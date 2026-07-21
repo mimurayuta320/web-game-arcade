@@ -23,8 +23,9 @@ const REPORT_AUTO_MUTE_THRESHOLD = Number(process.env.ROOM_REPORT_AUTO_MUTE_THRE
 const HOST_MUTE_DEFAULT_MS = Number(process.env.ROOM_HOST_MUTE_DEFAULT_MS || 5 * 60 * 1000);
 const HOST_MUTE_MAX_MS = Number(process.env.ROOM_HOST_MUTE_MAX_MS || 24 * 60 * 60 * 1000);
 const MESSAGE_STATE_TTL_MS = Number(process.env.ROOM_MESSAGE_STATE_TTL_MS || 4 * 60 * 60 * 1000);
+const INVITE_TOKEN_TTL_MS = Number(process.env.ROOM_INVITE_TOKEN_TTL_MS || 5 * 60 * 1000);
 const DATA_DIR = path.join(__dirname, "data");
-const DB_PATH = path.join(DATA_DIR, "profiles.json");
+const DB_PATH = process.env.SHARE_DB_PATH || path.join(DATA_DIR, "profiles.json");
 
 const DEFAULT_PROFILE = {
   bankCoins: 0,
@@ -64,9 +65,15 @@ function roomMetaOf(code) {
   if (!roomMeta.has(code)) {
     roomMeta.set(code, {
       hostPeerId: "",
+      isPublic: true,
+      inGame: false,
+      allowedPeerIds: new Set(),
       mutedPeers: new Map(),
       reports: new Map(),
       messageStates: new Map(),
+      rematchVotes: new Set(),
+      inviteTokens: new Map(),
+      privateAccessPeerIds: new Set(),
     });
   }
   return roomMeta.get(code);
@@ -98,6 +105,26 @@ function normalizeMessageId(raw) {
 
 function isHost(meta, peerId) {
   return Boolean(meta?.hostPeerId && peerId && meta.hostPeerId === peerId);
+}
+
+function asBoolean(value, fallback = true) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const v = value.toLowerCase().trim();
+    if (v === "true") return true;
+    if (v === "false") return false;
+  }
+  return fallback;
+}
+
+function asSpectateBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const v = value.toLowerCase().trim();
+    if (v === "true") return true;
+    if (v === "false") return false;
+  }
+  return false;
 }
 
 function isChatMutatingType(type) {
@@ -271,12 +298,23 @@ function removeFromRoom(ws) {
   if (!members) return;
   members.delete(ws);
   const meta = roomMeta.get(code);
+  if (meta && ws.peerId) {
+    meta.rematchVotes.delete(ws.peerId);
+  }
   if (meta && ws.peerId && meta.hostPeerId === ws.peerId) {
     meta.hostPeerId = "";
     for (const member of members) {
-      if (member.peerId) {
+      if (member.peerId && !member.spectator) {
         meta.hostPeerId = member.peerId;
         break;
+      }
+    }
+    if (!meta.hostPeerId) {
+      for (const member of members) {
+        if (member.peerId) {
+          meta.hostPeerId = member.peerId;
+          break;
+        }
       }
     }
   }
@@ -313,8 +351,24 @@ function joinRoom(ws, payload) {
   }
 
   const members = roomOf(code);
+  const requestedSpectate = asSpectateBoolean(payload?.spectate);
   if (!ws.roomCode && members.size >= MAX_ROOM_PLAYERS) {
     sendJson(ws, { type: "room-full", code });
+    return { ok: false, joined: false };
+  }
+
+  const meta = roomMetaOf(code);
+  const inviteToken = String(payload?.inviteToken || "").trim();
+  if (!ws.roomCode && !meta.isPublic && ws.peerId !== meta.hostPeerId) {
+    const alreadyAllowed = ws.peerId && meta.privateAccessPeerIds.has(ws.peerId);
+    const consumed = alreadyAllowed ? true : consumeInviteToken(meta, inviteToken);
+    if (!consumed) {
+      sendJson(ws, { type: "invite-token-required", code });
+      return { ok: false, joined: false };
+    }
+  }
+  if (!ws.roomCode && !requestedSpectate && meta.inGame && (!ws.peerId || !meta.allowedPeerIds.has(ws.peerId))) {
+    sendJson(ws, { type: "room-in-game", code });
     return { ok: false, joined: false };
   }
 
@@ -322,11 +376,19 @@ function joinRoom(ws, payload) {
   if (!ws.roomCode) {
     ws.roomCode = code;
     members.add(ws);
+    ws.spectator = requestedSpectate;
     joined = true;
-    const meta = roomMetaOf(code);
-    if (!meta.hostPeerId && ws.peerId) {
+    if (!meta.hostPeerId && ws.peerId && !ws.spectator) {
       meta.hostPeerId = ws.peerId;
     }
+    if (ws.peerId) {
+      meta.privateAccessPeerIds.add(ws.peerId);
+    }
+  }
+
+  const requestedPublic = asBoolean(payload?.roomPublic, meta.isPublic);
+  if (ws.peerId && meta.hostPeerId === ws.peerId) {
+    meta.isPublic = requestedPublic;
   }
 
   return { ok: true, joined };
@@ -335,13 +397,18 @@ function joinRoom(ws, payload) {
 function roomParticipants(code) {
   const members = rooms.get(code);
   if (!members) return [];
+  const meta = roomMetaOf(code);
   const participants = [];
   for (const member of members) {
     if (!member.peerId) continue;
+    const role = meta.inGame && !meta.allowedPeerIds.has(member.peerId)
+      ? "spectator"
+      : (member.spectator ? "spectator" : (meta.hostPeerId === member.peerId ? "host" : "guest"));
     participants.push({
       id: member.peerId,
       name: normalizePlayerName(member.playerName || "Player"),
       avatar: normalizeAvatarDataUrl(member.playerAvatar),
+      role,
     });
   }
   return participants;
@@ -349,7 +416,93 @@ function roomParticipants(code) {
 
 function broadcastRoomState(code) {
   if (!code) return;
-  broadcastRoom(code, { type: "room-state", room: code, participants: roomParticipants(code) });
+  const meta = roomMetaOf(code);
+  broadcastRoom(code, {
+    type: "room-state",
+    room: code,
+    participants: roomParticipants(code),
+    hostPeerId: meta.hostPeerId || "",
+    isPublic: Boolean(meta.isPublic),
+    inGame: Boolean(meta.inGame),
+    rematchVotes: [...meta.rematchVotes],
+  });
+}
+
+function lockCurrentParticipantsForMatch(code) {
+  const members = rooms.get(code);
+  if (!members) return;
+  const meta = roomMetaOf(code);
+  meta.inGame = true;
+  meta.allowedPeerIds = new Set();
+  for (const member of members) {
+    if (member.peerId && !member.spectator) meta.allowedPeerIds.add(member.peerId);
+  }
+}
+
+function unlockMatchForLobby(code) {
+  const meta = roomMetaOf(code);
+  meta.inGame = false;
+  meta.allowedPeerIds = new Set();
+  meta.rematchVotes = new Set();
+}
+
+function purgeExpiredInviteTokens(meta) {
+  const now = nowTs();
+  for (const [token, state] of meta.inviteTokens.entries()) {
+    if (!state || !Number.isFinite(state.expiresAt) || state.expiresAt <= now) {
+      meta.inviteTokens.delete(token);
+    }
+  }
+}
+
+function issueInviteToken(code, issuedBy) {
+  const meta = roomMetaOf(code);
+  purgeExpiredInviteTokens(meta);
+  const token = crypto.randomBytes(12).toString("base64url");
+  meta.inviteTokens.set(token, {
+    expiresAt: nowTs() + INVITE_TOKEN_TTL_MS,
+    used: false,
+    issuedBy: String(issuedBy || ""),
+  });
+  return token;
+}
+
+function consumeInviteToken(meta, token) {
+  if (!token) return false;
+  purgeExpiredInviteTokens(meta);
+  const state = meta.inviteTokens.get(token);
+  if (!state || state.used || !Number.isFinite(state.expiresAt) || state.expiresAt <= nowTs()) {
+    return false;
+  }
+  state.used = true;
+  return true;
+}
+
+function activePlayerCount(code) {
+  const members = rooms.get(code);
+  if (!members) return 0;
+  let count = 0;
+  for (const member of members) {
+    if (member.peerId && !member.spectator) count += 1;
+  }
+  return count;
+}
+
+function canVoteRematch(meta, ws) {
+  if (!meta.inGame) return false;
+  if (!ws?.peerId || ws.spectator) return false;
+  if (meta.allowedPeerIds.size > 0) return meta.allowedPeerIds.has(ws.peerId);
+  return true;
+}
+
+function broadcastRematchVoteState(code) {
+  const meta = roomMetaOf(code);
+  broadcastRoom(code, {
+    type: "rematch-vote-state",
+    room: code,
+    votes: [...meta.rematchVotes],
+    required: 2,
+  });
 }
 
 function handleHostMute(code, ws, payload) {
@@ -612,6 +765,7 @@ const wss = new WebSocketServer({ noServer: true });
 wss.on("connection", (ws) => {
   ws.roomCode = null;
   ws.peerId = null;
+  ws.spectator = false;
   ws.playerName = "Player";
   ws.playerAvatar = "";
   ws.chatRateState = {
@@ -630,6 +784,7 @@ wss.on("connection", (ws) => {
 
     if (!payload || typeof payload !== "object") return;
     ws.peerId = String(payload.from || ws.peerId || "").trim() || ws.peerId;
+    ws.spectator = asSpectateBoolean(payload?.spectate || ws.spectator);
     const joinResult = joinRoom(ws, payload);
     if (!joinResult.ok) return;
 
@@ -652,8 +807,89 @@ wss.on("connection", (ws) => {
       handleHostUnmute(code, ws, payload);
       return;
     }
+    if (type === "issue-invite-token") {
+      const meta = roomMetaOf(code);
+      if (!isHost(meta, ws.peerId)) {
+        sendError(ws, "HOST_ONLY");
+        return;
+      }
+      if (meta.isPublic) {
+        sendError(ws, "INVITE_TOKEN_PRIVATE_ONLY");
+        return;
+      }
+      const token = issueInviteToken(code, ws.peerId);
+      sendJson(ws, { type: "invite-token", room: code, token, ttlMs: INVITE_TOKEN_TTL_MS });
+      return;
+    }
+    if (type === "return-lobby") {
+      unlockMatchForLobby(code);
+      broadcastRoomState(code);
+      return;
+    }
     if (type === "chat-report") {
       handleChatReport(code, ws, payload);
+      return;
+    }
+
+    if (type === "spectator-chat") {
+      const text = String(payload?.text || "").trim().slice(0, 200);
+      if (!text) return;
+      if (!ws.spectator) {
+        sendError(ws, "SPECTATOR_ONLY");
+        return;
+      }
+      const members = rooms.get(code);
+      if (!members) return;
+      const envelope = {
+        type: "spectator-chat",
+        room: code,
+        from: ws.peerId || String(payload.from || ""),
+        name: ws.playerName || "Spectator",
+        text,
+      };
+      for (const member of members) {
+        if (member.spectator || member === ws) {
+          sendJson(member, envelope);
+        }
+      }
+      return;
+    }
+
+    if (type === "rematch-vote") {
+      const meta = roomMetaOf(code);
+      if (!canVoteRematch(meta, ws)) {
+        sendError(ws, "REMATCH_VOTE_FORBIDDEN");
+        return;
+      }
+      meta.rematchVotes.add(ws.peerId);
+      broadcastRematchVoteState(code);
+
+      const requiredVotes = 2;
+      if (activePlayerCount(code) >= requiredVotes && meta.rematchVotes.size >= requiredVotes) {
+        meta.rematchVotes = new Set();
+        const nextGame = String(payload?.game || "").trim();
+        if (nextGame) {
+          broadcastRoom(code, {
+            type: "new-game",
+            room: code,
+            game: nextGame,
+            from: "system",
+          });
+          lockCurrentParticipantsForMatch(code);
+        }
+        broadcastRematchVoteState(code);
+      }
+      return;
+    }
+
+    if (type === "rematch-unvote") {
+      const meta = roomMetaOf(code);
+      if (!canVoteRematch(meta, ws)) {
+        sendError(ws, "REMATCH_VOTE_FORBIDDEN");
+        return;
+      }
+      meta.rematchVotes.delete(ws.peerId);
+      broadcastRematchVoteState(code);
       return;
     }
 
@@ -661,6 +897,12 @@ wss.on("connection", (ws) => {
     if (isChatMutatingType(type)) {
       mutationResult = validateAndTrackChatMutation(code, ws, payload);
       if (!mutationResult.ok) return;
+    }
+
+    if (type === "select-game" || type === "new-game") {
+      const meta = roomMetaOf(code);
+      meta.rematchVotes = new Set();
+      lockCurrentParticipantsForMatch(code);
     }
 
     if (joinResult.joined || payload.type === "hello" || payload.type === "presence") {

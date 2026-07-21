@@ -1,5 +1,4 @@
-import { cloudApiRequestData } from "./cloudApiClient.js";
-import { bindBackToMenuButton } from "./uiButtonHelpers.js";
+import { cloudApiCandidates } from "./cloudApiClient.js";
 
 const VIEW_W = 960;
 const VIEW_H = 540;
@@ -669,7 +668,32 @@ function readCloudAuth() {
 }
 
 async function requestCloudProfile(path, payload) {
-  return cloudApiRequestData(path, payload);
+  const candidates = cloudApiCandidates();
+
+  let lastError = null;
+  for (const base of candidates) {
+    try {
+      const res = await fetch(`${base}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) {
+        const err = new Error(data?.message || `Cloud request failed (${res.status})`);
+        err.code = data?.code || "CLOUD_REQUEST_ERROR";
+        lastError = err;
+        continue;
+      }
+
+      return data;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Cloud request failed");
 }
 
 function skinFrames() {
@@ -3048,7 +3072,9 @@ export function initSurvivors(options = {}) {
   startBtn?.addEventListener("click", () => startGame());
   gachaBtn?.addEventListener("click", () => rollBankGacha());
   gacha10Btn?.addEventListener("click", () => rollBankGacha(10));
-  bindBackToMenuButton(menuBtn, () => {
+  menuBtn?.addEventListener("click", () => {
+    const confirmed = window.confirm("ゲーム一覧に戻りますか？");
+    if (!confirmed) return;
     options.onBackToMenu?.();
   });
   shopRerollBtn?.addEventListener("click", () => rerollShop());

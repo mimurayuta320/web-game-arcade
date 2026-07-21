@@ -71,12 +71,11 @@
                 placeholder="あなたの名前"
                 aria-label="Player name"
               />
-              <div class="avatar-settings-row">
-                <img id="playerAvatarPreview" class="player-avatar-preview" src="" alt="Player icon" />
-                <input id="playerAvatarInput" type="file" accept="image/*" class="hidden" aria-label="Player icon file" />
-                <button id="playerAvatarUploadBtn" class="start-btn ghost" type="button">アイコン選択</button>
-                <button id="playerAvatarClearBtn" class="start-btn ghost" type="button">アイコン解除</button>
-              </div>
+              <button id="quickMatchBtn" class="start-btn">クイックマッチ（マルチ）</button>
+              <label class="room-visibility-toggle" for="roomPublicToggle">
+                <input id="roomPublicToggle" type="checkbox" checked />
+                <span id="roomPublicLabel">公開ルーム（クイックマッチ対象）</span>
+              </label>
               <button id="createRoomBtn" class="start-btn">CREATE ROOM</button>
               <div class="join-row">
                 <input
@@ -89,6 +88,7 @@
                   aria-label="Room code"
                 />
                 <button id="joinRoomBtn" class="start-btn">JOIN</button>
+                <button id="spectateRoomBtn" class="start-btn ghost">SPECTATE</button>
               </div>
               <button id="backToEntryBtn" class="start-btn ghost">ログイン画面に戻る</button>
               <p id="roomMenuMessage" class="room-menu-message"></p>
@@ -169,22 +169,13 @@
           <p id="lobbyRoleText" class="lobby-line">ROLE: -</p>
           <p id="lobbySelfNameText" class="lobby-line">YOU: -</p>
           <p id="lobbyPeerNameText" class="lobby-line">PEER: -</p>
-          <p id="lobbyParticipantsText" class="lobby-line">MEMBERS: -</p>
-          <div class="lobby-avatar-row">
-            <div class="lobby-avatar-item">
-              <span id="lobbySelfAvatarLabel" class="lobby-line">YOU ICON</span>
-              <img id="lobbySelfAvatarImg" class="lobby-avatar-img" src="" alt="Your icon" />
-            </div>
-            <div class="lobby-avatar-item">
-              <span id="lobbyPeerAvatarLabel" class="lobby-line">PEER ICON</span>
-              <img id="lobbyPeerAvatarImg" class="lobby-avatar-img" src="" alt="Peer icon" />
-            </div>
-          </div>
-          <p id="lobbyFriendsText" class="lobby-line">FRIENDS: -</p>
           <p id="lobbyPeerText" class="lobby-line">STATUS: 参加者待機中</p>
+          <p id="lobbyConnectionText" class="lobby-line">CONNECTION: -</p>
+          <span id="spectatorBadge" class="spectator-badge hidden">観戦中</span>
           <p id="lobbyMessage" class="room-menu-message"></p>
 
           <div class="lobby-actions">
+            <button id="copyInviteLinkBtn" class="start-btn ghost">招待リンクをコピー</button>
             <button id="lobbyStartOthelloBtn" class="start-btn">OTHELLO START</button>
             <button id="lobbyStartShogiBtn" class="start-btn">SHOGI START</button>
             <button id="lobbyStartChessBtn" class="start-btn">CHESS START</button>
@@ -194,6 +185,15 @@
             <button id="lobbyStartSolitaireBtn" class="start-btn">SOLITAIRE START</button>
             <button id="lobbyBackBtn" class="start-btn ghost">BACK TO MENU</button>
           </div>
+
+          <aside id="spectatorChatPanel" class="spectator-chat-panel hidden" aria-live="polite">
+            <h3 id="spectatorChatTitle">観戦チャット</h3>
+            <div id="spectatorChatLog" class="spectator-chat-log"></div>
+            <div class="spectator-chat-input-row">
+              <input id="spectatorChatInput" class="text-input" maxlength="200" placeholder="観戦コメントを入力" />
+              <button id="spectatorChatSendBtn" class="start-btn" type="button">送信</button>
+            </div>
+          </aside>
         </div>
       </section>
 
@@ -654,75 +654,7 @@
         <p id="solitaireMessage" class="message">GAME STARTで開始</p>
       </section>
 
-      <section id="roomChatPanel" class="room-chat-panel hidden" aria-label="Room chat">
-        <div class="room-chat-header">
-          <h2 id="roomChatTitle">Room Chat</h2>
-          <button id="roomChatClearBtn" class="start-btn ghost room-chat-clear" type="button">Clear</button>
-        </div>
-        <div class="room-chat-group-row">
-          <select id="roomChatGroupSelect" class="difficulty-select room-chat-group-select" aria-label="チャットグループ"></select>
-          <input
-            id="roomChatGroupNameInput"
-            class="room-input room-chat-group-name"
-            type="text"
-            maxlength="20"
-            placeholder="新規グループ名"
-            aria-label="新規グループ名"
-          />
-          <button id="roomChatGroupCreateBtn" class="start-btn ghost room-chat-group-create" type="button">作成</button>
-        </div>
-        <p id="roomChatGroupInfo" class="room-chat-group-info">表示グループ: 全体 / 参加 1人</p>
-        <div class="room-chat-search-row">
-          <input
-            id="roomChatSearchDate"
-            class="room-input room-chat-search-date"
-            type="date"
-            aria-label="日付で検索"
-          />
-          <input
-            id="roomChatSearchWord"
-            class="room-input room-chat-search-word"
-            type="text"
-            maxlength="40"
-            placeholder="ワード検索"
-            aria-label="ワードで検索"
-          />
-          <button id="roomChatSearchClearBtn" class="start-btn ghost room-chat-search-clear" type="button">条件クリア</button>
-        </div>
-        <p id="roomChatSearchStatus" class="room-chat-search-status">表示 0 / 0</p>
-        <section id="roomHostMutePanel" class="room-chat-host-panel hidden" aria-live="polite">
-          <p id="roomHostMuteTitle" class="room-chat-host-title">ホストミュート中</p>
-          <ul id="roomHostMuteList" class="room-chat-host-list">
-            <li class="room-chat-host-empty">現在ミュート中の相手はいません</li>
-          </ul>
-        </section>
-        <details class="room-chat-help">
-          <summary id="roomChatHelpSummary">コマンドヘルプ</summary>
-          <ul class="room-chat-help-list">
-            <li id="roomChatHelpLine1">/help または /commands: ヘルプ表示</li>
-            <li id="roomChatHelpLine2">/mute 名前: 相手をミュート</li>
-            <li id="roomChatHelpLine3">/unmute 名前: ミュート解除</li>
-            <li id="roomChatHelpLine4">/mutes: ミュート一覧表示</li>
-            <li id="roomChatHelpLine5">/dm 名前 メッセージ: 1対1DM（保存期限なし）</li>
-            <li id="roomChatHelpLine6">/dmclear 名前|all: DM履歴削除</li>
-            <li id="roomChatHelpLine7">/editlast 新しいメッセージ: 直近メッセージ修正</li>
-            <li id="roomChatHelpLine8">/retractlast: 直近メッセージ取り消し（連続不可）</li>
-            <li id="roomChatHelpLine9">/friendadd 名前 /friendremove 名前 /friends</li>
-          </ul>
-        </details>
-        <div id="roomChatLog" class="room-chat-log" aria-live="polite"></div>
-        <div class="room-chat-input-row">
-          <input
-            id="roomChatInput"
-            class="room-input room-chat-input"
-            type="text"
-            maxlength="100"
-            placeholder="メッセージを入力"
-            aria-label="Room chat input"
-          />
-          <button id="roomChatSendBtn" class="start-btn room-chat-send" type="button">送信</button>
-        </div>
-      </section>
+      <button id="globalRematchBtn" class="start-btn rematch-floating hidden" type="button">RE-MATCH</button>
     </main>
 
     <script type="module" src="/src/main.js"></script>

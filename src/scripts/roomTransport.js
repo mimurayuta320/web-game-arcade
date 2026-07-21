@@ -2,6 +2,12 @@ const ROOM_WS_CONNECT_TIMEOUT_MS = 10000;
 const ROOM_WS_CONNECT_RETRIES = 2;
 const ROOM_WS_RETRY_DELAY_MS = 600;
 
+function defaultLegacyRoomUrl() {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const hostname = window.location.hostname || "localhost";
+  return `${protocol}//${hostname}:8788`;
+}
+
 function defaultSameOriginRoomUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
@@ -25,6 +31,28 @@ function normalizeServerUrl(raw, fallbackUrl) {
   } catch {
     return fallbackUrl;
   }
+}
+
+function dedupeUrls(urls) {
+  const seen = new Set();
+  const result = [];
+  urls.forEach((url) => {
+    const key = String(url || "").trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    result.push(key);
+  });
+  return result;
+}
+
+function resolveServerUrlCandidates(serverUrl) {
+  const sameOrigin = defaultSameOriginRoomUrl();
+  const legacy = defaultLegacyRoomUrl();
+  const fallback = sameOrigin;
+  const preferred = normalizeServerUrl(serverUrl, fallback);
+  const normalizedSameOrigin = normalizeServerUrl(sameOrigin, fallback);
+  const normalizedLegacy = normalizeServerUrl(legacy, fallback);
+  return dedupeUrls([preferred, normalizedSameOrigin, normalizedLegacy]);
 }
 
 function isLocalHost(hostname) {
@@ -62,7 +90,7 @@ export function resolveRoomServerUrl({ storageKey, queryParamKey, defaultUrl }) 
   return normalizeServerUrl(fromStorage, fallback);
 }
 
-function createBroadcastTransport({ roomCode, peerId, onMessage }) {
+function createBroadcastTransport({ roomCode, peerId, onMessage, onStatusChange }) {
   const channel = new BroadcastChannel(`neon-othello-room-${roomCode}`);
   channel.onmessage = (event) => {
     const payload = event.data;
@@ -70,8 +98,11 @@ function createBroadcastTransport({ roomCode, peerId, onMessage }) {
     onMessage(payload);
   };
 
+  onStatusChange?.({ state: "connected", transport: "broadcast", endpoint: "broadcast" });
+
   return {
     kind: "broadcast",
+    endpoint: "broadcast",
     send(message) {
       channel.postMessage({ ...message, from: peerId, room: roomCode });
     },
@@ -81,7 +112,7 @@ function createBroadcastTransport({ roomCode, peerId, onMessage }) {
   };
 }
 
-function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }) {
+function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage, onStatusChange }) {
   return new Promise((resolve) => {
     if (typeof WebSocket !== "function") {
       resolve(null);
@@ -122,8 +153,10 @@ function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }
 
     ws.onopen = () => {
       opened = true;
+      onStatusChange?.({ state: "connected", transport: "websocket", endpoint: serverUrl });
       const transport = {
         kind: "websocket",
+        endpoint: serverUrl,
         send(message) {
           const json = JSON.stringify({ ...message, from: peerId, room: roomCode });
           if (ws.readyState === WebSocket.OPEN) {
@@ -163,6 +196,9 @@ function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }
     };
 
     ws.onclose = () => {
+      if (opened) {
+        onStatusChange?.({ state: "disconnected", transport: "websocket", endpoint: serverUrl });
+      }
       if (!opened) {
         failToFallback();
       }
@@ -171,18 +207,23 @@ function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }
 }
 
 async function createWebSocketTransport(params) {
-  for (let i = 0; i <= ROOM_WS_CONNECT_RETRIES; i += 1) {
-    const transport = await createWebSocketTransportOnce(params);
-    if (transport) return transport;
-    if (i < ROOM_WS_CONNECT_RETRIES) {
-      await new Promise((resolve) => window.setTimeout(resolve, ROOM_WS_RETRY_DELAY_MS));
+  const candidates = resolveServerUrlCandidates(params.serverUrl);
+  for (const candidate of candidates) {
+    params.onStatusChange?.({ state: "connecting", transport: "websocket", endpoint: candidate });
+    for (let i = 0; i <= ROOM_WS_CONNECT_RETRIES; i += 1) {
+      const transport = await createWebSocketTransportOnce({ ...params, serverUrl: candidate });
+      if (transport) return transport;
+      if (i < ROOM_WS_CONNECT_RETRIES) {
+        await new Promise((resolve) => window.setTimeout(resolve, ROOM_WS_RETRY_DELAY_MS));
+      }
     }
   }
   return null;
 }
 
-export async function createRoomTransport({ roomCode, peerId, serverUrl, onMessage }) {
-  const wsTransport = await createWebSocketTransport({ roomCode, peerId, serverUrl, onMessage });
+export async function createRoomTransport({ roomCode, peerId, serverUrl, onMessage, onStatusChange }) {
+  const wsTransport = await createWebSocketTransport({ roomCode, peerId, serverUrl, onMessage, onStatusChange });
   if (wsTransport) return wsTransport;
-  return createBroadcastTransport({ roomCode, peerId, onMessage });
+  onStatusChange?.({ state: "fallback", transport: "broadcast", endpoint: "broadcast" });
+  return createBroadcastTransport({ roomCode, peerId, onMessage, onStatusChange });
 }

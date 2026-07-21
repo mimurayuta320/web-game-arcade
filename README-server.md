@@ -38,6 +38,33 @@ npm run dev
 アクセス例:
 http://<このPCのIP>:5173/#ToufuGameshow
 
+## 2.5) 本番稼働中でもテスト環境を並行起動する
+
+本番ポートと衝突しないテスト専用ポートを使います。
+
+ターミナルA（テスト用クラウド保存API: 18787, DB分離）
+
+npm run cloud:test
+
+ターミナルB（テスト用ルームWebSocket: 18788）
+
+npm run room:test
+
+ターミナルC（テスト用フロント: 5174）
+
+npm run dev:test
+
+アクセス例（同一PC）:
+http://localhost:5174/?cloudApi=http://localhost:18787&roomServer=ws://localhost:18788#ToufuGameshow
+
+補足:
+- `cloudApi` はクラウドAPI接続先を固定するクエリです（初回アクセス時にlocalStorageへ保存）。
+- テストDBは `server/data/a5m2.test.sqlite` を使用し、本番DBと分離されます。
+
+共有モードをテストしたい場合（4174 / テスト用JSON保存）:
+
+npm run share:test
+
 ## 3) グローバルNode.jsがないPCで実行する
 
 PowerShellで実行:
