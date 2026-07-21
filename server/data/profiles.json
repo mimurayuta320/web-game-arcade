@@ -1,0 +1,125 @@
+{
+  "users": {
+    "test-user": {
+      "passSaltHex": "8b5c1254f872acd14e0ea8530043968a",
+      "passHashHex": "5dd7a6c5cd5545ddbf8581cc01083a9927ede5ff98bcf1ff052de83c4acb8b629cacabaa819359daeaece16561b8d0ec13d65eb3cdf71eb66432a073e1113435",
+      "profile": {
+        "bankCoins": 123,
+        "pityCounter": 4,
+        "unlockedSkins": [
+          "classic",
+          "azure"
+        ],
+        "selectedSkin": "azure"
+      },
+      "updatedAt": 1784184216058,
+      "createdAt": 1784184208250
+    },
+    "NullToufu": {
+      "passSaltHex": "98e6a87fcff06b1d94d0dc17ba531a59",
+      "passHashHex": "b1eb13b86e77fda42e9bcfe3d2d57cc090ac6542fdfbdea30cf8496d63e2deadaa67a05f7f6117186fa3fd24a332bbec5003e5a6bce39dbbdf2246c5337561fe",
+      "profile": {
+        "bankCoins": 247,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic",
+          "hammer_default"
+        ],
+        "selectedSkin": "hammer_default",
+        "playerName": "NullToufu"
+      },
+      "updatedAt": 1784285774020,
+      "createdAt": 1784186269182
+    },
+    "remote_test_user": {
+      "passSaltHex": "876eba5a57ec4ec8ac5d2aa654e3d514",
+      "passHashHex": "4354b232d173e30062a35098a0a8e4e6e6cbd84765e96c85a510dfcd054de73723bfedc15dc91a30571d43c5bbbda588a7ad0f56eea07a83aa9bdd1b8e208ad9",
+      "profile": {
+        "bankCoins": 0,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic"
+        ],
+        "selectedSkin": "classic",
+        "playerName": "Player"
+      },
+      "updatedAt": 1784212933711,
+      "createdAt": 1784212933711
+    },
+    "mnmneki": {
+      "passSaltHex": "7391575f89b5b3339553b5bbbf7526f1",
+      "passHashHex": "e8d845c23bc2d3cd7026ba21af613bd613fddb5158fb0efb6ca7d56201003096553a9850689d5d6c35cb1ac0e5ce593d10743723a9164f9b4062d34f35b5df15",
+      "profile": {
+        "bankCoins": 0,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic"
+        ],
+        "selectedSkin": "classic",
+        "playerName": "Player"
+      },
+      "updatedAt": 1784213290367,
+      "createdAt": 1784213278002
+    },
+    "Toufu320": {
+      "passSaltHex": "7e9e1e432442af1f8c7bda3786a959ba",
+      "passHashHex": "6f30e68cb3b87c6f114272ac8d1158cfe39f3a70efa7cc592e38c532da12aedf59f293e37819c500973e20098827f7dcb439a010647dc7d431b13de82068c3d2",
+      "profile": {
+        "bankCoins": 0,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic"
+        ],
+        "selectedSkin": "classic",
+        "playerName": "Player"
+      },
+      "updatedAt": 1784216750804,
+      "createdAt": 1784216750804
+    },
+    "copilot-healthcheck": {
+      "passSaltHex": "10fe29c8476ec2798f0974d0789a27a5",
+      "passHashHex": "25ae2651fe3ce51d495368b502c1d2b509fab5c0d98e0214fe09e58a0a720e4b9bbd380afdf0791ed226c49107a83a0660514a1f1e3f85f1faf94c7e7c491c05",
+      "profile": {
+        "bankCoins": 0,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic"
+        ],
+        "selectedSkin": "classic",
+        "playerName": "Player"
+      },
+      "updatedAt": 1784269924399,
+      "createdAt": 1784269924399
+    },
+    "healthcheck-user": {
+      "passSaltHex": "f776275d700516460030bd3a3f6d17e4",
+      "passHashHex": "ce0db9fcae9d73da1191876ecd3303f9c6879704821d4054065a627e73918974e1c8208b678746669c77eeeed471865fc31a662fdeec3768c77258898b485318",
+      "profile": {
+        "bankCoins": 0,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic"
+        ],
+        "selectedSkin": "classic",
+        "playerName": "Player"
+      },
+      "updatedAt": 1784273723046,
+      "createdAt": 1784273723046
+    },
+    "test-user-001": {
+      "passSaltHex": "6ff38f0d9eccb10c04388dc71717a196",
+      "passHashHex": "3553e078e7131e1486dd3db704e4d4d22f1f44b246c5fee15bbc0ad01a688f2eaa1933fb8b09a9aa8c079134a6f85931f5c6604fc4460212ede2ab92e41096fe",
+      "profile": {
+        "bankCoins": 0,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic"
+        ],
+        "selectedSkin": "classic",
+        "playerName": "Player"
+      },
+      "updatedAt": 1784274016590,
+      "createdAt": 1784274016590
+    }
+  }
+}

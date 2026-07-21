@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Othello</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="app-bg"></div>
+    <main class="game-shell">
+      <div class="lang-switch">
+        <label for="langSelect">Language</label>
+        <select id="langSelect" class="difficulty-select" aria-label="Language select">
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+        </select>
+      </div>
+
+      <section id="entryScreen" class="menu-screen">
+        <header class="top-bar">
+          <h1 id="entryTitle">Start Session</h1>
+          <p id="entrySubtitle">ログインして進行データを共有するか、ゲストとして今すぐ遊べます。</p>
+        </header>
+        <div class="entry-card">
+          <input
+            id="entryCloudUserIdInput"
+            class="room-input"
+            type="text"
+            maxlength="24"
+            placeholder="クラウドID"
+            aria-label="Entry cloud user id"
+          />
+          <input
+            id="entryCloudPasswordInput"
+            class="room-input"
+            type="password"
+            maxlength="128"
+            placeholder="クラウドパスワード"
+            aria-label="Entry cloud password"
+          />
+          <div class="entry-actions">
+            <button id="entryLoginBtn" class="start-btn">LOGIN & PLAY</button>
+            <button id="entryGuestBtn" class="start-btn ghost">PLAY AS GUEST</button>
+          </div>
+          <p id="entryMessage" class="room-menu-message"></p>
+        </div>
+      </section>
+
+      <section id="menuScreen" class="menu-screen hidden">
+        <header class="top-bar">
+          <h1>Game Select</h1>
+          <p id="menuSubtitle">遊びたいゲームを選択してください</p>
+        </header>
+
+        <div class="game-grid">
+          <article class="game-card room-match-card">
+            <h2 id="roomCardTitle">Room Match</h2>
+            <p id="roomCardDesc">ルーム番号で集合してからゲームを選択。</p>
+            <div class="room-actions">
+              <input
+                id="playerNameInput"
+                class="room-input"
+                type="text"
+                maxlength="18"
+                placeholder="あなたの名前"
+                aria-label="Player name"
+              />
+              <button id="createRoomBtn" class="start-btn">CREATE ROOM</button>
+              <div class="join-row">
+                <input
+                  id="roomCodeInput"
+                  class="room-input"
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="6"
+                  placeholder="6桁の番号"
+                  aria-label="Room code"
+                />
+                <button id="joinRoomBtn" class="start-btn">JOIN</button>
+              </div>
+              <button id="backToEntryBtn" class="start-btn ghost">ログイン画面に戻る</button>
+              <p id="roomMenuMessage" class="room-menu-message"></p>
+            </div>
+          </article>
+          <article class="game-card">
+            <h2>Neon Othello</h2>
+            <p id="othelloCardDesc">CPU対戦対応のオセロ。相手の石をはさんで自分の色にし、最後に石が多い方が勝ち。</p>
+            <button id="playOthelloBtn" class="start-btn">PLAY</button>
+          </article>
+          <article class="game-card">
+            <h2>Neon Shogi</h2>
+            <p id="shogiCardDesc">2人対戦の将棋。駒を動かして相手の王を詰ませたら勝ち。取った駒は自分の持ち駒として使えます。</p>
+            <div class="game-card-actions">
+              <button id="playShogiBtn" class="start-btn">PLAY</button>
+              <details class="detail-toggle shogi-detail">
+                <summary id="shogiDetailSummary">詳細</summary>
+                <div class="shogi-detail-panel">
+                  <p id="shogiDetailTitle">駒の名称と強さ（目安）</p>
+                  <ul class="shogi-detail-list">
+                    <li id="shogiPieceKing">王: 最重要（取られたら負け）</li>
+                    <li id="shogiPieceRook">飛車: 非常に強い（縦横に長く動ける）</li>
+                    <li id="shogiPieceBishop">角行: 非常に強い（斜めに長く動ける）</li>
+                    <li id="shogiPieceGold">金将: 強い（前後左右と前斜め）</li>
+                    <li id="shogiPieceSilver">銀将: 中くらい（斜め中心に動く）</li>
+                    <li id="shogiPieceKnight">桂馬: やや特殊（前に跳ぶ）</li>
+                    <li id="shogiPieceLance">香車: 直線特化（前にまっすぐ）</li>
+                    <li id="shogiPiecePawn">歩兵: 基本駒（1マス前進）</li>
+                  </ul>
+                </div>
+              </details>
+            </div>
+          </article>
+          <article class="game-card">
+            <h2>Neon Chess</h2>
+            <p id="chessCardDesc">2人対戦のチェス。ルーム対戦にも対応。</p>
+            <button id="playChessBtn" class="start-btn">PLAY</button>
+          </article>
+          <article class="game-card">
+            <h2>Neon UNO</h2>
+            <p id="unoCardDesc">ローカル2人で遊べるUNO。手札を先に出し切ったプレイヤーの勝ち。</p>
+            <button id="playUnoBtn" class="start-btn">PLAY</button>
+          </article>
+          <article class="game-card">
+            <h2>Neon Gomoku</h2>
+            <p id="gomokuCardDesc">五目並べ。先に5つ石を並べたプレイヤーの勝ち。</p>
+            <button id="playGomokuBtn" class="start-btn">PLAY</button>
+          </article>
+          <article class="game-card">
+            <h2>Neon Survivors</h2>
+            <p id="survivorsCardDesc">2Dサバイバルアクション。移動しながら自動攻撃で敵の波をさばく。</p>
+            <button id="playSurvivorsBtn" class="start-btn">PLAY</button>
+          </article>
+          <article class="game-card">
+            <h2>Neon Fit Puzzle</h2>
+            <p id="fitPuzzleCardDesc">ピースを枠内に収めるパズル。すべてのマスを埋めればクリア。</p>
+            <button id="playFitPuzzleBtn" class="start-btn">PLAY</button>
+          </article>
+          <article class="game-card">
+            <h2>Neon Solitaire</h2>
+            <p id="solitaireCardDesc">定番のクロンダイク。AからKまで4組そろえるとクリア。</p>
+            <div class="game-card-actions">
+              <button id="playSolitaireSingleBtn" class="start-btn">SINGLE</button>
+              <button id="playSolitaireMultiBtn" class="start-btn ghost">MULTI</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="lobbyScreen" class="menu-screen hidden">
+        <header class="top-bar">
+          <h1 id="lobbyTitle">Room Lobby</h1>
+          <p id="lobbySubtitle">ルームに全員が集まったらゲームを選択します</p>
+        </header>
+
+        <div class="lobby-card">
+          <p id="lobbyRoomCodeText" class="lobby-line">ROOM: -</p>
+          <p id="lobbyRoleText" class="lobby-line">ROLE: -</p>
+          <p id="lobbySelfNameText" class="lobby-line">YOU: -</p>
+          <p id="lobbyPeerNameText" class="lobby-line">PEER: -</p>
+          <p id="lobbyParticipantsText" class="lobby-line">MEMBERS: -</p>
+          <p id="lobbyPeerText" class="lobby-line">STATUS: 参加者待機中</p>
+          <p id="lobbyMessage" class="room-menu-message"></p>
+
+          <div class="lobby-actions">
+            <button id="lobbyStartOthelloBtn" class="start-btn">OTHELLO START</button>
+            <button id="lobbyStartShogiBtn" class="start-btn">SHOGI START</button>
+            <button id="lobbyStartChessBtn" class="start-btn">CHESS START</button>
+            <button id="lobbyStartUnoBtn" class="start-btn">UNO START</button>
+            <button id="lobbyStartGomokuBtn" class="start-btn">GOMOKU START</button>
+            <button id="lobbyStartSurvivorsBtn" class="start-btn">SURVIVORS START</button>
+            <button id="lobbyStartSolitaireBtn" class="start-btn">SOLITAIRE START</button>
+            <button id="lobbyBackBtn" class="start-btn ghost">BACK TO MENU</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="othelloScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Othello</h1>
+          <p id="othelloSubtitle">CPU対戦またはローカル2人対戦を選べます。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric">
+            <span class="label">TURN</span>
+            <span id="turnText">BLACK</span>
+          </div>
+          <div class="metric">
+            <span class="label">TIMER</span>
+            <span id="turnTimerText">残り30秒</span>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">MODE</span>
+            <select id="modeSelect" class="difficulty-select" aria-label="Play mode">
+              <option value="cpu" selected>1P vs CPU</option>
+              <option value="cpuvscpu">CPU vs CPU</option>
+              <option value="local">2P LOCAL</option>
+              <option value="chaos">CHAOS</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">CPU LEVEL</span>
+            <select id="difficultySelect" class="difficulty-select" aria-label="CPU difficulty">
+              <option value="easy">かんたん</option>
+              <option value="normal" selected>ふつう</option>
+              <option value="hard">つよい</option>
+              <option value="expert">さいきょう</option>
+              <option value="pro">プロ</option>
+            </select>
+            <span id="difficultyCurrentText" class="level-indicator" aria-live="polite">現在: ふつう</span>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">先攻後攻</span>
+            <select id="turnOrderSelect" class="difficulty-select" aria-label="Turn order">
+              <option value="player-first" selected>先攻（あなた）</option>
+              <option value="player-second">後攻（あなた）</option>
+              <option value="random">ランダム</option>
+            </select>
+          </div>
+          <button id="startBtn" class="start-btn hud-primary">NEW GAME</button>
+          <button id="remakeBtn" class="start-btn ghost">REMAKE</button>
+          <button id="menuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <div class="othello-status-row">
+          <div id="roomStatus" class="room-status hidden">
+            <span id="roomCodeText">ROOM: -</span>
+            <span id="roomRoleText">ROLE: -</span>
+          </div>
+          <div class="piece-status" aria-label="piece counts">
+            <span class="piece-status-item">BLACK: <span id="blackCount">2</span></span>
+            <span class="piece-status-item">WHITE: <span id="whiteCount">2</span></span>
+            <span id="chaosOverwriteText" class="piece-status-item hidden">上書き残り: -</span>
+          </div>
+        </div>
+
+        <section class="canvas-wrap">
+          <div id="board" class="board" aria-label="Othello board"></div>
+          <div id="overlay" class="overlay">NEW GAMEで開始</div>
+        </section>
+
+        <p id="message" class="message">黒の手番です</p>
+      </section>
+
+      <section id="shogiScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Shogi</h1>
+          <p id="shogiSubtitle">先手後手で交互に指します。王を取れば勝ち。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric">
+            <span class="label">手番</span>
+            <span id="shogiTurnText">先手</span>
+          </div>
+          <div class="metric">
+            <span class="label">選択</span>
+            <span id="shogiSelectText">-</span>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">MODE</span>
+            <select id="shogiModeSelect" class="difficulty-select" aria-label="Shogi mode">
+              <option value="local" selected>ローカル2人</option>
+              <option value="cpu">1P 対 CPU</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">CPU LEVEL</span>
+            <select id="shogiDifficultySelect" class="difficulty-select" aria-label="Shogi CPU level">
+              <option value="easy">かんたん</option>
+              <option value="normal" selected>ふつう</option>
+              <option value="hard">つよい</option>
+              <option value="pro">プロ</option>
+            </select>
+          </div>
+          <button id="shogiStartBtn" class="start-btn hud-primary">新規対局</button>
+          <button id="shogiRemakeBtn" class="start-btn ghost">リメイク</button>
+          <button id="shogiMenuBtn" class="start-btn ghost">メニュー</button>
+        </section>
+
+        <section class="shogi-hands">
+          <div class="shogi-hand-row">
+            <span class="label">後手の持ち駒</span>
+            <div id="shogiWhiteHand" class="shogi-hand"></div>
+          </div>
+          <div class="shogi-hand-row">
+            <span class="label">先手の持ち駒</span>
+            <div id="shogiBlackHand" class="shogi-hand"></div>
+          </div>
+        </section>
+
+        <section class="canvas-wrap">
+          <div id="shogiBoard" class="shogi-board" aria-label="Shogi board"></div>
+          <div id="shogiOverlay" class="overlay">新規対局で開始</div>
+        </section>
+
+        <p id="shogiMessage" class="message">先手の手番です</p>
+      </section>
+
+      <section id="chessScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Chess</h1>
+          <p id="chessSubtitle">白黒で交互に指します。キングを詰ませた側の勝ち。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric">
+            <span class="label">手番</span>
+            <span id="chessTurnText">白</span>
+          </div>
+          <div class="metric">
+            <span class="label">選択</span>
+            <span id="chessSelectText">-</span>
+          </div>
+          <button id="chessStartBtn" class="start-btn hud-primary">新規対局</button>
+          <button id="chessMenuBtn" class="start-btn ghost">メニュー</button>
+        </section>
+
+        <section class="canvas-wrap chess-wrap">
+          <div id="chessBoard" class="chess-board" aria-label="Chess board"></div>
+          <div id="chessOverlay" class="overlay">新規対局で開始</div>
+        </section>
+
+        <p id="chessMessage" class="message">白の手番です</p>
+      </section>
+
+      <section id="unoScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon UNO</h1>
+          <p id="unoSubtitle">ローカル2人対戦。手札を先に出し切ったら勝ち。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric metric-select">
+            <span class="label">MODE</span>
+            <select id="unoModeSelect" class="difficulty-select" aria-label="UNO mode">
+              <option id="unoModeCpuOption" value="cpu" selected>1P vs CPU</option>
+              <option id="unoModeLocalOption" value="local">2P LOCAL</option>
+            </select>
+          </div>
+          <div class="metric">
+            <span class="label">TURN</span>
+            <span id="unoTurnText">PLAYER 1</span>
+          </div>
+          <div class="metric">
+            <span class="label">COLOR</span>
+            <span id="unoColorText">-</span>
+          </div>
+          <div class="metric">
+            <span class="label">DECK</span>
+            <span id="unoDeckCount">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">P1 HAND</span>
+            <span id="unoP1Count">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">P2 HAND</span>
+            <span id="unoP2Count">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">RESULT</span>
+            <span id="unoResultText">-</span>
+          </div>
+          <button id="unoStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="unoDrawBtn" class="start-btn ghost">DRAW</button>
+          <button id="unoMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <section class="canvas-wrap uno-wrap">
+          <div class="uno-zone">
+            <p class="label">対戦相手の手札</p>
+            <div id="unoOpponentHand" class="uno-hand"></div>
+          </div>
+          <div class="uno-center">
+            <div class="uno-pile-block">
+              <span class="label">DISCARD</span>
+              <div id="unoDiscardTop" class="uno-card-display">-</div>
+            </div>
+          </div>
+          <div class="uno-zone">
+            <p class="label">あなたの手札</p>
+            <div id="unoPlayerHand" class="uno-hand"></div>
+          </div>
+        </section>
+
+        <p id="unoMessage" class="message">GAME STARTを押してください</p>
+      </section>
+
+      <section id="gomokuScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Gomoku</h1>
+          <p id="gomokuSubtitle">黒白で交互に置き、先に5連を作った側の勝ち。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric">
+            <span class="label">TURN</span>
+            <span id="gomokuTurnText">BLACK</span>
+          </div>
+          <button id="gomokuStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="gomokuMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <section class="canvas-wrap gomoku-wrap">
+          <div id="gomokuBoard" class="gomoku-board" aria-label="Gomoku board"></div>
+          <div id="gomokuOverlay" class="overlay">GAME STARTで開始</div>
+        </section>
+
+        <p id="gomokuMessage" class="message">黒の手番です</p>
+      </section>
+
+      <section id="survivorsScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Survivors</h1>
+          <p id="survivorsSubtitle">WASD / 矢印キーで移動。自動攻撃で生き残れ。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric metric-hp">
+            <span class="label">HP</span>
+            <div id="survivorsHpGauge" class="survivors-hp-gauge" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-label="Survivors HP">
+              <div id="survivorsHpFill" class="survivors-hp-fill"></div>
+              <span id="survivorsHpText" class="survivors-hp-value">100 / 100</span>
+            </div>
+          </div>
+          <div class="metric">
+            <span class="label">LEVEL</span>
+            <span id="survivorsLevelText">1</span>
+          </div>
+          <div class="metric">
+            <span class="label">XP</span>
+            <span id="survivorsXpText">0 / 20</span>
+          </div>
+          <div class="metric">
+            <span class="label">TIME</span>
+            <span id="survivorsTimeText">00:00</span>
+          </div>
+          <div class="metric">
+            <span class="label">KILLS</span>
+            <span id="survivorsKillText">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">WAVE</span>
+            <span id="survivorsWaveText">1</span>
+          </div>
+          <div class="metric">
+            <span class="label">COINS</span>
+            <span id="survivorsCoinText">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">BANK</span>
+            <span id="survivorsBankText">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">PITY</span>
+            <span id="survivorsPityText">0 / 10</span>
+          </div>
+          <div class="metric">
+            <span class="label">DAMAGE</span>
+            <span id="survivorsDamageText">10</span>
+          </div>
+          <div class="metric">
+            <span class="label">RANGED</span>
+            <span id="survivorsRangedText">100%</span>
+          </div>
+          <div class="metric">
+            <span class="label">MELEE</span>
+            <span id="survivorsMeleeText">14</span>
+          </div>
+          <div class="metric">
+            <span class="label">EXPLOSION</span>
+            <span id="survivorsExplosionText">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">ATK/S</span>
+            <span id="survivorsFireText">1.67</span>
+          </div>
+          <div class="metric">
+            <span class="label">MOVE</span>
+            <span id="survivorsSpeedText">240</span>
+          </div>
+          <div class="metric">
+            <span class="label">ARMOR</span>
+            <span id="survivorsArmorText">0%</span>
+          </div>
+          <div class="metric">
+            <span class="label">PIERCE</span>
+            <span id="survivorsPierceText">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">WEAPON</span>
+            <span id="survivorsWeaponSlotsText">1 / 6</span>
+          </div>
+          <div class="metric">
+            <span class="label">PLAYERS</span>
+            <span id="survivorsPlayersText">1 / 8</span>
+          </div>
+          <div class="metric">
+            <span class="label">POS</span>
+            <span id="survivorsPosText">X: 0 Y: 0</span>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">CHAR</span>
+            <select id="survivorsCharacterSelect" class="difficulty-select" aria-label="Survivors character">
+              <option value="default" selected>BALANCED</option>
+              <option value="ranger">RANGER</option>
+              <option value="brawler">BRAWLER</option>
+              <option value="demolition">DEMOLITION</option>
+              <option value="medic">MEDIC</option>
+              <option value="assassin">ASSASSIN</option>
+              <option value="engineer">ENGINEER</option>
+              <option value="fairy">FAIRY</option>
+            </select>
+          </div>
+          <div class="metric">
+            <span class="label">PASSIVE</span>
+            <span id="survivorsPassiveText">-</span>
+          </div>
+          <button id="survivorsGachaBtn" class="start-btn ghost">SKIN GACHA</button>
+          <button id="survivorsGacha10Btn" class="start-btn ghost">SKIN GACHA x10</button>
+          <button id="survivorsStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="survivorsMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <section class="canvas-wrap survivors-wrap">
+          <div id="survivorsField" class="survivors-field" aria-label="Survivors arena"></div>
+          <div id="survivorsOverlay" class="overlay">GAME STARTで開始</div>
+          <div id="survivorsAugmentPanel" class="survivors-augment hidden" aria-live="polite">
+            <p class="survivors-augment-title">AUGMENT REWARD</p>
+            <p id="survivorsAugmentLevelText" class="survivors-augment-level">レベルアップ報酬を選択</p>
+            <div id="survivorsAugmentOptions" class="survivors-augment-options"></div>
+          </div>
+          <div id="survivorsShopPanel" class="survivors-shop hidden" aria-live="polite">
+            <p class="survivors-shop-title">WAVE SHOP</p>
+            <p id="survivorsShopCoinText" class="survivors-shop-coin">所持コイン: 0</p>
+            <p id="survivorsShopWaitText" class="survivors-shop-wait hidden">ホストがショップを選択中です...</p>
+            <div id="survivorsShopOptions" class="survivors-shop-options"></div>
+            <div class="survivors-shop-actions">
+              <button id="survivorsShopRerollBtn" class="start-btn ghost" type="button">REROLL</button>
+              <button id="survivorsShopNextBtn" class="start-btn hud-primary" type="button">NEXT WAVE</button>
+            </div>
+          </div>
+        </section>
+
+        <p id="survivorsMessage" class="message">敵の波をしのごう</p>
+      </section>
+
+      <section id="fitPuzzleScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Fit Puzzle</h1>
+          <p id="fitPuzzleSubtitle">ピースを選んで枠内に配置し、すべて埋めるとクリア。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric">
+            <span class="label">BOARD</span>
+            <span id="fitPuzzleBoardText">6 x 6</span>
+          </div>
+          <div class="metric">
+            <span class="label">PLACED</span>
+            <span id="fitPuzzlePlacedText">0 / 0</span>
+          </div>
+          <button id="fitPuzzleStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="fitPuzzleRotateBtn" class="start-btn ghost">ROTATE</button>
+          <button id="fitPuzzleResetBtn" class="start-btn ghost">RESET</button>
+          <button id="fitPuzzleMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <section class="canvas-wrap fit-puzzle-wrap">
+          <div class="fit-puzzle-layout">
+            <div id="fitPuzzleBoard" class="fit-puzzle-board" aria-label="Fit puzzle board"></div>
+            <div class="fit-puzzle-side">
+              <p class="label">PIECES</p>
+              <div id="fitPuzzlePieces" class="fit-puzzle-pieces"></div>
+            </div>
+          </div>
+        </section>
+
+        <p id="fitPuzzleMessage" class="message">GAME STARTで開始</p>
+      </section>
+
+      <section id="solitaireScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Solitaire</h1>
+          <p id="solitaireSubtitle">ストックからめくって並べ替え、4つの土台を完成させよう。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric">
+            <span class="label">FOUNDATION</span>
+            <span id="solitaireFoundationCountText">0 / 52</span>
+          </div>
+          <div class="metric">
+            <span class="label">DUEL</span>
+            <span id="solitaireRaceStatusText">-</span>
+          </div>
+          <button id="solitaireStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="solitaireResetBtn" class="start-btn ghost">RESET</button>
+          <button id="solitaireMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <section class="canvas-wrap solitaire-wrap">
+          <div class="solitaire-top-row">
+            <div class="solitaire-piles-left">
+              <button id="solitaireStock" class="solitaire-slot" type="button" aria-label="Stock"></button>
+              <button id="solitaireWaste" class="solitaire-slot" type="button" aria-label="Waste"></button>
+            </div>
+            <div class="solitaire-foundations">
+              <button id="solitaireFoundationH" class="solitaire-slot" type="button" aria-label="Foundation Hearts"></button>
+              <button id="solitaireFoundationD" class="solitaire-slot" type="button" aria-label="Foundation Diamonds"></button>
+              <button id="solitaireFoundationC" class="solitaire-slot" type="button" aria-label="Foundation Clubs"></button>
+              <button id="solitaireFoundationS" class="solitaire-slot" type="button" aria-label="Foundation Spades"></button>
+            </div>
+          </div>
+          <div id="solitaireTableau" class="solitaire-tableau" aria-label="Tableau"></div>
+        </section>
+
+        <div id="solitaireResultModal" class="solitaire-result-modal hidden" aria-live="polite">
+          <div class="solitaire-result-card" role="dialog" aria-modal="true" aria-labelledby="solitaireResultTitle">
+            <h2 id="solitaireResultTitle">RESULT</h2>
+            <p id="solitaireResultSummary" class="solitaire-result-summary">-</p>
+            <p id="solitaireResultDetail" class="solitaire-result-detail">-</p>
+            <div class="solitaire-result-actions">
+              <button id="solitaireResultRetryBtn" class="start-btn hud-primary" type="button">もう一回</button>
+              <button id="solitaireResultLobbyBtn" class="start-btn ghost" type="button">ロビーへ戻る</button>
+            </div>
+          </div>
+        </div>
+
+        <p id="solitaireMessage" class="message">GAME STARTで開始</p>
+      </section>
+
+      <section id="roomChatPanel" class="room-chat-panel hidden" aria-label="Room chat">
+        <div class="room-chat-header">
+          <h2 id="roomChatTitle">Room Chat</h2>
+          <button id="roomChatClearBtn" class="start-btn ghost room-chat-clear" type="button">Clear</button>
+        </div>
+        <div class="room-chat-group-row">
+          <select id="roomChatGroupSelect" class="difficulty-select room-chat-group-select" aria-label="チャットグループ"></select>
+          <input
+            id="roomChatGroupNameInput"
+            class="room-input room-chat-group-name"
+            type="text"
+            maxlength="20"
+            placeholder="新規グループ名"
+            aria-label="新規グループ名"
+          />
+          <button id="roomChatGroupCreateBtn" class="start-btn ghost room-chat-group-create" type="button">作成</button>
+        </div>
+        <p id="roomChatGroupInfo" class="room-chat-group-info">表示グループ: 全体 / 参加 1人</p>
+        <div class="room-chat-search-row">
+          <input
+            id="roomChatSearchDate"
+            class="room-input room-chat-search-date"
+            type="date"
+            aria-label="日付で検索"
+          />
+          <input
+            id="roomChatSearchWord"
+            class="room-input room-chat-search-word"
+            type="text"
+            maxlength="40"
+            placeholder="ワード検索"
+            aria-label="ワードで検索"
+          />
+          <button id="roomChatSearchClearBtn" class="start-btn ghost room-chat-search-clear" type="button">条件クリア</button>
+        </div>
+        <p id="roomChatSearchStatus" class="room-chat-search-status">表示 0 / 0</p>
+        <section id="roomHostMutePanel" class="room-chat-host-panel hidden" aria-live="polite">
+          <p id="roomHostMuteTitle" class="room-chat-host-title">ホストミュート中</p>
+          <ul id="roomHostMuteList" class="room-chat-host-list">
+            <li class="room-chat-host-empty">現在ミュート中の相手はいません</li>
+          </ul>
+        </section>
+        <details class="room-chat-help">
+          <summary id="roomChatHelpSummary">コマンドヘルプ</summary>
+          <ul class="room-chat-help-list">
+            <li id="roomChatHelpLine1">/help または /commands: ヘルプ表示</li>
+            <li id="roomChatHelpLine2">/mute 名前: 相手をミュート</li>
+            <li id="roomChatHelpLine3">/unmute 名前: ミュート解除</li>
+            <li id="roomChatHelpLine4">/mutes: ミュート一覧表示</li>
+            <li id="roomChatHelpLine5">/dm 名前 メッセージ: 1対1DM（保存期限なし）</li>
+            <li id="roomChatHelpLine6">/dmclear 名前|all: DM履歴削除</li>
+            <li id="roomChatHelpLine7">/editlast 新しいメッセージ: 直近メッセージ修正</li>
+            <li id="roomChatHelpLine8">/retractlast: 直近メッセージ取り消し（連続不可）</li>
+          </ul>
+        </details>
+        <div id="roomChatLog" class="room-chat-log" aria-live="polite"></div>
+        <div class="room-chat-input-row">
+          <input
+            id="roomChatInput"
+            class="room-input room-chat-input"
+            type="text"
+            maxlength="100"
+            placeholder="メッセージを入力"
+            aria-label="Room chat input"
+          />
+          <button id="roomChatSendBtn" class="start-btn room-chat-send" type="button">送信</button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

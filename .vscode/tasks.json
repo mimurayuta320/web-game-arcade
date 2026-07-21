@@ -1,0 +1,22 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Web Game Dev Server",
+			"type": "shell",
+			"command": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd",
+			"args": [
+				"run",
+				"dev"
+			],
+			"options": {
+				"env": {
+					"Path": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;${env:Path}",
+					"PATH": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;${env:PATH}"
+				}
+			},
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}

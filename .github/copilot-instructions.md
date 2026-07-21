@@ -1,0 +1,12 @@
+- [x] Verify that the copilot-instructions.md file in the .github directory is created. (Done: file created)
+- [x] Clarify Project Requirements (Done: user requested a web game)
+- [x] Scaffold the Project (Done: Vite + source files + README added)
+- [x] Customize the Project (Done: playable dodge game with responsive UI)
+- [x] Install Required Extensions (Skipped: no required extensions specified)
+- [x] Compile the Project (Done: portable Node.js added in .tools and build passed)
+- [x] Create and Run Task (Done: .vscode/tasks.json uses bundled npm command)
+- [ ] Launch the Project (Pending: requires Node.js/npm and user confirmation for debug launch)
+- [x] Ensure Documentation is Complete (Done: README and copilot-instructions.md are present and updated)
+- Work through each checklist item systematically.
+- Keep communication concise and focused.
+- Follow development best practices.
