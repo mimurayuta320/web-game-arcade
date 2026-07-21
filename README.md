@@ -12,7 +12,7 @@
 npm run share
 ```
 
-- 画面に表示される `http://<このPCのIP>:4173/` をそのまま共有します。
+- 画面に表示される `http://<このPCのIP>:4173/#ToufuGameshow` をそのまま共有します。
 - このモードはフロント配信・ルームWebSocket・クラウド保存APIを1つのサーバーで提供します。
 
 別々に起動する場合は、以下をこのPCで同時に起動してください。
@@ -23,8 +23,28 @@ npm run room
 npm run dev
 ```
 
-- 別端末からは `http://<このPCのIP>:5173/` にアクセスします。
+- 別端末からは `http://<このPCのIP>:5173/#ToufuGameshow` にアクセスします。
 - 必要に応じて Windows ファイアウォールで `5173` `8787` `8788` を許可してください。
+
+## 本番を止めずにテスト環境で確認する
+
+本番と別ポートで起動するため、同じPC上で並行確認できます。
+
+```bash
+npm run cloud:test
+npm run room:test
+npm run dev:test
+```
+
+テストアクセスURL（同一PC）:
+
+```text
+http://localhost:5174/?cloudApi=http://localhost:18787&roomServer=ws://localhost:18788#ToufuGameshow
+```
+
+- `cloudApi` はクラウドAPI接続先を指定します（初回アクセス時に保存）。
+- テストDBは `server/data/a5m2.test.sqlite` で、本番DBと分離されます。
+- 共有モードのテストは `npm run share:test`（`4174`、保存先 `server/data/profiles.test.json`）。
 
 ## セットアップ
 
@@ -62,8 +82,8 @@ npm run room
 
 4. ブラウザで開く
 
-- `http://localhost:5173/`
-- 別端末からは `http://<このPCのIP>:5173/`
+- `http://localhost:5173/#ToufuGameshow`
+- 別端末からは `http://<このPCのIP>:5173/#ToufuGameshow`
 
 クラウド保存を使わない場合は `npm run dev` だけでOKです。
 
@@ -83,7 +103,7 @@ npm run dev:tofu
 
 アクセスURL:
 
-- `http://toufugameshow.local:5173/`
+- `http://toufugameshow.local:5173/#ToufuGameshow`
 
 ## 起動確認チェック
 
@@ -155,14 +175,12 @@ npm run share
 
 2. 表示されたURLを相手にそのまま共有
 
-- 例: `http://<your-host>:4173/`
+- 例: `http://<your-host>:4173/#ToufuGameshow`
 
 このモードではフロント配信とルームWebSocketが同じオリジンで動作するため、
 `roomServer` クエリは不要です。
 
 ## 実装済み（第1段階）
-
-- 大富豪ルール表: `docs/daifugo-rule-table.md`
 
 - ゲーム選択画面（オセロ / 将棋 / チェス）
 - 8x8盤面の表示
@@ -187,11 +205,11 @@ npm run share
 - 持ち駒対応（取った駒を手駒に追加）
 - 打ち対応（手駒から盤面へ配置）
 - 二歩制限（同筋に自分の未成歩があると歩を打てない）
-- 打ち歩詰め禁止（歩打ちで即詰みになる手を禁止）
 - 王手 / 詰み判定
 
 ### 将棋の今後候補
 
+- 打ち歩詰めの厳密判定
 - 千日手や持将棋などの引き分け処理
 
 ## ルーム対戦について
@@ -199,15 +217,6 @@ npm run share
 - ルーム番号を作成して共有し、番号入力で参加できます。
 - 既定では `ws://localhost:8788` のWebSocketサーバーに接続します。
 - WebSocketに接続できない場合は `BroadcastChannel` へフォールバックします。
-
-### 将棋オンライン対戦（最短手順）
-
-1. VS Codeでタスク `Run Shogi Online (Room + Dev)` を実行
-2. 開いたブラウザで「ルーム対戦」→ ルーム作成
-3. 相手側は同じURLを開いて同じ6桁コードで参加
-4. ロビーで「将棋開始」を押す
-
-インターネット越しで1本URL共有したい場合は、タスク `Run Share Server (LAN/Internet)` を実行してください。
 
 ### ローカルでオンライン対戦をテストする
 
@@ -237,13 +246,13 @@ npm run dev
 2. クライアントURLに `roomServer` クエリを付ける
 
 ```text
-http://<your-host>:5173/?roomServer=ws://<public-host>:8788
+http://<your-host>:5173/?roomServer=ws://<public-host>:8788#ToufuGameshow
 ```
 
 3. HTTPS配信時は `wss://` を使う
 
 ```text
-https://<your-host>/?roomServer=wss://<public-host>:8788
+https://<your-host>/?roomServer=wss://<public-host>:8788#ToufuGameshow
 ```
 
 `roomServer` を一度指定すると、その値はブラウザのlocalStorageに保存されます。
@@ -269,6 +278,46 @@ $env:Path = "$nodeDir;$env:Path"
 
 - ルーム機能は WebSocket 優先です。
 - WebSocketが利用できない場合だけ BroadcastChannel を使用します。
+
+## 戦績機能の共通ファイル（各ゲーム本体は未改修でもOK）
+
+今回、各ゲームの内部コードには直接組み込まず、共通ファイルだけ追加しています。
+
+- 追加ファイル: `src/scripts/matchStatsClient.js`
+- 戦績保存先: `server/data/profiles.json`（この1ファイルを別PCへ移せば戦績も一緒に引き継げます）
+
+### サーバーAPI
+
+- `/api/match/record`
+	- 認証後に 1試合分を追記
+	- 集計先: `profile.matchStats`
+	- 履歴先: `profile.recentMatches`
+
+### 各ゲームに後から実装するとき（最小例）
+
+ゲーム終了時に次を呼ぶだけで戦績を保存できます。
+
+```js
+import { createMatchStatsClient } from "./scripts/matchStatsClient.js";
+
+const userId = localStorage.getItem("neon-cloud-user-id") || "";
+const password = localStorage.getItem("neon-cloud-password") || "";
+const stats = createMatchStatsClient({ userId, password });
+
+// 例: オセロで勝利したとき
+await stats.recordMatch({
+	game: "othello",
+	result: "win", // "win" | "lose" | "draw"
+	roomCode: "123456", // 任意
+	opponent: "Player2", // 任意
+});
+```
+
+### 別PCへ移すときに重要なファイル
+
+- `server/data/profiles.json`
+	- クラウドIDごとの戦績・スキン・BANK情報が入ります
+
 - 別PC同士で遊ぶ場合はルームサーバーを公開して `roomServer` を指定します。
 
 ### いまのサバイバー マルチ仕様

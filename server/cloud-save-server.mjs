@@ -3,45 +3,37 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, "data");
-const DB_PATH = path.join(DATA_DIR, "profiles.json");
-const INQUIRY_PATH = path.join(DATA_DIR, "inquiries.json");
+const LEGACY_JSON_PATH = path.join(DATA_DIR, "profiles.json");
+const SQLITE_PATH = process.env.A5M2_DB_PATH || path.join(DATA_DIR, "a5m2.sqlite");
 const HOST = process.env.CLOUD_HOST || "0.0.0.0";
 const PORT = Number(process.env.CLOUD_PORT || 8787);
-
-const GAME_KEYS = ["othello", "shogi", "chess", "uno", "gomoku", "survivors", "fitPuzzle", "solitaire", "sevens"];
-
-function createDefaultGameData() {
-  const gameData = {};
-  GAME_KEYS.forEach((key) => {
-    gameData[key] = {
-      playCount: 0,
-      roomPlayCount: 0,
-      lastPlayedAt: null,
-    };
-  });
-  return gameData;
-}
 
 const DEFAULT_PROFILE = {
   bankCoins: 0,
   pityCounter: 0,
   unlockedSkins: ["classic"],
   selectedSkin: "classic",
-  characterId: "default",
   playerName: "Player",
-  gameData: createDefaultGameData(),
-  fitPuzzleProgress: {
-    highestUnlockedStage: 0,
-    selectedStageIndex: 0,
-    difficulty: "normal",
-    noRotateMode: false,
-    updatedAt: null,
+  playerAvatar: "",
+  matchStats: {
+    total: 0,
+    win: 0,
+    lose: 0,
+    draw: 0,
+    byGame: {},
   },
+  recentMatches: [],
 };
+
+const MATCH_RECENT_LIMIT = 60;
+const MATCH_RESULT_VALUES = new Set(["win", "lose", "draw"]);
+
+let db = null;
 
 function normalizePlayerName(raw) {
   const trimmed = String(raw || "").trim().replace(/\s+/g, " ");
@@ -49,98 +41,134 @@ function normalizePlayerName(raw) {
   return trimmed.slice(0, 18);
 }
 
+function normalizeAvatarDataUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (value.length > 180000) return "";
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value)) return "";
+  return value;
+}
+
 function ensureDb() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ users: {} }, null, 2), "utf8");
-  }
 }
 
-function readDb() {
-  ensureDb();
-  const raw = fs.readFileSync(DB_PATH, "utf8");
-  const parsed = JSON.parse(raw || "{}");
-  if (!parsed.users || typeof parsed.users !== "object") {
-    parsed.users = {};
-  }
-  return parsed;
+function cloneDefaultProfile() {
+  return JSON.parse(JSON.stringify(DEFAULT_PROFILE));
 }
 
-function writeDb(db) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), "utf8");
-}
-
-function readInquiries() {
-  ensureDb();
-  if (!fs.existsSync(INQUIRY_PATH)) {
-    return [];
-  }
+function safeParseProfileJson(raw) {
   try {
-    const raw = fs.readFileSync(INQUIRY_PATH, "utf8");
-    const parsed = JSON.parse(raw || "[]");
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(String(raw || "{}"));
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
-    return [];
+    return {};
   }
 }
 
-function writeInquiries(items) {
+function initSqlite() {
   ensureDb();
-  fs.writeFileSync(INQUIRY_PATH, JSON.stringify(items, null, 2), "utf8");
+  db = new DatabaseSync(SQLITE_PATH);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      user_id TEXT PRIMARY KEY,
+      pass_salt_hex TEXT NOT NULL,
+      pass_hash_hex TEXT NOT NULL,
+      profile_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS match_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      game TEXT NOT NULL,
+      result TEXT NOT NULL,
+      room_code TEXT NOT NULL,
+      opponent TEXT NOT NULL,
+      played_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_match_records_user_time
+      ON match_records(user_id, played_at DESC);
+  `);
+
+  migrateLegacyJsonIfNeeded();
 }
 
-function sanitizeInquiry(raw) {
-  const name = String(raw?.name || "").trim().slice(0, 40);
-  const message = String(raw?.message || "").trim().slice(0, 1200);
-  const url = String(raw?.url || "").trim().slice(0, 400);
-  const lang = String(raw?.lang || "").trim().slice(0, 10);
+function readUser(userId) {
+  const row = db.prepare(`
+    SELECT user_id, pass_salt_hex, pass_hash_hex, profile_json, created_at, updated_at
+    FROM users
+    WHERE user_id = ?
+  `).get(userId);
+  if (!row) return null;
   return {
-    id: crypto.randomUUID(),
-    name,
-    message,
-    url,
-    lang,
-    submittedAt: new Date().toISOString(),
+    userId: row.user_id,
+    passSaltHex: row.pass_salt_hex,
+    passHashHex: row.pass_hash_hex,
+    profile: safeParseProfileJson(row.profile_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
-function ensureInquiryId(item) {
-  if (item && typeof item === "object" && typeof item.id === "string" && item.id.trim()) {
-    return item;
+function insertUser({ userId, passSaltHex, passHashHex, profile }) {
+  const now = Date.now();
+  db.prepare(`
+    INSERT INTO users (user_id, pass_salt_hex, pass_hash_hex, profile_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(userId, passSaltHex, passHashHex, JSON.stringify(profile), now, now);
+}
+
+function updateUserProfile({ userId, profile }) {
+  db.prepare(`
+    UPDATE users
+    SET profile_json = ?, updated_at = ?
+    WHERE user_id = ?
+  `).run(JSON.stringify(profile), Date.now(), userId);
+}
+
+function insertMatchRecord({ userId, game, result, roomCode, opponent, playedAt }) {
+  db.prepare(`
+    INSERT INTO match_records (user_id, game, result, room_code, opponent, played_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(userId, game, result, roomCode, opponent, playedAt);
+}
+
+function migrateLegacyJsonIfNeeded() {
+  const userCountRow = db.prepare("SELECT COUNT(*) AS count FROM users").get();
+  const userCount = Number(userCountRow?.count || 0);
+  if (userCount > 0) return;
+  if (!fs.existsSync(LEGACY_JSON_PATH)) return;
+
+  const raw = fs.readFileSync(LEGACY_JSON_PATH, "utf8");
+  const parsed = JSON.parse(raw || "{}");
+  const users = parsed?.users && typeof parsed.users === "object" ? parsed.users : {};
+  const entries = Object.entries(users);
+  if (entries.length === 0) return;
+
+  const tx = db.prepare(`
+    INSERT INTO users (user_id, pass_salt_hex, pass_hash_hex, profile_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const now = Date.now();
+  db.exec("BEGIN");
+  try {
+    for (const [userId, row] of entries) {
+      if (!row || typeof row !== "object") continue;
+      if (!row.passSaltHex || !row.passHashHex) continue;
+      const profile = sanitizeProfile(row.profile || cloneDefaultProfile(), cloneDefaultProfile());
+      const createdAt = Number.isFinite(row.createdAt) ? Math.floor(row.createdAt) : now;
+      const updatedAt = Number.isFinite(row.updatedAt) ? Math.floor(row.updatedAt) : now;
+      tx.run(userId, row.passSaltHex, row.passHashHex, JSON.stringify(profile), createdAt, updatedAt);
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
   }
-  return {
-    ...(item && typeof item === "object" ? item : {}),
-    id: crypto.randomUUID(),
-  };
-}
-
-function normalizeInquiryList(items) {
-  if (!Array.isArray(items)) return [];
-  return items.map((item) => ensureInquiryId(item));
-}
-
-function normalizeInquiryLimit(raw) {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return 50;
-  return Math.max(1, Math.min(200, Math.floor(n)));
-}
-
-function selectLatestInquiries(items, limit = 50) {
-  const safeLimit = normalizeInquiryLimit(limit);
-  return items.slice(-safeLimit).reverse();
-}
-
-function removeInquiryById(items, inquiryId) {
-  const list = normalizeInquiryList(items);
-  const targetId = String(inquiryId || "").trim();
-  const index = list.findIndex((item) => String(item?.id || "") === targetId);
-  if (index < 0) {
-    return { removed: false, items: list };
-  }
-  list.splice(index, 1);
-  return { removed: true, items: list };
 }
 
 function sendJson(res, status, payload) {
@@ -190,118 +218,165 @@ function verifyPassword(password, storedSaltHex, storedHashHex) {
   return crypto.timingSafeEqual(a, b);
 }
 
-function sanitizeProfile(profile) {
-  const bankCoins = Number.isFinite(profile?.bankCoins) ? Math.max(0, Math.floor(profile.bankCoins)) : 0;
-  const pityCounter = Number.isFinite(profile?.pityCounter) ? Math.max(0, Math.min(9, Math.floor(profile.pityCounter))) : 0;
-  const unlockedSkins = Array.isArray(profile?.unlockedSkins)
-    ? profile.unlockedSkins.filter((id) => typeof id === "string")
-    : ["classic"];
-  if (!unlockedSkins.includes("classic")) unlockedSkins.unshift("classic");
-  const selectedSkin = typeof profile?.selectedSkin === "string" ? profile.selectedSkin : "classic";
-  const characterId = typeof profile?.characterId === "string" ? profile.characterId : "default";
-  const playerName = normalizePlayerName(profile?.playerName);
-  const gameData = createDefaultGameData();
-  const fitPuzzleProgress = {
-    highestUnlockedStage: 0,
-    selectedStageIndex: 0,
-    difficulty: "normal",
-    noRotateMode: false,
-    customStages: [],
-    updatedAt: null,
-  };
+function sanitizeMatchStats(stats) {
+  const total = Number.isFinite(stats?.total) ? Math.max(0, Math.floor(stats.total)) : 0;
+  const win = Number.isFinite(stats?.win) ? Math.max(0, Math.floor(stats.win)) : 0;
+  const lose = Number.isFinite(stats?.lose) ? Math.max(0, Math.floor(stats.lose)) : 0;
+  const draw = Number.isFinite(stats?.draw) ? Math.max(0, Math.floor(stats.draw)) : 0;
 
-  if (profile?.gameData && typeof profile.gameData === "object") {
-    GAME_KEYS.forEach((key) => {
-      const src = profile.gameData[key];
-      if (!src || typeof src !== "object") return;
-      const playCount = Number(src.playCount);
-      const roomPlayCount = Number(src.roomPlayCount);
-      const lastPlayedAt = typeof src.lastPlayedAt === "string" && src.lastPlayedAt.trim()
-        ? src.lastPlayedAt.trim().slice(0, 64)
-        : null;
-      gameData[key] = {
-        playCount: Number.isFinite(playCount) ? Math.max(0, Math.floor(playCount)) : 0,
-        roomPlayCount: Number.isFinite(roomPlayCount) ? Math.max(0, Math.floor(roomPlayCount)) : 0,
-        lastPlayedAt,
+  const byGame = {};
+  if (stats?.byGame && typeof stats.byGame === "object") {
+    for (const [gameKey, value] of Object.entries(stats.byGame)) {
+      if (typeof gameKey !== "string" || !gameKey) continue;
+      const row = value && typeof value === "object" ? value : {};
+      byGame[gameKey] = {
+        total: Number.isFinite(row.total) ? Math.max(0, Math.floor(row.total)) : 0,
+        win: Number.isFinite(row.win) ? Math.max(0, Math.floor(row.win)) : 0,
+        lose: Number.isFinite(row.lose) ? Math.max(0, Math.floor(row.lose)) : 0,
+        draw: Number.isFinite(row.draw) ? Math.max(0, Math.floor(row.draw)) : 0,
       };
+    }
+  }
+
+  return {
+    total,
+    win,
+    lose,
+    draw,
+    byGame,
+  };
+}
+
+function sanitizeRecentMatches(matches) {
+  if (!Array.isArray(matches)) return [];
+  const normalized = [];
+
+  for (const row of matches) {
+    if (!row || typeof row !== "object") continue;
+    const game = String(row.game || "").trim().slice(0, 24);
+    const result = String(row.result || "").trim().toLowerCase();
+    if (!game) continue;
+    if (!MATCH_RESULT_VALUES.has(result)) continue;
+
+    const playedAt = Number.isFinite(row.playedAt) ? Math.max(0, Math.floor(row.playedAt)) : Date.now();
+    const roomCode = typeof row.roomCode === "string" ? row.roomCode.trim().slice(0, 12) : "";
+    const opponent = typeof row.opponent === "string" ? normalizePlayerName(row.opponent) : "";
+
+    normalized.push({
+      game,
+      result,
+      playedAt,
+      roomCode,
+      opponent,
     });
   }
 
-  if (profile?.fitPuzzleProgress && typeof profile.fitPuzzleProgress === "object") {
-    const rawHighest = Number(profile.fitPuzzleProgress.highestUnlockedStage);
-    const rawSelected = Number(profile.fitPuzzleProgress.selectedStageIndex);
-    fitPuzzleProgress.highestUnlockedStage = Number.isFinite(rawHighest) ? Math.max(0, Math.floor(rawHighest)) : 0;
-    fitPuzzleProgress.selectedStageIndex = Number.isFinite(rawSelected)
-      ? Math.max(0, Math.min(fitPuzzleProgress.highestUnlockedStage, Math.floor(rawSelected)))
-      : 0;
-    fitPuzzleProgress.difficulty =
-      profile.fitPuzzleProgress.difficulty === "easy" ||
-      profile.fitPuzzleProgress.difficulty === "normal" ||
-      profile.fitPuzzleProgress.difficulty === "hard"
-        ? profile.fitPuzzleProgress.difficulty
-        : "normal";
-    fitPuzzleProgress.noRotateMode = Boolean(profile.fitPuzzleProgress.noRotateMode);
-    if (Array.isArray(profile.fitPuzzleProgress.customStages)) {
-      fitPuzzleProgress.customStages = profile.fitPuzzleProgress.customStages.map((raw, idx) => {
-        const rows = Math.max(4, Math.min(12, Number.isFinite(Number(raw?.rows)) ? Math.floor(Number(raw.rows)) : 10));
-        const cols = Math.max(4, Math.min(12, Number.isFinite(Number(raw?.cols)) ? Math.floor(Number(raw.cols)) : 10));
-        const maxCells = rows * cols;
-        const pieceCount = Math.max(2, Math.min(maxCells, Number.isFinite(Number(raw?.pieceCount)) ? Math.floor(Number(raw.pieceCount)) : Math.max(2, Math.floor(maxCells / 2))));
-        const bias = raw?.profile?.bias === "long" || raw?.profile?.bias === "blocks" ? raw.profile.bias : "balanced";
-        const mutationSteps = Math.max(0, Math.min(20000, Number.isFinite(Number(raw?.profile?.mutationSteps)) ? Math.floor(Number(raw.profile.mutationSteps)) : rows * cols * 6));
-        const minComplex = Math.max(0, Math.min(200, Number.isFinite(Number(raw?.profile?.minComplex)) ? Math.floor(Number(raw.profile.minComplex)) : 0));
-        const minBranch = Math.max(0, Math.min(200, Number.isFinite(Number(raw?.profile?.minBranch)) ? Math.floor(Number(raw.profile.minBranch)) : 0));
-        const openingRotation = raw?.openingRotation === "mostly-rotated" ? "mostly-rotated" : "mixed";
-        const assistLimit = Math.max(0, Math.min(10, Number.isFinite(Number(raw?.assistLimit)) ? Math.floor(Number(raw.assistLimit)) : 0));
-        const seed = Math.max(1, Number.isFinite(Number(raw?.seed)) ? Math.floor(Number(raw.seed)) : 10001 + idx * 101);
-        const title = String(raw?.title || `カスタム-${idx + 1}`).trim().slice(0, 40) || `カスタム-${idx + 1}`;
-        return {
-          rows,
-          cols,
-          pieceCount,
-          title,
-          profile: {
-            bias,
-            mutationSteps,
-            minComplex,
-            minBranch,
-          },
-          openingRotation,
-          assistLimit,
-          seed,
-        };
-      });
-    }
-    fitPuzzleProgress.updatedAt =
-      typeof profile.fitPuzzleProgress.updatedAt === "string" && profile.fitPuzzleProgress.updatedAt.trim()
-        ? profile.fitPuzzleProgress.updatedAt.trim().slice(0, 64)
-        : null;
+  return normalized
+    .sort((a, b) => b.playedAt - a.playedAt)
+    .slice(0, MATCH_RECENT_LIMIT);
+}
+
+function normalizeGameKey(raw) {
+  return String(raw || "").trim().slice(0, 24).toLowerCase();
+}
+
+function normalizeMatchResult(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  return MATCH_RESULT_VALUES.has(value) ? value : "";
+}
+
+function normalizeRoomCode(raw) {
+  return String(raw || "").replace(/\D/g, "").slice(0, 6);
+}
+
+function applyMatchRecord(profile, rawRecord) {
+  const game = normalizeGameKey(rawRecord?.game);
+  const result = normalizeMatchResult(rawRecord?.result);
+  if (!game || !result) {
+    return { ok: false, code: "INVALID_MATCH", message: "game and result are required" };
   }
+
+  const next = sanitizeProfile(profile, profile);
+  next.matchStats.total += 1;
+  if (result === "win") next.matchStats.win += 1;
+  if (result === "lose") next.matchStats.lose += 1;
+  if (result === "draw") next.matchStats.draw += 1;
+
+  if (!next.matchStats.byGame[game]) {
+    next.matchStats.byGame[game] = { total: 0, win: 0, lose: 0, draw: 0 };
+  }
+  const row = next.matchStats.byGame[game];
+  row.total += 1;
+  if (result === "win") row.win += 1;
+  if (result === "lose") row.lose += 1;
+  if (result === "draw") row.draw += 1;
+
+  const match = {
+    game,
+    result,
+    playedAt: Date.now(),
+    roomCode: normalizeRoomCode(rawRecord?.roomCode),
+    opponent: typeof rawRecord?.opponent === "string" ? normalizePlayerName(rawRecord.opponent) : "",
+  };
+
+  next.recentMatches = [match, ...sanitizeRecentMatches(next.recentMatches)].slice(0, MATCH_RECENT_LIMIT);
+  return { ok: true, profile: sanitizeProfile(next, next), match };
+}
+
+function sanitizeProfile(profile, baseProfile = DEFAULT_PROFILE) {
+  const source = profile && typeof profile === "object" ? profile : {};
+  const base = baseProfile && typeof baseProfile === "object" ? baseProfile : DEFAULT_PROFILE;
+
+  const bankCoins = Number.isFinite(source.bankCoins)
+    ? Math.max(0, Math.floor(source.bankCoins))
+    : Number.isFinite(base.bankCoins)
+      ? Math.max(0, Math.floor(base.bankCoins))
+      : 0;
+  const pityCounter = Number.isFinite(source.pityCounter)
+    ? Math.max(0, Math.min(9, Math.floor(source.pityCounter)))
+    : Number.isFinite(base.pityCounter)
+      ? Math.max(0, Math.min(9, Math.floor(base.pityCounter)))
+      : 0;
+  const unlockedSkins = Array.isArray(source.unlockedSkins)
+    ? source.unlockedSkins.filter((id) => typeof id === "string")
+    : Array.isArray(base.unlockedSkins)
+      ? base.unlockedSkins.filter((id) => typeof id === "string")
+      : ["classic"];
+  if (!unlockedSkins.includes("classic")) unlockedSkins.unshift("classic");
+  const selectedSkin = typeof source.selectedSkin === "string"
+    ? source.selectedSkin
+    : typeof base.selectedSkin === "string"
+      ? base.selectedSkin
+      : "classic";
+  const playerName = normalizePlayerName(source.playerName ?? base.playerName);
+  const playerAvatar = normalizeAvatarDataUrl(source.playerAvatar ?? base.playerAvatar);
+
+  const matchStats = sanitizeMatchStats(source.matchStats ?? base.matchStats);
+  const recentMatches = sanitizeRecentMatches(source.recentMatches ?? base.recentMatches);
 
   return {
     bankCoins,
     pityCounter,
     unlockedSkins: [...new Set(unlockedSkins)],
     selectedSkin: unlockedSkins.includes(selectedSkin) ? selectedSkin : "classic",
-    characterId,
     playerName,
-    gameData,
-    fitPuzzleProgress,
+    playerAvatar,
+    matchStats,
+    recentMatches,
   };
 }
 
 function authenticateOrCreate(db, userId, password) {
-  const user = db.users[userId];
+  const user = readUser(userId);
   if (!user) {
     const pass = hashPassword(password);
-    db.users[userId] = {
+    insertUser({
+      userId,
       passSaltHex: pass.saltHex,
       passHashHex: pass.hashHex,
-      profile: { ...DEFAULT_PROFILE },
-      updatedAt: Date.now(),
-      createdAt: Date.now(),
-    };
-    return { ok: true, created: true, user: db.users[userId] };
+      profile: cloneDefaultProfile(),
+    });
+    return { ok: true, created: true, user: readUser(userId) };
   }
 
   const ok = verifyPassword(password, user.passSaltHex, user.passHashHex);
@@ -320,27 +395,12 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 405, { ok: false, code: "METHOD_NOT_ALLOWED", message: "POST only" });
   }
 
-  if (req.url !== "/api/profile/load" && req.url !== "/api/profile/save" && req.url !== "/api/inquiry" && req.url !== "/api/inquiry/list" && req.url !== "/api/inquiry/delete") {
+  if (req.url !== "/api/profile/load" && req.url !== "/api/profile/save" && req.url !== "/api/match/record") {
     return sendJson(res, 404, { ok: false, code: "NOT_FOUND", message: "Unknown endpoint" });
   }
 
   try {
     const body = await parseBody(req);
-
-    if (req.url === "/api/inquiry") {
-      const inquiry = sanitizeInquiry(body);
-      if (!inquiry.message) {
-        return sendJson(res, 400, { ok: false, code: "INQUIRY_REQUIRED", message: "message is required" });
-      }
-      const list = normalizeInquiryList(readInquiries());
-      list.push(inquiry);
-      if (list.length > 1000) {
-        list.splice(0, list.length - 1000);
-      }
-      writeInquiries(list);
-      return sendJson(res, 200, { ok: true });
-    }
-
     const userId = String(body?.userId || "").trim();
     const password = String(body?.password || "");
 
@@ -348,48 +408,48 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 400, { ok: false, code: "AUTH_REQUIRED", message: "userId and password are required" });
     }
 
-    const db = readDb();
     const auth = authenticateOrCreate(db, userId, password);
     if (!auth.ok) {
       return sendJson(res, 401, { ok: false, code: "INVALID_PASSWORD", message: "Invalid password" });
     }
 
-    if (req.url === "/api/inquiry/list") {
-      const items = selectLatestInquiries(normalizeInquiryList(readInquiries()), body?.limit);
-      return sendJson(res, 200, { ok: true, items });
-    }
-
-    if (req.url === "/api/inquiry/delete") {
-      const inquiryId = String(body?.id || "").trim();
-      if (!inquiryId) {
-        return sendJson(res, 400, { ok: false, code: "INQUIRY_ID_REQUIRED", message: "id is required" });
-      }
-      const result = removeInquiryById(readInquiries(), inquiryId);
-      if (!result.removed) {
-        return sendJson(res, 404, { ok: false, code: "INQUIRY_NOT_FOUND", message: "inquiry not found" });
-      }
-      writeInquiries(result.items);
-      return sendJson(res, 200, { ok: true });
-    }
-
     if (req.url === "/api/profile/load") {
-      writeDb(db);
       return sendJson(res, 200, {
         ok: true,
         created: auth.created,
-        profile: sanitizeProfile(auth.user.profile || DEFAULT_PROFILE),
+        profile: sanitizeProfile(auth.user.profile || DEFAULT_PROFILE, DEFAULT_PROFILE),
       });
     }
 
-    const incomingProfile = body?.profile && typeof body.profile === "object" ? body.profile : {};
-    const mergedProfile = {
-      ...(auth.user.profile || DEFAULT_PROFILE),
-      ...incomingProfile,
-    };
-    const nextProfile = sanitizeProfile(mergedProfile);
-    auth.user.profile = nextProfile;
-    auth.user.updatedAt = Date.now();
-    writeDb(db);
+    if (req.url === "/api/match/record") {
+      const recorded = applyMatchRecord(auth.user.profile || DEFAULT_PROFILE, body?.match || {});
+      if (!recorded.ok) {
+        return sendJson(res, 400, {
+          ok: false,
+          code: recorded.code,
+          message: recorded.message,
+        });
+      }
+
+      auth.user.profile = recorded.profile;
+      updateUserProfile({ userId, profile: auth.user.profile });
+      insertMatchRecord({
+        userId,
+        game: recorded.match.game,
+        result: recorded.match.result,
+        roomCode: recorded.match.roomCode,
+        opponent: recorded.match.opponent,
+        playedAt: recorded.match.playedAt,
+      });
+      return sendJson(res, 200, {
+        ok: true,
+        match: recorded.match,
+        matchStats: recorded.profile.matchStats,
+      });
+    }
+
+    const nextProfile = sanitizeProfile(body?.profile || {}, auth.user.profile || DEFAULT_PROFILE);
+    updateUserProfile({ userId, profile: nextProfile });
     return sendJson(res, 200, { ok: true, profile: nextProfile });
   } catch (err) {
     return sendJson(res, 500, {
@@ -400,6 +460,9 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+initSqlite();
+
 server.listen(PORT, HOST, () => {
   console.log(`Cloud save server running at http://${HOST}:${PORT}`);
+  console.log(`A5M2 SQLite DB: ${SQLITE_PATH}`);
 });

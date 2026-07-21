@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer } from "ws";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,23 +14,18 @@ const HOST = process.env.SHARE_HOST || "0.0.0.0";
 const PORT = Number(process.env.SHARE_PORT || 4173);
 const ROOM_PATH = process.env.ROOM_PATH || "/room";
 const MAX_ROOM_PLAYERS = Number(process.env.ROOM_MAX_PLAYERS || 8);
+const CHAT_RATE_MIN_INTERVAL_MS = Number(process.env.ROOM_CHAT_MIN_INTERVAL_MS || 700);
+const CHAT_RATE_WINDOW_MS = Number(process.env.ROOM_CHAT_WINDOW_MS || 12000);
+const CHAT_RATE_MAX_IN_WINDOW = Number(process.env.ROOM_CHAT_MAX_IN_WINDOW || 8);
+const CHAT_RATE_DUP_WINDOW_MS = Number(process.env.ROOM_CHAT_DUP_WINDOW_MS || 9000);
+const CHAT_EDIT_RETRACT_WINDOW_MS = Number(process.env.ROOM_CHAT_EDIT_RETRACT_WINDOW_MS || 30000);
+const REPORT_AUTO_MUTE_THRESHOLD = Number(process.env.ROOM_REPORT_AUTO_MUTE_THRESHOLD || 2);
+const HOST_MUTE_DEFAULT_MS = Number(process.env.ROOM_HOST_MUTE_DEFAULT_MS || 5 * 60 * 1000);
+const HOST_MUTE_MAX_MS = Number(process.env.ROOM_HOST_MUTE_MAX_MS || 24 * 60 * 60 * 1000);
+const MESSAGE_STATE_TTL_MS = Number(process.env.ROOM_MESSAGE_STATE_TTL_MS || 4 * 60 * 60 * 1000);
+const INVITE_TOKEN_TTL_MS = Number(process.env.ROOM_INVITE_TOKEN_TTL_MS || 5 * 60 * 1000);
 const DATA_DIR = path.join(__dirname, "data");
-const DB_PATH = path.join(DATA_DIR, "profiles.json");
-const INQUIRY_PATH = path.join(DATA_DIR, "inquiries.json");
-
-const GAME_KEYS = ["othello", "shogi", "chess", "uno", "gomoku", "survivors", "fitPuzzle", "solitaire", "sevens"];
-
-function createDefaultGameData() {
-  const gameData = {};
-  GAME_KEYS.forEach((key) => {
-    gameData[key] = {
-      playCount: 0,
-      roomPlayCount: 0,
-      lastPlayedAt: null,
-    };
-  });
-  return gameData;
-}
+const DB_PATH = process.env.SHARE_DB_PATH || path.join(DATA_DIR, "profiles.json");
 
 const DEFAULT_PROFILE = {
   bankCoins: 0,
@@ -38,15 +33,16 @@ const DEFAULT_PROFILE = {
   unlockedSkins: ["classic"],
   selectedSkin: "classic",
   playerName: "Player",
-  gameData: createDefaultGameData(),
-  fitPuzzleProgress: {
-    highestUnlockedStage: 0,
-    selectedStageIndex: 0,
-    difficulty: "normal",
-    noRotateMode: false,
-    updatedAt: null,
-  },
+  playerAvatar: "",
 };
+
+function normalizeAvatarDataUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (value.length > 180000) return "";
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value)) return "";
+  return value;
+}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -63,6 +59,112 @@ const MIME = {
 };
 
 const rooms = new Map();
+const roomMeta = new Map();
+
+function roomMetaOf(code) {
+  if (!roomMeta.has(code)) {
+    roomMeta.set(code, {
+      hostPeerId: "",
+      isPublic: true,
+      inGame: false,
+      allowedPeerIds: new Set(),
+      mutedPeers: new Map(),
+      reports: new Map(),
+      messageStates: new Map(),
+      rematchVotes: new Set(),
+      inviteTokens: new Map(),
+      privateAccessPeerIds: new Set(),
+    });
+  }
+  return roomMeta.get(code);
+}
+
+function nowTs() {
+  return Date.now();
+}
+
+function pruneRoomMeta(meta, now = nowTs()) {
+  for (const [peerId, until] of meta.mutedPeers.entries()) {
+    if (!Number.isFinite(until) || until <= now) {
+      meta.mutedPeers.delete(peerId);
+    }
+  }
+  for (const [messageId, state] of meta.messageStates.entries()) {
+    if (!state || !Number.isFinite(state.createdAt) || now - state.createdAt > MESSAGE_STATE_TTL_MS) {
+      meta.messageStates.delete(messageId);
+      meta.reports.delete(messageId);
+    }
+  }
+}
+
+function normalizeMessageId(raw) {
+  const id = String(raw || "").trim();
+  if (!id) return "";
+  return id.slice(0, 80);
+}
+
+function isHost(meta, peerId) {
+  return Boolean(meta?.hostPeerId && peerId && meta.hostPeerId === peerId);
+}
+
+function asBoolean(value, fallback = true) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const v = value.toLowerCase().trim();
+    if (v === "true") return true;
+    if (v === "false") return false;
+  }
+  return fallback;
+}
+
+function asSpectateBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const v = value.toLowerCase().trim();
+    if (v === "true") return true;
+    if (v === "false") return false;
+  }
+  return false;
+}
+
+function isChatMutatingType(type) {
+  return type === "chat" || type === "chat-edit" || type === "chat-retract";
+}
+
+function sendError(ws, code, detail = "") {
+  sendJson(ws, { type: "error", code, detail });
+}
+
+function checkChatRateLimit(ws, payload) {
+  const now = nowTs();
+  const state = ws.chatRateState || {
+    timestamps: [],
+    lastText: "",
+    lastAt: 0,
+  };
+  ws.chatRateState = state;
+
+  while (state.timestamps.length > 0 && now - state.timestamps[0] > CHAT_RATE_WINDOW_MS) {
+    state.timestamps.shift();
+  }
+
+  if (state.lastAt > 0 && now - state.lastAt < CHAT_RATE_MIN_INTERVAL_MS) {
+    return { ok: false, code: "RATE_LIMIT_FAST" };
+  }
+  if (state.timestamps.length >= CHAT_RATE_MAX_IN_WINDOW) {
+    return { ok: false, code: "RATE_LIMIT_BURST" };
+  }
+
+  const text = String(payload?.text || "").trim().toLowerCase();
+  if (text && state.lastText === text && now - state.lastAt < CHAT_RATE_DUP_WINDOW_MS) {
+    return { ok: false, code: "RATE_LIMIT_DUPLICATE" };
+  }
+
+  state.timestamps.push(now);
+  state.lastText = text;
+  state.lastAt = now;
+  return { ok: true };
+}
 
 function normalizePlayerName(raw) {
   const trimmed = String(raw || "").trim().replace(/\s+/g, " ");
@@ -91,77 +193,6 @@ function readDb() {
 
 function writeDb(db) {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2), "utf8");
-}
-
-function readInquiries() {
-  ensureDb();
-  if (!fs.existsSync(INQUIRY_PATH)) {
-    return [];
-  }
-  try {
-    const raw = fs.readFileSync(INQUIRY_PATH, "utf8");
-    const parsed = JSON.parse(raw || "[]");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeInquiries(items) {
-  ensureDb();
-  fs.writeFileSync(INQUIRY_PATH, JSON.stringify(items, null, 2), "utf8");
-}
-
-function sanitizeInquiry(raw) {
-  const name = String(raw?.name || "").trim().slice(0, 40);
-  const message = String(raw?.message || "").trim().slice(0, 1200);
-  const url = String(raw?.url || "").trim().slice(0, 400);
-  const lang = String(raw?.lang || "").trim().slice(0, 10);
-  return {
-    id: crypto.randomUUID(),
-    name,
-    message,
-    url,
-    lang,
-    submittedAt: new Date().toISOString(),
-  };
-}
-
-function ensureInquiryId(item) {
-  if (item && typeof item === "object" && typeof item.id === "string" && item.id.trim()) {
-    return item;
-  }
-  return {
-    ...(item && typeof item === "object" ? item : {}),
-    id: crypto.randomUUID(),
-  };
-}
-
-function normalizeInquiryList(items) {
-  if (!Array.isArray(items)) return [];
-  return items.map((item) => ensureInquiryId(item));
-}
-
-function normalizeInquiryLimit(raw) {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return 50;
-  return Math.max(1, Math.min(200, Math.floor(n)));
-}
-
-function selectLatestInquiries(items, limit = 50) {
-  const safeLimit = normalizeInquiryLimit(limit);
-  return items.slice(-safeLimit).reverse();
-}
-
-function removeInquiryById(items, inquiryId) {
-  const list = normalizeInquiryList(items);
-  const targetId = String(inquiryId || "").trim();
-  const index = list.findIndex((item) => String(item?.id || "") === targetId);
-  if (index < 0) {
-    return { removed: false, items: list };
-  }
-  list.splice(index, 1);
-  return { removed: true, items: list };
 }
 
 function sendApiJson(res, status, payload) {
@@ -220,83 +251,7 @@ function sanitizeProfile(profile) {
   if (!unlockedSkins.includes("classic")) unlockedSkins.unshift("classic");
   const selectedSkin = typeof profile?.selectedSkin === "string" ? profile.selectedSkin : "classic";
   const playerName = normalizePlayerName(profile?.playerName);
-  const gameData = createDefaultGameData();
-  const fitPuzzleProgress = {
-    highestUnlockedStage: 0,
-    selectedStageIndex: 0,
-    difficulty: "normal",
-    noRotateMode: false,
-    customStages: [],
-    updatedAt: null,
-  };
-
-  if (profile?.gameData && typeof profile.gameData === "object") {
-    GAME_KEYS.forEach((key) => {
-      const src = profile.gameData[key];
-      if (!src || typeof src !== "object") return;
-      const playCount = Number(src.playCount);
-      const roomPlayCount = Number(src.roomPlayCount);
-      const lastPlayedAt = typeof src.lastPlayedAt === "string" && src.lastPlayedAt.trim()
-        ? src.lastPlayedAt.trim().slice(0, 64)
-        : null;
-      gameData[key] = {
-        playCount: Number.isFinite(playCount) ? Math.max(0, Math.floor(playCount)) : 0,
-        roomPlayCount: Number.isFinite(roomPlayCount) ? Math.max(0, Math.floor(roomPlayCount)) : 0,
-        lastPlayedAt,
-      };
-    });
-  }
-
-  if (profile?.fitPuzzleProgress && typeof profile.fitPuzzleProgress === "object") {
-    const rawHighest = Number(profile.fitPuzzleProgress.highestUnlockedStage);
-    const rawSelected = Number(profile.fitPuzzleProgress.selectedStageIndex);
-    fitPuzzleProgress.highestUnlockedStage = Number.isFinite(rawHighest) ? Math.max(0, Math.floor(rawHighest)) : 0;
-    fitPuzzleProgress.selectedStageIndex = Number.isFinite(rawSelected)
-      ? Math.max(0, Math.min(fitPuzzleProgress.highestUnlockedStage, Math.floor(rawSelected)))
-      : 0;
-    fitPuzzleProgress.difficulty =
-      profile.fitPuzzleProgress.difficulty === "easy" ||
-      profile.fitPuzzleProgress.difficulty === "normal" ||
-      profile.fitPuzzleProgress.difficulty === "hard"
-        ? profile.fitPuzzleProgress.difficulty
-        : "normal";
-    fitPuzzleProgress.noRotateMode = Boolean(profile.fitPuzzleProgress.noRotateMode);
-    if (Array.isArray(profile.fitPuzzleProgress.customStages)) {
-      fitPuzzleProgress.customStages = profile.fitPuzzleProgress.customStages.map((raw, idx) => {
-        const rows = Math.max(4, Math.min(12, Number.isFinite(Number(raw?.rows)) ? Math.floor(Number(raw.rows)) : 10));
-        const cols = Math.max(4, Math.min(12, Number.isFinite(Number(raw?.cols)) ? Math.floor(Number(raw.cols)) : 10));
-        const maxCells = rows * cols;
-        const pieceCount = Math.max(2, Math.min(maxCells, Number.isFinite(Number(raw?.pieceCount)) ? Math.floor(Number(raw.pieceCount)) : Math.max(2, Math.floor(maxCells / 2))));
-        const bias = raw?.profile?.bias === "long" || raw?.profile?.bias === "blocks" ? raw.profile.bias : "balanced";
-        const mutationSteps = Math.max(0, Math.min(20000, Number.isFinite(Number(raw?.profile?.mutationSteps)) ? Math.floor(Number(raw.profile.mutationSteps)) : rows * cols * 6));
-        const minComplex = Math.max(0, Math.min(200, Number.isFinite(Number(raw?.profile?.minComplex)) ? Math.floor(Number(raw.profile.minComplex)) : 0));
-        const minBranch = Math.max(0, Math.min(200, Number.isFinite(Number(raw?.profile?.minBranch)) ? Math.floor(Number(raw.profile.minBranch)) : 0));
-        const openingRotation = raw?.openingRotation === "mostly-rotated" ? "mostly-rotated" : "mixed";
-        const assistLimit = Math.max(0, Math.min(10, Number.isFinite(Number(raw?.assistLimit)) ? Math.floor(Number(raw.assistLimit)) : 0));
-        const seed = Math.max(1, Number.isFinite(Number(raw?.seed)) ? Math.floor(Number(raw.seed)) : 10001 + idx * 101);
-        const title = String(raw?.title || `カスタム-${idx + 1}`).trim().slice(0, 40) || `カスタム-${idx + 1}`;
-        return {
-          rows,
-          cols,
-          pieceCount,
-          title,
-          profile: {
-            bias,
-            mutationSteps,
-            minComplex,
-            minBranch,
-          },
-          openingRotation,
-          assistLimit,
-          seed,
-        };
-      });
-    }
-    fitPuzzleProgress.updatedAt =
-      typeof profile.fitPuzzleProgress.updatedAt === "string" && profile.fitPuzzleProgress.updatedAt.trim()
-        ? profile.fitPuzzleProgress.updatedAt.trim().slice(0, 64)
-        : null;
-  }
+  const playerAvatar = normalizeAvatarDataUrl(profile?.playerAvatar);
 
   return {
     bankCoins,
@@ -304,8 +259,7 @@ function sanitizeProfile(profile) {
     unlockedSkins: [...new Set(unlockedSkins)],
     selectedSkin: unlockedSkins.includes(selectedSkin) ? selectedSkin : "classic",
     playerName,
-    gameData,
-    fitPuzzleProgress,
+    playerAvatar,
   };
 }
 
@@ -343,13 +297,35 @@ function removeFromRoom(ws) {
   const members = rooms.get(code);
   if (!members) return;
   members.delete(ws);
+  const meta = roomMeta.get(code);
+  if (meta && ws.peerId) {
+    meta.rematchVotes.delete(ws.peerId);
+  }
+  if (meta && ws.peerId && meta.hostPeerId === ws.peerId) {
+    meta.hostPeerId = "";
+    for (const member of members) {
+      if (member.peerId && !member.spectator) {
+        meta.hostPeerId = member.peerId;
+        break;
+      }
+    }
+    if (!meta.hostPeerId) {
+      for (const member of members) {
+        if (member.peerId) {
+          meta.hostPeerId = member.peerId;
+          break;
+        }
+      }
+    }
+  }
   if (members.size === 0) {
     rooms.delete(code);
+    roomMeta.delete(code);
   }
 }
 
 function sendJson(ws, payload) {
-  if (ws.readyState !== WebSocket.OPEN) return;
+  if (ws.readyState !== ws.OPEN) return;
   ws.send(JSON.stringify(payload));
 }
 
@@ -375,8 +351,24 @@ function joinRoom(ws, payload) {
   }
 
   const members = roomOf(code);
+  const requestedSpectate = asSpectateBoolean(payload?.spectate);
   if (!ws.roomCode && members.size >= MAX_ROOM_PLAYERS) {
     sendJson(ws, { type: "room-full", code });
+    return { ok: false, joined: false };
+  }
+
+  const meta = roomMetaOf(code);
+  const inviteToken = String(payload?.inviteToken || "").trim();
+  if (!ws.roomCode && !meta.isPublic && ws.peerId !== meta.hostPeerId) {
+    const alreadyAllowed = ws.peerId && meta.privateAccessPeerIds.has(ws.peerId);
+    const consumed = alreadyAllowed ? true : consumeInviteToken(meta, inviteToken);
+    if (!consumed) {
+      sendJson(ws, { type: "invite-token-required", code });
+      return { ok: false, joined: false };
+    }
+  }
+  if (!ws.roomCode && !requestedSpectate && meta.inGame && (!ws.peerId || !meta.allowedPeerIds.has(ws.peerId))) {
+    sendJson(ws, { type: "room-in-game", code });
     return { ok: false, joined: false };
   }
 
@@ -384,7 +376,19 @@ function joinRoom(ws, payload) {
   if (!ws.roomCode) {
     ws.roomCode = code;
     members.add(ws);
+    ws.spectator = requestedSpectate;
     joined = true;
+    if (!meta.hostPeerId && ws.peerId && !ws.spectator) {
+      meta.hostPeerId = ws.peerId;
+    }
+    if (ws.peerId) {
+      meta.privateAccessPeerIds.add(ws.peerId);
+    }
+  }
+
+  const requestedPublic = asBoolean(payload?.roomPublic, meta.isPublic);
+  if (ws.peerId && meta.hostPeerId === ws.peerId) {
+    meta.isPublic = requestedPublic;
   }
 
   return { ok: true, joined };
@@ -393,12 +397,18 @@ function joinRoom(ws, payload) {
 function roomParticipants(code) {
   const members = rooms.get(code);
   if (!members) return [];
+  const meta = roomMetaOf(code);
   const participants = [];
   for (const member of members) {
     if (!member.peerId) continue;
+    const role = meta.inGame && !meta.allowedPeerIds.has(member.peerId)
+      ? "spectator"
+      : (member.spectator ? "spectator" : (meta.hostPeerId === member.peerId ? "host" : "guest"));
     participants.push({
       id: member.peerId,
       name: normalizePlayerName(member.playerName || "Player"),
+      avatar: normalizeAvatarDataUrl(member.playerAvatar),
+      role,
     });
   }
   return participants;
@@ -406,7 +416,248 @@ function roomParticipants(code) {
 
 function broadcastRoomState(code) {
   if (!code) return;
-  broadcastRoom(code, { type: "room-state", room: code, participants: roomParticipants(code) });
+  const meta = roomMetaOf(code);
+  broadcastRoom(code, {
+    type: "room-state",
+    room: code,
+    participants: roomParticipants(code),
+    hostPeerId: meta.hostPeerId || "",
+    isPublic: Boolean(meta.isPublic),
+    inGame: Boolean(meta.inGame),
+    rematchVotes: [...meta.rematchVotes],
+  });
+}
+
+function lockCurrentParticipantsForMatch(code) {
+  const members = rooms.get(code);
+  if (!members) return;
+  const meta = roomMetaOf(code);
+  meta.inGame = true;
+  meta.allowedPeerIds = new Set();
+  for (const member of members) {
+    if (member.peerId && !member.spectator) meta.allowedPeerIds.add(member.peerId);
+  }
+}
+
+function unlockMatchForLobby(code) {
+  const meta = roomMetaOf(code);
+  meta.inGame = false;
+  meta.allowedPeerIds = new Set();
+  meta.rematchVotes = new Set();
+}
+
+function purgeExpiredInviteTokens(meta) {
+  const now = nowTs();
+  for (const [token, state] of meta.inviteTokens.entries()) {
+    if (!state || !Number.isFinite(state.expiresAt) || state.expiresAt <= now) {
+      meta.inviteTokens.delete(token);
+    }
+  }
+}
+
+function issueInviteToken(code, issuedBy) {
+  const meta = roomMetaOf(code);
+  purgeExpiredInviteTokens(meta);
+  const token = crypto.randomBytes(12).toString("base64url");
+  meta.inviteTokens.set(token, {
+    expiresAt: nowTs() + INVITE_TOKEN_TTL_MS,
+    used: false,
+    issuedBy: String(issuedBy || ""),
+  });
+  return token;
+}
+
+function consumeInviteToken(meta, token) {
+  if (!token) return false;
+  purgeExpiredInviteTokens(meta);
+  const state = meta.inviteTokens.get(token);
+  if (!state || state.used || !Number.isFinite(state.expiresAt) || state.expiresAt <= nowTs()) {
+    return false;
+  }
+  state.used = true;
+  return true;
+}
+
+function activePlayerCount(code) {
+  const members = rooms.get(code);
+  if (!members) return 0;
+  let count = 0;
+  for (const member of members) {
+    if (member.peerId && !member.spectator) count += 1;
+  }
+  return count;
+}
+
+function canVoteRematch(meta, ws) {
+  if (!meta.inGame) return false;
+  if (!ws?.peerId || ws.spectator) return false;
+  if (meta.allowedPeerIds.size > 0) return meta.allowedPeerIds.has(ws.peerId);
+  return true;
+}
+
+function broadcastRematchVoteState(code) {
+  const meta = roomMetaOf(code);
+  broadcastRoom(code, {
+    type: "rematch-vote-state",
+    room: code,
+    votes: [...meta.rematchVotes],
+    required: 2,
+  });
+}
+
+function handleHostMute(code, ws, payload) {
+  const meta = roomMetaOf(code);
+  if (!isHost(meta, ws.peerId)) {
+    sendError(ws, "HOST_ONLY");
+    return true;
+  }
+  const target = String(payload?.target || "").trim();
+  if (!target || target === ws.peerId) {
+    sendError(ws, "TARGET_INVALID");
+    return true;
+  }
+
+  const durationRaw = Number(payload?.durationMs);
+  const durationMs = Number.isFinite(durationRaw)
+    ? Math.max(30 * 1000, Math.min(HOST_MUTE_MAX_MS, Math.floor(durationRaw)))
+    : HOST_MUTE_DEFAULT_MS;
+  const until = nowTs() + durationMs;
+  meta.mutedPeers.set(target, until);
+
+  broadcastRoom(code, {
+    type: "moderation-action",
+    action: "host-mute",
+    target,
+    until,
+    by: ws.peerId,
+    room: code,
+  });
+  return true;
+}
+
+function handleHostUnmute(code, ws, payload) {
+  const meta = roomMetaOf(code);
+  if (!isHost(meta, ws.peerId)) {
+    sendError(ws, "HOST_ONLY");
+    return true;
+  }
+
+  const target = String(payload?.target || "").trim();
+  if (!target) {
+    sendError(ws, "TARGET_REQUIRED");
+    return true;
+  }
+  meta.mutedPeers.delete(target);
+
+  broadcastRoom(code, {
+    type: "moderation-action",
+    action: "host-unmute",
+    target,
+    by: ws.peerId,
+    room: code,
+  });
+  return true;
+}
+
+function handleChatReport(code, ws, payload) {
+  const meta = roomMetaOf(code);
+  const messageId = normalizeMessageId(payload?.messageId);
+  if (!messageId) {
+    sendError(ws, "MESSAGE_ID_REQUIRED");
+    return true;
+  }
+  const state = meta.messageStates.get(messageId);
+  if (!state) {
+    sendError(ws, "MESSAGE_NOT_FOUND");
+    return true;
+  }
+  if (state.ownerId === ws.peerId) {
+    sendError(ws, "REPORT_SELF_FORBIDDEN");
+    return true;
+  }
+
+  const reporters = meta.reports.get(messageId) || new Set();
+  reporters.add(ws.peerId || "");
+  meta.reports.set(messageId, reporters);
+
+  if (reporters.size >= REPORT_AUTO_MUTE_THRESHOLD && state.ownerId) {
+    const until = nowTs() + HOST_MUTE_DEFAULT_MS;
+    meta.mutedPeers.set(state.ownerId, until);
+    broadcastRoom(code, {
+      type: "moderation-action",
+      action: "auto-mute",
+      target: state.ownerId,
+      until,
+      room: code,
+      sourceMessageId: messageId,
+    });
+  }
+  return true;
+}
+
+function validateAndTrackChatMutation(code, ws, payload) {
+  const meta = roomMetaOf(code);
+  pruneRoomMeta(meta);
+
+  if (ws.peerId && meta.mutedPeers.has(ws.peerId)) {
+    sendError(ws, "MUTED");
+    return { ok: false };
+  }
+
+  const rateResult = checkChatRateLimit(ws, payload);
+  if (!rateResult.ok) {
+    sendError(ws, rateResult.code);
+    return { ok: false };
+  }
+
+  const type = String(payload?.type || "");
+  if (type === "chat") {
+    const messageId = normalizeMessageId(payload?.messageId);
+    if (!messageId) {
+      sendError(ws, "MESSAGE_ID_REQUIRED");
+      return { ok: false };
+    }
+    meta.messageStates.set(messageId, {
+      ownerId: ws.peerId || "",
+      createdAt: nowTs(),
+      retracted: false,
+      targetPeerId: String(payload?.to || "").trim() || "",
+    });
+    payload.messageId = messageId;
+    return { ok: true };
+  }
+
+  if (type === "chat-edit" || type === "chat-retract") {
+    const messageId = normalizeMessageId(payload?.messageId);
+    if (!messageId) {
+      sendError(ws, "MESSAGE_ID_REQUIRED");
+      return { ok: false };
+    }
+    const state = meta.messageStates.get(messageId);
+    if (!state) {
+      sendError(ws, "MESSAGE_NOT_FOUND");
+      return { ok: false };
+    }
+    if (!state.ownerId || state.ownerId !== ws.peerId) {
+      sendError(ws, "MESSAGE_NOT_OWNED");
+      return { ok: false };
+    }
+    if (state.retracted) {
+      sendError(ws, "MESSAGE_ALREADY_RETRACTED");
+      return { ok: false };
+    }
+    if (nowTs() - state.createdAt > CHAT_EDIT_RETRACT_WINDOW_MS) {
+      sendError(ws, "EDIT_RETRACT_WINDOW_EXPIRED");
+      return { ok: false };
+    }
+    if (type === "chat-retract") {
+      state.retracted = true;
+    }
+    payload.messageId = messageId;
+    return { ok: true, targetPeerId: state.targetPeerId || "" };
+  }
+
+  return { ok: true };
 }
 
 function resolveFilePath(urlPath) {
@@ -422,7 +673,7 @@ function resolveFilePath(urlPath) {
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
-  if (requestUrl.pathname === "/api/profile/load" || requestUrl.pathname === "/api/profile/save" || requestUrl.pathname === "/api/inquiry" || requestUrl.pathname === "/api/inquiry/list" || requestUrl.pathname === "/api/inquiry/delete") {
+  if (requestUrl.pathname === "/api/profile/load" || requestUrl.pathname === "/api/profile/save") {
     if (req.method === "OPTIONS") {
       sendApiJson(res, 204, { ok: true });
       return;
@@ -435,23 +686,6 @@ const server = http.createServer(async (req, res) => {
 
     try {
       const body = await parseBody(req);
-
-      if (requestUrl.pathname === "/api/inquiry") {
-        const inquiry = sanitizeInquiry(body);
-        if (!inquiry.message) {
-          sendApiJson(res, 400, { ok: false, code: "INQUIRY_REQUIRED", message: "message is required" });
-          return;
-        }
-        const list = normalizeInquiryList(readInquiries());
-        list.push(inquiry);
-        if (list.length > 1000) {
-          list.splice(0, list.length - 1000);
-        }
-        writeInquiries(list);
-        sendApiJson(res, 200, { ok: true });
-        return;
-      }
-
       const userId = String(body?.userId || "").trim();
       const password = String(body?.password || "");
 
@@ -467,28 +701,6 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (requestUrl.pathname === "/api/inquiry/list") {
-        const items = selectLatestInquiries(normalizeInquiryList(readInquiries()), body?.limit);
-        sendApiJson(res, 200, { ok: true, items });
-        return;
-      }
-
-      if (requestUrl.pathname === "/api/inquiry/delete") {
-        const inquiryId = String(body?.id || "").trim();
-        if (!inquiryId) {
-          sendApiJson(res, 400, { ok: false, code: "INQUIRY_ID_REQUIRED", message: "id is required" });
-          return;
-        }
-        const result = removeInquiryById(readInquiries(), inquiryId);
-        if (!result.removed) {
-          sendApiJson(res, 404, { ok: false, code: "INQUIRY_NOT_FOUND", message: "inquiry not found" });
-          return;
-        }
-        writeInquiries(result.items);
-        sendApiJson(res, 200, { ok: true });
-        return;
-      }
-
       if (requestUrl.pathname === "/api/profile/load") {
         writeDb(db);
         sendApiJson(res, 200, {
@@ -499,11 +711,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const mergedProfile = {
-        ...(auth.user.profile || DEFAULT_PROFILE),
-        ...(body?.profile && typeof body.profile === "object" ? body.profile : {}),
-      };
-      const nextProfile = sanitizeProfile(mergedProfile);
+      const nextProfile = sanitizeProfile(body?.profile || {});
       auth.user.profile = nextProfile;
       auth.user.updatedAt = Date.now();
       writeDb(db);
@@ -540,8 +748,6 @@ const server = http.createServer(async (req, res) => {
 
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME[ext] || "application/octet-stream";
-  const isIndexHtml = filePath === path.join(distDir, "index.html");
-  const isHashedAsset = requestPath.startsWith("/assets/");
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
@@ -549,17 +755,7 @@ const server = http.createServer(async (req, res) => {
       res.end("Not found");
       return;
     }
-    const headers = { "Content-Type": contentType };
-    if (isIndexHtml) {
-      // Always revalidate HTML so clients pick up latest hashed bundles after deploy.
-      headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
-      headers.Pragma = "no-cache";
-      headers.Expires = "0";
-    } else if (isHashedAsset) {
-      headers["Cache-Control"] = "public, max-age=31536000, immutable";
-    }
-
-    res.writeHead(200, headers);
+    res.writeHead(200, { "Content-Type": contentType });
     res.end(data);
   });
 });
@@ -569,7 +765,14 @@ const wss = new WebSocketServer({ noServer: true });
 wss.on("connection", (ws) => {
   ws.roomCode = null;
   ws.peerId = null;
+  ws.spectator = false;
   ws.playerName = "Player";
+  ws.playerAvatar = "";
+  ws.chatRateState = {
+    timestamps: [],
+    lastText: "",
+    lastAt: 0,
+  };
 
   ws.on("message", (raw) => {
     let payload = null;
@@ -580,26 +783,150 @@ wss.on("connection", (ws) => {
     }
 
     if (!payload || typeof payload !== "object") return;
+    ws.peerId = String(payload.from || ws.peerId || "").trim() || ws.peerId;
+    ws.spectator = asSpectateBoolean(payload?.spectate || ws.spectator);
     const joinResult = joinRoom(ws, payload);
     if (!joinResult.ok) return;
 
-    ws.peerId = String(payload.from || ws.peerId || "").trim() || ws.peerId;
+    const code = ws.roomCode;
+    if (!code) return;
+
     if (typeof payload.name === "string") {
       ws.playerName = normalizePlayerName(payload.name);
     }
+    if (typeof payload.avatar === "string") {
+      ws.playerAvatar = normalizeAvatarDataUrl(payload.avatar);
+    }
+
+    const type = String(payload.type || "");
+    if (type === "host-mute") {
+      handleHostMute(code, ws, payload);
+      return;
+    }
+    if (type === "host-unmute") {
+      handleHostUnmute(code, ws, payload);
+      return;
+    }
+    if (type === "issue-invite-token") {
+      const meta = roomMetaOf(code);
+      if (!isHost(meta, ws.peerId)) {
+        sendError(ws, "HOST_ONLY");
+        return;
+      }
+      if (meta.isPublic) {
+        sendError(ws, "INVITE_TOKEN_PRIVATE_ONLY");
+        return;
+      }
+      const token = issueInviteToken(code, ws.peerId);
+      sendJson(ws, { type: "invite-token", room: code, token, ttlMs: INVITE_TOKEN_TTL_MS });
+      return;
+    }
+    if (type === "return-lobby") {
+      unlockMatchForLobby(code);
+      broadcastRoomState(code);
+      return;
+    }
+    if (type === "chat-report") {
+      handleChatReport(code, ws, payload);
+      return;
+    }
+
+    if (type === "spectator-chat") {
+      const text = String(payload?.text || "").trim().slice(0, 200);
+      if (!text) return;
+      if (!ws.spectator) {
+        sendError(ws, "SPECTATOR_ONLY");
+        return;
+      }
+      const members = rooms.get(code);
+      if (!members) return;
+      const envelope = {
+        type: "spectator-chat",
+        room: code,
+        from: ws.peerId || String(payload.from || ""),
+        name: ws.playerName || "Spectator",
+        text,
+      };
+      for (const member of members) {
+        if (member.spectator || member === ws) {
+          sendJson(member, envelope);
+        }
+      }
+      return;
+    }
+
+    if (type === "rematch-vote") {
+      const meta = roomMetaOf(code);
+      if (!canVoteRematch(meta, ws)) {
+        sendError(ws, "REMATCH_VOTE_FORBIDDEN");
+        return;
+      }
+      meta.rematchVotes.add(ws.peerId);
+      broadcastRematchVoteState(code);
+
+      const requiredVotes = 2;
+      if (activePlayerCount(code) >= requiredVotes && meta.rematchVotes.size >= requiredVotes) {
+        meta.rematchVotes = new Set();
+        const nextGame = String(payload?.game || "").trim();
+        if (nextGame) {
+          broadcastRoom(code, {
+            type: "new-game",
+            room: code,
+            game: nextGame,
+            from: "system",
+          });
+          lockCurrentParticipantsForMatch(code);
+        }
+        broadcastRematchVoteState(code);
+      }
+      return;
+    }
+
+    if (type === "rematch-unvote") {
+      const meta = roomMetaOf(code);
+      if (!canVoteRematch(meta, ws)) {
+        sendError(ws, "REMATCH_VOTE_FORBIDDEN");
+        return;
+      }
+      meta.rematchVotes.delete(ws.peerId);
+      broadcastRematchVoteState(code);
+      return;
+    }
+
+    let mutationResult = { ok: true };
+    if (isChatMutatingType(type)) {
+      mutationResult = validateAndTrackChatMutation(code, ws, payload);
+      if (!mutationResult.ok) return;
+    }
+
+    if (type === "select-game" || type === "new-game") {
+      const meta = roomMetaOf(code);
+      meta.rematchVotes = new Set();
+      lockCurrentParticipantsForMatch(code);
+    }
 
     if (joinResult.joined || payload.type === "hello" || payload.type === "presence") {
-      broadcastRoomState(ws.roomCode);
+      broadcastRoomState(code);
     }
 
     const envelope = {
       ...payload,
-      room: ws.roomCode,
+      room: code,
       from: ws.peerId || String(payload.from || ""),
     };
 
-    const members = rooms.get(ws.roomCode);
+    const members = rooms.get(code);
     if (!members) return;
+
+    if ((type === "chat-edit" || type === "chat-retract") && mutationResult.targetPeerId) {
+      for (const member of members) {
+        if (member.peerId === mutationResult.targetPeerId) {
+          sendJson(member, envelope);
+          return;
+        }
+      }
+      return;
+    }
 
     if (payload.to) {
       for (const member of members) {
@@ -611,7 +938,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    broadcastRoom(ws.roomCode, envelope, ws);
+    broadcastRoom(code, envelope, ws);
   });
 
   ws.on("close", () => {

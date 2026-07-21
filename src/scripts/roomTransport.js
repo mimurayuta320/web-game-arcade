@@ -1,19 +1,18 @@
-const ROOM_WS_CONNECT_TIMEOUT_MS = 0;
+const ROOM_WS_CONNECT_TIMEOUT_MS = 10000;
 const ROOM_WS_CONNECT_RETRIES = 2;
 const ROOM_WS_RETRY_DELAY_MS = 600;
-const ROOM_WS_KEEPALIVE_INTERVAL_MS = 15000;
+
+function defaultLegacyRoomUrl() {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const hostname = window.location.hostname || "localhost";
+  return `${protocol}//${hostname}:8788`;
+}
 
 function defaultSameOriginRoomUrl() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
   if (!host) return "ws://localhost:8788";
   return `${protocol}//${host}/room`;
-}
-
-function defaultPortRoomUrl() {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const host = window.location.hostname || "localhost";
-  return `${protocol}//${host}:8788`;
 }
 
 function normalizeServerUrl(raw, fallbackUrl) {
@@ -34,6 +33,28 @@ function normalizeServerUrl(raw, fallbackUrl) {
   }
 }
 
+function dedupeUrls(urls) {
+  const seen = new Set();
+  const result = [];
+  urls.forEach((url) => {
+    const key = String(url || "").trim();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    result.push(key);
+  });
+  return result;
+}
+
+function resolveServerUrlCandidates(serverUrl) {
+  const sameOrigin = defaultSameOriginRoomUrl();
+  const legacy = defaultLegacyRoomUrl();
+  const fallback = sameOrigin;
+  const preferred = normalizeServerUrl(serverUrl, fallback);
+  const normalizedSameOrigin = normalizeServerUrl(sameOrigin, fallback);
+  const normalizedLegacy = normalizeServerUrl(legacy, fallback);
+  return dedupeUrls([preferred, normalizedSameOrigin, normalizedLegacy]);
+}
+
 function isLocalHost(hostname) {
   const host = String(hostname || "").toLowerCase();
   return host === "localhost" || host === "127.0.0.1" || host === "::1";
@@ -43,19 +64,8 @@ function shouldIgnoreStoredUrl(storedUrl) {
   try {
     const parsed = new URL(storedUrl);
     const pageHost = window.location.hostname;
-    const isInternetPage = !isLocalHost(pageHost);
-    if (!isInternetPage) {
-      return false;
-    }
-
     // Ignore stale localhost config when page is opened from a non-local host.
-    if (isLocalHost(parsed.hostname)) {
-      return true;
-    }
-
-    // For internet access (for example via Cloudflare Tunnel), prefer same-origin
-    // websocket endpoint and ignore stale LAN/old-host overrides.
-    return parsed.hostname !== pageHost;
+    return isLocalHost(parsed.hostname) && !isLocalHost(pageHost);
   } catch {
     return false;
   }
@@ -80,7 +90,7 @@ export function resolveRoomServerUrl({ storageKey, queryParamKey, defaultUrl }) 
   return normalizeServerUrl(fromStorage, fallback);
 }
 
-function createBroadcastTransport({ roomCode, peerId, onMessage }) {
+function createBroadcastTransport({ roomCode, peerId, onMessage, onStatusChange }) {
   const channel = new BroadcastChannel(`neon-othello-room-${roomCode}`);
   channel.onmessage = (event) => {
     const payload = event.data;
@@ -88,8 +98,11 @@ function createBroadcastTransport({ roomCode, peerId, onMessage }) {
     onMessage(payload);
   };
 
+  onStatusChange?.({ state: "connected", transport: "broadcast", endpoint: "broadcast" });
+
   return {
     kind: "broadcast",
+    endpoint: "broadcast",
     send(message) {
       channel.postMessage({ ...message, from: peerId, room: roomCode });
     },
@@ -99,7 +112,7 @@ function createBroadcastTransport({ roomCode, peerId, onMessage }) {
   };
 }
 
-function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }) {
+function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage, onStatusChange }) {
   return new Promise((resolve) => {
     if (typeof WebSocket !== "function") {
       resolve(null);
@@ -110,34 +123,12 @@ function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }
     let opened = false;
     let ws = null;
     const pending = [];
-    let keepaliveTimerId = null;
 
     function settle(value) {
       if (settled) return;
       settled = true;
       clearTimeout(timerId);
       resolve(value);
-    }
-
-    function clearKeepaliveTimer() {
-      if (!keepaliveTimerId) return;
-      window.clearInterval(keepaliveTimerId);
-      keepaliveTimerId = null;
-    }
-
-    function startKeepaliveTimer() {
-      clearKeepaliveTimer();
-      keepaliveTimerId = window.setInterval(() => {
-        if (ws?.readyState !== WebSocket.OPEN) return;
-        ws.send(
-          JSON.stringify({
-            type: "keepalive",
-            room: roomCode,
-            from: peerId,
-            to: peerId,
-          })
-        );
-      }, ROOM_WS_KEEPALIVE_INTERVAL_MS);
     }
 
     function failToFallback() {
@@ -156,17 +147,16 @@ function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }
       return;
     }
 
-    const timerId =
-      ROOM_WS_CONNECT_TIMEOUT_MS > 0
-        ? window.setTimeout(() => {
-            if (!opened) failToFallback();
-          }, ROOM_WS_CONNECT_TIMEOUT_MS)
-        : null;
+    const timerId = window.setTimeout(() => {
+      if (!opened) failToFallback();
+    }, ROOM_WS_CONNECT_TIMEOUT_MS);
 
     ws.onopen = () => {
       opened = true;
+      onStatusChange?.({ state: "connected", transport: "websocket", endpoint: serverUrl });
       const transport = {
         kind: "websocket",
+        endpoint: serverUrl,
         send(message) {
           const json = JSON.stringify({ ...message, from: peerId, room: roomCode });
           if (ws.readyState === WebSocket.OPEN) {
@@ -176,14 +166,11 @@ function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }
           }
         },
         close() {
-          clearKeepaliveTimer();
           if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
             ws.close();
           }
         },
       };
-
-      startKeepaliveTimer();
 
       while (pending.length) {
         ws.send(pending.shift());
@@ -209,7 +196,9 @@ function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }
     };
 
     ws.onclose = () => {
-      clearKeepaliveTimer();
+      if (opened) {
+        onStatusChange?.({ state: "disconnected", transport: "websocket", endpoint: serverUrl });
+      }
       if (!opened) {
         failToFallback();
       }
@@ -218,15 +207,11 @@ function createWebSocketTransportOnce({ roomCode, peerId, serverUrl, onMessage }
 }
 
 async function createWebSocketTransport(params) {
-  const candidates = [
-    defaultSameOriginRoomUrl(),
-    params.serverUrl,
-    defaultPortRoomUrl(),
-  ].filter((url, index, list) => url && list.indexOf(url) === index);
-
-  for (const serverUrl of candidates) {
+  const candidates = resolveServerUrlCandidates(params.serverUrl);
+  for (const candidate of candidates) {
+    params.onStatusChange?.({ state: "connecting", transport: "websocket", endpoint: candidate });
     for (let i = 0; i <= ROOM_WS_CONNECT_RETRIES; i += 1) {
-      const transport = await createWebSocketTransportOnce({ ...params, serverUrl });
+      const transport = await createWebSocketTransportOnce({ ...params, serverUrl: candidate });
       if (transport) return transport;
       if (i < ROOM_WS_CONNECT_RETRIES) {
         await new Promise((resolve) => window.setTimeout(resolve, ROOM_WS_RETRY_DELAY_MS));
@@ -236,8 +221,9 @@ async function createWebSocketTransport(params) {
   return null;
 }
 
-export async function createRoomTransport({ roomCode, peerId, serverUrl, onMessage }) {
-  const wsTransport = await createWebSocketTransport({ roomCode, peerId, serverUrl, onMessage });
+export async function createRoomTransport({ roomCode, peerId, serverUrl, onMessage, onStatusChange }) {
+  const wsTransport = await createWebSocketTransport({ roomCode, peerId, serverUrl, onMessage, onStatusChange });
   if (wsTransport) return wsTransport;
-  return createBroadcastTransport({ roomCode, peerId, onMessage });
+  onStatusChange?.({ state: "fallback", transport: "broadcast", endpoint: "broadcast" });
+  return createBroadcastTransport({ roomCode, peerId, onMessage, onStatusChange });
 }
