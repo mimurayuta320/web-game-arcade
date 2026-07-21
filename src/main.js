@@ -24,6 +24,8 @@ const APP_URL_TAG = "ToufuGameshow";
 
 const entryScreen = document.getElementById("entryScreen");
 const menuScreen = document.getElementById("menuScreen");
+const cardListScreen = document.getElementById("cardListScreen");
+const casinoListScreen = document.getElementById("casinoListScreen");
 const lobbyScreen = document.getElementById("lobbyScreen");
 const othelloScreen = document.getElementById("othelloScreen");
 const shogiScreen = document.getElementById("shogiScreen");
@@ -43,6 +45,18 @@ const playSurvivorsBtn = document.getElementById("playSurvivorsBtn");
 const playFitPuzzleBtn = document.getElementById("playFitPuzzleBtn");
 const playSolitaireSingleBtn = document.getElementById("playSolitaireSingleBtn");
 const playSolitaireMultiBtn = document.getElementById("playSolitaireMultiBtn");
+const openCardListBtn = document.getElementById("openCardListBtn");
+const cardListUnoBtn = document.getElementById("cardListUnoBtn");
+const cardListSevensBtn = document.getElementById("cardListSevensBtn");
+const cardListSolitaireBtn = document.getElementById("cardListSolitaireBtn");
+const cardListDaifugoBtn = document.getElementById("cardListDaifugoBtn");
+const cardListBackBtn = document.getElementById("cardListBackBtn");
+const cardListMessage = document.getElementById("cardListMessage");
+const openCasinoListBtn = document.getElementById("openCasinoListBtn");
+const casinoListBlackjackBtn = document.getElementById("casinoListBlackjackBtn");
+const casinoListPokerBtn = document.getElementById("casinoListPokerBtn");
+const casinoListBackBtn = document.getElementById("casinoListBackBtn");
+const casinoListMessage = document.getElementById("casinoListMessage");
 const quickMatchBtn = document.getElementById("quickMatchBtn");
 const roomPublicToggle = document.getElementById("roomPublicToggle");
 const roomPublicLabel = document.getElementById("roomPublicLabel");
@@ -61,6 +75,12 @@ const cloudPasswordInput = document.getElementById("cloudPasswordInput");
 const saveCloudAuthBtn = document.getElementById("saveCloudAuthBtn");
 const backToEntryBtn = document.getElementById("backToEntryBtn");
 const roomMenuMessage = document.getElementById("roomMenuMessage");
+const friendUserIdInput = document.getElementById("friendUserIdInput");
+const friendAddBtn = document.getElementById("friendAddBtn");
+const friendRemoveBtn = document.getElementById("friendRemoveBtn");
+const friendRefreshBtn = document.getElementById("friendRefreshBtn");
+const friendMessage = document.getElementById("friendMessage");
+const friendList = document.getElementById("friendList");
 
 const lobbyRoomCodeText = document.getElementById("lobbyRoomCodeText");
 const lobbyRoleText = document.getElementById("lobbyRoleText");
@@ -76,7 +96,9 @@ const lobbyStartChessBtn = document.getElementById("lobbyStartChessBtn");
 const lobbyStartUnoBtn = document.getElementById("lobbyStartUnoBtn");
 const lobbyStartGomokuBtn = document.getElementById("lobbyStartGomokuBtn");
 const lobbyStartSurvivorsBtn = document.getElementById("lobbyStartSurvivorsBtn");
+const lobbyStartFitPuzzleBtn = document.getElementById("lobbyStartFitPuzzleBtn");
 const lobbyStartSolitaireBtn = document.getElementById("lobbyStartSolitaireBtn");
+const lobbySwitchSpectateBtn = document.getElementById("lobbySwitchSpectateBtn");
 const lobbyBackBtn = document.getElementById("lobbyBackBtn");
 const copyInviteLinkBtn = document.getElementById("copyInviteLinkBtn");
 const globalRematchBtn = document.getElementById("globalRematchBtn");
@@ -84,6 +106,10 @@ const spectatorChatPanel = document.getElementById("spectatorChatPanel");
 const spectatorChatLog = document.getElementById("spectatorChatLog");
 const spectatorChatInput = document.getElementById("spectatorChatInput");
 const spectatorChatSendBtn = document.getElementById("spectatorChatSendBtn");
+const roomChatPanel = document.getElementById("roomChatPanel");
+const roomChatLog = document.getElementById("roomChatLog");
+const roomChatInput = document.getElementById("roomChatInput");
+const roomChatSendBtn = document.getElementById("roomChatSendBtn");
 
 const roomStatus = document.getElementById("roomStatus");
 const roomCodeText = document.getElementById("roomCodeText");
@@ -137,6 +163,8 @@ const messages = {
     createRoom: "ルーム作成",
     join: "参加",
     spectateJoin: "観戦参加",
+    spectateToggleToSpectator: "観戦",
+    spectateToggleToPlayer: "プレイヤー",
     play: "プレイ",
     backToMenu: "メニューへ戻る",
     othelloStart: "オセロ開始",
@@ -145,6 +173,7 @@ const messages = {
     unoStart: "UNO開始",
     gomokuStart: "五目並べ開始",
     survivorsStart: "サバイバー開始",
+    fitPuzzleStart: "Fit Puzzle開始",
     solitaireStart: "ソリティア開始",
     bankGacha: "スキンガチャ",
     bankGacha10: "スキンガチャ x10",
@@ -168,6 +197,12 @@ const messages = {
     spectatorChatPlaceholder: "観戦コメントを入力",
     spectatorChatSend: "送信",
     spectatorChatEmpty: "まだコメントはありません",
+    roomChatTitle: "ルームチャット",
+    roomChatPlaceholder: "メッセージを入力",
+    roomChatSend: "送信",
+    roomChatEmpty: "まだメッセージはありません",
+    roomChatMuted: "チャット送信が制限されています",
+    roomChatRateLimited: "送信が早すぎます。少し待ってください",
     newGame: "ゲーム開始",
     remake: "リメイク",
     menu: "メニュー",
@@ -186,6 +221,20 @@ const messages = {
     cloudAuthInvalid: "クラウドID/パスワードを入力してください",
     cloudIdDuplicateWarn: "このIDは既に使用されています。別のIDか、正しいパスワードを入力してください",
     cloudCheckFailed: "クラウド確認に失敗しました。サーバー起動後にもう一度お試しください",
+    friendsTitle: "フレンド",
+    friendsSubtitle: "クラウドIDでフレンドを管理できます。",
+    friendIdPlaceholder: "フレンドのクラウドID",
+    friendAdd: "追加",
+    friendRemove: "削除",
+    friendRefresh: "更新",
+    friendListEmpty: "まだフレンドはいません",
+    friendNeedLogin: "フレンド機能はログイン時のみ利用できます",
+    friendIdRequired: "フレンドIDを入力してください",
+    friendAdded: "フレンドを追加しました",
+    friendRemoved: "フレンドを削除しました",
+    friendNotFound: "指定したフレンドIDが見つかりません",
+    friendSelfForbidden: "自分自身は追加できません",
+    friendLoadFailed: "フレンド一覧の取得に失敗しました",
     roomCodePlaceholder: "6桁の番号",
     roomPublicToggle: "公開ルーム（クイックマッチ対象）",
     roomPrivateToggle: "非公開ルーム（招待のみ）",
@@ -197,7 +246,7 @@ const messages = {
     menuRoomConnected: "ルーム {code} に接続しました",
     menuRoomJoined: "ルーム {code} へ参加しました",
     menuRoomSpectate: "ルーム {code} を観戦中です",
-    roomInGameSuggestSpectate: "対戦中のため参加できません。観戦参加を使ってください。",
+    roomInGameSuggestSpectate: "対戦中のため参加できません。観戦を使ってください。",
     roomCodeInvalid: "6桁のルーム番号を入力してください",
     copyInviteLink: "招待リンクをコピー",
     inviteLinkCopied: "招待リンクをコピーしました",
@@ -274,6 +323,8 @@ const messages = {
     createRoom: "룸 만들기",
     join: "참가",
     spectateJoin: "관전 참가",
+    spectateToggleToSpectator: "관전",
+    spectateToggleToPlayer: "플레이어",
     play: "플레이",
     backToMenu: "메뉴로",
     othelloStart: "오셀로 시작",
@@ -282,6 +333,7 @@ const messages = {
     unoStart: "UNO 시작",
     gomokuStart: "오목 시작",
     survivorsStart: "서바이버 시작",
+    fitPuzzleStart: "핏 퍼즐 시작",
     solitaireStart: "솔리테어 시작",
     bankGacha: "SKIN GACHA",
     bankGacha10: "SKIN GACHA x10",
@@ -305,6 +357,12 @@ const messages = {
     spectatorChatPlaceholder: "관전 코멘트를 입력",
     spectatorChatSend: "전송",
     spectatorChatEmpty: "아직 코멘트가 없습니다",
+    roomChatTitle: "룸 채팅",
+    roomChatPlaceholder: "메시지를 입력",
+    roomChatSend: "전송",
+    roomChatEmpty: "아직 메시지가 없습니다",
+    roomChatMuted: "채팅 전송이 제한되었습니다",
+    roomChatRateLimited: "전송이 너무 빠릅니다. 잠시 후 다시 시도하세요",
     newGame: "GAME START",
     remake: "REMAKE",
     menu: "메뉴",
@@ -323,6 +381,20 @@ const messages = {
     cloudAuthInvalid: "클라우드 ID/비밀번호를 입력하세요",
     cloudIdDuplicateWarn: "이 ID는 이미 사용 중입니다. 다른 ID 또는 올바른 비밀번호를 입력하세요",
     cloudCheckFailed: "클라우드 확인에 실패했습니다. 서버 실행 후 다시 시도하세요",
+    friendsTitle: "친구",
+    friendsSubtitle: "클라우드 ID로 친구를 관리할 수 있습니다.",
+    friendIdPlaceholder: "친구 클라우드 ID",
+    friendAdd: "추가",
+    friendRemove: "삭제",
+    friendRefresh: "새로고침",
+    friendListEmpty: "아직 친구가 없습니다",
+    friendNeedLogin: "친구 기능은 로그인 상태에서만 사용할 수 있습니다",
+    friendIdRequired: "친구 ID를 입력하세요",
+    friendAdded: "친구를 추가했습니다",
+    friendRemoved: "친구를 삭제했습니다",
+    friendNotFound: "지정한 친구 ID를 찾을 수 없습니다",
+    friendSelfForbidden: "자기 자신은 추가할 수 없습니다",
+    friendLoadFailed: "친구 목록을 불러오지 못했습니다",
     roomCodePlaceholder: "6자리 번호",
     roomPublicToggle: "공개 룸 (빠른 매치 대상)",
     roomPrivateToggle: "비공개 룸 (초대 전용)",
@@ -334,7 +406,7 @@ const messages = {
     menuRoomConnected: "룸 {code} 에 연결했습니다",
     menuRoomJoined: "룸 {code} 에 참가했습니다",
     menuRoomSpectate: "룸 {code} 관전 중",
-    roomInGameSuggestSpectate: "경기 중이라 참가할 수 없습니다. 관전 참가를 이용하세요.",
+    roomInGameSuggestSpectate: "경기 중이라 참가할 수 없습니다. 관전을 이용하세요.",
     roomCodeInvalid: "6자리 룸 번호를 입력하세요",
     copyInviteLink: "초대 링크 복사",
     inviteLinkCopied: "초대 링크를 복사했습니다",
@@ -423,6 +495,7 @@ function applyStaticTranslations() {
   if (entryCloudUserIdInput) entryCloudUserIdInput.placeholder = tr("cloudUserPlaceholder");
   if (entryCloudPasswordInput) entryCloudPasswordInput.placeholder = tr("cloudPassPlaceholder");
   if (playerNameInput) playerNameInput.placeholder = tr("playerNamePlaceholder");
+  if (friendUserIdInput) friendUserIdInput.placeholder = tr("friendIdPlaceholder");
   if (cloudUserIdInput) cloudUserIdInput.placeholder = tr("cloudUserPlaceholder");
   if (cloudPasswordInput) cloudPasswordInput.placeholder = tr("cloudPassPlaceholder");
   if (roomCodeInput) roomCodeInput.placeholder = tr("roomCodePlaceholder");
@@ -447,13 +520,21 @@ function applyStaticTranslations() {
   if (entryGuestBtn) entryGuestBtn.textContent = tr("playAsGuest");
   if (saveCloudAuthBtn) saveCloudAuthBtn.textContent = tr("saveCloudAuth");
   if (backToEntryBtn) backToEntryBtn.textContent = tr("backToLogin");
+  setTextById("friendsTitle", tr("friendsTitle"));
+  setTextById("friendsSubtitle", tr("friendsSubtitle"));
+  if (friendAddBtn) friendAddBtn.textContent = tr("friendAdd");
+  if (friendRemoveBtn) friendRemoveBtn.textContent = tr("friendRemove");
+  if (friendRefreshBtn) friendRefreshBtn.textContent = tr("friendRefresh");
+  setTextById("friendListEmpty", tr("friendListEmpty"));
   if (lobbyStartOthelloBtn) lobbyStartOthelloBtn.textContent = tr("othelloStart");
   if (lobbyStartShogiBtn) lobbyStartShogiBtn.textContent = tr("shogiStart");
   if (lobbyStartChessBtn) lobbyStartChessBtn.textContent = tr("chessStart");
   if (lobbyStartUnoBtn) lobbyStartUnoBtn.textContent = tr("unoStart");
   if (lobbyStartGomokuBtn) lobbyStartGomokuBtn.textContent = tr("gomokuStart");
   if (lobbyStartSurvivorsBtn) lobbyStartSurvivorsBtn.textContent = tr("survivorsStart");
+  if (lobbyStartFitPuzzleBtn) lobbyStartFitPuzzleBtn.textContent = tr("fitPuzzleStart");
   if (lobbyStartSolitaireBtn) lobbyStartSolitaireBtn.textContent = tr("solitaireStart");
+  updateLobbySpectateToggleButton();
   if (lobbyBackBtn) lobbyBackBtn.textContent = tr("backToMenu");
   if (copyInviteLinkBtn) copyInviteLinkBtn.textContent = tr("copyInviteLink");
   if (globalRematchBtn) globalRematchBtn.textContent = tr("rematchApproveNow");
@@ -461,6 +542,9 @@ function applyStaticTranslations() {
   setTextById("spectatorChatTitle", tr("spectatorChatTitle"));
   if (spectatorChatInput) spectatorChatInput.placeholder = tr("spectatorChatPlaceholder");
   if (spectatorChatSendBtn) spectatorChatSendBtn.textContent = tr("spectatorChatSend");
+  setTextById("roomChatTitle", tr("roomChatTitle"));
+  if (roomChatInput) roomChatInput.placeholder = tr("roomChatPlaceholder");
+  if (roomChatSendBtn) roomChatSendBtn.textContent = tr("roomChatSend");
 
   setTextById("startBtn", tr("newGame"));
   setTextById("remakeBtn", tr("remake"));
@@ -532,7 +616,15 @@ const roomSession = {
   pendingInviteToken: "",
   rematchVotes: new Set(),
   spectatorChatMessages: [],
+  roomChatMessages: [],
 };
+
+function createRoomMessageId() {
+  const rnd = typeof crypto?.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+  return `msg-${peerId.slice(0, 8)}-${rnd}`.slice(0, 80);
+}
 
 let inviteTokenRequestResolve = null;
 
@@ -669,6 +761,76 @@ function setLobbyMessage(text) {
   lobbyMessage.textContent = text;
 }
 
+function setCardListMessage(text) {
+  if (!cardListMessage) return;
+  cardListMessage.textContent = text;
+}
+
+function setCasinoListMessage(text) {
+  if (!casinoListMessage) return;
+  casinoListMessage.textContent = text;
+}
+
+function setFriendMessage(text) {
+  if (!friendMessage) return;
+  friendMessage.textContent = text;
+}
+
+function renderFriendList(friends) {
+  if (!friendList) return;
+  friendList.innerHTML = "";
+  const rows = Array.isArray(friends)
+    ? friends
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+    : [];
+
+  if (!rows.length) {
+    const li = document.createElement("li");
+    li.id = "friendListEmpty";
+    li.textContent = tr("friendListEmpty");
+    friendList.appendChild(li);
+    return;
+  }
+
+  rows.forEach((id) => {
+    const li = document.createElement("li");
+    li.textContent = id;
+    friendList.appendChild(li);
+  });
+}
+
+async function loadFriendsToView(auth, { quiet = false } = {}) {
+  try {
+    const { data } = await cloudApiRequest("/api/friends/list", {
+      userId: auth.userId,
+      password: auth.password,
+    });
+    renderFriendList(data?.friends || []);
+    if (!quiet) {
+      setFriendMessage("");
+    }
+    return true;
+  } catch {
+    if (!quiet) {
+      setFriendMessage(tr("friendLoadFailed"));
+    }
+    return false;
+  }
+}
+
+async function refreshFriendListFromStorage({ quiet = false } = {}) {
+  const auth = getCloudAuthFromStorage();
+  if (!auth) {
+    renderFriendList([]);
+    if (!quiet) {
+      setFriendMessage(tr("friendNeedLogin"));
+    }
+    return false;
+  }
+  return loadFriendsToView(auth, { quiet });
+}
+
 function connectionLabel() {
   if (roomSession.connectionState === "connecting") return tr("connectionConnecting");
   if (roomSession.connectionState === "connected") return tr("connectionConnected");
@@ -709,6 +871,44 @@ function renderSpectatorChat() {
     spectatorChatLog.appendChild(row);
   });
   spectatorChatLog.scrollTop = spectatorChatLog.scrollHeight;
+}
+
+function shouldShowRoomChat() {
+  return Boolean(roomSession.code) && roomSession.role !== "spectator";
+}
+
+function renderRoomChat() {
+  if (!roomChatPanel || !roomChatLog) return;
+  const visible = shouldShowRoomChat();
+  roomChatPanel.classList.toggle("hidden", !visible);
+  roomChatLog.innerHTML = "";
+  if (!visible) return;
+  if (!roomSession.roomChatMessages.length) {
+    const empty = document.createElement("p");
+    empty.className = "room-chat-empty";
+    empty.textContent = tr("roomChatEmpty");
+    roomChatLog.appendChild(empty);
+    return;
+  }
+
+  roomSession.roomChatMessages.slice(-80).forEach((message) => {
+    const row = document.createElement("p");
+    row.className = "room-chat-item";
+    row.textContent = `${message.name}: ${message.text}`;
+    roomChatLog.appendChild(row);
+  });
+  roomChatLog.scrollTop = roomChatLog.scrollHeight;
+}
+
+function appendRoomChatMessage(name, text) {
+  const normalizedName = normalizeName(name || "Player");
+  const normalizedText = String(text || "").trim().slice(0, 200);
+  if (!normalizedText) return;
+  roomSession.roomChatMessages.push({ name: normalizedName, text: normalizedText });
+  if (roomSession.roomChatMessages.length > 160) {
+    roomSession.roomChatMessages.splice(0, roomSession.roomChatMessages.length - 160);
+  }
+  renderRoomChat();
 }
 
 function setRematchVoteMessage(count, need) {
@@ -811,6 +1011,8 @@ async function syncPlayerNameToCloud(userId, password, baseProfile = null) {
 function showOnly(screen) {
   entryScreen.classList.add("hidden");
   menuScreen.classList.add("hidden");
+  cardListScreen.classList.add("hidden");
+  casinoListScreen.classList.add("hidden");
   lobbyScreen.classList.add("hidden");
   othelloScreen.classList.add("hidden");
   shogiScreen.classList.add("hidden");
@@ -829,6 +1031,14 @@ function showEntryScreen() {
 
 function showMenuScreen() {
   showOnly(menuScreen);
+}
+
+function showCardListScreen() {
+  showOnly(cardListScreen);
+}
+
+function showCasinoListScreen() {
+  showOnly(casinoListScreen);
 }
 
 function showLobbyScreen() {
@@ -882,6 +1092,15 @@ function refreshRoomPresence() {
   syncRoomParticipantsToGame();
 }
 
+function updateLobbySpectateToggleButton() {
+  if (!lobbySwitchSpectateBtn) return;
+  const inRoom = Boolean(roomSession.code);
+  lobbySwitchSpectateBtn.disabled = !inRoom;
+  lobbySwitchSpectateBtn.textContent = roomSession.role === "spectator"
+    ? tr("spectateToggleToPlayer")
+    : tr("spectateToggleToSpectator");
+}
+
 function updateLobbyView() {
   const code = roomSession.code ?? "-";
   let roleLabel = "-";
@@ -907,9 +1126,15 @@ function updateLobbyView() {
   lobbyStartUnoBtn.disabled = !hostCanStart;
   lobbyStartGomokuBtn.disabled = !hostCanStart;
   lobbyStartSurvivorsBtn.disabled = !hostCanStart;
+  if (lobbyStartFitPuzzleBtn) {
+    lobbyStartFitPuzzleBtn.disabled = true;
+    lobbyStartFitPuzzleBtn.title = "ROOM未対応";
+  }
   lobbyStartSolitaireBtn.disabled = !hostCanStart;
+  updateLobbySpectateToggleButton();
   if (copyInviteLinkBtn) copyInviteLinkBtn.disabled = !roomSession.code;
   renderSpectatorBadge();
+  renderRoomChat();
   renderSpectatorChat();
   updateRematchButtonVisibility();
 }
@@ -1025,7 +1250,8 @@ function startQuickMatch() {
   const code = generateQuickMatchCode(0);
   if (roomCodeInput) roomCodeInput.value = code;
   setMenuMessage(tr("quickMatchSearching"));
-  void attachRoom(code, "guest", playerName, { quickMatchMode: true, quickJoin: true });
+  // Quick match must always use public rooms, regardless of the private toggle state.
+  void attachRoom(code, "guest", playerName, { quickMatchMode: true, quickJoin: true, roomPublic: true });
 }
 
 function isSpectator() {
@@ -1076,6 +1302,7 @@ function closeRoom() {
   roomSession.pendingInviteToken = "";
   roomSession.rematchVotes = new Set();
   roomSession.spectatorChatMessages = [];
+  roomSession.roomChatMessages = [];
   if (inviteTokenRequestResolve) {
     inviteTokenRequestResolve("");
     inviteTokenRequestResolve = null;
@@ -1204,7 +1431,10 @@ function handleRoomMessage(payload, roomCode) {
 
   if (payload.type === "room-state" && Array.isArray(payload.participants)) {
     const prevRole = roomSession.role;
-    if (typeof payload.hostPeerId === "string" && payload.hostPeerId.trim()) {
+    const selfEntry = payload.participants.find((entry) => entry && entry.id === peerId);
+    if (selfEntry && (selfEntry.role === "host" || selfEntry.role === "guest" || selfEntry.role === "spectator")) {
+      roomSession.role = selfEntry.role;
+    } else if (typeof payload.hostPeerId === "string" && payload.hostPeerId.trim()) {
       roomSession.role = payload.hostPeerId === peerId ? "host" : "guest";
     }
 
@@ -1288,9 +1518,11 @@ function handleRoomMessage(payload, roomCode) {
   if (payload.type === "room-assigned" && payload.code) {
     roomSession.code = normalizeRoomCode(payload.code);
     if (roomCodeInput) roomCodeInput.value = roomSession.code;
-    if (payload.role === "spectator") {
-      roomSession.role = "spectator";
-      setLobbyMessage(tr("spectatorReadOnly"));
+    if (payload.role === "host" || payload.role === "guest" || payload.role === "spectator") {
+      roomSession.role = payload.role;
+      if (payload.role === "spectator") {
+        setLobbyMessage(tr("spectatorReadOnly"));
+      }
     }
     if (payload.roomPublic === false && roomSession.quickMatchMode) {
       setMenuMessage(tr("quickMatchPrivateSkipped"));
@@ -1347,7 +1579,7 @@ function handleRoomMessage(payload, roomCode) {
         const fallbackOffset = Math.floor(Math.random() * 4) + 1;
         const fallbackCode = generateQuickMatchCode(fallbackOffset);
         if (roomCodeInput) roomCodeInput.value = fallbackCode;
-        void attachRoom(fallbackCode, "guest", currentPlayerName, { quickMatchMode: true });
+        void attachRoom(fallbackCode, "guest", currentPlayerName, { quickMatchMode: true, quickJoin: true, roomPublic: true });
       } else {
         setMenuMessage(tr("roomFullRejected", { code: rejectedCode }));
       }
@@ -1407,6 +1639,22 @@ function handleRoomMessage(payload, roomCode) {
     }
     renderSpectatorChat();
     return;
+  }
+
+  if (payload.type === "chat") {
+    appendRoomChatMessage(payload.name || payload.from || "Player", payload.text || "");
+    return;
+  }
+
+  if (payload.type === "error") {
+    const code = String(payload.code || "");
+    if (code === "MUTED") {
+      setLobbyMessage(tr("roomChatMuted"));
+      return;
+    }
+    if (code.startsWith("RATE_LIMIT_")) {
+      setLobbyMessage(tr("roomChatRateLimited"));
+    }
   }
 
   if (payload.type === "snapshot" && payload.game && payload.snapshot) {
@@ -1537,6 +1785,66 @@ playFitPuzzleBtn?.addEventListener("click", () => {
   currentGameKey = "fitPuzzle";
   showGameScreen("fitPuzzle");
   controllerOf("fitPuzzle")?.enterStandby?.();
+});
+
+openCardListBtn?.addEventListener("click", () => {
+  closeRoom();
+  configureAllStandardModes();
+  setCardListMessage("");
+  showCardListScreen();
+});
+
+cardListBackBtn?.addEventListener("click", () => {
+  setCardListMessage("");
+  showMenuScreen();
+});
+
+cardListUnoBtn?.addEventListener("click", () => {
+  closeRoom();
+  configureAllStandardModes();
+  setCardListMessage("");
+  currentGameKey = "uno";
+  showGameScreen("uno");
+  controllerOf("uno")?.enterStandby?.();
+});
+
+cardListSolitaireBtn?.addEventListener("click", () => {
+  closeRoom();
+  configureAllStandardModes();
+  setCardListMessage("");
+  currentGameKey = "solitaire";
+  showGameScreen("solitaire");
+  const solitaireController = controllerOf("solitaire");
+  solitaireController?.configureStandardMode?.();
+  solitaireController?.enterStandby?.();
+});
+
+cardListSevensBtn?.addEventListener("click", () => {
+  setCardListMessage("7並べはこの一覧からの起動対応を順次反映中です");
+});
+
+cardListDaifugoBtn?.addEventListener("click", () => {
+  setCardListMessage("大富豪はこの一覧からの起動対応を順次反映中です");
+});
+
+openCasinoListBtn?.addEventListener("click", () => {
+  closeRoom();
+  configureAllStandardModes();
+  setCasinoListMessage("");
+  showCasinoListScreen();
+});
+
+casinoListBackBtn?.addEventListener("click", () => {
+  setCasinoListMessage("");
+  showMenuScreen();
+});
+
+casinoListBlackjackBtn?.addEventListener("click", () => {
+  setCasinoListMessage("ブラックジャックはこの一覧からの起動対応を順次反映中です");
+});
+
+casinoListPokerBtn?.addEventListener("click", () => {
+  setCasinoListMessage("ポーカーはこの一覧からの起動対応を順次反映中です");
 });
 
 playSolitaireSingleBtn?.addEventListener("click", () => {
@@ -1707,6 +2015,21 @@ lobbyBackBtn?.addEventListener("click", () => {
   showMenuScreen();
 });
 
+lobbySwitchSpectateBtn?.addEventListener("click", () => {
+  if (!roomSession.code) return;
+
+  const code = roomSession.code;
+  const name = roomSession.playerName;
+  const switchToSpectator = roomSession.role !== "spectator";
+  const nextRole = switchToSpectator ? "spectator" : "guest";
+  void attachRoom(code, nextRole, name, {
+    spectate: switchToSpectator,
+    quickMatchMode: roomSession.quickMatchMode,
+    roomPublic: roomSession.roomVisibility === "public",
+    inviteToken: roomSession.pendingInviteToken,
+  });
+});
+
 globalRematchBtn?.addEventListener("click", () => {
   if (!roomSession.code || !roomSession.activeGame || isSpectator()) return;
   if (roomSession.rematchVotes.has(peerId)) {
@@ -1743,6 +2066,28 @@ spectatorChatInput?.addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
   event.preventDefault();
   spectatorChatSendBtn?.click();
+});
+
+roomChatSendBtn?.addEventListener("click", () => {
+  if (!roomSession.code || roomSession.role === "spectator") return;
+  const text = String(roomChatInput?.value || "").trim().slice(0, 200);
+  if (!text) return;
+  const messageId = createRoomMessageId();
+  postRoomMessage({
+    type: "chat",
+    room: roomSession.code,
+    name: roomSession.playerName,
+    text,
+    messageId,
+  });
+  appendRoomChatMessage(roomSession.playerName, text);
+  if (roomChatInput) roomChatInput.value = "";
+});
+
+roomChatInput?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  roomChatSendBtn?.click();
 });
 
 roomCodeInput?.addEventListener("input", () => {
@@ -1800,6 +2145,8 @@ entryLoginBtn?.addEventListener("click", async () => {
   setEntryMessage("");
   showMenuScreen();
   setMenuMessage(tr("cloudAuthSaved"));
+  setFriendMessage("");
+  void loadFriendsToView({ userId, password }, { quiet: true });
 });
 
 entryGuestBtn?.addEventListener("click", () => {
@@ -1820,6 +2167,8 @@ entryGuestBtn?.addEventListener("click", () => {
   setEntryMessage("");
   showMenuScreen();
   setMenuMessage(tr("entryGuestSelected"));
+  renderFriendList([]);
+  setFriendMessage(tr("friendNeedLogin"));
 });
 
 saveCloudAuthBtn?.addEventListener("click", async () => {
@@ -1848,6 +2197,73 @@ saveCloudAuthBtn?.addEventListener("click", async () => {
   if (entryCloudUserIdInput) entryCloudUserIdInput.value = userId;
   if (entryCloudPasswordInput) entryCloudPasswordInput.value = password;
   setMenuMessage(tr("cloudAuthSaved"));
+  setFriendMessage("");
+  void loadFriendsToView({ userId, password }, { quiet: true });
+});
+
+friendRefreshBtn?.addEventListener("click", () => {
+  void refreshFriendListFromStorage();
+});
+
+friendAddBtn?.addEventListener("click", async () => {
+  const auth = getCloudAuthFromStorage();
+  if (!auth) {
+    setFriendMessage(tr("friendNeedLogin"));
+    return;
+  }
+  const friendUserId = String(friendUserIdInput?.value || "").trim();
+  if (!friendUserId) {
+    setFriendMessage(tr("friendIdRequired"));
+    return;
+  }
+
+  try {
+    const { data } = await cloudApiRequest("/api/friends/add", {
+      userId: auth.userId,
+      password: auth.password,
+      friendUserId,
+    });
+    renderFriendList(data?.friends || []);
+    setFriendMessage(tr("friendAdded"));
+    if (friendUserIdInput) friendUserIdInput.value = "";
+  } catch (err) {
+    const code = String(err?.code || "");
+    if (code === "FRIEND_NOT_FOUND") {
+      setFriendMessage(tr("friendNotFound"));
+      return;
+    }
+    if (code === "FRIEND_SELF_FORBIDDEN") {
+      setFriendMessage(tr("friendSelfForbidden"));
+      return;
+    }
+    setFriendMessage(tr("friendLoadFailed"));
+  }
+});
+
+friendRemoveBtn?.addEventListener("click", async () => {
+  const auth = getCloudAuthFromStorage();
+  if (!auth) {
+    setFriendMessage(tr("friendNeedLogin"));
+    return;
+  }
+  const friendUserId = String(friendUserIdInput?.value || "").trim();
+  if (!friendUserId) {
+    setFriendMessage(tr("friendIdRequired"));
+    return;
+  }
+
+  try {
+    const { data } = await cloudApiRequest("/api/friends/remove", {
+      userId: auth.userId,
+      password: auth.password,
+      friendUserId,
+    });
+    renderFriendList(data?.friends || []);
+    setFriendMessage(tr("friendRemoved"));
+    if (friendUserIdInput) friendUserIdInput.value = "";
+  } catch {
+    setFriendMessage(tr("friendLoadFailed"));
+  }
 });
 
 backToEntryBtn?.addEventListener("click", () => {
@@ -1900,6 +2316,8 @@ if (entryCloudPasswordInput) {
 
 setPlayerName(localStorage.getItem(STORAGE_PLAYER_NAME_KEY) || "Player");
 setEntryActionButtonsVisible(true);
+renderFriendList([]);
+void refreshFriendListFromStorage({ quiet: true });
 
 updateLobbyView();
 showEntryScreen();

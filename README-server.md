@@ -131,3 +131,5 @@ npm run cloud
 補足:
 
 - 旧 `server/data/profiles.json` が存在し、`users` が空の場合は初回起動時に自動移行されます。
+- パスワード平文はDBへ保存されません。`users.pass_hash_bcrypt` にbcryptハッシュのみ保存されます。
+- 旧方式（scrypt）の既存ユーザーは、ログイン成功時にbcryptへ自動移行されます。

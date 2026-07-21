@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
 import { DatabaseSync } from "node:sqlite";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,6 +13,7 @@ const LEGACY_JSON_PATH = path.join(DATA_DIR, "profiles.json");
 const SQLITE_PATH = process.env.A5M2_DB_PATH || path.join(DATA_DIR, "a5m2.sqlite");
 const HOST = process.env.CLOUD_HOST || "0.0.0.0";
 const PORT = Number(process.env.CLOUD_PORT || 8787);
+const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 12);
 
 const DEFAULT_PROFILE = {
   bankCoins: 0,
@@ -91,14 +93,32 @@ function initSqlite() {
     );
     CREATE INDEX IF NOT EXISTS idx_match_records_user_time
       ON match_records(user_id, played_at DESC);
+    CREATE TABLE IF NOT EXISTS friends (
+      user_id TEXT NOT NULL,
+      friend_user_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, friend_user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_friends_user
+      ON friends(user_id);
   `);
+
+  ensureAuthColumns();
 
   migrateLegacyJsonIfNeeded();
 }
 
+function ensureAuthColumns() {
+  const columns = db.prepare("PRAGMA table_info(users)").all();
+  const hasBcrypt = columns.some((col) => col?.name === "pass_hash_bcrypt");
+  if (!hasBcrypt) {
+    db.exec("ALTER TABLE users ADD COLUMN pass_hash_bcrypt TEXT NOT NULL DEFAULT ''");
+  }
+}
+
 function readUser(userId) {
   const row = db.prepare(`
-    SELECT user_id, pass_salt_hex, pass_hash_hex, profile_json, created_at, updated_at
+    SELECT user_id, pass_salt_hex, pass_hash_hex, pass_hash_bcrypt, profile_json, created_at, updated_at
     FROM users
     WHERE user_id = ?
   `).get(userId);
@@ -107,18 +127,27 @@ function readUser(userId) {
     userId: row.user_id,
     passSaltHex: row.pass_salt_hex,
     passHashHex: row.pass_hash_hex,
+    passHashBcrypt: String(row.pass_hash_bcrypt || ""),
     profile: safeParseProfileJson(row.profile_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-function insertUser({ userId, passSaltHex, passHashHex, profile }) {
+function insertUser({ userId, passSaltHex, passHashHex, passHashBcrypt, profile }) {
   const now = Date.now();
   db.prepare(`
-    INSERT INTO users (user_id, pass_salt_hex, pass_hash_hex, profile_json, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(userId, passSaltHex, passHashHex, JSON.stringify(profile), now, now);
+    INSERT INTO users (user_id, pass_salt_hex, pass_hash_hex, pass_hash_bcrypt, profile_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(userId, passSaltHex, passHashHex, passHashBcrypt, JSON.stringify(profile), now, now);
+}
+
+function updateUserPasswordHashBcrypt({ userId, passHashBcrypt }) {
+  db.prepare(`
+    UPDATE users
+    SET pass_hash_bcrypt = ?, updated_at = ?
+    WHERE user_id = ?
+  `).run(passHashBcrypt, Date.now(), userId);
 }
 
 function updateUserProfile({ userId, profile }) {
@@ -149,8 +178,8 @@ function migrateLegacyJsonIfNeeded() {
   if (entries.length === 0) return;
 
   const tx = db.prepare(`
-    INSERT INTO users (user_id, pass_salt_hex, pass_hash_hex, profile_json, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO users (user_id, pass_salt_hex, pass_hash_hex, pass_hash_bcrypt, profile_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   const now = Date.now();
@@ -162,7 +191,7 @@ function migrateLegacyJsonIfNeeded() {
       const profile = sanitizeProfile(row.profile || cloneDefaultProfile(), cloneDefaultProfile());
       const createdAt = Number.isFinite(row.createdAt) ? Math.floor(row.createdAt) : now;
       const updatedAt = Number.isFinite(row.updatedAt) ? Math.floor(row.updatedAt) : now;
-      tx.run(userId, row.passSaltHex, row.passHashHex, JSON.stringify(profile), createdAt, updatedAt);
+      tx.run(userId, row.passSaltHex, row.passHashHex, "", JSON.stringify(profile), createdAt, updatedAt);
     }
     db.exec("COMMIT");
   } catch (err) {
@@ -201,7 +230,7 @@ function parseBody(req) {
   });
 }
 
-function hashPassword(password, saltHex) {
+function hashPasswordLegacyScrypt(password, saltHex) {
   const salt = saltHex ? Buffer.from(saltHex, "hex") : crypto.randomBytes(16);
   const key = crypto.scryptSync(password, salt, 64);
   return {
@@ -210,12 +239,27 @@ function hashPassword(password, saltHex) {
   };
 }
 
-function verifyPassword(password, storedSaltHex, storedHashHex) {
-  const { hashHex } = hashPassword(password, storedSaltHex);
+function hashPasswordBcrypt(password) {
+  return bcrypt.hashSync(password, BCRYPT_ROUNDS);
+}
+
+function verifyPasswordLegacyScrypt(password, storedSaltHex, storedHashHex) {
+  const { hashHex } = hashPasswordLegacyScrypt(password, storedSaltHex);
   const a = Buffer.from(hashHex, "hex");
   const b = Buffer.from(storedHashHex, "hex");
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+function verifyPassword(password, user) {
+  const bcryptHash = String(user?.passHashBcrypt || "");
+  if (bcryptHash) {
+    return bcrypt.compareSync(password, bcryptHash);
+  }
+
+  const hasLegacy = Boolean(user?.passSaltHex && user?.passHashHex);
+  if (!hasLegacy) return false;
+  return verifyPasswordLegacyScrypt(password, user.passSaltHex, user.passHashHex);
 }
 
 function sanitizeMatchStats(stats) {
@@ -287,6 +331,48 @@ function normalizeMatchResult(raw) {
 
 function normalizeRoomCode(raw) {
   return String(raw || "").replace(/\D/g, "").slice(0, 6);
+}
+
+function normalizeUserId(raw) {
+  return String(raw || "").trim().slice(0, 24);
+}
+
+function listFriends(userId) {
+  const rows = db.prepare(`
+    SELECT friend_user_id
+    FROM friends
+    WHERE user_id = ?
+    ORDER BY friend_user_id COLLATE NOCASE ASC
+  `).all(userId);
+  return rows
+    .map((row) => normalizeUserId(row?.friend_user_id || ""))
+    .filter(Boolean);
+}
+
+function addFriendBothWays(userId, friendUserId) {
+  const now = Date.now();
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO friends (user_id, friend_user_id, created_at)
+    VALUES (?, ?, ?)
+  `);
+  db.exec("BEGIN");
+  try {
+    insert.run(userId, friendUserId, now);
+    insert.run(friendUserId, userId, now);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+function removeFriendBothWays(userId, friendUserId) {
+  const del = db.prepare(`
+    DELETE FROM friends
+    WHERE (user_id = ? AND friend_user_id = ?)
+       OR (user_id = ? AND friend_user_id = ?)
+  `);
+  del.run(userId, friendUserId, friendUserId, userId);
 }
 
 function applyMatchRecord(profile, rawRecord) {
@@ -369,19 +455,26 @@ function sanitizeProfile(profile, baseProfile = DEFAULT_PROFILE) {
 function authenticateOrCreate(db, userId, password) {
   const user = readUser(userId);
   if (!user) {
-    const pass = hashPassword(password);
+    const passHashBcrypt = hashPasswordBcrypt(password);
     insertUser({
       userId,
-      passSaltHex: pass.saltHex,
-      passHashHex: pass.hashHex,
+      passSaltHex: "",
+      passHashHex: "",
+      passHashBcrypt,
       profile: cloneDefaultProfile(),
     });
     return { ok: true, created: true, user: readUser(userId) };
   }
 
-  const ok = verifyPassword(password, user.passSaltHex, user.passHashHex);
+  const ok = verifyPassword(password, user);
   if (!ok) {
     return { ok: false };
+  }
+
+  if (!user.passHashBcrypt) {
+    const passHashBcrypt = hashPasswordBcrypt(password);
+    updateUserPasswordHashBcrypt({ userId, passHashBcrypt });
+    user.passHashBcrypt = passHashBcrypt;
   }
   return { ok: true, created: false, user };
 }
@@ -395,7 +488,14 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 405, { ok: false, code: "METHOD_NOT_ALLOWED", message: "POST only" });
   }
 
-  if (req.url !== "/api/profile/load" && req.url !== "/api/profile/save" && req.url !== "/api/match/record") {
+  if (
+    req.url !== "/api/profile/load"
+    && req.url !== "/api/profile/save"
+    && req.url !== "/api/match/record"
+    && req.url !== "/api/friends/list"
+    && req.url !== "/api/friends/add"
+    && req.url !== "/api/friends/remove"
+  ) {
     return sendJson(res, 404, { ok: false, code: "NOT_FOUND", message: "Unknown endpoint" });
   }
 
@@ -419,6 +519,38 @@ const server = http.createServer(async (req, res) => {
         created: auth.created,
         profile: sanitizeProfile(auth.user.profile || DEFAULT_PROFILE, DEFAULT_PROFILE),
       });
+    }
+
+    if (req.url === "/api/friends/list") {
+      const friends = listFriends(userId);
+      return sendJson(res, 200, { ok: true, friends });
+    }
+
+    if (req.url === "/api/friends/add") {
+      const friendUserId = normalizeUserId(body?.friendUserId || "");
+      if (!friendUserId) {
+        return sendJson(res, 400, { ok: false, code: "FRIEND_ID_REQUIRED", message: "friendUserId is required" });
+      }
+      if (friendUserId === userId) {
+        return sendJson(res, 400, { ok: false, code: "FRIEND_SELF_FORBIDDEN", message: "Cannot add yourself" });
+      }
+      const friendUser = readUser(friendUserId);
+      if (!friendUser) {
+        return sendJson(res, 404, { ok: false, code: "FRIEND_NOT_FOUND", message: "Friend user not found" });
+      }
+      addFriendBothWays(userId, friendUserId);
+      const friends = listFriends(userId);
+      return sendJson(res, 200, { ok: true, friends });
+    }
+
+    if (req.url === "/api/friends/remove") {
+      const friendUserId = normalizeUserId(body?.friendUserId || "");
+      if (!friendUserId) {
+        return sendJson(res, 400, { ok: false, code: "FRIEND_ID_REQUIRED", message: "friendUserId is required" });
+      }
+      removeFriendBothWays(userId, friendUserId);
+      const friends = listFriends(userId);
+      return sendJson(res, 200, { ok: true, friends });
     }
 
     if (req.url === "/api/match/record") {
