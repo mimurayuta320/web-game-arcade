@@ -32,7 +32,16 @@ const DEFAULT_PROFILE = {
   unlockedSkins: ["classic"],
   selectedSkin: "classic",
   playerName: "Player",
+  playerAvatar: "",
 };
+
+function normalizeAvatarDataUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (value.length > 180000) return "";
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value)) return "";
+  return value;
+}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -215,6 +224,7 @@ function sanitizeProfile(profile) {
   if (!unlockedSkins.includes("classic")) unlockedSkins.unshift("classic");
   const selectedSkin = typeof profile?.selectedSkin === "string" ? profile.selectedSkin : "classic";
   const playerName = normalizePlayerName(profile?.playerName);
+  const playerAvatar = normalizeAvatarDataUrl(profile?.playerAvatar);
 
   return {
     bankCoins,
@@ -222,6 +232,7 @@ function sanitizeProfile(profile) {
     unlockedSkins: [...new Set(unlockedSkins)],
     selectedSkin: unlockedSkins.includes(selectedSkin) ? selectedSkin : "classic",
     playerName,
+    playerAvatar,
   };
 }
 
@@ -330,6 +341,7 @@ function roomParticipants(code) {
     participants.push({
       id: member.peerId,
       name: normalizePlayerName(member.playerName || "Player"),
+      avatar: normalizeAvatarDataUrl(member.playerAvatar),
     });
   }
   return participants;
@@ -601,6 +613,7 @@ wss.on("connection", (ws) => {
   ws.roomCode = null;
   ws.peerId = null;
   ws.playerName = "Player";
+  ws.playerAvatar = "";
   ws.chatRateState = {
     timestamps: [],
     lastText: "",
@@ -625,6 +638,9 @@ wss.on("connection", (ws) => {
 
     if (typeof payload.name === "string") {
       ws.playerName = normalizePlayerName(payload.name);
+    }
+    if (typeof payload.avatar === "string") {
+      ws.playerAvatar = normalizeAvatarDataUrl(payload.avatar);
     }
 
     const type = String(payload.type || "");

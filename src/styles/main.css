@@ -187,6 +187,22 @@ body {
   gap: 0.62rem;
 }
 
+.avatar-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
+  flex-wrap: wrap;
+}
+
+.player-avatar-preview {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(6, 14, 20, 0.82);
+}
+
 .join-row {
   display: grid;
   gap: 0.62rem;
@@ -275,6 +291,28 @@ body {
   display: flex;
   gap: 0.6rem;
   flex-wrap: wrap;
+}
+
+.lobby-avatar-row {
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.lobby-avatar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.lobby-avatar-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(6, 14, 20, 0.82);
 }
 
 .game-card.disabled {
@@ -2010,6 +2048,21 @@ body {
 
 .room-chat-name {
   font-weight: 700;
+}
+
+.room-chat-name-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.room-chat-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(6, 14, 20, 0.8);
 }
 
 .room-chat-text {

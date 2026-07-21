@@ -14,7 +14,9 @@ const STORAGE_LANG_KEY = "neon-arcade-lang";
 const STORAGE_CLOUD_USER_ID_KEY = "neon-cloud-user-id";
 const STORAGE_CLOUD_PASSWORD_KEY = "neon-cloud-password";
 const STORAGE_PLAYER_NAME_KEY = "neon-player-name";
+const STORAGE_PLAYER_AVATAR_KEY = "neon-player-avatar";
 const STORAGE_ROOM_SERVER_URL_KEY = "neon-room-server-url";
+const STORAGE_FRIENDS_KEY = "neon-friends-v1";
 const ROOM_SERVER_QUERY_PARAM_KEY = "roomServer";
 const DEFAULT_ROOM_SERVER_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname || "localhost"}:8788`;
 const APP_URL_TAG = "ToufuGameshow";
@@ -44,6 +46,10 @@ const createRoomBtn = document.getElementById("createRoomBtn");
 const joinRoomBtn = document.getElementById("joinRoomBtn");
 const roomCodeInput = document.getElementById("roomCodeInput");
 const playerNameInput = document.getElementById("playerNameInput");
+const playerAvatarInput = document.getElementById("playerAvatarInput");
+const playerAvatarPreview = document.getElementById("playerAvatarPreview");
+const playerAvatarUploadBtn = document.getElementById("playerAvatarUploadBtn");
+const playerAvatarClearBtn = document.getElementById("playerAvatarClearBtn");
 const entryCloudUserIdInput = document.getElementById("entryCloudUserIdInput");
 const entryCloudPasswordInput = document.getElementById("entryCloudPasswordInput");
 const entryLoginBtn = document.getElementById("entryLoginBtn");
@@ -59,7 +65,12 @@ const lobbyRoomCodeText = document.getElementById("lobbyRoomCodeText");
 const lobbyRoleText = document.getElementById("lobbyRoleText");
 const lobbySelfNameText = document.getElementById("lobbySelfNameText");
 const lobbyPeerNameText = document.getElementById("lobbyPeerNameText");
+const lobbySelfAvatarLabel = document.getElementById("lobbySelfAvatarLabel");
+const lobbyPeerAvatarLabel = document.getElementById("lobbyPeerAvatarLabel");
+const lobbySelfAvatarImg = document.getElementById("lobbySelfAvatarImg");
+const lobbyPeerAvatarImg = document.getElementById("lobbyPeerAvatarImg");
 const lobbyParticipantsText = document.getElementById("lobbyParticipantsText");
+const lobbyFriendsText = document.getElementById("lobbyFriendsText");
 const lobbyPeerText = document.getElementById("lobbyPeerText");
 const lobbyMessage = document.getElementById("lobbyMessage");
 const lobbyStartOthelloBtn = document.getElementById("lobbyStartOthelloBtn");
@@ -180,6 +191,12 @@ const messages = {
     cloudAuthInvalid: "クラウドID/パスワードを入力してください",
     cloudIdDuplicateWarn: "このIDは既に使用されています。別のIDか、正しいパスワードを入力してください",
     cloudCheckFailed: "クラウド確認に失敗しました。サーバー起動後にもう一度お試しください",
+    avatarUpload: "アイコン選択",
+    avatarClear: "アイコン解除",
+    avatarUpdated: "アイコンを更新しました",
+    avatarRemoved: "アイコンを解除しました",
+    avatarInvalidType: "画像ファイルを選択してください",
+    avatarLoadFailed: "画像の読み込みに失敗しました",
     roomCodePlaceholder: "6桁の番号",
     roomWaiting: "参加者待機中",
     roomConnected: "相手が参加しました",
@@ -203,7 +220,10 @@ const messages = {
     labelRole: "役割",
     labelYou: "あなた",
     labelPeer: "相手",
+    labelYouIcon: "あなたのアイコン",
+    labelPeerIcon: "相手のアイコン",
     labelParticipants: "参加メンバー",
+    labelFriends: "フレンド",
     labelStatus: "状態",
     gameSelectTitle: "ゲーム選択",
     unsupportedGameSelected: "相手が未対応ゲーム {game} を選択しました。この端末ではプレイできません。",
@@ -237,6 +257,15 @@ const messages = {
     roomChatUnmuteEmpty: "解除する名前を指定してください（例: /unmute 太郎）",
     roomChatMuteList: "ミュート一覧: {names}",
     roomChatMuteListEmpty: "ミュート中の相手はいません",
+    roomChatFriendAddUsage: "フレンド追加: /friendadd 名前",
+    roomChatFriendRemoveUsage: "フレンド削除: /friendremove 名前",
+    roomChatFriendAdded: "フレンドに追加しました: {name}",
+    roomChatFriendRemoved: "フレンドから削除しました: {name}",
+    roomChatFriendExists: "すでにフレンドです: {name}",
+    roomChatFriendNotFound: "フレンドに登録されていません: {name}",
+    roomChatFriendListEmpty: "フレンドはまだいません",
+    roomChatFriendList: "フレンド一覧: {names}",
+    roomChatFriendSelfBlocked: "自分自身はフレンド追加できません",
     roomChatDmUsage: "DM送信: /dm 名前 メッセージ",
     roomChatDmTargetNotFound: "DM相手が見つかりません: {name}",
     roomChatDmSent: "{name} とのDMを開始しました",
@@ -276,7 +305,7 @@ const messages = {
     roomChatActionReport: "通報",
     roomChatActionHostMute: "ホストミュート",
     roomChatActionHostUnmute: "解除",
-    roomChatUnknownCommand: "未対応コマンドです（/help /mute /unmute /mutes /dm /dmclear /editlast /retractlast /reportlast /hostmute /hostunmute /hostmutes）",
+    roomChatUnknownCommand: "未対応コマンドです（/help /mute /unmute /mutes /friendadd /friendremove /friends /dm /dmclear /editlast /retractlast /reportlast /hostmute /hostunmute /hostmutes）",
     roomChatHelpSummary: "コマンドヘルプ",
     roomChatHelpLine1: "/help または /commands: ヘルプ表示",
     roomChatHelpLine2: "/mute 名前: 相手をミュート",
@@ -286,7 +315,11 @@ const messages = {
     roomChatHelpLine6: "/dmclear 名前|all: DM履歴削除",
     roomChatHelpLine7: "/editlast 新しいメッセージ: 直近メッセージ修正",
     roomChatHelpLine8: "/retractlast /reportlast [理由] /hostmute 名前 [秒] /hostunmute 名前 /hostmutes",
-    roomChatHelpInline: "コマンド: /help, /mute 名前, /unmute 名前, /mutes, /dm 名前 メッセージ, /dmclear 名前|all, /editlast 新しいメッセージ, /retractlast, /reportlast [理由], /hostmute 名前 [秒], /hostunmute 名前, /hostmutes",
+    roomChatHelpLine9: "/friendadd 名前 /friendremove 名前 /friends",
+    roomChatHelpInline: "コマンド: /help, /mute 名前, /unmute 名前, /mutes, /friendadd 名前, /friendremove 名前, /friends, /dm 名前 メッセージ, /dmclear 名前|all, /editlast 新しいメッセージ, /retractlast, /reportlast [理由], /hostmute 名前 [秒], /hostunmute 名前, /hostmutes",
+    lobbyFriendsEmpty: "フレンド: 0人",
+    lobbyFriendsOffline: "フレンド: オンライン 0 / 全体 {total}",
+    lobbyFriendsOnline: "フレンド: オンライン {online} / 全体 {total} ({names})",
   },
   ko: {
     entryTitle: "Start Session",
@@ -364,6 +397,12 @@ const messages = {
     cloudAuthInvalid: "클라우드 ID/비밀번호를 입력하세요",
     cloudIdDuplicateWarn: "이 ID는 이미 사용 중입니다. 다른 ID 또는 올바른 비밀번호를 입력하세요",
     cloudCheckFailed: "클라우드 확인에 실패했습니다. 서버 실행 후 다시 시도하세요",
+    avatarUpload: "아이콘 선택",
+    avatarClear: "아이콘 해제",
+    avatarUpdated: "아이콘을 업데이트했습니다",
+    avatarRemoved: "아이콘을 해제했습니다",
+    avatarInvalidType: "이미지 파일을 선택해 주세요",
+    avatarLoadFailed: "이미지를 불러오지 못했습니다",
     roomCodePlaceholder: "6자리 번호",
     roomWaiting: "참가자 대기 중",
     roomConnected: "상대가 참가했습니다",
@@ -387,7 +426,10 @@ const messages = {
     labelRole: "ROLE",
     labelYou: "YOU",
     labelPeer: "PEER",
+    labelYouIcon: "YOU ICON",
+    labelPeerIcon: "PEER ICON",
     labelParticipants: "MEMBERS",
+    labelFriends: "FRIENDS",
     labelStatus: "STATUS",
     gameSelectTitle: "게임 선택",
     unsupportedGameSelected: "상대가 미지원 게임 {game} 을 선택했습니다. 이 기기에서는 플레이할 수 없습니다.",
@@ -421,6 +463,15 @@ const messages = {
     roomChatUnmuteEmpty: "해제할 이름을 입력하세요 (예: /unmute 홍길동)",
     roomChatMuteList: "음소거 목록: {names}",
     roomChatMuteListEmpty: "음소거 중인 상대가 없습니다",
+    roomChatFriendAddUsage: "친구 추가: /friendadd 이름",
+    roomChatFriendRemoveUsage: "친구 삭제: /friendremove 이름",
+    roomChatFriendAdded: "친구로 추가했습니다: {name}",
+    roomChatFriendRemoved: "친구에서 삭제했습니다: {name}",
+    roomChatFriendExists: "이미 친구입니다: {name}",
+    roomChatFriendNotFound: "친구 목록에 없습니다: {name}",
+    roomChatFriendListEmpty: "아직 친구가 없습니다",
+    roomChatFriendList: "친구 목록: {names}",
+    roomChatFriendSelfBlocked: "자기 자신은 친구로 추가할 수 없습니다",
     roomChatDmUsage: "DM 전송: /dm 이름 메시지",
     roomChatDmTargetNotFound: "DM 대상을 찾을 수 없습니다: {name}",
     roomChatDmSent: "{name} 님과 DM을 시작했습니다",
@@ -460,7 +511,7 @@ const messages = {
     roomChatActionReport: "신고",
     roomChatActionHostMute: "호스트 음소거",
     roomChatActionHostUnmute: "해제",
-    roomChatUnknownCommand: "지원하지 않는 명령어입니다 (/help /mute /unmute /mutes /dm /dmclear /editlast /retractlast /reportlast /hostmute /hostunmute /hostmutes)",
+    roomChatUnknownCommand: "지원하지 않는 명령어입니다 (/help /mute /unmute /mutes /friendadd /friendremove /friends /dm /dmclear /editlast /retractlast /reportlast /hostmute /hostunmute /hostmutes)",
     roomChatHelpSummary: "명령어 도움말",
     roomChatHelpLine1: "/help 또는 /commands: 도움말 표시",
     roomChatHelpLine2: "/mute 이름: 상대 음소거",
@@ -470,7 +521,11 @@ const messages = {
     roomChatHelpLine6: "/dmclear 이름|all: DM 기록 삭제",
     roomChatHelpLine7: "/editlast 새 메시지: 최근 메시지 수정",
     roomChatHelpLine8: "/retractlast /reportlast [사유] /hostmute 이름 [초] /hostunmute 이름 /hostmutes",
-    roomChatHelpInline: "명령어: /help, /mute 이름, /unmute 이름, /mutes, /dm 이름 메시지, /dmclear 이름|all, /editlast 새 메시지, /retractlast, /reportlast [사유], /hostmute 이름 [초], /hostunmute 이름, /hostmutes",
+    roomChatHelpLine9: "/friendadd 이름 /friendremove 이름 /friends",
+    roomChatHelpInline: "명령어: /help, /mute 이름, /unmute 이름, /mutes, /friendadd 이름, /friendremove 이름, /friends, /dm 이름 메시지, /dmclear 이름|all, /editlast 새 메시지, /retractlast, /reportlast [사유], /hostmute 이름 [초], /hostunmute 이름, /hostmutes",
+    lobbyFriendsEmpty: "친구: 0명",
+    lobbyFriendsOffline: "친구: 온라인 0 / 전체 {total}",
+    lobbyFriendsOnline: "친구: 온라인 {online} / 전체 {total} ({names})",
   },
 };
 
@@ -545,6 +600,8 @@ function applyStaticTranslations() {
   if (playSolitaireMultiBtn) playSolitaireMultiBtn.textContent = tr("multiPlay");
   if (createRoomBtn) createRoomBtn.textContent = tr("createRoom");
   if (joinRoomBtn) joinRoomBtn.textContent = tr("join");
+  if (playerAvatarUploadBtn) playerAvatarUploadBtn.textContent = tr("avatarUpload");
+  if (playerAvatarClearBtn) playerAvatarClearBtn.textContent = tr("avatarClear");
   if (entryLoginBtn) entryLoginBtn.textContent = tr("loginAndPlay");
   if (entryGuestBtn) entryGuestBtn.textContent = tr("playAsGuest");
   if (saveCloudAuthBtn) saveCloudAuthBtn.textContent = tr("saveCloudAuth");
@@ -553,6 +610,8 @@ function applyStaticTranslations() {
     if (button) button.textContent = tr(labelKey);
   });
   if (lobbyBackBtn) lobbyBackBtn.textContent = tr("backToMenu");
+  if (lobbySelfAvatarLabel) lobbySelfAvatarLabel.textContent = tr("labelYouIcon");
+  if (lobbyPeerAvatarLabel) lobbyPeerAvatarLabel.textContent = tr("labelPeerIcon");
   if (roomChatTitle) roomChatTitle.textContent = tr("roomChatTitle");
   if (roomChatGroupNameInput) roomChatGroupNameInput.placeholder = tr("roomChatGroupNamePlaceholder");
   if (roomChatGroupCreateBtn) roomChatGroupCreateBtn.textContent = tr("roomChatGroupCreate");
@@ -569,6 +628,7 @@ function applyStaticTranslations() {
   setTextById("roomChatHelpLine6", tr("roomChatHelpLine6"));
   setTextById("roomChatHelpLine7", tr("roomChatHelpLine7"));
   setTextById("roomChatHelpLine8", tr("roomChatHelpLine8"));
+  setTextById("roomChatHelpLine9", tr("roomChatHelpLine9"));
   if (roomChatInput) roomChatInput.placeholder = tr("roomChatInputPlaceholder");
   if (roomChatSendBtn) roomChatSendBtn.textContent = tr("roomChatSend");
   if (roomChatClearBtn) roomChatClearBtn.textContent = tr("roomChatClear");
@@ -628,10 +688,12 @@ const roomSession = {
   peerConnected: false,
   selectedGame: null,
   playerName: "Player",
+  playerAvatar: "",
   peerName: null,
   mutedUntil: 0,
   serverMutedPeers: new Map(),
   participants: new Map(),
+  participantAvatars: new Map(),
   peerSupportedGames: new Map(),
   peerChatGroups: new Map(),
   chatMessages: [],
@@ -654,6 +716,8 @@ const ROOM_CHAT_INCOMING_MAX_IN_WINDOW = 10;
 const ROOM_CHAT_INCOMING_REPEAT_BLOCK_COUNT = 3;
 const ROOM_CHAT_RETRACT_COOLDOWN_MS = 15000;
 const ROOM_CHAT_EDIT_RETRACT_WINDOW_MS = 30000;
+const AVATAR_ICON_SIZE = 72;
+const AVATAR_MAX_DATA_URL_LENGTH = 180000;
 const roomChatFilter = {
   date: "",
   word: "",
@@ -693,6 +757,122 @@ function setPlayerName(name) {
   localStorage.setItem(STORAGE_PLAYER_NAME_KEY, normalized);
   if (playerNameInput) playerNameInput.value = normalized;
   updateLobbyView();
+}
+
+function normalizeAvatarDataUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (value.length > AVATAR_MAX_DATA_URL_LENGTH) return "";
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value)) return "";
+  return value;
+}
+
+function avatarStorageKey() {
+  const cloudUserId = String(localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "").trim().toLowerCase();
+  if (cloudUserId) return `${STORAGE_PLAYER_AVATAR_KEY}.${cloudUserId}`;
+  return STORAGE_PLAYER_AVATAR_KEY;
+}
+
+function savePlayerAvatarToStorage() {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(avatarStorageKey(), roomSession.playerAvatar || "");
+  } catch {
+    // Ignore storage quota/security errors.
+  }
+}
+
+function renderAvatarImage(imgEl, avatarDataUrl) {
+  if (!(imgEl instanceof HTMLImageElement)) return;
+  const safe = normalizeAvatarDataUrl(avatarDataUrl);
+  if (safe) {
+    imgEl.src = safe;
+  } else {
+    imgEl.removeAttribute("src");
+  }
+}
+
+function setPlayerAvatar(avatarDataUrl, { persist = true, broadcast = true } = {}) {
+  const safe = normalizeAvatarDataUrl(avatarDataUrl);
+  roomSession.playerAvatar = safe;
+  roomSession.participantAvatars.set(peerId, safe);
+  renderAvatarImage(playerAvatarPreview, safe);
+  renderAvatarImage(lobbySelfAvatarImg, safe);
+  if (persist) {
+    savePlayerAvatarToStorage();
+  }
+  updateLobbyView();
+  renderRoomChat();
+  if (broadcast && roomSession.code && roomSession.transport) {
+    sendRoomPresence();
+  }
+}
+
+function loadPlayerAvatarFromStorage() {
+  if (typeof localStorage === "undefined") {
+    setPlayerAvatar("", { persist: false, broadcast: false });
+    return;
+  }
+  try {
+    const stored = localStorage.getItem(avatarStorageKey()) || "";
+    setPlayerAvatar(stored, { persist: false, broadcast: false });
+  } catch {
+    setPlayerAvatar("", { persist: false, broadcast: false });
+  }
+}
+
+function setParticipantAvatarByPayload(peer, rawAvatar) {
+  if (!peer) return;
+  const safe = normalizeAvatarDataUrl(rawAvatar);
+  roomSession.participantAvatars.set(peer, safe);
+}
+
+function participantAvatarById(targetPeerId) {
+  const id = String(targetPeerId || "").trim();
+  if (!id) return "";
+  if (id === peerId) return roomSession.playerAvatar;
+  return normalizeAvatarDataUrl(roomSession.participantAvatars.get(id) || "");
+}
+
+async function createAvatarDataUrlFromFile(file) {
+  if (!(file instanceof File) || !String(file.type || "").startsWith("image/")) {
+    throw new Error("invalid-type");
+  }
+
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("read-failed"));
+    reader.readAsDataURL(file);
+  });
+
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("decode-failed"));
+    img.src = dataUrl;
+  });
+
+  const srcW = Math.max(1, Number(image.naturalWidth || image.width || AVATAR_ICON_SIZE));
+  const srcH = Math.max(1, Number(image.naturalHeight || image.height || AVATAR_ICON_SIZE));
+  const square = Math.min(srcW, srcH);
+  const sx = Math.floor((srcW - square) / 2);
+  const sy = Math.floor((srcH - square) / 2);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = AVATAR_ICON_SIZE;
+  canvas.height = AVATAR_ICON_SIZE;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas-failed");
+  ctx.drawImage(image, sx, sy, square, square, 0, 0, AVATAR_ICON_SIZE, AVATAR_ICON_SIZE);
+
+  let out = canvas.toDataURL("image/webp", 0.86);
+  if (!normalizeAvatarDataUrl(out)) {
+    out = canvas.toDataURL("image/png");
+  }
+  const safe = normalizeAvatarDataUrl(out);
+  if (!safe) throw new Error("avatar-too-large");
+  return safe;
 }
 
 function getCloudAuthFromStorage() {
@@ -894,6 +1074,7 @@ function loadRoomChatFromStorage(roomCode) {
           mine: Boolean(entry?.mine),
           ts: Number.isFinite(entry?.ts) ? entry.ts : Date.now(),
           senderId: typeof entry?.senderId === "string" ? entry.senderId : "",
+          avatar: normalizeAvatarDataUrl(entry?.avatar),
           messageId: typeof entry?.messageId === "string" && entry.messageId ? entry.messageId : generateChatMessageId(),
           editedAt: Number.isFinite(entry?.editedAt) ? entry.editedAt : 0,
           retracted: Boolean(entry?.retracted),
@@ -956,6 +1137,89 @@ function updateRoomChatVisibility() {
 
 function normalizeMuteName(raw) {
   return normalizeName(raw || "").toLowerCase();
+}
+
+const friendState = {
+  namesByKey: new Map(),
+};
+
+function friendStorageKey() {
+  const cloudUserId = String(localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "").trim().toLowerCase();
+  if (cloudUserId) return `${STORAGE_FRIENDS_KEY}.${cloudUserId}`;
+  return STORAGE_FRIENDS_KEY;
+}
+
+function saveFriendsToStorage() {
+  if (typeof localStorage === "undefined") return;
+  const key = friendStorageKey();
+  const names = [...friendState.namesByKey.values()];
+  try {
+    localStorage.setItem(key, JSON.stringify(names));
+  } catch {
+    // Ignore storage quota/security errors.
+  }
+}
+
+function loadFriendsFromStorage() {
+  if (typeof localStorage === "undefined") return;
+  friendState.namesByKey.clear();
+  const key = friendStorageKey();
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach((entry) => {
+      const name = normalizeName(entry);
+      const keyName = normalizeMuteName(name);
+      if (!keyName) return;
+      friendState.namesByKey.set(keyName, name);
+    });
+  } catch {
+    // Ignore malformed JSON.
+  }
+}
+
+function friendNames() {
+  return [...friendState.namesByKey.values()].sort((a, b) => a.localeCompare(b));
+}
+
+function isFriendName(rawName) {
+  const key = normalizeMuteName(rawName);
+  if (!key) return false;
+  return friendState.namesByKey.has(key);
+}
+
+function addFriendName(rawName) {
+  const name = normalizeName(rawName);
+  const key = normalizeMuteName(name);
+  if (!key) return { ok: false, reason: "empty" };
+  if (key === normalizeMuteName(roomSession.playerName)) return { ok: false, reason: "self", name };
+  if (friendState.namesByKey.has(key)) return { ok: false, reason: "exists", name: friendState.namesByKey.get(key) || name };
+  friendState.namesByKey.set(key, name);
+  saveFriendsToStorage();
+  return { ok: true, name };
+}
+
+function removeFriendName(rawName) {
+  const key = normalizeMuteName(rawName);
+  if (!key) return { ok: false, reason: "empty" };
+  const existing = friendState.namesByKey.get(key);
+  if (!existing) return { ok: false, reason: "not-found", name: normalizeName(rawName) };
+  friendState.namesByKey.delete(key);
+  saveFriendsToStorage();
+  return { ok: true, name: existing };
+}
+
+function onlineFriendNames() {
+  const online = [];
+  for (const [id, name] of roomSession.participants.entries()) {
+    if (id === peerId) continue;
+    if (isFriendName(name)) {
+      online.push(normalizeName(name));
+    }
+  }
+  return online.sort((a, b) => a.localeCompare(b));
 }
 
 function isDmGroupId(groupId) {
@@ -1265,6 +1529,7 @@ function runChatCommand(inputText) {
       mine: true,
       ts,
       senderId: peerId,
+      avatar: roomSession.playerAvatar,
       groupId: dmGroup.id,
       groupName: dmGroup.label,
       messageId,
@@ -1273,6 +1538,7 @@ function runChatCommand(inputText) {
       type: "chat",
       text: message,
       name: roomSession.playerName,
+      avatar: roomSession.playerAvatar,
       ts,
       messageId,
       dm: true,
@@ -1565,6 +1831,7 @@ function sendRoomPresence() {
   postRoomMessage({
     type: "presence",
     name: roomSession.playerName,
+    avatar: roomSession.playerAvatar,
     supportedGames: localSupportedGameKeys(),
     chatGroupId: activeChatGroupId(),
     chatGroups: roomChatGroupsForPayload(),
@@ -1764,6 +2031,17 @@ function renderRoomChat() {
     const meta = document.createElement("div");
     meta.className = "room-chat-meta";
 
+    const nameWrap = document.createElement("span");
+    nameWrap.className = "room-chat-name-wrap";
+
+    const avatar = document.createElement("img");
+    avatar.className = "room-chat-avatar";
+    avatar.alt = "avatar";
+    const avatarData = normalizeAvatarDataUrl(entry.avatar)
+      || participantAvatarById(entry.mine ? peerId : entry.senderId)
+      || roomSession.playerAvatar;
+    renderAvatarImage(avatar, avatarData);
+
     const name = document.createElement("span");
     name.className = "room-chat-name";
     name.textContent = entry.name;
@@ -1777,7 +2055,9 @@ function renderRoomChat() {
     text.className = `room-chat-text${entry.retracted ? " retracted" : ""}`;
     text.textContent = entry.retracted ? tr("roomChatRetractedLabel") : entry.text;
 
-    meta.appendChild(name);
+    nameWrap.appendChild(avatar);
+    nameWrap.appendChild(name);
+    meta.appendChild(nameWrap);
     meta.appendChild(clock);
     item.appendChild(meta);
     item.appendChild(text);
@@ -1838,7 +2118,7 @@ function renderRoomChat() {
   roomChatLog.scrollTop = hasRoomChatFilter() ? 0 : roomChatLog.scrollHeight;
 }
 
-function pushRoomChatMessage({ name, text, mine = false, ts = Date.now(), senderId = "", groupId = ROOM_CHAT_DEFAULT_GROUP_ID, groupName = "", messageId = "", editedAt = 0, retracted = false, retractedAt = 0 }) {
+function pushRoomChatMessage({ name, text, mine = false, ts = Date.now(), senderId = "", avatar = "", groupId = ROOM_CHAT_DEFAULT_GROUP_ID, groupName = "", messageId = "", editedAt = 0, retracted = false, retractedAt = 0 }) {
   const normalizedText = normalizeChatText(text);
   if (!normalizedText) return;
   const normalizedGroupId = normalizeChatGroupId(groupId);
@@ -1853,6 +2133,7 @@ function pushRoomChatMessage({ name, text, mine = false, ts = Date.now(), sender
     mine: Boolean(mine),
     ts,
     senderId: typeof senderId === "string" ? senderId : "",
+    avatar: normalizeAvatarDataUrl(avatar),
     messageId: typeof messageId === "string" && messageId ? messageId : generateChatMessageId(),
     editedAt: Number.isFinite(editedAt) ? editedAt : 0,
     retracted: Boolean(retracted),
@@ -1918,6 +2199,7 @@ function sendRoomChat() {
       mine: true,
       ts,
       senderId: peerId,
+      avatar: roomSession.playerAvatar,
       groupId: currentGroupId,
       groupName: currentGroupName,
       messageId,
@@ -1927,6 +2209,7 @@ function sendRoomChat() {
       type: "chat",
       text,
       name: roomSession.playerName,
+      avatar: roomSession.playerAvatar,
       ts,
       messageId,
       dm: true,
@@ -1946,6 +2229,7 @@ function sendRoomChat() {
     mine: true,
     ts,
     senderId: peerId,
+    avatar: roomSession.playerAvatar,
     groupId: currentGroupId,
     groupName: currentGroupName,
     messageId,
@@ -1955,6 +2239,7 @@ function sendRoomChat() {
     type: "chat",
     text,
     name: roomSession.playerName,
+    avatar: roomSession.playerAvatar,
     ts,
     messageId,
     groupId: currentGroupId,
@@ -1986,6 +2271,7 @@ async function saveCloudProfile(userId, password, profile) {
 async function syncPlayerNameToCloud(userId, password, baseProfile = null) {
   const name = normalizeName(playerNameInput?.value || localStorage.getItem(STORAGE_PLAYER_NAME_KEY) || "Player");
   setPlayerName(name);
+  const avatar = normalizeAvatarDataUrl(roomSession.playerAvatar);
   let profile = baseProfile && typeof baseProfile === "object" ? { ...baseProfile } : null;
   if (!profile) {
     const check = await verifyCloudAuth(userId, password);
@@ -1993,6 +2279,7 @@ async function syncPlayerNameToCloud(userId, password, baseProfile = null) {
     profile = check.profile && typeof check.profile === "object" ? { ...check.profile } : {};
   }
   profile.playerName = name;
+  profile.playerAvatar = avatar;
   try {
     return await saveCloudProfile(userId, password, profile);
   } catch {
@@ -2055,6 +2342,13 @@ function otherParticipantNames() {
   return [...roomSession.participants.entries()]
     .filter(([id]) => id !== peerId)
     .map(([, name]) => name);
+}
+
+function firstOtherParticipantId() {
+  for (const id of roomSession.participants.keys()) {
+    if (id !== peerId) return id;
+  }
+  return "";
 }
 
 function localSupportedGameKeys() {
@@ -2136,12 +2430,32 @@ function updateLobbyView() {
   lobbyRoleText.textContent = `${tr("labelRole")}: ${roleLabel}`;
   lobbySelfNameText.textContent = `${tr("labelYou")}: ${roomSession.playerName}`;
   lobbyPeerNameText.textContent = `${tr("labelPeer")}: ${roomSession.peerName ?? "-"}`;
+  renderAvatarImage(lobbySelfAvatarImg, roomSession.playerAvatar);
+  const firstPeer = firstOtherParticipantId();
+  renderAvatarImage(lobbyPeerAvatarImg, participantAvatarById(firstPeer));
   if (lobbyParticipantsText) {
     const memberNames = roomSession.code
       ? [...roomSession.participants.entries()]
         .map(([id, name]) => (id === peerId ? `${name} (${tr("labelYou")})` : name))
       : [];
     lobbyParticipantsText.textContent = `${tr("labelParticipants")}: ${memberNames.length > 0 ? memberNames.join(", ") : "-"}`;
+  }
+  if (lobbyFriendsText) {
+    const allFriends = friendNames();
+    const onlineFriends = onlineFriendNames();
+    if (allFriends.length === 0) {
+      lobbyFriendsText.textContent = tr("lobbyFriendsEmpty");
+    } else if (onlineFriends.length === 0) {
+      lobbyFriendsText.textContent = tr("lobbyFriendsOffline", { total: allFriends.length });
+    } else {
+      const preview = onlineFriends.slice(0, 6);
+      const names = preview.join(", ") + (onlineFriends.length > preview.length ? ` +${onlineFriends.length - preview.length}` : "");
+      lobbyFriendsText.textContent = tr("lobbyFriendsOnline", {
+        online: onlineFriends.length,
+        total: allFriends.length,
+        names,
+      });
+    }
   }
   lobbyPeerText.textContent = `${tr("labelStatus")}: ${peerLabel}`;
 
@@ -2193,6 +2507,7 @@ function closeRoom() {
   roomSession.mutedUntil = 0;
   roomSession.serverMutedPeers = new Map();
   roomSession.participants = new Map();
+  roomSession.participantAvatars = new Map([[peerId, roomSession.playerAvatar]]);
   roomSession.peerSupportedGames = new Map();
   roomSession.peerChatGroups = new Map();
   roomSession.chatMessages = [];
@@ -2334,11 +2649,13 @@ function handleRoomMessage(payload, roomCode) {
 
   if (payload.type === "room-state" && Array.isArray(payload.participants)) {
     const nextParticipants = new Map();
+    const nextParticipantAvatars = new Map();
     const nextSupportedGames = new Map();
     const nextPeerChatGroups = new Map();
     payload.participants.forEach((entry) => {
       if (!entry || typeof entry.id !== "string") return;
       nextParticipants.set(entry.id, normalizeName(entry.name));
+      nextParticipantAvatars.set(entry.id, normalizeAvatarDataUrl(entry.avatar));
       const normalized = normalizeSupportedGames(entry.supportedGames);
       if (normalized) {
         nextSupportedGames.set(entry.id, new Set(normalized));
@@ -2348,8 +2665,12 @@ function handleRoomMessage(payload, roomCode) {
     if (!nextParticipants.has(peerId)) {
       nextParticipants.set(peerId, roomSession.playerName);
     }
+    if (!nextParticipantAvatars.has(peerId) || !nextParticipantAvatars.get(peerId)) {
+      nextParticipantAvatars.set(peerId, roomSession.playerAvatar);
+    }
     nextPeerChatGroups.set(peerId, activeChatGroupId());
     roomSession.participants = nextParticipants;
+    roomSession.participantAvatars = nextParticipantAvatars;
     roomSession.peerSupportedGames = nextSupportedGames;
     roomSession.peerChatGroups = nextPeerChatGroups;
     refreshRoomPresence();
@@ -2374,6 +2695,7 @@ function handleRoomMessage(payload, roomCode) {
     }
 
     roomSession.participants.set(payload.from, senderName);
+    setParticipantAvatarByPayload(payload.from, payload.avatar);
     setPeerSupportedGamesByPayload(payload.from, payload.supportedGames);
     setPeerChatGroupByPayload(payload.from, payload.chatGroupId);
     mergeChatGroups(payload.chatGroups);
@@ -2396,6 +2718,7 @@ function handleRoomMessage(payload, roomCode) {
 
   if (payload.type === "presence") {
     roomSession.participants.set(payload.from, normalizeName(payload.name));
+    setParticipantAvatarByPayload(payload.from, payload.avatar);
     setPeerSupportedGamesByPayload(payload.from, payload.supportedGames);
     setPeerChatGroupByPayload(payload.from, payload.chatGroupId);
     mergeChatGroups(payload.chatGroups);
@@ -2420,6 +2743,7 @@ function handleRoomMessage(payload, roomCode) {
   if (payload.type === "chat") {
     const text = normalizeChatText(payload.text);
     if (!text) return;
+    setParticipantAvatarByPayload(payload.from, payload.avatar);
 
     const senderName = normalizeName(
       payload.name
@@ -2456,6 +2780,7 @@ function handleRoomMessage(payload, roomCode) {
       ts: Number.isFinite(payload.ts) ? payload.ts : Date.now(),
       senderId: typeof payload.from === "string" ? payload.from : "",
       messageId: typeof payload.messageId === "string" && payload.messageId ? payload.messageId : generateChatMessageId(),
+      avatar: normalizeAvatarDataUrl(payload.avatar) || participantAvatarById(payload.from),
       groupId,
       groupName,
     });
@@ -2495,6 +2820,7 @@ function handleRoomMessage(payload, roomCode) {
 
   if (payload.type === "leave") {
     roomSession.participants.delete(payload.from);
+    roomSession.participantAvatars.delete(payload.from);
     roomSession.peerSupportedGames.delete(payload.from);
     roomSession.peerChatGroups.delete(payload.from);
     refreshRoomPresence();
@@ -2578,6 +2904,7 @@ async function attachRoom(roomCode, role, playerName) {
   roomSession.mutedUntil = 0;
   roomSession.serverMutedPeers = new Map();
   roomSession.participants = new Map([[peerId, playerName]]);
+  roomSession.participantAvatars = new Map([[peerId, roomSession.playerAvatar]]);
   const loadedGroupState = loadRoomChatGroupStateFromStorage(roomCode);
   roomSession.chatGroups = loadedGroupState.groups;
   roomSession.activeChatGroupId = loadedGroupState.activeGroupId;
@@ -2618,6 +2945,7 @@ async function attachRoom(roomCode, role, playerName) {
   postRoomMessage({
     type: "hello",
     name: roomSession.playerName,
+    avatar: roomSession.playerAvatar,
     supportedGames: localSupportedGameKeys(),
     chatGroupId: activeChatGroupId(),
     chatGroups: roomChatGroupsForPayload(),
@@ -2910,6 +3238,38 @@ roomCodeInput?.addEventListener("input", () => {
   roomCodeInput.value = normalizeRoomCode(roomCodeInput.value);
 });
 
+playerAvatarUploadBtn?.addEventListener("click", () => {
+  playerAvatarInput?.click();
+});
+
+playerAvatarInput?.addEventListener("change", async () => {
+  const file = playerAvatarInput.files?.[0];
+  if (!file) return;
+  try {
+    const avatar = await createAvatarDataUrlFromFile(file);
+    setPlayerAvatar(avatar, { persist: true, broadcast: true });
+    setMenuMessage(tr("avatarUpdated"));
+    const auth = getCloudAuthFromStorage();
+    if (auth) {
+      void syncPlayerNameToCloud(auth.userId, auth.password);
+    }
+  } catch (err) {
+    const reason = String(err?.message || "");
+    setMenuMessage(tr(reason === "invalid-type" ? "avatarInvalidType" : "avatarLoadFailed"));
+  } finally {
+    playerAvatarInput.value = "";
+  }
+});
+
+playerAvatarClearBtn?.addEventListener("click", () => {
+  setPlayerAvatar("", { persist: true, broadcast: true });
+  setMenuMessage(tr("avatarRemoved"));
+  const auth = getCloudAuthFromStorage();
+  if (auth) {
+    void syncPlayerNameToCloud(auth.userId, auth.password);
+  }
+});
+
 playerNameInput?.addEventListener("blur", () => {
   const normalized = normalizeName(playerNameInput.value);
   setPlayerName(normalized);
@@ -2948,14 +3308,23 @@ entryLoginBtn?.addEventListener("click", async () => {
   }
 
   const cloudName = check.profile?.playerName ? normalizeName(check.profile.playerName) : "";
+  const cloudAvatar = normalizeAvatarDataUrl(check.profile?.playerAvatar || "");
   if (cloudName) {
     setPlayerName(cloudName);
   } else {
     await syncPlayerNameToCloud(userId, password, check.profile);
   }
+  if (cloudAvatar) {
+    setPlayerAvatar(cloudAvatar, { persist: true, broadcast: false });
+  } else if (roomSession.playerAvatar) {
+    await syncPlayerNameToCloud(userId, password, check.profile);
+  }
 
   localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
   localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+  loadFriendsFromStorage();
+  loadPlayerAvatarFromStorage();
+  updateLobbyView();
   if (cloudUserIdInput) cloudUserIdInput.value = userId;
   if (cloudPasswordInput) cloudPasswordInput.value = password;
   setEntryMessage("");
@@ -2974,6 +3343,9 @@ entryGuestBtn?.addEventListener("click", () => {
 
   localStorage.removeItem(STORAGE_CLOUD_USER_ID_KEY);
   localStorage.removeItem(STORAGE_CLOUD_PASSWORD_KEY);
+  loadFriendsFromStorage();
+  loadPlayerAvatarFromStorage();
+  updateLobbyView();
   if (entryCloudUserIdInput) entryCloudUserIdInput.value = "";
   if (entryCloudPasswordInput) entryCloudPasswordInput.value = "";
   if (cloudUserIdInput) cloudUserIdInput.value = "";
@@ -2998,14 +3370,23 @@ saveCloudAuthBtn?.addEventListener("click", async () => {
   }
 
   const cloudName = check.profile?.playerName ? normalizeName(check.profile.playerName) : "";
+  const cloudAvatar = normalizeAvatarDataUrl(check.profile?.playerAvatar || "");
   if (cloudName) {
     setPlayerName(cloudName);
   } else {
     await syncPlayerNameToCloud(userId, password, check.profile);
   }
+  if (cloudAvatar) {
+    setPlayerAvatar(cloudAvatar, { persist: true, broadcast: false });
+  } else if (roomSession.playerAvatar) {
+    await syncPlayerNameToCloud(userId, password, check.profile);
+  }
 
   localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
   localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+  loadFriendsFromStorage();
+  loadPlayerAvatarFromStorage();
+  updateLobbyView();
   if (entryCloudUserIdInput) entryCloudUserIdInput.value = userId;
   if (entryCloudPasswordInput) entryCloudPasswordInput.value = password;
   setMenuMessage(tr("cloudAuthSaved"));
@@ -3024,6 +3405,8 @@ backToEntryBtn?.addEventListener("click", () => {
 
 const initialLang = "ja";
 if (langSelect) langSelect.value = initialLang;
+loadFriendsFromStorage();
+loadPlayerAvatarFromStorage();
 setLanguage(initialLang);
 ensureBrandedUrlHash();
 

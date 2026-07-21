@@ -19,6 +19,7 @@ const DEFAULT_PROFILE = {
   unlockedSkins: ["classic"],
   selectedSkin: "classic",
   playerName: "Player",
+  playerAvatar: "",
   matchStats: {
     total: 0,
     win: 0,
@@ -38,6 +39,14 @@ function normalizePlayerName(raw) {
   const trimmed = String(raw || "").trim().replace(/\s+/g, " ");
   if (!trimmed) return "Player";
   return trimmed.slice(0, 18);
+}
+
+function normalizeAvatarDataUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (value.length > 180000) return "";
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(value)) return "";
+  return value;
 }
 
 function ensureDb() {
@@ -340,6 +349,7 @@ function sanitizeProfile(profile, baseProfile = DEFAULT_PROFILE) {
       ? base.selectedSkin
       : "classic";
   const playerName = normalizePlayerName(source.playerName ?? base.playerName);
+  const playerAvatar = normalizeAvatarDataUrl(source.playerAvatar ?? base.playerAvatar);
 
   const matchStats = sanitizeMatchStats(source.matchStats ?? base.matchStats);
   const recentMatches = sanitizeRecentMatches(source.recentMatches ?? base.recentMatches);
@@ -350,6 +360,7 @@ function sanitizeProfile(profile, baseProfile = DEFAULT_PROFILE) {
     unlockedSkins: [...new Set(unlockedSkins)],
     selectedSkin: unlockedSkins.includes(selectedSkin) ? selectedSkin : "classic",
     playerName,
+    playerAvatar,
     matchStats,
     recentMatches,
   };
