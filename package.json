@@ -25,6 +25,7 @@
     "room:test": "set ROOM_PORT=18788&& .\\.tools\\node-v24.18.0-win-x64\\node.exe ./server/room-server.mjs"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "ws": "^8.18.3"
   },
   "devDependencies": {

@@ -150,10 +150,23 @@ function pickNextHostPeerId(code) {
   for (const member of members) {
     if (member.peerId && !member.spectator) return member.peerId;
   }
-  for (const member of members) {
-    if (member.peerId) return member.peerId;
-  }
   return "";
+}
+
+function ensureHostPeerId(code) {
+  const meta = roomMetaOf(code);
+  const members = rooms.get(code);
+  if (!members || members.size === 0) {
+    meta.hostPeerId = "";
+    return;
+  }
+
+  const hasActiveHost = [...members].some(
+    (member) => member.peerId && member.peerId === meta.hostPeerId && !member.spectator,
+  );
+  if (!hasActiveHost) {
+    meta.hostPeerId = pickNextHostPeerId(code);
+  }
 }
 
 function sendError(ws, code, detail = "") {
@@ -196,16 +209,17 @@ function canJoinInCurrentMatch(meta, ws) {
 
 function pickQuickJoinRoomCode() {
   let bestCode = "";
-  let bestSize = -1;
   for (const [code, members] of rooms.entries()) {
     const size = members?.size || 0;
     if (size <= 0 || size >= MAX_ROOM_PLAYERS) continue;
     const meta = roomMetaOf(code);
     if (!meta.isPublic || meta.inGame) continue;
-    if (size > bestSize) {
-      bestSize = size;
-      bestCode = code;
-    }
+    const activePlayers = activePlayerCount(code);
+    // Quick match should join rooms that already have at least one active player.
+    // Skip spectator-only rooms so the first real entrant can become host in a new room.
+    if (activePlayers < 1 || activePlayers >= 2) continue;
+    bestCode = code;
+    break;
   }
   return bestCode;
 }
@@ -364,6 +378,7 @@ function tryJoinRoom(ws, payload) {
   }
 
   const meta = roomMetaOf(code);
+  ensureHostPeerId(code);
   const inviteToken = String(payload?.inviteToken || "").trim();
   if (!ws.roomCode && !meta.isPublic && ws.peerId !== meta.hostPeerId) {
     const alreadyAllowed = ws.peerId && meta.privateAccessPeerIds.has(ws.peerId);
@@ -399,8 +414,12 @@ function tryJoinRoom(ws, payload) {
     }
   }
 
+  ensureHostPeerId(code);
+
   if (ws.spectator) {
     assignedRole = "spectator";
+  } else if (ws.peerId && meta.hostPeerId === ws.peerId) {
+    assignedRole = "host";
   }
 
   const requestedPublic = asBoolean(payload?.roomPublic, meta.isPublic);
@@ -597,7 +616,7 @@ wss.on("connection", (ws) => {
 
     if (!payload || typeof payload !== "object") return;
     ws.peerId = String(payload.from || ws.peerId || "").trim() || ws.peerId;
-    ws.spectator = asSpectateBoolean(payload?.spectate || ws.spectator);
+    ws.spectator = asSpectateBoolean(payload?.spectate ?? ws.spectator);
     const joinResult = tryJoinRoom(ws, payload);
     if (!joinResult.ok) return;
 
