@@ -727,6 +727,15 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (requestUrl.pathname.startsWith("/api/")) {
+    if (req.method === "OPTIONS") {
+      sendApiJson(res, 204, { ok: true });
+      return;
+    }
+    sendApiJson(res, 404, { ok: false, code: "NOT_FOUND", message: "Unknown API endpoint" });
+    return;
+  }
+
   if (!fs.existsSync(distDir)) {
     res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("dist directory not found. Run npm run build first.");

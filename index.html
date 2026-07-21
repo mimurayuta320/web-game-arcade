@@ -46,6 +46,7 @@
           />
           <div class="entry-actions">
             <button id="entryLoginBtn" class="start-btn">LOGIN & PLAY</button>
+              <button id="entryRegisterBtn" class="start-btn">CREATE ACCOUNT</button>
             <button id="entryGuestBtn" class="start-btn ghost">PLAY AS GUEST</button>
           </div>
           <p id="entryMessage" class="room-menu-message"></p>
@@ -92,30 +93,6 @@
               </div>
               <button id="backToEntryBtn" class="start-btn ghost">ログイン画面に戻る</button>
               <p id="roomMenuMessage" class="room-menu-message"></p>
-
-              <section class="friends-panel" aria-live="polite">
-                <h3 id="friendsTitle">フレンド</h3>
-                <p id="friendsSubtitle" class="friends-subtitle">クラウドIDでフレンドを管理できます。</p>
-                <div class="friends-controls">
-                  <input
-                    id="friendUserIdInput"
-                    class="room-input"
-                    type="text"
-                    maxlength="24"
-                    placeholder="フレンドのクラウドID"
-                    aria-label="Friend user id"
-                  />
-                  <div class="friends-actions">
-                    <button id="friendAddBtn" class="start-btn" type="button">追加</button>
-                    <button id="friendRemoveBtn" class="start-btn ghost" type="button">削除</button>
-                    <button id="friendRefreshBtn" class="start-btn ghost" type="button">更新</button>
-                  </div>
-                </div>
-                <p id="friendMessage" class="room-menu-message"></p>
-                <ul id="friendList" class="friends-list">
-                  <li id="friendListEmpty">まだフレンドはいません</li>
-                </ul>
-              </section>
             </div>
           </article>
           <article class="game-card">
@@ -205,6 +182,11 @@
             <h2>大富豪</h2>
             <p>ルール拡張対応の対戦カードゲーム。</p>
             <button id="cardListDaifugoBtn" class="start-btn">選択</button>
+          </article>
+          <article class="game-card game-list-item">
+            <h2>NUMERON</h2>
+            <p>数字を読み合う推理型の対戦ゲーム。</p>
+            <button id="cardListNumeronBtn" class="start-btn">選択</button>
           </article>
         </div>
 

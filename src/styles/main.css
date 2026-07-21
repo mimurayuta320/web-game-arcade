@@ -290,50 +290,6 @@ body {
   flex-wrap: wrap;
 }
 
-.friends-panel {
-  margin-top: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  padding: 0.75rem;
-  background: linear-gradient(165deg, rgba(9, 30, 40, 0.74), rgba(25, 18, 39, 0.56));
-}
-
-.friends-panel h3 {
-  margin: 0;
-  font-size: 1rem;
-  letter-spacing: 0.05em;
-}
-
-.friends-subtitle {
-  margin: 0.35rem 0 0.55rem;
-  font-size: 0.88rem;
-  color: rgba(239, 247, 255, 0.8);
-}
-
-.friends-controls {
-  display: grid;
-  gap: 0.55rem;
-}
-
-.friends-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.friends-list {
-  margin: 0.5rem 0 0;
-  padding-left: 1.1rem;
-  max-height: 160px;
-  overflow-y: auto;
-}
-
-.friends-list li {
-  margin: 0.2rem 0;
-  font-size: 0.9rem;
-  line-height: 1.35;
-}
-
 .lobby-card {
   margin-top: 1rem;
   border: 1px solid rgba(255, 255, 255, 0.24);
@@ -1829,7 +1785,6 @@ body {
 
   .join-row,
   .entry-actions,
-  .friends-actions,
   .lobby-toolbar,
   .lobby-actions,
   .room-chat-input-row,

@@ -14,6 +14,7 @@ const SQLITE_PATH = process.env.A5M2_DB_PATH || path.join(DATA_DIR, "a5m2.sqlite
 const HOST = process.env.CLOUD_HOST || "0.0.0.0";
 const PORT = Number(process.env.CLOUD_PORT || 8787);
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS || 12);
+const ENABLE_LEGACY_JSON_MIGRATION = String(process.env.ENABLE_LEGACY_JSON_MIGRATION || "false").toLowerCase() === "true";
 
 const DEFAULT_PROFILE = {
   bankCoins: 0,
@@ -166,6 +167,8 @@ function insertMatchRecord({ userId, game, result, roomCode, opponent, playedAt 
 }
 
 function migrateLegacyJsonIfNeeded() {
+  if (!ENABLE_LEGACY_JSON_MIGRATION) return;
+
   const userCountRow = db.prepare("SELECT COUNT(*) AS count FROM users").get();
   const userCount = Number(userCountRow?.count || 0);
   if (userCount > 0) return;
@@ -479,6 +482,40 @@ function authenticateOrCreate(db, userId, password) {
   return { ok: true, created: false, user };
 }
 
+function authenticateOnly(userId, password) {
+  const user = readUser(userId);
+  if (!user) {
+    return { ok: false, code: "USER_NOT_FOUND" };
+  }
+  const ok = verifyPassword(password, user);
+  if (!ok) {
+    return { ok: false, code: "INVALID_PASSWORD" };
+  }
+
+  if (!user.passHashBcrypt) {
+    const passHashBcrypt = hashPasswordBcrypt(password);
+    updateUserPasswordHashBcrypt({ userId, passHashBcrypt });
+    user.passHashBcrypt = passHashBcrypt;
+  }
+  return { ok: true, user };
+}
+
+function registerUser(userId, password) {
+  const existing = readUser(userId);
+  if (existing) {
+    return { ok: false, code: "USER_ALREADY_EXISTS" };
+  }
+  const passHashBcrypt = hashPasswordBcrypt(password);
+  insertUser({
+    userId,
+    passSaltHex: "",
+    passHashHex: "",
+    passHashBcrypt,
+    profile: cloneDefaultProfile(),
+  });
+  return { ok: true, user: readUser(userId) };
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     return sendJson(res, 204, { ok: true });
@@ -489,7 +526,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (
-    req.url !== "/api/profile/load"
+    req.url !== "/api/auth/login"
+    && req.url !== "/api/auth/register"
+    && req.url !== "/api/profile/load"
     && req.url !== "/api/profile/save"
     && req.url !== "/api/match/record"
     && req.url !== "/api/friends/list"
@@ -501,22 +540,49 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = await parseBody(req);
-    const userId = String(body?.userId || "").trim();
+    const userId = normalizeUserId(body?.userId || "");
     const password = String(body?.password || "");
 
     if (!userId || !password) {
       return sendJson(res, 400, { ok: false, code: "AUTH_REQUIRED", message: "userId and password are required" });
     }
 
-    const auth = authenticateOrCreate(db, userId, password);
+    if (req.url === "/api/auth/register") {
+      const registered = registerUser(userId, password);
+      if (!registered.ok) {
+        if (registered.code === "USER_ALREADY_EXISTS") {
+          return sendJson(res, 409, { ok: false, code: registered.code, message: "User already exists" });
+        }
+        return sendJson(res, 400, { ok: false, code: registered.code || "REGISTER_FAILED", message: "Register failed" });
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        created: true,
+        profile: sanitizeProfile(registered.user.profile || DEFAULT_PROFILE, DEFAULT_PROFILE),
+      });
+    }
+
+    if (req.url === "/api/auth/login") {
+      const auth = authenticateOnly(userId, password);
+      if (!auth.ok) {
+        const status = auth.code === "USER_NOT_FOUND" ? 404 : 401;
+        return sendJson(res, status, { ok: false, code: auth.code, message: "Login failed" });
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        profile: sanitizeProfile(auth.user.profile || DEFAULT_PROFILE, DEFAULT_PROFILE),
+      });
+    }
+
+    const auth = authenticateOnly(userId, password);
     if (!auth.ok) {
-      return sendJson(res, 401, { ok: false, code: "INVALID_PASSWORD", message: "Invalid password" });
+      const status = auth.code === "USER_NOT_FOUND" ? 404 : 401;
+      return sendJson(res, status, { ok: false, code: auth.code, message: "Authentication failed" });
     }
 
     if (req.url === "/api/profile/load") {
       return sendJson(res, 200, {
         ok: true,
-        created: auth.created,
         profile: sanitizeProfile(auth.user.profile || DEFAULT_PROFILE, DEFAULT_PROFILE),
       });
     }
@@ -597,4 +663,5 @@ initSqlite();
 server.listen(PORT, HOST, () => {
   console.log(`Cloud save server running at http://${HOST}:${PORT}`);
   console.log(`A5M2 SQLite DB: ${SQLITE_PATH}`);
+  console.log(`Legacy JSON migration: ${ENABLE_LEGACY_JSON_MIGRATION ? "enabled" : "disabled"}`);
 });

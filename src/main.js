@@ -50,6 +50,7 @@ const cardListUnoBtn = document.getElementById("cardListUnoBtn");
 const cardListSevensBtn = document.getElementById("cardListSevensBtn");
 const cardListSolitaireBtn = document.getElementById("cardListSolitaireBtn");
 const cardListDaifugoBtn = document.getElementById("cardListDaifugoBtn");
+const cardListNumeronBtn = document.getElementById("cardListNumeronBtn");
 const cardListBackBtn = document.getElementById("cardListBackBtn");
 const cardListMessage = document.getElementById("cardListMessage");
 const openCasinoListBtn = document.getElementById("openCasinoListBtn");
@@ -68,6 +69,7 @@ const playerNameInput = document.getElementById("playerNameInput");
 const entryCloudUserIdInput = document.getElementById("entryCloudUserIdInput");
 const entryCloudPasswordInput = document.getElementById("entryCloudPasswordInput");
 const entryLoginBtn = document.getElementById("entryLoginBtn");
+const entryRegisterBtn = document.getElementById("entryRegisterBtn");
 const entryGuestBtn = document.getElementById("entryGuestBtn");
 const entryMessage = document.getElementById("entryMessage");
 const cloudUserIdInput = document.getElementById("cloudUserIdInput");
@@ -75,12 +77,6 @@ const cloudPasswordInput = document.getElementById("cloudPasswordInput");
 const saveCloudAuthBtn = document.getElementById("saveCloudAuthBtn");
 const backToEntryBtn = document.getElementById("backToEntryBtn");
 const roomMenuMessage = document.getElementById("roomMenuMessage");
-const friendUserIdInput = document.getElementById("friendUserIdInput");
-const friendAddBtn = document.getElementById("friendAddBtn");
-const friendRemoveBtn = document.getElementById("friendRemoveBtn");
-const friendRefreshBtn = document.getElementById("friendRefreshBtn");
-const friendMessage = document.getElementById("friendMessage");
-const friendList = document.getElementById("friendList");
 
 const lobbyRoomCodeText = document.getElementById("lobbyRoomCodeText");
 const lobbyRoleText = document.getElementById("lobbyRoleText");
@@ -121,10 +117,15 @@ const messages = {
     entryTitle: "セッション開始",
     entrySubtitle: "ログインして進行データを共有するか、ゲストとして今すぐ遊べます。",
     loginAndPlay: "ログインして遊ぶ",
+    registerAndPlay: "新規登録",
     playAsGuest: "ゲストで遊ぶ",
     entryGuestSelected: "ゲストモードで開始しました",
     loginConfirmPrompt: "ログインします。よろしいですか？",
+    registerConfirmPrompt: "このIDで新規登録します。よろしいですか？",
     loginCanceled: "ログインをキャンセルしました",
+    registerCanceled: "新規登録をキャンセルしました",
+    registerSuccess: "新規登録が完了しました",
+    registerDuplicate: "このIDは既に使われています。ログインしてください",
     guestConfirmPrompt: "セーブデータが保存されません。よろしいですか？",
     guestCanceled: "ゲスト開始をキャンセルしました",
     menuSubtitle: "遊びたいゲームを選択してください",
@@ -219,22 +220,9 @@ const messages = {
     confirmBackToLogin: "ログイン画面に戻ります。よろしいですか？",
     cloudAuthSaved: "クラウド認証情報を保存しました",
     cloudAuthInvalid: "クラウドID/パスワードを入力してください",
+    cloudUserNotFound: "ユーザーが存在しません。新規登録してください",
     cloudIdDuplicateWarn: "このIDは既に使用されています。別のIDか、正しいパスワードを入力してください",
     cloudCheckFailed: "クラウド確認に失敗しました。サーバー起動後にもう一度お試しください",
-    friendsTitle: "フレンド",
-    friendsSubtitle: "クラウドIDでフレンドを管理できます。",
-    friendIdPlaceholder: "フレンドのクラウドID",
-    friendAdd: "追加",
-    friendRemove: "削除",
-    friendRefresh: "更新",
-    friendListEmpty: "まだフレンドはいません",
-    friendNeedLogin: "フレンド機能はログイン時のみ利用できます",
-    friendIdRequired: "フレンドIDを入力してください",
-    friendAdded: "フレンドを追加しました",
-    friendRemoved: "フレンドを削除しました",
-    friendNotFound: "指定したフレンドIDが見つかりません",
-    friendSelfForbidden: "自分自身は追加できません",
-    friendLoadFailed: "フレンド一覧の取得に失敗しました",
     roomCodePlaceholder: "6桁の番号",
     roomPublicToggle: "公開ルーム（クイックマッチ対象）",
     roomPrivateToggle: "非公開ルーム（招待のみ）",
@@ -281,10 +269,15 @@ const messages = {
     entryTitle: "Start Session",
     entrySubtitle: "로그인하여 진행 데이터를 공유하거나, 게스트로 바로 플레이할 수 있습니다.",
     loginAndPlay: "LOGIN & PLAY",
+    registerAndPlay: "SIGN UP",
     playAsGuest: "PLAY AS GUEST",
     entryGuestSelected: "게스트 모드로 시작했습니다",
     loginConfirmPrompt: "로그인하시겠습니까?",
+    registerConfirmPrompt: "이 ID로 신규 가입할까요?",
     loginCanceled: "로그인을 취소했습니다",
+    registerCanceled: "신규 가입을 취소했습니다",
+    registerSuccess: "신규 가입이 완료되었습니다",
+    registerDuplicate: "이미 사용 중인 ID입니다. 로그인을 이용하세요",
     guestConfirmPrompt: "저장 데이터가 보관되지 않습니다. 계속할까요?",
     guestCanceled: "게스트 시작을 취소했습니다",
     menuSubtitle: "플레이할 게임을 선택하세요",
@@ -379,22 +372,9 @@ const messages = {
     confirmBackToLogin: "로그인 화면으로 돌아갑니다. 계속할까요?",
     cloudAuthSaved: "클라우드 인증 정보를 저장했습니다",
     cloudAuthInvalid: "클라우드 ID/비밀번호를 입력하세요",
+    cloudUserNotFound: "사용자가 존재하지 않습니다. 회원가입을 진행해 주세요",
     cloudIdDuplicateWarn: "이 ID는 이미 사용 중입니다. 다른 ID 또는 올바른 비밀번호를 입력하세요",
     cloudCheckFailed: "클라우드 확인에 실패했습니다. 서버 실행 후 다시 시도하세요",
-    friendsTitle: "친구",
-    friendsSubtitle: "클라우드 ID로 친구를 관리할 수 있습니다.",
-    friendIdPlaceholder: "친구 클라우드 ID",
-    friendAdd: "추가",
-    friendRemove: "삭제",
-    friendRefresh: "새로고침",
-    friendListEmpty: "아직 친구가 없습니다",
-    friendNeedLogin: "친구 기능은 로그인 상태에서만 사용할 수 있습니다",
-    friendIdRequired: "친구 ID를 입력하세요",
-    friendAdded: "친구를 추가했습니다",
-    friendRemoved: "친구를 삭제했습니다",
-    friendNotFound: "지정한 친구 ID를 찾을 수 없습니다",
-    friendSelfForbidden: "자기 자신은 추가할 수 없습니다",
-    friendLoadFailed: "친구 목록을 불러오지 못했습니다",
     roomCodePlaceholder: "6자리 번호",
     roomPublicToggle: "공개 룸 (빠른 매치 대상)",
     roomPrivateToggle: "비공개 룸 (초대 전용)",
@@ -495,7 +475,6 @@ function applyStaticTranslations() {
   if (entryCloudUserIdInput) entryCloudUserIdInput.placeholder = tr("cloudUserPlaceholder");
   if (entryCloudPasswordInput) entryCloudPasswordInput.placeholder = tr("cloudPassPlaceholder");
   if (playerNameInput) playerNameInput.placeholder = tr("playerNamePlaceholder");
-  if (friendUserIdInput) friendUserIdInput.placeholder = tr("friendIdPlaceholder");
   if (cloudUserIdInput) cloudUserIdInput.placeholder = tr("cloudUserPlaceholder");
   if (cloudPasswordInput) cloudPasswordInput.placeholder = tr("cloudPassPlaceholder");
   if (roomCodeInput) roomCodeInput.placeholder = tr("roomCodePlaceholder");
@@ -517,15 +496,10 @@ function applyStaticTranslations() {
   if (joinRoomBtn) joinRoomBtn.textContent = tr("join");
   if (spectateRoomBtn) spectateRoomBtn.textContent = tr("spectateJoin");
   if (entryLoginBtn) entryLoginBtn.textContent = tr("loginAndPlay");
+  if (entryRegisterBtn) entryRegisterBtn.textContent = tr("registerAndPlay");
   if (entryGuestBtn) entryGuestBtn.textContent = tr("playAsGuest");
   if (saveCloudAuthBtn) saveCloudAuthBtn.textContent = tr("saveCloudAuth");
   if (backToEntryBtn) backToEntryBtn.textContent = tr("backToLogin");
-  setTextById("friendsTitle", tr("friendsTitle"));
-  setTextById("friendsSubtitle", tr("friendsSubtitle"));
-  if (friendAddBtn) friendAddBtn.textContent = tr("friendAdd");
-  if (friendRemoveBtn) friendRemoveBtn.textContent = tr("friendRemove");
-  if (friendRefreshBtn) friendRefreshBtn.textContent = tr("friendRefresh");
-  setTextById("friendListEmpty", tr("friendListEmpty"));
   if (lobbyStartOthelloBtn) lobbyStartOthelloBtn.textContent = tr("othelloStart");
   if (lobbyStartShogiBtn) lobbyStartShogiBtn.textContent = tr("shogiStart");
   if (lobbyStartChessBtn) lobbyStartChessBtn.textContent = tr("chessStart");
@@ -751,6 +725,10 @@ function setEntryActionButtonsVisible(visible) {
     entryLoginBtn.style.display = display;
     entryLoginBtn.disabled = !visible;
   }
+  if (entryRegisterBtn) {
+    entryRegisterBtn.style.display = display;
+    entryRegisterBtn.disabled = !visible;
+  }
   if (entryGuestBtn) {
     entryGuestBtn.style.display = display;
     entryGuestBtn.disabled = !visible;
@@ -769,66 +747,6 @@ function setCardListMessage(text) {
 function setCasinoListMessage(text) {
   if (!casinoListMessage) return;
   casinoListMessage.textContent = text;
-}
-
-function setFriendMessage(text) {
-  if (!friendMessage) return;
-  friendMessage.textContent = text;
-}
-
-function renderFriendList(friends) {
-  if (!friendList) return;
-  friendList.innerHTML = "";
-  const rows = Array.isArray(friends)
-    ? friends
-      .map((id) => String(id || "").trim())
-      .filter(Boolean)
-    : [];
-
-  if (!rows.length) {
-    const li = document.createElement("li");
-    li.id = "friendListEmpty";
-    li.textContent = tr("friendListEmpty");
-    friendList.appendChild(li);
-    return;
-  }
-
-  rows.forEach((id) => {
-    const li = document.createElement("li");
-    li.textContent = id;
-    friendList.appendChild(li);
-  });
-}
-
-async function loadFriendsToView(auth, { quiet = false } = {}) {
-  try {
-    const { data } = await cloudApiRequest("/api/friends/list", {
-      userId: auth.userId,
-      password: auth.password,
-    });
-    renderFriendList(data?.friends || []);
-    if (!quiet) {
-      setFriendMessage("");
-    }
-    return true;
-  } catch {
-    if (!quiet) {
-      setFriendMessage(tr("friendLoadFailed"));
-    }
-    return false;
-  }
-}
-
-async function refreshFriendListFromStorage({ quiet = false } = {}) {
-  const auth = getCloudAuthFromStorage();
-  if (!auth) {
-    renderFriendList([]);
-    if (!quiet) {
-      setFriendMessage(tr("friendNeedLogin"));
-    }
-    return false;
-  }
-  return loadFriendsToView(auth, { quiet });
 }
 
 function connectionLabel() {
@@ -945,9 +863,19 @@ function clearReconnectTimer() {
 
 async function cloudApiRequest(path, payload) {
   const candidates = cloudApiCandidates();
+  const authoritativeCodes = new Set([
+    "USER_NOT_FOUND",
+    "INVALID_PASSWORD",
+    "USER_ALREADY_EXISTS",
+    "AUTH_REQUIRED",
+    "FRIEND_NOT_FOUND",
+    "FRIEND_SELF_FORBIDDEN",
+    "FRIEND_ID_REQUIRED",
+  ]);
 
   let lastError = null;
-  for (const base of candidates) {
+  for (let i = 0; i < candidates.length; i += 1) {
+    const base = candidates[i];
     try {
       const res = await fetch(`${base}${path}`, {
         method: "POST",
@@ -957,8 +885,21 @@ async function cloudApiRequest(path, payload) {
       const data = await res.json().catch(() => ({}));
 
       // If this candidate cannot handle the cloud endpoint, try the next one.
-      if (!res.ok || data?.ok === false) {
-        lastError = new Error(data?.message || `Cloud API request failed at ${base}`);
+      // Some hosts may return HTML (index page) for unknown /api paths; treat that as a failure.
+      if (!res.ok || data?.ok !== true) {
+        const err = new Error(data?.message || `Cloud API request failed at ${base}`);
+        err.code = data?.code || (res.ok ? "INVALID_API_RESPONSE" : "CLOUD_REQUEST_ERROR");
+        err.status = res.status;
+        // USER_NOT_FOUND can be a false negative when multiple cloud endpoints are configured.
+        // Keep trying remaining candidates before concluding this user does not exist.
+        if (err.code === "USER_NOT_FOUND" && i < candidates.length - 1) {
+          lastError = err;
+          continue;
+        }
+        if (authoritativeCodes.has(err.code)) {
+          throw err;
+        }
+        lastError = err;
         continue;
       }
 
@@ -973,15 +914,39 @@ async function cloudApiRequest(path, payload) {
 
 async function verifyCloudAuth(userId, password) {
   try {
-    const { res, data } = await cloudApiRequest("/api/profile/load", { userId, password });
+    const { res, data } = await cloudApiRequest("/api/auth/login", { userId, password });
     if (res.ok && data?.ok !== false) {
       return { ok: true, profile: data?.profile || null };
+    }
+    if (data?.code === "USER_NOT_FOUND") {
+      return { ok: false, reason: "not_found" };
     }
     if (data?.code === "INVALID_PASSWORD") {
       return { ok: false, reason: "duplicate" };
     }
     return { ok: false, reason: "failed" };
-  } catch {
+  } catch (err) {
+    if (String(err?.code || "") === "USER_NOT_FOUND") {
+      return { ok: false, reason: "not_found" };
+    }
+    return { ok: false, reason: "failed" };
+  }
+}
+
+async function registerCloudAuth(userId, password) {
+  try {
+    const { res, data } = await cloudApiRequest("/api/auth/register", { userId, password });
+    if (res.ok && data?.ok !== false) {
+      return { ok: true, profile: data?.profile || null };
+    }
+    if (data?.code === "USER_ALREADY_EXISTS") {
+      return { ok: false, reason: "duplicate" };
+    }
+    return { ok: false, reason: "failed" };
+  } catch (err) {
+    if (String(err?.code || "") === "USER_ALREADY_EXISTS") {
+      return { ok: false, reason: "duplicate" };
+    }
     return { ok: false, reason: "failed" };
   }
 }
@@ -1827,6 +1792,10 @@ cardListDaifugoBtn?.addEventListener("click", () => {
   setCardListMessage("大富豪はこの一覧からの起動対応を順次反映中です");
 });
 
+cardListNumeronBtn?.addEventListener("click", () => {
+  setCardListMessage("NUMERONはこの一覧からの起動対応を順次反映中です");
+});
+
 openCasinoListBtn?.addEventListener("click", () => {
   closeRoom();
   configureAllStandardModes();
@@ -2126,7 +2095,10 @@ entryLoginBtn?.addEventListener("click", async () => {
 
   const check = await verifyCloudAuth(userId, password);
   if (!check.ok) {
-    setEntryMessage(tr(check.reason === "duplicate" ? "cloudIdDuplicateWarn" : "cloudCheckFailed"));
+    const key = check.reason === "duplicate"
+      ? "cloudIdDuplicateWarn"
+      : (check.reason === "not_found" ? "cloudUserNotFound" : "cloudCheckFailed");
+    setEntryMessage(tr(key));
     setEntryActionButtonsVisible(true);
     return;
   }
@@ -2145,8 +2117,46 @@ entryLoginBtn?.addEventListener("click", async () => {
   setEntryMessage("");
   showMenuScreen();
   setMenuMessage(tr("cloudAuthSaved"));
-  setFriendMessage("");
-  void loadFriendsToView({ userId, password }, { quiet: true });
+});
+
+entryRegisterBtn?.addEventListener("click", async () => {
+  setEntryActionButtonsVisible(false);
+
+  const userId = String(entryCloudUserIdInput?.value || "").trim();
+  const password = String(entryCloudPasswordInput?.value || "");
+  if (!userId || !password) {
+    setEntryMessage(tr("cloudAuthInvalid"));
+    setEntryActionButtonsVisible(true);
+    return;
+  }
+
+  if (!window.confirm(tr("registerConfirmPrompt"))) {
+    setEntryMessage(tr("registerCanceled"));
+    setEntryActionButtonsVisible(true);
+    return;
+  }
+
+  const created = await registerCloudAuth(userId, password);
+  if (!created.ok) {
+    setEntryMessage(tr(created.reason === "duplicate" ? "registerDuplicate" : "cloudCheckFailed"));
+    setEntryActionButtonsVisible(true);
+    return;
+  }
+
+  const cloudName = created.profile?.playerName ? normalizeName(created.profile.playerName) : "";
+  if (cloudName) {
+    setPlayerName(cloudName);
+  } else {
+    await syncPlayerNameToCloud(userId, password, created.profile);
+  }
+
+  localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
+  localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+  if (cloudUserIdInput) cloudUserIdInput.value = userId;
+  if (cloudPasswordInput) cloudPasswordInput.value = password;
+  setEntryMessage("");
+  showMenuScreen();
+  setMenuMessage(tr("registerSuccess"));
 });
 
 entryGuestBtn?.addEventListener("click", () => {
@@ -2167,8 +2177,6 @@ entryGuestBtn?.addEventListener("click", () => {
   setEntryMessage("");
   showMenuScreen();
   setMenuMessage(tr("entryGuestSelected"));
-  renderFriendList([]);
-  setFriendMessage(tr("friendNeedLogin"));
 });
 
 saveCloudAuthBtn?.addEventListener("click", async () => {
@@ -2181,7 +2189,10 @@ saveCloudAuthBtn?.addEventListener("click", async () => {
 
   const check = await verifyCloudAuth(userId, password);
   if (!check.ok) {
-    setMenuMessage(tr(check.reason === "duplicate" ? "cloudIdDuplicateWarn" : "cloudCheckFailed"));
+    const key = check.reason === "duplicate"
+      ? "cloudIdDuplicateWarn"
+      : (check.reason === "not_found" ? "cloudUserNotFound" : "cloudCheckFailed");
+    setMenuMessage(tr(key));
     return;
   }
 
@@ -2197,73 +2208,6 @@ saveCloudAuthBtn?.addEventListener("click", async () => {
   if (entryCloudUserIdInput) entryCloudUserIdInput.value = userId;
   if (entryCloudPasswordInput) entryCloudPasswordInput.value = password;
   setMenuMessage(tr("cloudAuthSaved"));
-  setFriendMessage("");
-  void loadFriendsToView({ userId, password }, { quiet: true });
-});
-
-friendRefreshBtn?.addEventListener("click", () => {
-  void refreshFriendListFromStorage();
-});
-
-friendAddBtn?.addEventListener("click", async () => {
-  const auth = getCloudAuthFromStorage();
-  if (!auth) {
-    setFriendMessage(tr("friendNeedLogin"));
-    return;
-  }
-  const friendUserId = String(friendUserIdInput?.value || "").trim();
-  if (!friendUserId) {
-    setFriendMessage(tr("friendIdRequired"));
-    return;
-  }
-
-  try {
-    const { data } = await cloudApiRequest("/api/friends/add", {
-      userId: auth.userId,
-      password: auth.password,
-      friendUserId,
-    });
-    renderFriendList(data?.friends || []);
-    setFriendMessage(tr("friendAdded"));
-    if (friendUserIdInput) friendUserIdInput.value = "";
-  } catch (err) {
-    const code = String(err?.code || "");
-    if (code === "FRIEND_NOT_FOUND") {
-      setFriendMessage(tr("friendNotFound"));
-      return;
-    }
-    if (code === "FRIEND_SELF_FORBIDDEN") {
-      setFriendMessage(tr("friendSelfForbidden"));
-      return;
-    }
-    setFriendMessage(tr("friendLoadFailed"));
-  }
-});
-
-friendRemoveBtn?.addEventListener("click", async () => {
-  const auth = getCloudAuthFromStorage();
-  if (!auth) {
-    setFriendMessage(tr("friendNeedLogin"));
-    return;
-  }
-  const friendUserId = String(friendUserIdInput?.value || "").trim();
-  if (!friendUserId) {
-    setFriendMessage(tr("friendIdRequired"));
-    return;
-  }
-
-  try {
-    const { data } = await cloudApiRequest("/api/friends/remove", {
-      userId: auth.userId,
-      password: auth.password,
-      friendUserId,
-    });
-    renderFriendList(data?.friends || []);
-    setFriendMessage(tr("friendRemoved"));
-    if (friendUserIdInput) friendUserIdInput.value = "";
-  } catch {
-    setFriendMessage(tr("friendLoadFailed"));
-  }
 });
 
 backToEntryBtn?.addEventListener("click", () => {
@@ -2316,8 +2260,6 @@ if (entryCloudPasswordInput) {
 
 setPlayerName(localStorage.getItem(STORAGE_PLAYER_NAME_KEY) || "Player");
 setEntryActionButtonsVisible(true);
-renderFriendList([]);
-void refreshFriendListFromStorage({ quiet: true });
 
 updateLobbyView();
 showEntryScreen();

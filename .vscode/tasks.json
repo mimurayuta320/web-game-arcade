@@ -47,6 +47,20 @@
 			"group": "build"
 		},
 		{
+			"label": "Run Web Game Full Stack (Cloud + Room + Dev)",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"$nodeDir='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64'; Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',\"$env:Path='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;' + $env:Path; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run cloud\"; Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',\"$env:Path='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;' + $env:Path; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run room\"; Start-Process chrome 'http://localhost:5173/'; $env:Path=\"$nodeDir;$env:Path\"; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run dev"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
 			"label": "Run Share Server (LAN/Internet)",
 			"type": "shell",
 			"command": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd",
