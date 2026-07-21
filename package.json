@@ -1,0 +1,27 @@
+{
+  "name": "neon-drift-runner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A stylish browser dodge game built with vanilla JS and Vite",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "dev:tofu": "vite --host toufugameshow.local --port 5173 --strictPort",
+    "build": "vite build",
+    "build:share": ".\\.tools\\node-v24.18.0-win-x64\\node.exe .\\node_modules\\vite\\bin\\vite.js build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "preview:tofu": "vite preview --host toufugameshow.local --port 4173 --strictPort",
+    "serve:share": ".\\.tools\\node-v24.18.0-win-x64\\node.exe ./server/share-server.mjs",
+    "share": ".\\.tools\\node-v24.18.0-win-x64\\node.exe .\\node_modules\\vite\\bin\\vite.js build && .\\.tools\\node-v24.18.0-win-x64\\node.exe ./server/share-server.mjs",
+    "cf:setup": "powershell -ExecutionPolicy Bypass -File .\\scripts\\cloudflare\\setup-tunnel.ps1",
+    "cf:run": "powershell -ExecutionPolicy Bypass -File .\\scripts\\cloudflare\\run-tunnel.ps1",
+    "check": "npm run build",
+    "cloud": ".\\.tools\\node-v24.18.0-win-x64\\node.exe ./server/cloud-save-server.mjs",
+    "room": ".\\.tools\\node-v24.18.0-win-x64\\node.exe ./server/room-server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}
