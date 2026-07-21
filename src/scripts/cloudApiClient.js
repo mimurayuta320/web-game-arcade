@@ -65,9 +65,11 @@ export async function cloudApiRequest(path, payload) {
       });
       const data = await res.json().catch(() => ({}));
 
-      if (!res.ok || data?.ok === false) {
+      // Unknown /api routes can return HTML with 200 from static hosts.
+      // Only accept explicit JSON success payloads.
+      if (!res.ok || data?.ok !== true) {
         const err = new Error(data?.message || `Cloud API request failed at ${base}`);
-        err.code = data?.code || "CLOUD_REQUEST_ERROR";
+        err.code = data?.code || (res.ok ? "INVALID_API_RESPONSE" : "CLOUD_REQUEST_ERROR");
         err.status = res.status;
         lastError = err;
         continue;
