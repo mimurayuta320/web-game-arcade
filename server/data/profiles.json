@@ -1,0 +1,218 @@
+{
+  "users": {
+    "opi072": {
+      "passSaltHex": "6b11a4977042dfa2ae87ce31814e9f8a",
+      "passHashHex": "f074652de36d57eb8d96a217f5b7598af332966bc328fea0af0e8d47cab9b86109663f965e69bcec3a7c3479f766922070be494a12a08952bef93ec06502acc9",
+      "profile": {
+        "bankCoins": 0,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic",
+          "hammer_default"
+        ],
+        "selectedSkin": "hammer_default",
+        "playerName": "opi072",
+        "gameData": {
+          "othello": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "shogi": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "chess": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "uno": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "gomoku": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "survivors": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "fitPuzzle": {
+            "playCount": 20,
+            "roomPlayCount": 0,
+            "lastPlayedAt": "2026-07-19T03:18:15.190Z"
+          },
+          "solitaire": {
+            "playCount": 22,
+            "roomPlayCount": 8,
+            "lastPlayedAt": "2026-07-19T15:00:01.395Z"
+          },
+          "sevens": {
+            "playCount": 1,
+            "roomPlayCount": 0,
+            "lastPlayedAt": "2026-07-19T14:39:13.198Z"
+          }
+        },
+        "fitPuzzleProgress": {
+          "highestUnlockedStage": 5,
+          "selectedStageIndex": 5,
+          "difficulty": "normal",
+          "noRotateMode": true,
+          "customStages": [],
+          "updatedAt": "2026-07-19T03:18:21.768Z"
+        }
+      },
+      "updatedAt": 1784548756070,
+      "createdAt": 1784480318444
+    },
+    "NullToufu": {
+      "passSaltHex": "f46e522e0f7009e72809fbbbfbe1c087",
+      "passHashHex": "b0e9249536cf2daa53f239d51796ea0028ebf20d8ca63bcf53a867db8d9b7e309f05396a2e6c4e41b6d9bfce258d94d536c702442832c22168bee29da3876fce",
+      "profile": {
+        "bankCoins": 105265,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic",
+          "hammer_default",
+          "hammer_violet",
+          "hammer_cobalt",
+          "hammer_crimson"
+        ],
+        "selectedSkin": "hammer_violet",
+        "playerName": "Player",
+        "gameData": {
+          "othello": {
+            "playCount": 4,
+            "roomPlayCount": 3,
+            "lastPlayedAt": "2026-07-20T14:50:11.621Z"
+          },
+          "shogi": {
+            "playCount": 2,
+            "roomPlayCount": 1,
+            "lastPlayedAt": "2026-07-19T04:26:55.110Z"
+          },
+          "chess": {
+            "playCount": 2,
+            "roomPlayCount": 2,
+            "lastPlayedAt": "2026-07-18T13:43:33.546Z"
+          },
+          "uno": {
+            "playCount": 2,
+            "roomPlayCount": 1,
+            "lastPlayedAt": "2026-07-19T14:40:06.672Z"
+          },
+          "gomoku": {
+            "playCount": 3,
+            "roomPlayCount": 1,
+            "lastPlayedAt": "2026-07-19T02:59:33.704Z"
+          },
+          "survivors": {
+            "playCount": 90,
+            "roomPlayCount": 16,
+            "lastPlayedAt": "2026-07-20T15:09:42.563Z"
+          },
+          "fitPuzzle": {
+            "playCount": 21,
+            "roomPlayCount": 0,
+            "lastPlayedAt": "2026-07-19T13:39:39.313Z"
+          },
+          "solitaire": {
+            "playCount": 45,
+            "roomPlayCount": 1,
+            "lastPlayedAt": "2026-07-20T08:29:58.550Z"
+          },
+          "sevens": {
+            "playCount": 1,
+            "roomPlayCount": 0,
+            "lastPlayedAt": "2026-07-19T14:39:26.330Z"
+          }
+        },
+        "fitPuzzleProgress": {
+          "highestUnlockedStage": 8,
+          "selectedStageIndex": 5,
+          "difficulty": "easy",
+          "noRotateMode": true,
+          "customStages": [],
+          "updatedAt": "2026-07-19T13:39:39.322Z"
+        }
+      },
+      "updatedAt": 1784635784419,
+      "createdAt": 1784480396510
+    },
+    "nulltoufu": {
+      "passSaltHex": "928aee2495058f4e9e06d301de22cdc6",
+      "passHashHex": "f77706a5fec7e91bc3adbf9c33e32616b8cedfce7dc3b36e33e9e40851d15d5b0601aeb2058f0b9f1eb960de85891aff7e71ef596d5fc78ee89be7d4d25ec40d",
+      "profile": {
+        "bankCoins": 0,
+        "pityCounter": 0,
+        "unlockedSkins": [
+          "classic"
+        ],
+        "selectedSkin": "classic",
+        "playerName": "Player",
+        "gameData": {
+          "othello": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "shogi": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "chess": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "uno": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "gomoku": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "survivors": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "fitPuzzle": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "solitaire": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          },
+          "sevens": {
+            "playCount": 0,
+            "roomPlayCount": 0,
+            "lastPlayedAt": null
+          }
+        },
+        "fitPuzzleProgress": {
+          "highestUnlockedStage": 0,
+          "selectedStageIndex": 0,
+          "difficulty": "normal",
+          "noRotateMode": false,
+          "updatedAt": null
+        }
+      },
+      "updatedAt": 1784568718887,
+      "createdAt": 1784568718887
+    }
+  }
+}
