@@ -46,6 +46,7 @@
           />
           <div class="entry-actions">
             <button id="entryLoginBtn" class="start-btn">LOGIN & PLAY</button>
+              <button id="entryRegisterBtn" class="start-btn">CREATE ACCOUNT</button>
             <button id="entryGuestBtn" class="start-btn ghost">PLAY AS GUEST</button>
           </div>
           <p id="entryMessage" class="room-menu-message"></p>
@@ -128,11 +129,6 @@
             <button id="playChessBtn" class="start-btn">PLAY</button>
           </article>
           <article class="game-card">
-            <h2>Neon UNO</h2>
-            <p id="unoCardDesc">ローカル2人で遊べるUNO。手札を先に出し切ったプレイヤーの勝ち。</p>
-            <button id="playUnoBtn" class="start-btn">PLAY</button>
-          </article>
-          <article class="game-card">
             <h2>Neon Gomoku</h2>
             <p id="gomokuCardDesc">五目並べ。先に5つ石を並べたプレイヤーの勝ち。</p>
             <button id="playGomokuBtn" class="start-btn">PLAY</button>
@@ -147,14 +143,81 @@
             <p id="fitPuzzleCardDesc">ピースを枠内に収めるパズル。すべてのマスを埋めればクリア。</p>
             <button id="playFitPuzzleBtn" class="start-btn">PLAY</button>
           </article>
-          <article class="game-card">
-            <h2>Neon Solitaire</h2>
-            <p id="solitaireCardDesc">定番のクロンダイク。AからKまで4組そろえるとクリア。</p>
-            <div class="game-card-actions">
-              <button id="playSolitaireSingleBtn" class="start-btn">SINGLE</button>
-              <button id="playSolitaireMultiBtn" class="start-btn ghost">MULTI</button>
-            </div>
+          <article class="game-card menu-category-card">
+            <h2>カードゲーム一覧</h2>
+            <p>UNO / 7並べ / ソリティア / 大富豪 を選べます。</p>
+            <button id="openCardListBtn" class="start-btn">一覧を開く</button>
           </article>
+          <article class="game-card menu-category-card">
+            <h2>カジノ一覧</h2>
+            <p>ブラックジャック / ポーカーを選べます。</p>
+            <button id="openCasinoListBtn" class="start-btn">一覧を開く</button>
+          </article>
+        </div>
+      </section>
+
+      <section id="cardListScreen" class="menu-screen hidden">
+        <header class="top-bar">
+          <h1>カード一覧</h1>
+          <p>遊びたいカードゲームを選択してください</p>
+        </header>
+
+        <div class="game-grid">
+          <article class="game-card game-list-item">
+            <h2>UNO</h2>
+            <p>ローカル2人またはCPU対戦。</p>
+            <button id="cardListUnoBtn" class="start-btn">選択</button>
+          </article>
+          <article class="game-card game-list-item">
+            <h2>7並べ</h2>
+            <p>7を起点に順番に場へ出していく定番ゲーム。</p>
+            <button id="cardListSevensBtn" class="start-btn">選択</button>
+          </article>
+          <article class="game-card game-list-item">
+            <h2>ソリティア</h2>
+            <p>クロンダイク形式の1人用カードゲーム。</p>
+            <button id="cardListSolitaireBtn" class="start-btn">選択</button>
+          </article>
+          <article class="game-card game-list-item">
+            <h2>大富豪</h2>
+            <p>ルール拡張対応の対戦カードゲーム。</p>
+            <button id="cardListDaifugoBtn" class="start-btn">選択</button>
+          </article>
+          <article class="game-card game-list-item">
+            <h2>NUMERON</h2>
+            <p>数字を読み合う推理型の対戦ゲーム。</p>
+            <button id="cardListNumeronBtn" class="start-btn">選択</button>
+          </article>
+        </div>
+
+        <div class="card-list-footer">
+          <button id="cardListBackBtn" class="start-btn ghost">メニューに戻る</button>
+          <p id="cardListMessage" class="room-menu-message"></p>
+        </div>
+      </section>
+
+      <section id="casinoListScreen" class="menu-screen hidden">
+        <header class="top-bar">
+          <h1>カジノ一覧</h1>
+          <p>遊びたいカジノゲームを選択してください</p>
+        </header>
+
+        <div class="game-grid">
+          <article class="game-card game-list-item">
+            <h2>ブラックジャック</h2>
+            <p>ヒット/スタンドで勝負する定番カジノ。</p>
+            <button id="casinoListBlackjackBtn" class="start-btn">選択</button>
+          </article>
+          <article class="game-card game-list-item">
+            <h2>ポーカー</h2>
+            <p>ベット/レイズ対応のカードバトル。</p>
+            <button id="casinoListPokerBtn" class="start-btn">選択</button>
+          </article>
+        </div>
+
+        <div class="card-list-footer">
+          <button id="casinoListBackBtn" class="start-btn ghost">メニューに戻る</button>
+          <p id="casinoListMessage" class="room-menu-message"></p>
         </div>
       </section>
 
@@ -165,25 +228,81 @@
         </header>
 
         <div class="lobby-card">
-          <p id="lobbyRoomCodeText" class="lobby-line">ROOM: -</p>
-          <p id="lobbyRoleText" class="lobby-line">ROLE: -</p>
-          <p id="lobbySelfNameText" class="lobby-line">YOU: -</p>
-          <p id="lobbyPeerNameText" class="lobby-line">PEER: -</p>
-          <p id="lobbyPeerText" class="lobby-line">STATUS: 参加者待機中</p>
-          <p id="lobbyConnectionText" class="lobby-line">CONNECTION: -</p>
-          <span id="spectatorBadge" class="spectator-badge hidden">観戦中</span>
+          <div class="lobby-head-grid">
+            <div class="lobby-meta-block">
+              <p id="lobbyRoomCodeText" class="lobby-line">ROOM: -</p>
+              <p id="lobbyRoleText" class="lobby-line">ROLE: -</p>
+              <p id="lobbySelfNameText" class="lobby-line">YOU: -</p>
+              <p id="lobbyPeerNameText" class="lobby-line">PEER: -</p>
+              <p id="lobbyPeerText" class="lobby-line">STATUS: 参加者待機中</p>
+              <p id="lobbyConnectionText" class="lobby-line">CONNECTION: -</p>
+              <span id="spectatorBadge" class="spectator-badge hidden">観戦中</span>
+            </div>
+            <aside class="lobby-members-panel" aria-live="polite">
+              <h3 id="lobbyPlayersTitle">参加プレイヤー</h3>
+              <ul id="lobbyPlayersList" class="lobby-players-list">
+                <li>-</li>
+              </ul>
+            </aside>
+          </div>
           <p id="lobbyMessage" class="room-menu-message"></p>
 
-          <div class="lobby-actions">
+          <div class="lobby-toolbar">
             <button id="copyInviteLinkBtn" class="start-btn ghost">招待リンクをコピー</button>
-            <button id="lobbyStartOthelloBtn" class="start-btn">OTHELLO START</button>
-            <button id="lobbyStartShogiBtn" class="start-btn">SHOGI START</button>
-            <button id="lobbyStartChessBtn" class="start-btn">CHESS START</button>
-            <button id="lobbyStartUnoBtn" class="start-btn">UNO START</button>
-            <button id="lobbyStartGomokuBtn" class="start-btn">GOMOKU START</button>
-            <button id="lobbyStartSurvivorsBtn" class="start-btn">SURVIVORS START</button>
-            <button id="lobbyStartSolitaireBtn" class="start-btn">SOLITAIRE START</button>
+            <button id="lobbySwitchSpectateBtn" class="start-btn ghost">観戦</button>
             <button id="lobbyBackBtn" class="start-btn ghost">BACK TO MENU</button>
+          </div>
+
+          <aside id="roomChatPanel" class="room-chat-panel hidden" aria-live="polite">
+            <h3 id="roomChatTitle">ルームチャット</h3>
+            <div id="roomChatLog" class="room-chat-log"></div>
+            <div class="room-chat-input-row">
+              <input id="roomChatInput" class="text-input" maxlength="200" placeholder="メッセージを入力" />
+              <button id="roomChatSendBtn" class="start-btn" type="button">送信</button>
+            </div>
+          </aside>
+
+          <div class="game-grid lobby-game-grid">
+            <article class="game-card game-list-item">
+              <h2>Othello</h2>
+              <p>ルームでオセロ対戦を開始します。</p>
+              <button id="lobbyStartOthelloBtn" class="start-btn">OTHELLO START</button>
+            </article>
+            <article class="game-card game-list-item">
+              <h2>Shogi</h2>
+              <p>ルームで将棋対戦を開始します。</p>
+              <button id="lobbyStartShogiBtn" class="start-btn">SHOGI START</button>
+            </article>
+            <article class="game-card game-list-item">
+              <h2>Chess</h2>
+              <p>ルームでチェス対戦を開始します。</p>
+              <button id="lobbyStartChessBtn" class="start-btn">CHESS START</button>
+            </article>
+            <article class="game-card game-list-item">
+              <h2>UNO</h2>
+              <p>ルームでUNO対戦を開始します。</p>
+              <button id="lobbyStartUnoBtn" class="start-btn">UNO START</button>
+            </article>
+            <article class="game-card game-list-item">
+              <h2>Gomoku</h2>
+              <p>ルームで五目並べ対戦を開始します。</p>
+              <button id="lobbyStartGomokuBtn" class="start-btn">GOMOKU START</button>
+            </article>
+            <article class="game-card game-list-item">
+              <h2>Survivors</h2>
+              <p>ルームでサバイバーを開始します。</p>
+              <button id="lobbyStartSurvivorsBtn" class="start-btn">SURVIVORS START</button>
+            </article>
+            <article class="game-card game-list-item">
+              <h2>Fit Puzzle</h2>
+              <p>ROOM未対応のため現在は選択不可です。</p>
+              <button id="lobbyStartFitPuzzleBtn" class="start-btn ghost" disabled>FIT PUZZLE START</button>
+            </article>
+            <article class="game-card game-list-item">
+              <h2>Solitaire</h2>
+              <p>ルームでソリティア対戦を開始します。</p>
+              <button id="lobbyStartSolitaireBtn" class="start-btn">SOLITAIRE START</button>
+            </article>
           </div>
 
           <aside id="spectatorChatPanel" class="spectator-chat-panel hidden" aria-live="polite">
