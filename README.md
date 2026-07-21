@@ -26,6 +26,26 @@ npm run dev
 - 別端末からは `http://<このPCのIP>:5173/#ToufuGameshow` にアクセスします。
 - 必要に応じて Windows ファイアウォールで `5173` `8787` `8788` を許可してください。
 
+## 本番を止めずにテスト環境で確認する
+
+本番と別ポートで起動するため、同じPC上で並行確認できます。
+
+```bash
+npm run cloud:test
+npm run room:test
+npm run dev:test
+```
+
+テストアクセスURL（同一PC）:
+
+```text
+http://localhost:5174/?cloudApi=http://localhost:18787&roomServer=ws://localhost:18788#ToufuGameshow
+```
+
+- `cloudApi` はクラウドAPI接続先を指定します（初回アクセス時に保存）。
+- テストDBは `server/data/a5m2.test.sqlite` で、本番DBと分離されます。
+- 共有モードのテストは `npm run share:test`（`4174`、保存先 `server/data/profiles.test.json`）。
+
 ## セットアップ
 
 ```bash

@@ -17,6 +17,51 @@
 			},
 			"isBackground": true,
 			"group": "build"
+		},
+		{
+			"label": "Run Web Game Dev Server + Chrome",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Start-Process chrome 'http://localhost:5173/'; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run dev"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Run Shogi Online (Room + Dev)",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"$nodeDir='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64'; Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',\"$env:Path='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;' + $env:Path; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run room\"; Start-Process chrome 'http://localhost:5173/'; $env:Path=\"$nodeDir;$env:Path\"; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run dev"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Run Share Server (LAN/Internet)",
+			"type": "shell",
+			"command": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd",
+			"args": [
+				"run",
+				"share"
+			],
+			"options": {
+				"env": {
+					"Path": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;${env:Path}",
+					"PATH": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;${env:PATH}"
+				}
+			},
+			"isBackground": true,
+			"group": "build"
 		}
 	]
 }

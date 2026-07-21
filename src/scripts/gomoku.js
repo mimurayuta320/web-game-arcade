@@ -1,9 +1,43 @@
-import { bindBackToMenuButton } from "./uiButtonHelpers.js";
-
 const SIZE = 15;
 const EMPTY = 0;
 const BLACK = 1;
 const WHITE = 2;
+const CPU_THINK_MS = 260;
+
+function gomokuLang() {
+  const langSelectEl = document.getElementById("langSelect");
+  return langSelectEl?.value === "ko" ? "ko" : "ja";
+}
+
+function gomokuText(key) {
+  const dict = {
+    ja: {
+      black: "黒",
+      white: "白",
+      yourTurn: "あなたの手番です",
+      opponentTurn: "相手の手番です",
+      cpuTurn: "CPUの手番です",
+      roomLabel: "ルーム",
+      roleLabel: "役割",
+      roleHost: "ホスト",
+      roleGuest: "ゲスト",
+      roleSpectator: "観戦",
+    },
+    ko: {
+      black: "흑",
+      white: "백",
+      yourTurn: "당신의 턴입니다",
+      opponentTurn: "상대 턴입니다",
+      cpuTurn: "CPU 턴입니다",
+      roomLabel: "룸",
+      roleLabel: "역할",
+      roleHost: "호스트",
+      roleGuest: "게스트",
+      roleSpectator: "관전",
+    },
+  };
+  return dict[gomokuLang()][key] || dict.ja[key] || key;
+}
 
 function createBoard() {
   return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => EMPTY));
@@ -14,14 +48,17 @@ function opposite(player) {
 }
 
 function turnText(player) {
-  return player === BLACK ? "BLACK" : "WHITE";
+  return player === BLACK ? gomokuText("black") : gomokuText("white");
 }
 
 function messageTurn(player, state) {
   if (state.gameMode === "room") {
-    return player === state.roomPlayer ? "あなたの手番です" : "相手の手番です";
+    return player === state.roomPlayer ? gomokuText("yourTurn") : gomokuText("opponentTurn");
   }
-  return player === BLACK ? "黒の手番です" : "白の手番です";
+  if (state.playMode === "cpu") {
+    return player === state.cpuPlayer ? gomokuText("cpuTurn") : gomokuText("yourTurn");
+  }
+  return `${turnText(player)}${gomokuLang() === "ko" ? " 턴입니다" : "の手番です"}`;
 }
 
 function inside(row, col) {
@@ -73,6 +110,10 @@ export function initGomoku(options = {}) {
   const turnTextEl = document.getElementById("gomokuTurnText");
   const messageEl = document.getElementById("gomokuMessage");
   const overlayEl = document.getElementById("gomokuOverlay");
+  const modeSelectEl = document.getElementById("gomokuModeSelect");
+  const roomStatusEl = document.getElementById("gomokuRoomStatus");
+  const roomCodeTextEl = document.getElementById("gomokuRoomCodeText");
+  const roomRoleTextEl = document.getElementById("gomokuRoomRoleText");
   const startBtn = document.getElementById("gomokuStartBtn");
   const menuBtn = document.getElementById("gomokuMenuBtn");
 
@@ -81,12 +122,27 @@ export function initGomoku(options = {}) {
     currentPlayer: BLACK,
     gameOver: true,
     gameMode: "local",
+    playMode: "cpu",
+    cpuPlayer: WHITE,
+    cpuThinking: false,
+    cpuTimerId: null,
     roomCode: null,
     roomRole: null,
     roomPlayer: BLACK,
     roomLocked: false,
     roomLockMessage: "",
   };
+
+  function clearCpuTimer() {
+    if (state.cpuTimerId) {
+      window.clearTimeout(state.cpuTimerId);
+      state.cpuTimerId = null;
+    }
+  }
+
+  function isCpuMode() {
+    return state.gameMode !== "room" && state.playMode === "cpu";
+  }
 
   function fitBoardToGrid() {
     const wrap = boardEl?.parentElement;
@@ -114,6 +170,9 @@ export function initGomoku(options = {}) {
 
   function isLocalPlayersTurn() {
     if (!isRoomMode()) return true;
+    if (isCpuMode()) {
+      return state.currentPlayer !== state.cpuPlayer && !state.cpuThinking;
+    }
     return state.currentPlayer === state.roomPlayer;
   }
 
@@ -130,6 +189,53 @@ export function initGomoku(options = {}) {
 
   function updateHeader() {
     turnTextEl.textContent = turnText(state.currentPlayer);
+  }
+
+  function playerNameFor(player) {
+    if (isRoomMode()) {
+      return player === state.roomPlayer ? "あなた" : "相手";
+    }
+    if (isCpuMode()) {
+      return player === state.cpuPlayer ? "CPU" : "あなた";
+    }
+    return player === BLACK ? "黒" : "白";
+  }
+
+  function outcomeTextForWinner(winnerPlayer) {
+    const loserPlayer = opposite(winnerPlayer);
+    return `${playerNameFor(winnerPlayer)}: 勝ち / ${playerNameFor(loserPlayer)}: 負け`;
+  }
+
+  function syncStartButtonDisabled() {
+    if (!startBtn) return;
+    startBtn.disabled = isRoomMode() && state.roomRole !== "host";
+  }
+
+  function syncModeSelectDisabled() {
+    if (!modeSelectEl) return;
+    modeSelectEl.disabled = isRoomMode() || !state.gameOver || state.cpuThinking;
+    modeSelectEl.value = state.playMode;
+  }
+
+  function updateRoomStatusPanel() {
+    if (!roomStatusEl || !roomCodeTextEl || !roomRoleTextEl) return;
+
+    if (!isRoomMode() || !state.roomCode) {
+      roomStatusEl.classList.add("hidden");
+      roomCodeTextEl.textContent = `${gomokuText("roomLabel")}: -`;
+      roomRoleTextEl.textContent = `${gomokuText("roleLabel")}: -`;
+      return;
+    }
+
+    roomStatusEl.classList.remove("hidden");
+    roomCodeTextEl.textContent = `${gomokuText("roomLabel")}: ${state.roomCode}`;
+    const roleLabel =
+      state.roomRole === "host"
+        ? gomokuText("roleHost")
+        : state.roomRole === "guest"
+          ? gomokuText("roleGuest")
+          : gomokuText("roleSpectator");
+    roomRoleTextEl.textContent = `${gomokuText("roleLabel")}: ${roleLabel}`;
   }
 
   function renderBoard() {
@@ -157,20 +263,136 @@ export function initGomoku(options = {}) {
 
   function render() {
     updateHeader();
+    updateRoomStatusPanel();
+    syncStartButtonDisabled();
+    syncModeSelectDisabled();
     renderBoard();
+  }
+
+  function collectEmptyCells(board) {
+    const cells = [];
+    for (let row = 0; row < SIZE; row += 1) {
+      for (let col = 0; col < SIZE; col += 1) {
+        if (board[row][col] === EMPTY) {
+          cells.push({ row, col });
+        }
+      }
+    }
+    return cells;
+  }
+
+  function hasNeighborStone(board, row, col) {
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        if (dr === 0 && dc === 0) continue;
+        const r = row + dr;
+        const c = col + dc;
+        if (inside(r, c) && board[r][c] !== EMPTY) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function findImmediateMove(board, player) {
+    const empties = collectEmptyCells(board);
+    for (const cell of empties) {
+      board[cell.row][cell.col] = player;
+      const win = hasFive(board, cell.row, cell.col, player);
+      board[cell.row][cell.col] = EMPTY;
+      if (win) return cell;
+    }
+    return null;
+  }
+
+  function chooseCpuMove() {
+    const board = state.board;
+    const cpu = state.currentPlayer;
+    const enemy = opposite(cpu);
+
+    const winning = findImmediateMove(board, cpu);
+    if (winning) return winning;
+
+    const block = findImmediateMove(board, enemy);
+    if (block) return block;
+
+    const empties = collectEmptyCells(board);
+    if (empties.length === 0) return null;
+
+    const center = Math.floor(SIZE / 2);
+    const active = empties.filter((cell) => hasNeighborStone(board, cell.row, cell.col));
+    const candidates = active.length > 0 ? active : empties;
+
+    let bestScore = -Infinity;
+    let best = candidates[0];
+    for (const cell of candidates) {
+      let score = 0;
+      const centerDist = Math.abs(cell.row - center) + Math.abs(cell.col - center);
+      score += (SIZE - centerDist) * 0.25;
+
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) {
+          if (dr === 0 && dc === 0) continue;
+          const r = cell.row + dr;
+          const c = cell.col + dc;
+          if (!inside(r, c)) continue;
+          if (board[r][c] === cpu) score += 1.2;
+          if (board[r][c] === enemy) score += 0.9;
+        }
+      }
+
+      // Small noise keeps games from feeling repetitive when scores tie.
+      score += Math.random() * 0.08;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = cell;
+      }
+    }
+
+    return best;
+  }
+
+  function maybeTriggerCpuTurn() {
+    clearCpuTimer();
+    state.cpuThinking = false;
+
+    if (!isCpuMode() || state.gameOver || state.roomLocked) {
+      return;
+    }
+    if (state.currentPlayer !== state.cpuPlayer) {
+      return;
+    }
+
+    state.cpuThinking = true;
+    messageEl.textContent = "CPUが考えています...";
+    render();
+
+    state.cpuTimerId = window.setTimeout(() => {
+      state.cpuTimerId = null;
+      state.cpuThinking = false;
+
+      if (!isCpuMode() || state.gameOver || state.roomLocked) {
+        render();
+        return;
+      }
+
+      const move = chooseCpuMove();
+      if (!move) {
+        setDraw();
+        return;
+      }
+
+      placeStone(move.row, move.col, { isCpu: true });
+    }, CPU_THINK_MS);
   }
 
   function setWinner(player) {
     state.gameOver = true;
-    const winner = player === BLACK ? "黒" : "白";
-
-    if (isRoomMode()) {
-      messageEl.textContent = player === state.roomPlayer ? "あなたの勝ちです" : "相手の勝ちです";
-    } else {
-      messageEl.textContent = `${winner}の勝ちです`;
-    }
-
-    setOverlay(`${winner} WIN`);
+    const outcomeText = outcomeTextForWinner(player);
+    messageEl.textContent = outcomeText;
+    setOverlay(outcomeText);
     render();
   }
 
@@ -181,10 +403,10 @@ export function initGomoku(options = {}) {
     render();
   }
 
-  function placeStone(row, col, { isRemote = false } = {}) {
+  function placeStone(row, col, { isRemote = false, isCpu = false } = {}) {
     if (state.gameOver || state.roomLocked) return;
     if (!inside(row, col)) return;
-    if (!isRemote && !isLocalPlayersTurn()) return;
+    if (!isRemote && !isCpu && !isLocalPlayersTurn()) return;
     if (state.board[row][col] !== EMPTY) return;
 
     const player = state.currentPlayer;
@@ -207,9 +429,12 @@ export function initGomoku(options = {}) {
     state.currentPlayer = opposite(state.currentPlayer);
     messageEl.textContent = messageTurn(state.currentPlayer, state);
     render();
+    maybeTriggerCpuTurn();
   }
 
   function resetGame({ fromRemote = false } = {}) {
+    clearCpuTimer();
+    state.cpuThinking = false;
     state.board = createBoard();
     state.currentPlayer = BLACK;
     state.gameOver = false;
@@ -227,9 +452,13 @@ export function initGomoku(options = {}) {
     if (isRoomMode() && !fromRemote) {
       options.onRoomNewGame?.();
     }
+
+    maybeTriggerCpuTurn();
   }
 
   function enterStandby() {
+    clearCpuTimer();
+    state.cpuThinking = false;
     state.board = createBoard();
     state.currentPlayer = BLACK;
     state.gameOver = true;
@@ -245,7 +474,20 @@ export function initGomoku(options = {}) {
     resetGame({ fromRemote: false });
   });
 
-  bindBackToMenuButton(menuBtn, () => {
+  modeSelectEl?.addEventListener("change", () => {
+    if (isRoomMode()) return;
+    const nextMode = modeSelectEl.value === "local" ? "local" : "cpu";
+    state.playMode = nextMode;
+    enterStandby();
+  });
+
+  menuBtn?.addEventListener("click", () => {
+    const confirmed = window.confirm("ゲーム一覧に戻りますか？");
+    if (!confirmed) return;
+    if (isRoomMode()) {
+      options.onBackToLobby?.();
+      return;
+    }
     options.onBackToMenu?.();
   });
   window.addEventListener("resize", fitBoardToGrid);
@@ -259,6 +501,7 @@ export function initGomoku(options = {}) {
     startNewGame: ({ fromRemote = false } = {}) => resetGame({ fromRemote }),
     enterStandby,
     stop: () => {
+      clearCpuTimer();
       window.removeEventListener("resize", fitBoardToGrid);
     },
     configureRoomMode: ({ roomCode, roomRole, roomPlayer }) => {
@@ -270,10 +513,11 @@ export function initGomoku(options = {}) {
       state.roomLockMessage = "";
       options.onRoomStatusChange?.({ roomCode, roomRole });
       fitBoardToGrid();
-      render();
+      enterStandby();
     },
-    configureStandardMode: () => {
+    configureStandardMode: (mode) => {
       state.gameMode = "local";
+      state.playMode = mode === "local" ? "local" : "cpu";
       state.roomCode = null;
       state.roomRole = null;
       state.roomPlayer = BLACK;
@@ -281,7 +525,7 @@ export function initGomoku(options = {}) {
       state.roomLockMessage = "";
       options.onRoomStatusChange?.({ roomCode: null, roomRole: null });
       fitBoardToGrid();
-      render();
+      enterStandby();
     },
     setRoomLock: ({ locked, message }) => {
       state.roomLocked = Boolean(locked);
