@@ -24,8 +24,6 @@ const APP_URL_TAG = "ToufuGameshow";
 
 const entryScreen = document.getElementById("entryScreen");
 const menuScreen = document.getElementById("menuScreen");
-const cardListScreen = document.getElementById("cardListScreen");
-const casinoListScreen = document.getElementById("casinoListScreen");
 const lobbyScreen = document.getElementById("lobbyScreen");
 const othelloScreen = document.getElementById("othelloScreen");
 const shogiScreen = document.getElementById("shogiScreen");
@@ -45,19 +43,6 @@ const playSurvivorsBtn = document.getElementById("playSurvivorsBtn");
 const playFitPuzzleBtn = document.getElementById("playFitPuzzleBtn");
 const playSolitaireSingleBtn = document.getElementById("playSolitaireSingleBtn");
 const playSolitaireMultiBtn = document.getElementById("playSolitaireMultiBtn");
-const openCardListBtn = document.getElementById("openCardListBtn");
-const cardListUnoBtn = document.getElementById("cardListUnoBtn");
-const cardListSevensBtn = document.getElementById("cardListSevensBtn");
-const cardListSolitaireBtn = document.getElementById("cardListSolitaireBtn");
-const cardListDaifugoBtn = document.getElementById("cardListDaifugoBtn");
-const cardListNumeronBtn = document.getElementById("cardListNumeronBtn");
-const cardListBackBtn = document.getElementById("cardListBackBtn");
-const cardListMessage = document.getElementById("cardListMessage");
-const openCasinoListBtn = document.getElementById("openCasinoListBtn");
-const casinoListBlackjackBtn = document.getElementById("casinoListBlackjackBtn");
-const casinoListPokerBtn = document.getElementById("casinoListPokerBtn");
-const casinoListBackBtn = document.getElementById("casinoListBackBtn");
-const casinoListMessage = document.getElementById("casinoListMessage");
 const quickMatchBtn = document.getElementById("quickMatchBtn");
 const roomPublicToggle = document.getElementById("roomPublicToggle");
 const roomPublicLabel = document.getElementById("roomPublicLabel");
@@ -72,6 +57,9 @@ const entryLoginBtn = document.getElementById("entryLoginBtn");
 const entryRegisterBtn = document.getElementById("entryRegisterBtn");
 const entryGuestBtn = document.getElementById("entryGuestBtn");
 const entryMessage = document.getElementById("entryMessage");
+const entryConnectGauge = document.getElementById("entryConnectGauge");
+const entryConnectGaugeFill = document.getElementById("entryConnectGaugeFill");
+const entryConnectGaugeLabel = document.getElementById("entryConnectGaugeLabel");
 const cloudUserIdInput = document.getElementById("cloudUserIdInput");
 const cloudPasswordInput = document.getElementById("cloudPasswordInput");
 const saveCloudAuthBtn = document.getElementById("saveCloudAuthBtn");
@@ -92,40 +80,46 @@ const lobbyStartChessBtn = document.getElementById("lobbyStartChessBtn");
 const lobbyStartUnoBtn = document.getElementById("lobbyStartUnoBtn");
 const lobbyStartGomokuBtn = document.getElementById("lobbyStartGomokuBtn");
 const lobbyStartSurvivorsBtn = document.getElementById("lobbyStartSurvivorsBtn");
-const lobbyStartFitPuzzleBtn = document.getElementById("lobbyStartFitPuzzleBtn");
 const lobbyStartSolitaireBtn = document.getElementById("lobbyStartSolitaireBtn");
-const lobbySwitchSpectateBtn = document.getElementById("lobbySwitchSpectateBtn");
 const lobbyBackBtn = document.getElementById("lobbyBackBtn");
 const copyInviteLinkBtn = document.getElementById("copyInviteLinkBtn");
+const globalRoomBackBtn = document.getElementById("globalRoomBackBtn");
 const globalRematchBtn = document.getElementById("globalRematchBtn");
-const spectatorChatPanel = document.getElementById("spectatorChatPanel");
-const spectatorChatLog = document.getElementById("spectatorChatLog");
-const spectatorChatInput = document.getElementById("spectatorChatInput");
-const spectatorChatSendBtn = document.getElementById("spectatorChatSendBtn");
 const roomChatPanel = document.getElementById("roomChatPanel");
 const roomChatLog = document.getElementById("roomChatLog");
 const roomChatInput = document.getElementById("roomChatInput");
 const roomChatSendBtn = document.getElementById("roomChatSendBtn");
+const spectatorChatPanel = document.getElementById("spectatorChatPanel");
+const spectatorChatLog = document.getElementById("spectatorChatLog");
+const spectatorChatInput = document.getElementById("spectatorChatInput");
+const spectatorChatSendBtn = document.getElementById("spectatorChatSendBtn");
 
 const roomStatus = document.getElementById("roomStatus");
 const roomCodeText = document.getElementById("roomCodeText");
 const roomRoleText = document.getElementById("roomRoleText");
 const langSelect = document.getElementById("langSelect");
 
+const gameMenuButtons = {
+  othello: document.getElementById("menuBtn"),
+  shogi: document.getElementById("shogiMenuBtn"),
+  chess: document.getElementById("chessMenuBtn"),
+  uno: document.getElementById("unoMenuBtn"),
+  gomoku: document.getElementById("gomokuMenuBtn"),
+  survivors: document.getElementById("survivorsMenuBtn"),
+  fitPuzzle: document.getElementById("fitPuzzleMenuBtn"),
+  solitaire: document.getElementById("solitaireMenuBtn"),
+};
+
 const messages = {
   ja: {
     entryTitle: "セッション開始",
     entrySubtitle: "ログインして進行データを共有するか、ゲストとして今すぐ遊べます。",
     loginAndPlay: "ログインして遊ぶ",
-    registerAndPlay: "新規登録",
+    registerAndPlay: "アカウント作成",
     playAsGuest: "ゲストで遊ぶ",
     entryGuestSelected: "ゲストモードで開始しました",
     loginConfirmPrompt: "ログインします。よろしいですか？",
-    registerConfirmPrompt: "このIDで新規登録します。よろしいですか？",
     loginCanceled: "ログインをキャンセルしました",
-    registerCanceled: "新規登録をキャンセルしました",
-    registerSuccess: "新規登録が完了しました",
-    registerDuplicate: "このIDは既に使われています。ログインしてください",
     guestConfirmPrompt: "セーブデータが保存されません。よろしいですか？",
     guestCanceled: "ゲスト開始をキャンセルしました",
     menuSubtitle: "遊びたいゲームを選択してください",
@@ -153,6 +147,18 @@ const messages = {
     lobbySubtitle: "ルームに全員が集まったらゲームを選択します",
     othelloSubtitle: "CPU対戦・CPU同士対戦・ローカル2人対戦を選べます。",
     shogiSubtitle: "先手後手で交互に指します。王を取れば勝ち。",
+    shogiModeLocal: "ローカル2人",
+    shogiModeCpu: "1P 対 CPU",
+    shogiModeChaos: "カオス",
+    shogiChaosPanelTitle: "将棋カオス設定",
+    shogiHandicapBlackLabel: "先手ハンデ",
+    shogiHandicapWhiteLabel: "後手ハンデ",
+    shogiHandicapNone: "なし",
+    shogiHandicapRook: "飛車落ち",
+    shogiHandicapBishop: "角落ち",
+    shogiHandicapTwo: "二枚落ち（飛角）",
+    shogiHandicapFour: "四枚落ち（飛角香香）",
+    shogiHandicapNote: "設定は次回新規対局開始時に適用されます。",
     chessSubtitle: "白黒で交互に指します。キングを詰ませた側の勝ち。",
     unoSubtitle: "CPU対戦またはローカル2人対戦。手札を先に出し切ったら勝ち。",
     gomokuSubtitle: "黒白で交互に置き、先に5連を作った側の勝ち。",
@@ -164,17 +170,16 @@ const messages = {
     createRoom: "ルーム作成",
     join: "参加",
     spectateJoin: "観戦参加",
-    spectateToggleToSpectator: "観戦",
-    spectateToggleToPlayer: "プレイヤー",
     play: "プレイ",
     backToMenu: "メニューへ戻る",
+    backToRoom: "ルームへ戻る",
+    confirmBackToRoom: "ルームロビーへ戻ります。よろしいですか？",
     othelloStart: "オセロ開始",
     shogiStart: "将棋開始",
     chessStart: "チェス開始",
     unoStart: "UNO開始",
     gomokuStart: "五目並べ開始",
     survivorsStart: "サバイバー開始",
-    fitPuzzleStart: "Fit Puzzle開始",
     solitaireStart: "ソリティア開始",
     bankGacha: "スキンガチャ",
     bankGacha10: "スキンガチャ x10",
@@ -188,7 +193,6 @@ const messages = {
     roomReconnected: "再接続に成功しました",
     rematchNow: "即再戦",
     rematchApproveNow: "再戦に同意",
-    rematchWithdrawNow: "同意を取り消す",
     rematchVoteWaiting: "再戦の同意待ち... ({count}/{need})",
     rematchVoteReady: "全員同意で再戦を開始します",
     inviteTokenRequired: "この非公開ルームへの参加には招待リンクが必要です",
@@ -202,8 +206,6 @@ const messages = {
     roomChatPlaceholder: "メッセージを入力",
     roomChatSend: "送信",
     roomChatEmpty: "まだメッセージはありません",
-    roomChatMuted: "チャット送信が制限されています",
-    roomChatRateLimited: "送信が早すぎます。少し待ってください",
     newGame: "ゲーム開始",
     remake: "リメイク",
     menu: "メニュー",
@@ -220,9 +222,12 @@ const messages = {
     confirmBackToLogin: "ログイン画面に戻ります。よろしいですか？",
     cloudAuthSaved: "クラウド認証情報を保存しました",
     cloudAuthInvalid: "クラウドID/パスワードを入力してください",
-    cloudUserNotFound: "ユーザーが存在しません。新規登録してください",
     cloudIdDuplicateWarn: "このIDは既に使用されています。別のIDか、正しいパスワードを入力してください",
+    cloudUserNotFound: "このIDは未登録です。先にアカウント作成してください",
     cloudCheckFailed: "クラウド確認に失敗しました。サーバー起動後にもう一度お試しください",
+    registerConfirmPrompt: "このIDで新規登録します。よろしいですか？",
+    registerCanceled: "新規登録をキャンセルしました",
+    registerSucceeded: "アカウントを作成してログインしました",
     roomCodePlaceholder: "6桁の番号",
     roomPublicToggle: "公開ルーム（クイックマッチ対象）",
     roomPrivateToggle: "非公開ルーム（招待のみ）",
@@ -234,7 +239,7 @@ const messages = {
     menuRoomConnected: "ルーム {code} に接続しました",
     menuRoomJoined: "ルーム {code} へ参加しました",
     menuRoomSpectate: "ルーム {code} を観戦中です",
-    roomInGameSuggestSpectate: "対戦中のため参加できません。観戦を使ってください。",
+    roomInGameSuggestSpectate: "対戦中のため参加できません。観戦参加を使ってください。",
     roomCodeInvalid: "6桁のルーム番号を入力してください",
     copyInviteLink: "招待リンクをコピー",
     inviteLinkCopied: "招待リンクをコピーしました",
@@ -269,15 +274,11 @@ const messages = {
     entryTitle: "Start Session",
     entrySubtitle: "로그인하여 진행 데이터를 공유하거나, 게스트로 바로 플레이할 수 있습니다.",
     loginAndPlay: "LOGIN & PLAY",
-    registerAndPlay: "SIGN UP",
+    registerAndPlay: "CREATE ACCOUNT",
     playAsGuest: "PLAY AS GUEST",
     entryGuestSelected: "게스트 모드로 시작했습니다",
     loginConfirmPrompt: "로그인하시겠습니까?",
-    registerConfirmPrompt: "이 ID로 신규 가입할까요?",
     loginCanceled: "로그인을 취소했습니다",
-    registerCanceled: "신규 가입을 취소했습니다",
-    registerSuccess: "신규 가입이 완료되었습니다",
-    registerDuplicate: "이미 사용 중인 ID입니다. 로그인을 이용하세요",
     guestConfirmPrompt: "저장 데이터가 보관되지 않습니다. 계속할까요?",
     guestCanceled: "게스트 시작을 취소했습니다",
     menuSubtitle: "플레이할 게임을 선택하세요",
@@ -305,6 +306,18 @@ const messages = {
     lobbySubtitle: "모두 모이면 호스트가 게임을 선택합니다",
     othelloSubtitle: "CPU 대전, CPU vs CPU, 로컬 2인 대전을 선택할 수 있습니다.",
     shogiSubtitle: "선수/후수가 번갈아 둡니다. 왕을 잡으면 승리합니다.",
+    shogiModeLocal: "2P LOCAL",
+    shogiModeCpu: "1P vs CPU",
+    shogiModeChaos: "CHAOS",
+    shogiChaosPanelTitle: "쇼기 카오스 설정",
+    shogiHandicapBlackLabel: "선수 핸디캡",
+    shogiHandicapWhiteLabel: "후수 핸디캡",
+    shogiHandicapNone: "없음",
+    shogiHandicapRook: "비차 떨어뜨림",
+    shogiHandicapBishop: "각 떨어뜨림",
+    shogiHandicapTwo: "2장 떨어뜨림 (비차+각)",
+    shogiHandicapFour: "4장 떨어뜨림 (비차+각+향+향)",
+    shogiHandicapNote: "설정은 다음 새 대국 시작 시 적용됩니다.",
     chessSubtitle: "백/흑이 번갈아 둡니다. 킹을 체크메이트하면 승리합니다.",
     unoSubtitle: "CPU 대전 또는 로컬 2인 대전. 손패를 먼저 비우면 승리합니다.",
     gomokuSubtitle: "흑/백이 번갈아 두고, 먼저 5목을 만들면 승리합니다.",
@@ -316,17 +329,16 @@ const messages = {
     createRoom: "룸 만들기",
     join: "참가",
     spectateJoin: "관전 참가",
-    spectateToggleToSpectator: "관전",
-    spectateToggleToPlayer: "플레이어",
     play: "플레이",
     backToMenu: "메뉴로",
+    backToRoom: "룸으로",
+    confirmBackToRoom: "룸 로비로 돌아갈까요?",
     othelloStart: "오셀로 시작",
     shogiStart: "쇼기 시작",
     chessStart: "체스 시작",
     unoStart: "UNO 시작",
     gomokuStart: "오목 시작",
     survivorsStart: "서바이버 시작",
-    fitPuzzleStart: "핏 퍼즐 시작",
     solitaireStart: "솔리테어 시작",
     bankGacha: "SKIN GACHA",
     bankGacha10: "SKIN GACHA x10",
@@ -340,7 +352,6 @@ const messages = {
     roomReconnected: "재접속에 성공했습니다",
     rematchNow: "즉시 재대전",
     rematchApproveNow: "재대전 동의",
-    rematchWithdrawNow: "동의 취소",
     rematchVoteWaiting: "재대전 동의 대기... ({count}/{need})",
     rematchVoteReady: "전원 동의로 재대전을 시작합니다",
     inviteTokenRequired: "이 비공개 룸은 초대 링크가 필요합니다",
@@ -354,8 +365,6 @@ const messages = {
     roomChatPlaceholder: "메시지를 입력",
     roomChatSend: "전송",
     roomChatEmpty: "아직 메시지가 없습니다",
-    roomChatMuted: "채팅 전송이 제한되었습니다",
-    roomChatRateLimited: "전송이 너무 빠릅니다. 잠시 후 다시 시도하세요",
     newGame: "GAME START",
     remake: "REMAKE",
     menu: "메뉴",
@@ -372,9 +381,12 @@ const messages = {
     confirmBackToLogin: "로그인 화면으로 돌아갑니다. 계속할까요?",
     cloudAuthSaved: "클라우드 인증 정보를 저장했습니다",
     cloudAuthInvalid: "클라우드 ID/비밀번호를 입력하세요",
-    cloudUserNotFound: "사용자가 존재하지 않습니다. 회원가입을 진행해 주세요",
     cloudIdDuplicateWarn: "이 ID는 이미 사용 중입니다. 다른 ID 또는 올바른 비밀번호를 입력하세요",
+    cloudUserNotFound: "이 ID는 아직 등록되지 않았습니다. 먼저 계정을 생성하세요",
     cloudCheckFailed: "클라우드 확인에 실패했습니다. 서버 실행 후 다시 시도하세요",
+    registerConfirmPrompt: "이 ID로 새 계정을 생성할까요?",
+    registerCanceled: "계정 생성을 취소했습니다",
+    registerSucceeded: "계정을 생성하고 로그인했습니다",
     roomCodePlaceholder: "6자리 번호",
     roomPublicToggle: "공개 룸 (빠른 매치 대상)",
     roomPrivateToggle: "비공개 룸 (초대 전용)",
@@ -386,7 +398,7 @@ const messages = {
     menuRoomConnected: "룸 {code} 에 연결했습니다",
     menuRoomJoined: "룸 {code} 에 참가했습니다",
     menuRoomSpectate: "룸 {code} 관전 중",
-    roomInGameSuggestSpectate: "경기 중이라 참가할 수 없습니다. 관전을 이용하세요.",
+    roomInGameSuggestSpectate: "경기 중이라 참가할 수 없습니다. 관전 참가를 이용하세요.",
     roomCodeInvalid: "6자리 룸 번호를 입력하세요",
     copyInviteLink: "초대 링크 복사",
     inviteLinkCopied: "초대 링크를 복사했습니다",
@@ -463,6 +475,23 @@ function applyStaticTranslations() {
   setTextById("lobbySubtitle", tr("lobbySubtitle"));
   setTextById("othelloSubtitle", tr("othelloSubtitle"));
   setTextById("shogiSubtitle", tr("shogiSubtitle"));
+  setTextById("shogiModeLocalOption", tr("shogiModeLocal"));
+  setTextById("shogiModeCpuOption", tr("shogiModeCpu"));
+  setTextById("shogiModeChaosOption", tr("shogiModeChaos"));
+  setTextById("shogiChaosPanelTitle", tr("shogiChaosPanelTitle"));
+  setTextById("shogiHandicapBlackLabel", tr("shogiHandicapBlackLabel"));
+  setTextById("shogiHandicapWhiteLabel", tr("shogiHandicapWhiteLabel"));
+  setTextById("shogiHandicapNoneOptionBlack", tr("shogiHandicapNone"));
+  setTextById("shogiHandicapRookOptionBlack", tr("shogiHandicapRook"));
+  setTextById("shogiHandicapBishopOptionBlack", tr("shogiHandicapBishop"));
+  setTextById("shogiHandicapTwoOptionBlack", tr("shogiHandicapTwo"));
+  setTextById("shogiHandicapFourOptionBlack", tr("shogiHandicapFour"));
+  setTextById("shogiHandicapNoneOptionWhite", tr("shogiHandicapNone"));
+  setTextById("shogiHandicapRookOptionWhite", tr("shogiHandicapRook"));
+  setTextById("shogiHandicapBishopOptionWhite", tr("shogiHandicapBishop"));
+  setTextById("shogiHandicapTwoOptionWhite", tr("shogiHandicapTwo"));
+  setTextById("shogiHandicapFourOptionWhite", tr("shogiHandicapFour"));
+  setTextById("shogiHandicapNote", tr("shogiHandicapNote"));
   setTextById("chessSubtitle", tr("chessSubtitle"));
   setTextById("unoSubtitle", tr("unoSubtitle"));
   setTextById("gomokuSubtitle", tr("gomokuSubtitle"));
@@ -506,19 +535,18 @@ function applyStaticTranslations() {
   if (lobbyStartUnoBtn) lobbyStartUnoBtn.textContent = tr("unoStart");
   if (lobbyStartGomokuBtn) lobbyStartGomokuBtn.textContent = tr("gomokuStart");
   if (lobbyStartSurvivorsBtn) lobbyStartSurvivorsBtn.textContent = tr("survivorsStart");
-  if (lobbyStartFitPuzzleBtn) lobbyStartFitPuzzleBtn.textContent = tr("fitPuzzleStart");
   if (lobbyStartSolitaireBtn) lobbyStartSolitaireBtn.textContent = tr("solitaireStart");
-  updateLobbySpectateToggleButton();
   if (lobbyBackBtn) lobbyBackBtn.textContent = tr("backToMenu");
   if (copyInviteLinkBtn) copyInviteLinkBtn.textContent = tr("copyInviteLink");
+  if (globalRoomBackBtn) globalRoomBackBtn.textContent = tr("backToRoom");
   if (globalRematchBtn) globalRematchBtn.textContent = tr("rematchApproveNow");
   if (spectatorBadge) spectatorBadge.textContent = tr("spectatorBadge");
-  setTextById("spectatorChatTitle", tr("spectatorChatTitle"));
-  if (spectatorChatInput) spectatorChatInput.placeholder = tr("spectatorChatPlaceholder");
-  if (spectatorChatSendBtn) spectatorChatSendBtn.textContent = tr("spectatorChatSend");
   setTextById("roomChatTitle", tr("roomChatTitle"));
   if (roomChatInput) roomChatInput.placeholder = tr("roomChatPlaceholder");
   if (roomChatSendBtn) roomChatSendBtn.textContent = tr("roomChatSend");
+  setTextById("spectatorChatTitle", tr("spectatorChatTitle"));
+  if (spectatorChatInput) spectatorChatInput.placeholder = tr("spectatorChatPlaceholder");
+  if (spectatorChatSendBtn) spectatorChatSendBtn.textContent = tr("spectatorChatSend");
 
   setTextById("startBtn", tr("newGame"));
   setTextById("remakeBtn", tr("remake"));
@@ -562,6 +590,9 @@ const peerId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now() +
 const MAX_ROOM_PLAYERS = 8;
 const ROOM_RECONNECT_BASE_DELAY_MS = 1200;
 const ROOM_RECONNECT_MAX_DELAY_MS = 9000;
+const CLOUD_API_TIMEOUT_MS = 1400;
+const LOGIN_FLOW_TIMEOUT_MS = 5000;
+const CLOUD_API_BASE_STORAGE_KEY = "neon-cloud-api-base-url";
 const roomServerUrl = resolveRoomServerUrl({
   storageKey: STORAGE_ROOM_SERVER_URL_KEY,
   queryParamKey: ROOM_SERVER_QUERY_PARAM_KEY,
@@ -589,16 +620,12 @@ const roomSession = {
   spectateIntent: false,
   pendingInviteToken: "",
   rematchVotes: new Set(),
-  spectatorChatMessages: [],
   roomChatMessages: [],
+  spectatorChatMessages: [],
+  roomRuleModes: {
+    othello: "local",
+  },
 };
-
-function createRoomMessageId() {
-  const rnd = typeof crypto?.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
-  return `msg-${peerId.slice(0, 8)}-${rnd}`.slice(0, 80);
-}
 
 let inviteTokenRequestResolve = null;
 
@@ -615,6 +642,8 @@ const gameScreens = {
 
 let games = null;
 let currentGameKey = "othello";
+let entryConnectGaugeTimerId = 0;
+let entryConnectGaugeStartedAt = 0;
 
 function normalizeName(raw) {
   const trimmed = String(raw ?? "").trim().replace(/\s+/g, " ");
@@ -683,14 +712,6 @@ function buildInviteUrl(roomCode) {
   return url.toString();
 }
 
-function stripInviteTokenFromAddressBar() {
-  if (typeof window === "undefined") return;
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY)) return;
-  url.searchParams.delete(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY);
-  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-}
-
 async function copyInviteUrl(roomCode) {
   if (roomSession.role === "host" && roomSession.roomVisibility === "private") {
     const token = await requestInviteToken(roomCode);
@@ -735,18 +756,42 @@ function setEntryActionButtonsVisible(visible) {
   }
 }
 
+function renderEntryConnectGauge() {
+  if (!entryConnectGaugeFill || !entryConnectGaugeLabel) return;
+  const elapsedMs = Math.max(0, performance.now() - entryConnectGaugeStartedAt);
+  const progress = Math.min(100, (elapsedMs / LOGIN_FLOW_TIMEOUT_MS) * 100);
+  entryConnectGaugeFill.style.width = `${progress.toFixed(1)}%`;
+  entryConnectGaugeLabel.textContent = `接続中 ${(elapsedMs / 1000).toFixed(1)}秒`;
+}
+
+function startEntryConnectGauge() {
+  if (!entryConnectGauge) return;
+  if (entryConnectGaugeTimerId) {
+    window.clearInterval(entryConnectGaugeTimerId);
+    entryConnectGaugeTimerId = 0;
+  }
+  entryConnectGaugeStartedAt = performance.now();
+  entryConnectGauge.classList.remove("hidden");
+  renderEntryConnectGauge();
+  entryConnectGaugeTimerId = window.setInterval(renderEntryConnectGauge, 100);
+}
+
+function stopEntryConnectGauge() {
+  if (entryConnectGaugeTimerId) {
+    window.clearInterval(entryConnectGaugeTimerId);
+    entryConnectGaugeTimerId = 0;
+  }
+  if (entryConnectGaugeFill) {
+    entryConnectGaugeFill.style.width = "0%";
+  }
+  if (entryConnectGaugeLabel) {
+    entryConnectGaugeLabel.textContent = "接続中 0.0秒";
+  }
+  entryConnectGauge?.classList.add("hidden");
+}
+
 function setLobbyMessage(text) {
   lobbyMessage.textContent = text;
-}
-
-function setCardListMessage(text) {
-  if (!cardListMessage) return;
-  cardListMessage.textContent = text;
-}
-
-function setCasinoListMessage(text) {
-  if (!casinoListMessage) return;
-  casinoListMessage.textContent = text;
 }
 
 function connectionLabel() {
@@ -766,6 +811,30 @@ function renderSpectatorBadge() {
   if (!spectatorBadge) return;
   const visible = Boolean(roomSession.code) && roomSession.role === "spectator";
   spectatorBadge.classList.toggle("hidden", !visible);
+}
+
+function renderRoomChat() {
+  if (!roomChatPanel || !roomChatLog) return;
+  const visible = Boolean(roomSession.code) && roomSession.role !== "spectator";
+  roomChatPanel.classList.toggle("hidden", !visible);
+  roomChatLog.innerHTML = "";
+  if (!visible) return;
+
+  if (!roomSession.roomChatMessages.length) {
+    const empty = document.createElement("p");
+    empty.className = "room-chat-empty";
+    empty.textContent = tr("roomChatEmpty");
+    roomChatLog.appendChild(empty);
+    return;
+  }
+
+  roomSession.roomChatMessages.slice(-80).forEach((message) => {
+    const row = document.createElement("p");
+    row.className = "room-chat-item";
+    row.textContent = `${message.name}: ${message.text}`;
+    roomChatLog.appendChild(row);
+  });
+  roomChatLog.scrollTop = roomChatLog.scrollHeight;
 }
 
 function renderSpectatorChat() {
@@ -789,44 +858,6 @@ function renderSpectatorChat() {
     spectatorChatLog.appendChild(row);
   });
   spectatorChatLog.scrollTop = spectatorChatLog.scrollHeight;
-}
-
-function shouldShowRoomChat() {
-  return Boolean(roomSession.code) && roomSession.role !== "spectator";
-}
-
-function renderRoomChat() {
-  if (!roomChatPanel || !roomChatLog) return;
-  const visible = shouldShowRoomChat();
-  roomChatPanel.classList.toggle("hidden", !visible);
-  roomChatLog.innerHTML = "";
-  if (!visible) return;
-  if (!roomSession.roomChatMessages.length) {
-    const empty = document.createElement("p");
-    empty.className = "room-chat-empty";
-    empty.textContent = tr("roomChatEmpty");
-    roomChatLog.appendChild(empty);
-    return;
-  }
-
-  roomSession.roomChatMessages.slice(-80).forEach((message) => {
-    const row = document.createElement("p");
-    row.className = "room-chat-item";
-    row.textContent = `${message.name}: ${message.text}`;
-    roomChatLog.appendChild(row);
-  });
-  roomChatLog.scrollTop = roomChatLog.scrollHeight;
-}
-
-function appendRoomChatMessage(name, text) {
-  const normalizedName = normalizeName(name || "Player");
-  const normalizedText = String(text || "").trim().slice(0, 200);
-  if (!normalizedText) return;
-  roomSession.roomChatMessages.push({ name: normalizedName, text: normalizedText });
-  if (roomSession.roomChatMessages.length > 160) {
-    roomSession.roomChatMessages.splice(0, roomSession.roomChatMessages.length - 160);
-  }
-  renderRoomChat();
 }
 
 function setRematchVoteMessage(count, need) {
@@ -862,73 +893,97 @@ function clearReconnectTimer() {
 }
 
 async function cloudApiRequest(path, payload) {
+  const storedPreferredBase = String(localStorage.getItem(CLOUD_API_BASE_STORAGE_KEY) || "").trim();
   const candidates = cloudApiCandidates();
-  const authoritativeCodes = new Set([
-    "USER_NOT_FOUND",
-    "INVALID_PASSWORD",
-    "USER_ALREADY_EXISTS",
-    "AUTH_REQUIRED",
-    "FRIEND_NOT_FOUND",
-    "FRIEND_SELF_FORBIDDEN",
-    "FRIEND_ID_REQUIRED",
-  ]);
+  const orderedCandidates = storedPreferredBase
+    ? [storedPreferredBase, ...candidates.filter((base) => base !== storedPreferredBase)]
+    : candidates;
 
   let lastError = null;
-  for (let i = 0; i < candidates.length; i += 1) {
-    const base = candidates[i];
+  for (const base of orderedCandidates) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), CLOUD_API_TIMEOUT_MS);
     try {
       const res = await fetch(`${base}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
 
+      if (data?.code === "USER_NOT_FOUND" || data?.code === "INVALID_PASSWORD") {
+        localStorage.setItem(CLOUD_API_BASE_STORAGE_KEY, base);
+        return { res, data };
+      }
+
       // If this candidate cannot handle the cloud endpoint, try the next one.
-      // Some hosts may return HTML (index page) for unknown /api paths; treat that as a failure.
-      if (!res.ok || data?.ok !== true) {
+      if (!res.ok || data?.ok === false) {
         const err = new Error(data?.message || `Cloud API request failed at ${base}`);
-        err.code = data?.code || (res.ok ? "INVALID_API_RESPONSE" : "CLOUD_REQUEST_ERROR");
+        err.code = data?.code || "CLOUD_REQUEST_FAILED";
         err.status = res.status;
-        // USER_NOT_FOUND can be a false negative when multiple cloud endpoints are configured.
-        // Keep trying remaining candidates before concluding this user does not exist.
-        if (err.code === "USER_NOT_FOUND" && i < candidates.length - 1) {
-          lastError = err;
-          continue;
-        }
-        if (authoritativeCodes.has(err.code)) {
-          throw err;
-        }
         lastError = err;
         continue;
       }
 
+      localStorage.setItem(CLOUD_API_BASE_STORAGE_KEY, base);
       return { res, data };
     } catch (err) {
       lastError = err;
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   }
 
   throw lastError || new Error("Cloud API request failed");
 }
 
+function withTimeout(promise, timeoutMs, timeoutMessage = "Request timeout") {
+  let timeoutId = 0;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+}
+
 async function verifyCloudAuth(userId, password) {
+  let loginError = null;
   try {
     const { res, data } = await cloudApiRequest("/api/auth/login", { userId, password });
     if (res.ok && data?.ok !== false) {
       return { ok: true, profile: data?.profile || null };
     }
+    if (data?.code === "INVALID_PASSWORD") {
+      return { ok: false, reason: "duplicate" };
+    }
     if (data?.code === "USER_NOT_FOUND") {
-      return { ok: false, reason: "not_found" };
+      return { ok: false, reason: "notFound" };
+    }
+  } catch (err) {
+    loginError = err;
+  }
+
+  if (!(loginError?.code === "NOT_FOUND" || loginError?.status === 404)) {
+    return { ok: false, reason: "failed" };
+  }
+
+  try {
+    const { res, data } = await cloudApiRequest("/api/profile/load", { userId, password });
+    if (res.ok && data?.ok !== false) {
+      return { ok: true, profile: data?.profile || null };
     }
     if (data?.code === "INVALID_PASSWORD") {
       return { ok: false, reason: "duplicate" };
     }
-    return { ok: false, reason: "failed" };
-  } catch (err) {
-    if (String(err?.code || "") === "USER_NOT_FOUND") {
-      return { ok: false, reason: "not_found" };
+    if (data?.code === "USER_NOT_FOUND") {
+      return { ok: false, reason: "notFound" };
     }
+    return { ok: false, reason: "failed" };
+  } catch {
     return { ok: false, reason: "failed" };
   }
 }
@@ -939,14 +994,11 @@ async function registerCloudAuth(userId, password) {
     if (res.ok && data?.ok !== false) {
       return { ok: true, profile: data?.profile || null };
     }
-    if (data?.code === "USER_ALREADY_EXISTS") {
+    if (data?.code === "USER_EXISTS") {
       return { ok: false, reason: "duplicate" };
     }
     return { ok: false, reason: "failed" };
-  } catch (err) {
-    if (String(err?.code || "") === "USER_ALREADY_EXISTS") {
-      return { ok: false, reason: "duplicate" };
-    }
+  } catch {
     return { ok: false, reason: "failed" };
   }
 }
@@ -976,8 +1028,6 @@ async function syncPlayerNameToCloud(userId, password, baseProfile = null) {
 function showOnly(screen) {
   entryScreen.classList.add("hidden");
   menuScreen.classList.add("hidden");
-  cardListScreen.classList.add("hidden");
-  casinoListScreen.classList.add("hidden");
   lobbyScreen.classList.add("hidden");
   othelloScreen.classList.add("hidden");
   shogiScreen.classList.add("hidden");
@@ -988,6 +1038,7 @@ function showOnly(screen) {
   fitPuzzleScreen.classList.add("hidden");
   solitaireScreen.classList.add("hidden");
   screen.classList.remove("hidden");
+  updateRoomBackButtonVisibility();
 }
 
 function showEntryScreen() {
@@ -998,14 +1049,6 @@ function showMenuScreen() {
   showOnly(menuScreen);
 }
 
-function showCardListScreen() {
-  showOnly(cardListScreen);
-}
-
-function showCasinoListScreen() {
-  showOnly(casinoListScreen);
-}
-
 function showLobbyScreen() {
   showOnly(lobbyScreen);
 }
@@ -1014,6 +1057,22 @@ function showGameScreen(gameKey) {
   const screen = gameScreens[gameKey];
   if (!screen) return;
   showOnly(screen);
+}
+
+function updateRoomBackButtonVisibility() {
+  if (!globalRoomBackBtn) return;
+  const currentScreen = gameScreens[currentGameKey];
+  const inGameScreen = Boolean(currentScreen && !currentScreen.classList.contains("hidden"));
+  const visible = Boolean(roomSession.code) && inGameScreen;
+
+  if (visible) {
+    const menuBtn = gameMenuButtons[currentGameKey];
+    if (menuBtn && menuBtn.parentElement) {
+      menuBtn.insertAdjacentElement("afterend", globalRoomBackBtn);
+    }
+  }
+
+  globalRoomBackBtn.classList.toggle("hidden", !visible);
 }
 
 function updateRoomStatus({ roomCode, roomRole }) {
@@ -1057,15 +1116,6 @@ function refreshRoomPresence() {
   syncRoomParticipantsToGame();
 }
 
-function updateLobbySpectateToggleButton() {
-  if (!lobbySwitchSpectateBtn) return;
-  const inRoom = Boolean(roomSession.code);
-  lobbySwitchSpectateBtn.disabled = !inRoom;
-  lobbySwitchSpectateBtn.textContent = roomSession.role === "spectator"
-    ? tr("spectateToggleToPlayer")
-    : tr("spectateToggleToSpectator");
-}
-
 function updateLobbyView() {
   const code = roomSession.code ?? "-";
   let roleLabel = "-";
@@ -1091,17 +1141,25 @@ function updateLobbyView() {
   lobbyStartUnoBtn.disabled = !hostCanStart;
   lobbyStartGomokuBtn.disabled = !hostCanStart;
   lobbyStartSurvivorsBtn.disabled = !hostCanStart;
-  if (lobbyStartFitPuzzleBtn) {
-    lobbyStartFitPuzzleBtn.disabled = true;
-    lobbyStartFitPuzzleBtn.title = "ROOM未対応";
-  }
   lobbyStartSolitaireBtn.disabled = !hostCanStart;
-  updateLobbySpectateToggleButton();
   if (copyInviteLinkBtn) copyInviteLinkBtn.disabled = !roomSession.code;
   renderSpectatorBadge();
   renderRoomChat();
   renderSpectatorChat();
   updateRematchButtonVisibility();
+}
+
+function pushRoomChatMessage(message) {
+  const text = String(message?.text || "").trim();
+  if (!text) return;
+  roomSession.roomChatMessages.push({
+    name: normalizeName(message?.name || "Player"),
+    text: text.slice(0, 200),
+  });
+  if (roomSession.roomChatMessages.length > 120) {
+    roomSession.roomChatMessages.splice(0, roomSession.roomChatMessages.length - 120);
+  }
+  renderRoomChat();
 }
 
 function postRoomMessage(message) {
@@ -1215,8 +1273,7 @@ function startQuickMatch() {
   const code = generateQuickMatchCode(0);
   if (roomCodeInput) roomCodeInput.value = code;
   setMenuMessage(tr("quickMatchSearching"));
-  // Quick match must always use public rooms, regardless of the private toggle state.
-  void attachRoom(code, "guest", playerName, { quickMatchMode: true, quickJoin: true, roomPublic: true });
+  void attachRoom(code, "guest", playerName, { quickMatchMode: true, quickJoin: true });
 }
 
 function isSpectator() {
@@ -1228,8 +1285,21 @@ function updateRematchButtonVisibility() {
   const visible = Boolean(roomSession.code) && !menuScreen.classList.contains("hidden") && !lobbyScreen.classList.contains("hidden");
   globalRematchBtn.classList.toggle("hidden", !visible);
   const alreadyVoted = roomSession.rematchVotes.has(peerId);
-  globalRematchBtn.disabled = !visible || !roomSession.peerConnected || isSpectator();
-  globalRematchBtn.textContent = alreadyVoted ? tr("rematchWithdrawNow") : tr("rematchApproveNow");
+  globalRematchBtn.disabled = !visible || !roomSession.peerConnected || isSpectator() || alreadyVoted;
+  globalRematchBtn.textContent = alreadyVoted ? tr("rematchVoteWaiting", { count: roomSession.rematchVotes.size, need: 2 }) : tr("rematchApproveNow");
+}
+
+function returnToRoomLobbyFromGame() {
+  if (!roomSession.code) return;
+  activeController()?.enterStandby?.();
+  roomSession.selectedGame = null;
+  showLobbyScreen();
+  updateLobbyView();
+  if (roomSession.role === "host") {
+    setLobbyMessage(roomSession.peerConnected ? tr("lobbyParticipantConnected") : tr("lobbyWaitPeer"));
+  } else {
+    setLobbyMessage(tr("lobbyJoinedWaitHost"));
+  }
 }
 
 function controllerOf(gameKey) {
@@ -1266,8 +1336,9 @@ function closeRoom() {
   roomSession.spectatorIds = new Set();
   roomSession.pendingInviteToken = "";
   roomSession.rematchVotes = new Set();
-  roomSession.spectatorChatMessages = [];
   roomSession.roomChatMessages = [];
+  roomSession.spectatorChatMessages = [];
+  roomSession.roomRuleModes = { othello: "local" };
   if (inviteTokenRequestResolve) {
     inviteTokenRequestResolve("");
     inviteTokenRequestResolve = null;
@@ -1278,6 +1349,7 @@ function closeRoom() {
   roomSession.roomVisibility = "public";
   roomSession.spectateIntent = false;
   updateLobbyView();
+  updateRoomBackButtonVisibility();
   updateRematchButtonVisibility();
   updateRoomStatus({ roomCode: null, roomRole: null });
 }
@@ -1291,10 +1363,12 @@ function enterRoomGame(gameKey) {
   roomSession.activeGame = gameKey;
 
   const localPlayer = roomSession.role === "host" ? BLACK : WHITE;
+  const roomRuleMode = roomSession.roomRuleModes?.[gameKey] === "chaos" ? "chaos" : "local";
   controller.configureRoomMode({
     roomCode: roomSession.code,
     roomRole: roomSession.role,
     roomPlayer: localPlayer,
+    roomRuleMode,
     roomPlayerCount: Math.max(1, roomParticipantCount()),
     roomMaxPlayers: MAX_ROOM_PLAYERS,
   });
@@ -1303,11 +1377,13 @@ function enterRoomGame(gameKey) {
 
   if (isSpectator()) {
     controller.setRoomLock({ locked: true, message: tr("spectatorReadOnly") });
+    controller.enterStandby?.();
   } else if (roomSession.role === "host") {
     controller.setRoomLock({ locked: false, message: "" });
-    controller.startNewGame();
+    controller.enterStandby?.();
   } else {
     controller.setRoomLock({ locked: true, message: tr("gameWaitHostStart") });
+    controller.enterStandby?.();
   }
 }
 
@@ -1346,8 +1422,12 @@ function createGameCallbacks(gameKey) {
     onRoomNewGame: () => {
       const controller = controllerOf(gameKey);
       if (!controller) return;
-      postRoomMessage({ type: "new-game", game: gameKey });
+      postRoomMessage({ type: "new-game", game: gameKey, mode: roomSession.roomRuleModes?.[gameKey] || "local" });
       postRoomMessage({ type: "snapshot", game: gameKey, snapshot: controller.getSnapshot() });
+    },
+    onRoomRuleChange: ({ mode }) => {
+      roomSession.roomRuleModes[gameKey] = mode === "chaos" ? "chaos" : "local";
+      postRoomMessage({ type: "room-rule", game: gameKey, mode });
     },
     onRoomStatusChange: ({ roomCode, roomRole }) => {
       updateRoomStatus({ roomCode, roomRole });
@@ -1396,10 +1476,7 @@ function handleRoomMessage(payload, roomCode) {
 
   if (payload.type === "room-state" && Array.isArray(payload.participants)) {
     const prevRole = roomSession.role;
-    const selfEntry = payload.participants.find((entry) => entry && entry.id === peerId);
-    if (selfEntry && (selfEntry.role === "host" || selfEntry.role === "guest" || selfEntry.role === "spectator")) {
-      roomSession.role = selfEntry.role;
-    } else if (typeof payload.hostPeerId === "string" && payload.hostPeerId.trim()) {
+    if (typeof payload.hostPeerId === "string" && payload.hostPeerId.trim()) {
       roomSession.role = payload.hostPeerId === peerId ? "host" : "guest";
     }
 
@@ -1443,6 +1520,28 @@ function handleRoomMessage(payload, roomCode) {
     return;
   }
 
+  if (payload.type === "chat-history") {
+    if (Array.isArray(payload.roomMessages)) {
+      roomSession.roomChatMessages = payload.roomMessages
+        .map((message) => ({
+          name: normalizeName(message?.name || "Player"),
+          text: String(message?.text || "").trim().slice(0, 200),
+        }))
+        .filter((message) => message.text);
+    }
+    if (Array.isArray(payload.spectatorMessages)) {
+      roomSession.spectatorChatMessages = payload.spectatorMessages
+        .map((message) => ({
+          name: normalizeName(message?.name || "Spectator"),
+          text: String(message?.text || "").trim().slice(0, 200),
+        }))
+        .filter((message) => message.text);
+    }
+    renderRoomChat();
+    renderSpectatorChat();
+    return;
+  }
+
   if (payload.type === "hello") {
     const senderName = normalizeName(payload.name);
     const isKnown = roomSession.participants.has(payload.from);
@@ -1466,7 +1565,11 @@ function handleRoomMessage(payload, roomCode) {
       spectate: roomSession.spectateIntent,
     });
     if (roomSession.role === "host" && roomSession.selectedGame) {
-      postRoomMessage({ type: "select-game", game: roomSession.selectedGame });
+      postRoomMessage({
+        type: "select-game",
+        game: roomSession.selectedGame,
+        mode: roomSession.roomRuleModes?.[roomSession.selectedGame] || "local",
+      });
     }
     return;
   }
@@ -1483,11 +1586,9 @@ function handleRoomMessage(payload, roomCode) {
   if (payload.type === "room-assigned" && payload.code) {
     roomSession.code = normalizeRoomCode(payload.code);
     if (roomCodeInput) roomCodeInput.value = roomSession.code;
-    if (payload.role === "host" || payload.role === "guest" || payload.role === "spectator") {
-      roomSession.role = payload.role;
-      if (payload.role === "spectator") {
-        setLobbyMessage(tr("spectatorReadOnly"));
-      }
+    if (payload.role === "spectator") {
+      roomSession.role = "spectator";
+      setLobbyMessage(tr("spectatorReadOnly"));
     }
     if (payload.roomPublic === false && roomSession.quickMatchMode) {
       setMenuMessage(tr("quickMatchPrivateSkipped"));
@@ -1544,7 +1645,7 @@ function handleRoomMessage(payload, roomCode) {
         const fallbackOffset = Math.floor(Math.random() * 4) + 1;
         const fallbackCode = generateQuickMatchCode(fallbackOffset);
         if (roomCodeInput) roomCodeInput.value = fallbackCode;
-        void attachRoom(fallbackCode, "guest", currentPlayerName, { quickMatchMode: true, quickJoin: true, roomPublic: true });
+        void attachRoom(fallbackCode, "guest", currentPlayerName, { quickMatchMode: true });
       } else {
         setMenuMessage(tr("roomFullRejected", { code: rejectedCode }));
       }
@@ -1568,6 +1669,9 @@ function handleRoomMessage(payload, roomCode) {
   }
 
   if (payload.type === "select-game" && payload.game) {
+    if (payload.mode === "chaos" || payload.mode === "local") {
+      roomSession.roomRuleModes[payload.game] = payload.mode;
+    }
     roomSession.selectedGame = payload.game;
     roomSession.activeGame = payload.game;
     roomSession.rematchVotes = new Set();
@@ -1578,9 +1682,21 @@ function handleRoomMessage(payload, roomCode) {
   if (payload.type === "new-game" && payload.game) {
     const controller = controllerOf(payload.game);
     if (!controller) return;
+    if (payload.mode === "chaos" || payload.mode === "local") {
+      roomSession.roomRuleModes[payload.game] = payload.mode;
+      controller.setRoomRuleMode?.(payload.mode, { fromRemote: true });
+    }
     roomSession.rematchVotes = new Set();
     controller.setRoomLock({ locked: false, message: "" });
     controller.startNewGame({ fromRemote: true });
+    return;
+  }
+
+  if (payload.type === "room-rule" && payload.game && payload.mode) {
+    const controller = controllerOf(payload.game);
+    if (!controller?.setRoomRuleMode) return;
+    roomSession.roomRuleModes[payload.game] = payload.mode === "chaos" ? "chaos" : "local";
+    controller.setRoomRuleMode(payload.mode, { fromRemote: true });
     return;
   }
 
@@ -1607,19 +1723,11 @@ function handleRoomMessage(payload, roomCode) {
   }
 
   if (payload.type === "chat") {
-    appendRoomChatMessage(payload.name || payload.from || "Player", payload.text || "");
+    pushRoomChatMessage({
+      name: payload.name || "Player",
+      text: payload.text,
+    });
     return;
-  }
-
-  if (payload.type === "error") {
-    const code = String(payload.code || "");
-    if (code === "MUTED") {
-      setLobbyMessage(tr("roomChatMuted"));
-      return;
-    }
-    if (code.startsWith("RATE_LIMIT_")) {
-      setLobbyMessage(tr("roomChatRateLimited"));
-    }
   }
 
   if (payload.type === "snapshot" && payload.game && payload.snapshot) {
@@ -1662,6 +1770,7 @@ async function attachRoom(roomCode, role, playerName, options = {}) {
   roomSession.spectateIntent = Boolean(options?.spectate);
   roomSession.pendingInviteToken = String(options?.inviteToken || "").trim();
   roomSession.rematchVotes = new Set();
+  roomSession.roomChatMessages = [];
   roomSession.spectatorChatMessages = [];
 
   setConnectionState("connecting");
@@ -1676,9 +1785,6 @@ async function attachRoom(roomCode, role, playerName, options = {}) {
   }
 
   const ok = await connectRoomTransport({ roomCode, role, reconnecting: false });
-  if (ok) {
-    stripInviteTokenFromAddressBar();
-  }
   if (ok && options?.quickJoin) {
     postRoomMessage({
       type: "quick-join",
@@ -1750,70 +1856,6 @@ playFitPuzzleBtn?.addEventListener("click", () => {
   currentGameKey = "fitPuzzle";
   showGameScreen("fitPuzzle");
   controllerOf("fitPuzzle")?.enterStandby?.();
-});
-
-openCardListBtn?.addEventListener("click", () => {
-  closeRoom();
-  configureAllStandardModes();
-  setCardListMessage("");
-  showCardListScreen();
-});
-
-cardListBackBtn?.addEventListener("click", () => {
-  setCardListMessage("");
-  showMenuScreen();
-});
-
-cardListUnoBtn?.addEventListener("click", () => {
-  closeRoom();
-  configureAllStandardModes();
-  setCardListMessage("");
-  currentGameKey = "uno";
-  showGameScreen("uno");
-  controllerOf("uno")?.enterStandby?.();
-});
-
-cardListSolitaireBtn?.addEventListener("click", () => {
-  closeRoom();
-  configureAllStandardModes();
-  setCardListMessage("");
-  currentGameKey = "solitaire";
-  showGameScreen("solitaire");
-  const solitaireController = controllerOf("solitaire");
-  solitaireController?.configureStandardMode?.();
-  solitaireController?.enterStandby?.();
-});
-
-cardListSevensBtn?.addEventListener("click", () => {
-  setCardListMessage("7並べはこの一覧からの起動対応を順次反映中です");
-});
-
-cardListDaifugoBtn?.addEventListener("click", () => {
-  setCardListMessage("大富豪はこの一覧からの起動対応を順次反映中です");
-});
-
-cardListNumeronBtn?.addEventListener("click", () => {
-  setCardListMessage("NUMERONはこの一覧からの起動対応を順次反映中です");
-});
-
-openCasinoListBtn?.addEventListener("click", () => {
-  closeRoom();
-  configureAllStandardModes();
-  setCasinoListMessage("");
-  showCasinoListScreen();
-});
-
-casinoListBackBtn?.addEventListener("click", () => {
-  setCasinoListMessage("");
-  showMenuScreen();
-});
-
-casinoListBlackjackBtn?.addEventListener("click", () => {
-  setCasinoListMessage("ブラックジャックはこの一覧からの起動対応を順次反映中です");
-});
-
-casinoListPokerBtn?.addEventListener("click", () => {
-  setCasinoListMessage("ポーカーはこの一覧からの起動対応を順次反映中です");
 });
 
 playSolitaireSingleBtn?.addEventListener("click", () => {
@@ -1899,7 +1941,8 @@ lobbyStartOthelloBtn?.addEventListener("click", () => {
   }
 
   roomSession.selectedGame = "othello";
-  postRoomMessage({ type: "select-game", game: "othello" });
+  roomSession.roomRuleModes.othello = roomSession.roomRuleModes?.othello === "chaos" ? "chaos" : "local";
+  postRoomMessage({ type: "select-game", game: "othello", mode: roomSession.roomRuleModes.othello });
   enterRoomGame("othello");
 });
 
@@ -1984,32 +2027,18 @@ lobbyBackBtn?.addEventListener("click", () => {
   showMenuScreen();
 });
 
-lobbySwitchSpectateBtn?.addEventListener("click", () => {
-  if (!roomSession.code) return;
-
-  const code = roomSession.code;
-  const name = roomSession.playerName;
-  const switchToSpectator = roomSession.role !== "spectator";
-  const nextRole = switchToSpectator ? "spectator" : "guest";
-  void attachRoom(code, nextRole, name, {
-    spectate: switchToSpectator,
-    quickMatchMode: roomSession.quickMatchMode,
-    roomPublic: roomSession.roomVisibility === "public",
-    inviteToken: roomSession.pendingInviteToken,
-  });
-});
-
 globalRematchBtn?.addEventListener("click", () => {
   if (!roomSession.code || !roomSession.activeGame || isSpectator()) return;
-  if (roomSession.rematchVotes.has(peerId)) {
-    postRoomMessage({ type: "rematch-unvote", game: roomSession.activeGame });
-    roomSession.rematchVotes.delete(peerId);
-  } else {
-    postRoomMessage({ type: "rematch-vote", game: roomSession.activeGame });
-    roomSession.rematchVotes.add(peerId);
-  }
+  postRoomMessage({ type: "rematch-vote", game: roomSession.activeGame });
+  roomSession.rematchVotes.add(peerId);
   setRematchVoteMessage(roomSession.rematchVotes.size, 2);
   updateRematchButtonVisibility();
+});
+
+globalRoomBackBtn?.addEventListener("click", () => {
+  if (!roomSession.code) return;
+  if (!window.confirm(tr("confirmBackToRoom"))) return;
+  returnToRoomLobbyFromGame();
 });
 
 copyInviteLinkBtn?.addEventListener("click", async () => {
@@ -2031,25 +2060,20 @@ spectatorChatSendBtn?.addEventListener("click", () => {
   if (spectatorChatInput) spectatorChatInput.value = "";
 });
 
-spectatorChatInput?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter") return;
-  event.preventDefault();
-  spectatorChatSendBtn?.click();
-});
-
 roomChatSendBtn?.addEventListener("click", () => {
-  if (!roomSession.code || roomSession.role === "spectator") return;
-  const text = String(roomChatInput?.value || "").trim().slice(0, 200);
+  if (!roomSession.code || isSpectator()) return;
+  const text = String(roomChatInput?.value || "").trim();
   if (!text) return;
-  const messageId = createRoomMessageId();
+  const messageId = (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  const trimmed = text.slice(0, 200);
   postRoomMessage({
     type: "chat",
     room: roomSession.code,
     name: roomSession.playerName,
-    text,
+    text: trimmed,
     messageId,
   });
-  appendRoomChatMessage(roomSession.playerName, text);
+  pushRoomChatMessage({ name: roomSession.playerName, text: trimmed });
   if (roomChatInput) roomChatInput.value = "";
 });
 
@@ -2057,6 +2081,12 @@ roomChatInput?.addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
   event.preventDefault();
   roomChatSendBtn?.click();
+});
+
+spectatorChatInput?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  spectatorChatSendBtn?.click();
 });
 
 roomCodeInput?.addEventListener("input", () => {
@@ -2078,85 +2108,107 @@ langSelect?.addEventListener("change", () => {
 
 entryLoginBtn?.addEventListener("click", async () => {
   setEntryActionButtonsVisible(false);
+  setEntryMessage("接続を確認中...");
+  startEntryConnectGauge();
 
-  const userId = String(entryCloudUserIdInput?.value || "").trim();
-  const password = String(entryCloudPasswordInput?.value || "");
-  if (!userId || !password) {
-    setEntryMessage(tr("cloudAuthInvalid"));
+  try {
+    const userId = String(entryCloudUserIdInput?.value || "").trim();
+    const password = String(entryCloudPasswordInput?.value || "");
+    if (!userId || !password) {
+      setEntryMessage(tr("cloudAuthInvalid"));
+      return;
+    }
+
+    if (!window.confirm(tr("loginConfirmPrompt"))) {
+      setEntryMessage(tr("loginCanceled"));
+      return;
+    }
+
+    const check = await withTimeout(
+      verifyCloudAuth(userId, password),
+      LOGIN_FLOW_TIMEOUT_MS,
+      "Login timeout",
+    );
+    if (!check.ok) {
+      const key = check.reason === "duplicate"
+        ? "cloudIdDuplicateWarn"
+        : check.reason === "notFound"
+          ? "cloudUserNotFound"
+          : "cloudCheckFailed";
+      setEntryMessage(tr(key));
+      return;
+    }
+
+    const cloudName = check.profile?.playerName ? normalizeName(check.profile.playerName) : "";
+    if (cloudName) {
+      setPlayerName(cloudName);
+    } else {
+      void syncPlayerNameToCloud(userId, password, check.profile).catch(() => {});
+    }
+
+    localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
+    localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+    if (cloudUserIdInput) cloudUserIdInput.value = userId;
+    if (cloudPasswordInput) cloudPasswordInput.value = password;
+    setEntryMessage("");
+    showMenuScreen();
+    setMenuMessage(tr("cloudAuthSaved"));
+  } catch {
+    setEntryMessage(tr("cloudCheckFailed"));
+  } finally {
+    stopEntryConnectGauge();
     setEntryActionButtonsVisible(true);
-    return;
   }
-
-  if (!window.confirm(tr("loginConfirmPrompt"))) {
-    setEntryMessage(tr("loginCanceled"));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const check = await verifyCloudAuth(userId, password);
-  if (!check.ok) {
-    const key = check.reason === "duplicate"
-      ? "cloudIdDuplicateWarn"
-      : (check.reason === "not_found" ? "cloudUserNotFound" : "cloudCheckFailed");
-    setEntryMessage(tr(key));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const cloudName = check.profile?.playerName ? normalizeName(check.profile.playerName) : "";
-  if (cloudName) {
-    setPlayerName(cloudName);
-  } else {
-    await syncPlayerNameToCloud(userId, password, check.profile);
-  }
-
-  localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
-  localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
-  if (cloudUserIdInput) cloudUserIdInput.value = userId;
-  if (cloudPasswordInput) cloudPasswordInput.value = password;
-  setEntryMessage("");
-  showMenuScreen();
-  setMenuMessage(tr("cloudAuthSaved"));
 });
 
 entryRegisterBtn?.addEventListener("click", async () => {
   setEntryActionButtonsVisible(false);
+  setEntryMessage("接続を確認中...");
+  startEntryConnectGauge();
 
-  const userId = String(entryCloudUserIdInput?.value || "").trim();
-  const password = String(entryCloudPasswordInput?.value || "");
-  if (!userId || !password) {
-    setEntryMessage(tr("cloudAuthInvalid"));
+  try {
+    const userId = String(entryCloudUserIdInput?.value || "").trim();
+    const password = String(entryCloudPasswordInput?.value || "");
+    if (!userId || !password) {
+      setEntryMessage(tr("cloudAuthInvalid"));
+      return;
+    }
+
+    if (!window.confirm(tr("registerConfirmPrompt"))) {
+      setEntryMessage(tr("registerCanceled"));
+      return;
+    }
+
+    const registered = await withTimeout(
+      registerCloudAuth(userId, password),
+      LOGIN_FLOW_TIMEOUT_MS,
+      "Register timeout",
+    );
+    if (!registered.ok) {
+      setEntryMessage(tr(registered.reason === "duplicate" ? "cloudIdDuplicateWarn" : "cloudCheckFailed"));
+      return;
+    }
+
+    const cloudName = registered.profile?.playerName ? normalizeName(registered.profile.playerName) : "";
+    if (cloudName) {
+      setPlayerName(cloudName);
+    } else {
+      void syncPlayerNameToCloud(userId, password, registered.profile).catch(() => {});
+    }
+
+    localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
+    localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+    if (cloudUserIdInput) cloudUserIdInput.value = userId;
+    if (cloudPasswordInput) cloudPasswordInput.value = password;
+    setEntryMessage("");
+    showMenuScreen();
+    setMenuMessage(tr("registerSucceeded"));
+  } catch {
+    setEntryMessage(tr("cloudCheckFailed"));
+  } finally {
+    stopEntryConnectGauge();
     setEntryActionButtonsVisible(true);
-    return;
   }
-
-  if (!window.confirm(tr("registerConfirmPrompt"))) {
-    setEntryMessage(tr("registerCanceled"));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const created = await registerCloudAuth(userId, password);
-  if (!created.ok) {
-    setEntryMessage(tr(created.reason === "duplicate" ? "registerDuplicate" : "cloudCheckFailed"));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const cloudName = created.profile?.playerName ? normalizeName(created.profile.playerName) : "";
-  if (cloudName) {
-    setPlayerName(cloudName);
-  } else {
-    await syncPlayerNameToCloud(userId, password, created.profile);
-  }
-
-  localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
-  localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
-  if (cloudUserIdInput) cloudUserIdInput.value = userId;
-  if (cloudPasswordInput) cloudPasswordInput.value = password;
-  setEntryMessage("");
-  showMenuScreen();
-  setMenuMessage(tr("registerSuccess"));
 });
 
 entryGuestBtn?.addEventListener("click", () => {
@@ -2189,10 +2241,7 @@ saveCloudAuthBtn?.addEventListener("click", async () => {
 
   const check = await verifyCloudAuth(userId, password);
   if (!check.ok) {
-    const key = check.reason === "duplicate"
-      ? "cloudIdDuplicateWarn"
-      : (check.reason === "not_found" ? "cloudUserNotFound" : "cloudCheckFailed");
-    setMenuMessage(tr(key));
+    setMenuMessage(tr(check.reason === "duplicate" ? "cloudIdDuplicateWarn" : "cloudCheckFailed"));
     return;
   }
 

@@ -1,5 +1,3 @@
-import { readStoredAuth, scopedStorageKey } from "./userScopedStorage.js";
-
 const SIZE = 8;
 const EMPTY = 0;
 const BLACK = 1;
@@ -10,11 +8,9 @@ const LEARNING_CELL_CLAMP = 24;
 const LEARNING_REWARD = 0.35;
 const TT_MAX_ENTRIES = 120000;
 const CPU_THINK_DELAY_MAX_MS = 360;
-const CORNER_SACRIFICE_DESTROY_COUNT = 3;
-const NO_CORNER_SACRIFICE_COUNT = 2;
-const NO_CORNER_DESTROY_COUNT = 1;
 const ITERATIVE_SEARCH_BUDGET_MAX_MS = 420;
 const ENDGAME_SEARCH_BUDGET_MAX_MS = 620;
+const CHAOS_OVERWRITE_BASE = 3;
 const ITERATIVE_SEARCH_MAX_NODES = 42000;
 const ENDGAME_SEARCH_MAX_NODES = 140000;
 const OPENING_BOOK_PRIORITY = [
@@ -183,31 +179,12 @@ const DIRECTIONS = [
   [1, 1],
 ];
 
-const HANDICAP_PATTERNS = {
-  none: [],
-  immutable1: [],
-};
-
 function createZeroMatrix() {
   return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => 0));
 }
 
-function createFalseMatrix() {
-  return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => false));
-}
-
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
-}
-
-function normalizeBooleanMatrix(matrix) {
-  if (!Array.isArray(matrix) || matrix.length !== SIZE) return createFalseMatrix();
-  return matrix.map((line) => {
-    if (!Array.isArray(line) || line.length !== SIZE) {
-      return Array.from({ length: SIZE }, () => false);
-    }
-    return line.map((value) => Boolean(value));
-  });
 }
 
 function createDefaultLearning() {
@@ -220,17 +197,7 @@ function createDefaultLearning() {
 
 function loadLearningState() {
   try {
-    const auth = readStoredAuth();
-    const scopedKey = scopedStorageKey(OTHELLO_LEARNING_KEY, auth?.userId || "");
-    let raw = localStorage.getItem(scopedKey);
-    if (!raw) {
-      // Migrate the pre-user-scoped learning cache on first read.
-      const legacy = localStorage.getItem(OTHELLO_LEARNING_KEY);
-      if (legacy) {
-        raw = legacy;
-        localStorage.setItem(scopedKey, legacy);
-      }
-    }
+    const raw = localStorage.getItem(OTHELLO_LEARNING_KEY);
     if (!raw) return createDefaultLearning();
     const parsed = JSON.parse(raw);
 
@@ -263,9 +230,7 @@ function loadLearningState() {
 
 function saveLearningState(learning) {
   try {
-    const auth = readStoredAuth();
-    const scopedKey = scopedStorageKey(OTHELLO_LEARNING_KEY, auth?.userId || "");
-    localStorage.setItem(scopedKey, JSON.stringify(learning));
+    localStorage.setItem(OTHELLO_LEARNING_KEY, JSON.stringify(learning));
   } catch {
     // Ignore storage errors to keep gameplay uninterrupted.
   }
@@ -376,68 +341,29 @@ export function initGame(options = {}) {
   const difficultySelect = document.getElementById("difficultySelect");
   const difficultyCurrentTextEl = document.getElementById("difficultyCurrentText");
   const turnOrderSelect = document.getElementById("turnOrderSelect");
-  const handicapMetric = document.getElementById("handicapMetric");
-  const handicapSelect = document.getElementById("handicapSelect");
-  const handicapTargetMetric = document.getElementById("handicapTargetMetric");
-  const handicapTargetSelect = document.getElementById("handicapTargetSelect");
-  const bothBlackHandicapMetric = document.getElementById("bothBlackHandicapMetric");
-  const bothWhiteHandicapMetric = document.getElementById("bothWhiteHandicapMetric");
-  const bothBlackHandicapSelect = document.getElementById("bothBlackHandicapSelect");
-  const bothWhiteHandicapSelect = document.getElementById("bothWhiteHandicapSelect");
-  const overwriteLimitMetric = document.getElementById("overwriteLimitMetric");
-  const overwriteLimitSelect = document.getElementById("overwriteLimitSelect");
-  const bothBlackOverwriteMetric = document.getElementById("bothBlackOverwriteMetric");
-  const bothWhiteOverwriteMetric = document.getElementById("bothWhiteOverwriteMetric");
-  const bothBlackOverwriteSelect = document.getElementById("bothBlackOverwriteSelect");
-  const bothWhiteOverwriteSelect = document.getElementById("bothWhiteOverwriteSelect");
-  const randomLineCountIgnoreMetric = document.getElementById("randomLineCountIgnoreMetric");
-  const randomLineCountIgnoreSelect = document.getElementById("randomLineCountIgnoreSelect");
-  const destroyLimitPanel = document.getElementById("destroyLimitPanel");
-  const destroyLimitWhitePanel = document.getElementById("destroyLimitWhitePanel");
-  const destroyLimitBlackSelect = document.getElementById("destroyLimitBlackSelect");
-  const destroyLimitWhiteSelect = document.getElementById("destroyLimitWhiteSelect");
-  const sideBlackCard = document.getElementById("sideBlackCard");
-  const sideWhiteCard = document.getElementById("sideWhiteCard");
-  const othelloSkillPanel = document.getElementById("othelloSkillPanel");
-  const immutablePlaceBtn = document.getElementById("immutablePlaceBtn");
-  const doubleActionBtn = document.getElementById("doubleActionBtn");
-  const destroySkillBtn = document.getElementById("destroySkillBtn");
   const chaosOverwriteTextEl = document.getElementById("chaosOverwriteText");
-  const doubleActionStockTextEl = document.getElementById("doubleActionStockText");
-  const i18nLang = () => (document.documentElement.getAttribute("lang") || "ja").toLowerCase();
-  const t = (ja, ko) => (i18nLang().startsWith("ko") ? ko : ja);
-
-  function normalizeOverwriteLimit(value) {
-    const parsed = Number.parseInt(String(value ?? "3"), 10);
-    if (!Number.isFinite(parsed)) return 3;
-    return clamp(parsed, 0, 8);
-  }
-
-  function normalizeDestroyLimit(value) {
-    const parsed = Number.parseInt(String(value ?? "1"), 10);
-    if (!Number.isFinite(parsed)) return 1;
-    return clamp(parsed, 0, 8);
-  }
-
-  function normalizeNonNegativeInt(value, fallback = 0, cap = 99) {
-    const parsed = Number.parseInt(String(value ?? fallback), 10);
-    if (!Number.isFinite(parsed)) return fallback;
-    return clamp(parsed, 0, cap);
-  }
-
-  function normalizeToggle(value) {
-    return String(value ?? "off").toLowerCase() === "on";
-  }
-
-  function normalizeOwnerType(value) {
-    return value === "none" || value === "white" || value === "player" || value === "opponent" || value === "both" || value === "black"
-      ? value
-      : "none";
-  }
-
-  function normalizeHandicapType(value) {
-    return HANDICAP_PATTERNS[value] ? value : "none";
-  }
+  const chaosImmutableTextEl = document.getElementById("chaosImmutableText");
+  const chaosDestroyTextEl = document.getElementById("chaosDestroyText");
+  const chaosRandomCutTextEl = document.getElementById("chaosRandomCutText");
+  const chaosHandicapPanelEl = document.getElementById("chaosHandicapPanel");
+  const chaosHandicapTargetSelect = document.getElementById("chaosHandicapTargetSelect");
+  const chaosHandicapBonusRow = document.getElementById("chaosHandicapBonusRow");
+  const chaosHandicapBonusSelect = document.getElementById("chaosHandicapBonusSelect");
+  const chaosHandicapSplitRow = document.getElementById("chaosHandicapSplitRow");
+  const chaosHandicapBonusBlackSelect = document.getElementById("chaosHandicapBonusBlackSelect");
+  const chaosHandicapBonusWhiteSelect = document.getElementById("chaosHandicapBonusWhiteSelect");
+  const chaosImmutableBonusRow = document.getElementById("chaosImmutableBonusRow");
+  const chaosImmutableBonusSelect = document.getElementById("chaosImmutableBonusSelect");
+  const chaosImmutableSplitRow = document.getElementById("chaosImmutableSplitRow");
+  const chaosImmutableBonusBlackSelect = document.getElementById("chaosImmutableBonusBlackSelect");
+  const chaosImmutableBonusWhiteSelect = document.getElementById("chaosImmutableBonusWhiteSelect");
+  const chaosDestroyBonusRow = document.getElementById("chaosDestroyBonusRow");
+  const chaosDestroyBonusSelect = document.getElementById("chaosDestroyBonusSelect");
+  const chaosDestroySplitRow = document.getElementById("chaosDestroySplitRow");
+  const chaosDestroyBonusBlackSelect = document.getElementById("chaosDestroyBonusBlackSelect");
+  const chaosDestroyBonusWhiteSelect = document.getElementById("chaosDestroyBonusWhiteSelect");
+  const chaosRandomLineExcludeToggle = document.getElementById("chaosRandomLineExcludeToggle");
+  const chaosHandicapSummaryEl = document.getElementById("chaosHandicapSummary");
 
   const state = {
     board: createInitialBoard(),
@@ -454,35 +380,27 @@ export function initGame(options = {}) {
     roomCode: null,
     roomRole: null,
     roomPlayer: BLACK,
-    roomRuleMode: "local",
     roomLocked: false,
     roomLockMessage: "",
-    roomSyncPending: false,
-    overwriteRemaining: { [BLACK]: 3, [WHITE]: 3 },
-    overwriteLimit: normalizeOverwriteLimit(overwriteLimitSelect?.value),
-    randomLineCountIgnoreEnabled: normalizeToggle(randomLineCountIgnoreSelect?.value),
-    randomLineCountIgnoreLine: null,
-    bothOverwriteLimit: {
-      [BLACK]: normalizeOverwriteLimit(bothBlackOverwriteSelect?.value ?? overwriteLimitSelect?.value),
-      [WHITE]: normalizeOverwriteLimit(bothWhiteOverwriteSelect?.value ?? overwriteLimitSelect?.value),
-    },
-    immutableDiscs: createFalseMatrix(),
-    immutablePlaceCharges: { [BLACK]: 0, [WHITE]: 0 },
-    immutablePlaceArmed: { [BLACK]: false, [WHITE]: false },
-    destroySkillArmed: { [BLACK]: false, [WHITE]: false },
-    destroySkillSelectedSelfSacrifices: { [BLACK]: [], [WHITE]: [] },
-    destroySkillRemaining: {
-      [BLACK]: normalizeDestroyLimit(destroyLimitBlackSelect?.value),
-      [WHITE]: normalizeDestroyLimit(destroyLimitWhiteSelect?.value),
-    },
-    destroySkillLimit: {
-      [BLACK]: normalizeDestroyLimit(destroyLimitBlackSelect?.value),
-      [WHITE]: normalizeDestroyLimit(destroyLimitWhiteSelect?.value),
-    },
-    firstCornerTakenBonusUsed: false,
-    doubleActionCharges: { [BLACK]: 0, [WHITE]: 0 },
-    doubleActionArmed: { [BLACK]: false, [WHITE]: false },
-    cornerLossStreak: { [BLACK]: 0, [WHITE]: 0 },
+    roomRuleMode:
+      modeSelect?.value === "chaos"
+        ? "chaos"
+        : "local",
+    overwriteRemaining: { [BLACK]: CHAOS_OVERWRITE_BASE, [WHITE]: CHAOS_OVERWRITE_BASE },
+    immutableChargesRemaining: { [BLACK]: 0, [WHITE]: 0 },
+    destroyChargesRemaining: { [BLACK]: 0, [WHITE]: 0 },
+    chaosHandicapTarget: chaosHandicapTargetSelect?.value || "none",
+    chaosHandicapBonus: Number(chaosHandicapBonusSelect?.value || 0),
+    chaosHandicapBonusBlack: Number(chaosHandicapBonusBlackSelect?.value || 0),
+    chaosHandicapBonusWhite: Number(chaosHandicapBonusWhiteSelect?.value || 0),
+    chaosImmutableBonus: Number(chaosImmutableBonusSelect?.value || 0),
+    chaosImmutableBonusBlack: Number(chaosImmutableBonusBlackSelect?.value || 0),
+    chaosImmutableBonusWhite: Number(chaosImmutableBonusWhiteSelect?.value || 0),
+    chaosDestroyBonus: Number(chaosDestroyBonusSelect?.value || 0),
+    chaosDestroyBonusBlack: Number(chaosDestroyBonusBlackSelect?.value || 0),
+    chaosDestroyBonusWhite: Number(chaosDestroyBonusWhiteSelect?.value || 0),
+    chaosRandomLineExcludeEnabled: Boolean(chaosRandomLineExcludeToggle?.checked),
+    chaosLastExcludedLine: null,
     drawVotes: { [BLACK]: false, [WHITE]: false },
     cpuPlayer: WHITE,
     playerSide: BLACK,
@@ -495,12 +413,6 @@ export function initGame(options = {}) {
     turnRemainingSec: TURN_LIMIT_SEC,
     difficulty: DIFFICULTY_SETTINGS[difficultySelect?.value] ? difficultySelect.value : "normal",
     turnOrder: turnOrderSelect?.value || "player-first",
-    handicapType: normalizeHandicapType(handicapSelect?.value),
-    handicapTarget: normalizeOwnerType(handicapTargetSelect?.value),
-    bothHandicapType: {
-      [BLACK]: normalizeHandicapType(bothBlackHandicapSelect?.value),
-      [WHITE]: normalizeHandicapType(bothWhiteHandicapSelect?.value),
-    },
   };
 
   // Always start from normal difficulty as requested.
@@ -511,24 +423,7 @@ export function initGame(options = {}) {
 
   function updateTimerText() {
     if (!turnTimerTextEl) return;
-    if (isRoomMode()) {
-      turnTimerTextEl.textContent = "残り-秒";
-      return;
-    }
     turnTimerTextEl.textContent = `残り${state.turnRemainingSec}秒`;
-  }
-
-  function getOverwriteLimitFor(player) {
-    if (state.handicapTarget === "both") {
-      return normalizeOverwriteLimit(state.bothOverwriteLimit[player]);
-    }
-    return normalizeOverwriteLimit(state.overwriteLimit);
-  }
-
-  function getDestroyLimitFor(player) {
-    const targets = new Set(resolveConfiguredOwners(state.handicapTarget));
-    if (!targets.has(player)) return 0;
-    return normalizeDestroyLimit(state.destroySkillLimit[player]);
   }
 
   function stopTurnTimer({ reset = false } = {}) {
@@ -569,7 +464,7 @@ export function initGame(options = {}) {
     stopTurnTimer();
 
     const winner = opponentOf(state.currentPlayer);
-    overlay.textContent = `時間切れ: ${outcomeTextForWinner(winner)}`;
+    overlay.textContent = `時間切れ: ${getDisplayName(winner)}の勝ち`;
     overlay.style.opacity = "1";
     messageEl.textContent = `${getDisplayName(state.currentPlayer)}が時間切れになりました`;
     render();
@@ -578,9 +473,6 @@ export function initGame(options = {}) {
   function startTurnTimer() {
     stopTurnTimer();
     if (state.gameOver || state.roomLocked) return;
-    if (isRoomMode()) {
-      return;
-    }
 
     const deadline = Date.now() + TURN_LIMIT_SEC * 1000;
     state.turnRemainingSec = TURN_LIMIT_SEC;
@@ -669,7 +561,6 @@ export function initGame(options = {}) {
   }
 
   function updateModeUiState() {
-    const hasHandicapTarget = state.handicapTarget !== "none";
     if (difficultySelect) {
       difficultySelect.disabled = isLocalMode() || isRoomMode();
     }
@@ -678,145 +569,8 @@ export function initGame(options = {}) {
       turnOrderSelect.value = state.turnOrder;
     }
     if (modeSelect) {
-      if (isRoomMode()) {
-        modeSelect.value = state.roomRuleMode === "chaos" ? "chaos" : "local";
-      } else {
-        modeSelect.value = state.gameMode;
-      }
-      modeSelect.disabled = isRoomMode() && state.roomRole !== "host";
-    }
-    if (handicapMetric) {
-      handicapMetric.classList.toggle("hidden", !isChaosMode() || !hasHandicapTarget);
-    }
-    if (handicapTargetMetric) {
-      handicapTargetMetric.classList.toggle("hidden", !isChaosMode());
-    }
-    if (handicapSelect) {
-      const shouldDisable = !hasHandicapTarget || state.handicapTarget === "both" || (isRoomMode() && state.roomRole !== "host");
-      handicapSelect.disabled = shouldDisable;
-      handicapSelect.value = state.handicapType;
-    }
-    if (handicapTargetSelect) {
-      handicapTargetSelect.disabled = isRoomMode() && state.roomRole !== "host";
-      handicapTargetSelect.value = state.handicapTarget;
-    }
-    if (bothBlackHandicapMetric) {
-      bothBlackHandicapMetric.classList.toggle("hidden", !isChaosMode() || state.handicapTarget !== "both");
-    }
-    if (bothWhiteHandicapMetric) {
-      bothWhiteHandicapMetric.classList.toggle("hidden", !isChaosMode() || state.handicapTarget !== "both");
-    }
-    if (bothBlackHandicapSelect) {
-      const shouldDisable = state.handicapTarget !== "both" || (isRoomMode() && state.roomRole !== "host");
-      bothBlackHandicapSelect.disabled = shouldDisable;
-      bothBlackHandicapSelect.value = state.bothHandicapType[BLACK];
-    }
-    if (bothWhiteHandicapSelect) {
-      const shouldDisable = state.handicapTarget !== "both" || (isRoomMode() && state.roomRole !== "host");
-      bothWhiteHandicapSelect.disabled = shouldDisable;
-      bothWhiteHandicapSelect.value = state.bothHandicapType[WHITE];
-    }
-    const visibleOwners = new Set(resolveConfiguredOwners(state.handicapTarget));
-    if (sideBlackCard) {
-      sideBlackCard.classList.toggle("hidden", !isChaosMode() || !hasHandicapTarget || !visibleOwners.has(BLACK));
-    }
-    if (sideWhiteCard) {
-      sideWhiteCard.classList.toggle("hidden", !isChaosMode() || !hasHandicapTarget || !visibleOwners.has(WHITE));
-    }
-    if (overwriteLimitMetric) {
-      overwriteLimitMetric.classList.toggle("hidden", !isChaosMode() || !hasHandicapTarget || state.handicapTarget === "both");
-    }
-    if (randomLineCountIgnoreMetric) {
-      randomLineCountIgnoreMetric.classList.toggle("hidden", !isChaosMode());
-    }
-    if (bothBlackOverwriteMetric) {
-      bothBlackOverwriteMetric.classList.toggle("hidden", !isChaosMode() || state.handicapTarget !== "both");
-    }
-    if (bothWhiteOverwriteMetric) {
-      bothWhiteOverwriteMetric.classList.toggle("hidden", !isChaosMode() || state.handicapTarget !== "both");
-    }
-    if (overwriteLimitSelect) {
-      const shouldDisable = !isChaosMode() || !hasHandicapTarget || state.handicapTarget === "both" || (isRoomMode() && state.roomRole !== "host");
-      overwriteLimitSelect.disabled = shouldDisable;
-      overwriteLimitSelect.value = String(state.overwriteLimit);
-    }
-    if (randomLineCountIgnoreSelect) {
-      const shouldDisable = !isChaosMode() || (isRoomMode() && state.roomRole !== "host");
-      randomLineCountIgnoreSelect.disabled = shouldDisable;
-      randomLineCountIgnoreSelect.value = state.randomLineCountIgnoreEnabled ? "on" : "off";
-    }
-    if (bothBlackOverwriteSelect) {
-      const shouldDisable = !isChaosMode() || state.handicapTarget !== "both" || (isRoomMode() && state.roomRole !== "host");
-      bothBlackOverwriteSelect.disabled = shouldDisable;
-      bothBlackOverwriteSelect.value = String(state.bothOverwriteLimit[BLACK]);
-    }
-    if (bothWhiteOverwriteSelect) {
-      const shouldDisable = !isChaosMode() || state.handicapTarget !== "both" || (isRoomMode() && state.roomRole !== "host");
-      bothWhiteOverwriteSelect.disabled = shouldDisable;
-      bothWhiteOverwriteSelect.value = String(state.bothOverwriteLimit[WHITE]);
-    }
-    if (destroyLimitPanel) {
-      destroyLimitPanel.classList.toggle(
-        "hidden",
-        !isChaosMode() || !hasHandicapTarget || !visibleOwners.has(BLACK),
-      );
-    }
-    if (destroyLimitWhitePanel) {
-      destroyLimitWhitePanel.classList.toggle(
-        "hidden",
-        !isChaosMode() || !hasHandicapTarget || !visibleOwners.has(WHITE),
-      );
-    }
-    if (destroyLimitBlackSelect) {
-      const shouldDisable =
-        !isChaosMode() || !hasHandicapTarget || !visibleOwners.has(BLACK) || (isRoomMode() && state.roomRole !== "host");
-      destroyLimitBlackSelect.disabled = shouldDisable;
-      destroyLimitBlackSelect.value = String(state.destroySkillLimit[BLACK]);
-    }
-    if (destroyLimitWhiteSelect) {
-      const shouldDisable =
-        !isChaosMode() || !hasHandicapTarget || !visibleOwners.has(WHITE) || (isRoomMode() && state.roomRole !== "host");
-      destroyLimitWhiteSelect.disabled = shouldDisable;
-      destroyLimitWhiteSelect.value = String(state.destroySkillLimit[WHITE]);
-    }
-    if (othelloSkillPanel) {
-      othelloSkillPanel.classList.toggle("hidden", !isChaosMode());
-    }
-    if (immutablePlaceBtn) {
-      const current = state.currentPlayer;
-      const hasImmutableSkill =
-        Boolean(state.immutablePlaceArmed[current]) || (state.immutablePlaceCharges[current] ?? 0) > 0;
-      const canActivate =
-        isChaosMode() &&
-        hasImmutableSkill &&
-        !state.gameOver &&
-        !state.roomLocked &&
-        isLocalPlayersTurn() &&
-        (state.immutablePlaceArmed[current] || (state.immutablePlaceCharges[current] ?? 0) > 0);
-      immutablePlaceBtn.disabled = !canActivate;
-      immutablePlaceBtn.classList.toggle("hidden", !isChaosMode() || !hasImmutableSkill);
-    }
-    if (destroySkillBtn) {
-      const current = state.currentPlayer;
-      const canActivate =
-        isChaosMode() &&
-        !state.gameOver &&
-        !state.roomLocked &&
-        isLocalPlayersTurn() &&
-        (state.destroySkillArmed[current] || (state.destroySkillRemaining[current] ?? 0) > 0);
-      destroySkillBtn.disabled = !canActivate;
-      destroySkillBtn.classList.toggle("hidden", !isChaosMode());
-    }
-    if (doubleActionBtn) {
-      const current = state.currentPlayer;
-      const canActivate =
-        isChaosMode() &&
-        !state.gameOver &&
-        !state.roomLocked &&
-        isLocalPlayersTurn() &&
-        (state.doubleActionArmed[current] || (state.doubleActionCharges[current] ?? 0) > 0);
-      doubleActionBtn.disabled = !canActivate;
-      doubleActionBtn.classList.toggle("hidden", !isChaosMode());
+      modeSelect.value = isRoomMode() ? state.roomRuleMode : state.gameMode;
+      modeSelect.disabled = isRoomMode() ? state.roomRole !== "host" || !state.gameOver : false;
     }
     if (startBtn) {
       startBtn.disabled = isRoomMode() && state.roomRole !== "host";
@@ -824,10 +578,170 @@ export function initGame(options = {}) {
     if (chaosOverwriteTextEl) {
       chaosOverwriteTextEl.classList.toggle("hidden", !isChaosMode());
     }
-    if (doubleActionStockTextEl) {
-      doubleActionStockTextEl.classList.toggle("hidden", !isChaosMode());
+    if (chaosImmutableTextEl) {
+      chaosImmutableTextEl.classList.toggle("hidden", !isChaosMode());
     }
+    if (chaosDestroyTextEl) {
+      chaosDestroyTextEl.classList.toggle("hidden", !isChaosMode());
+    }
+    if (chaosRandomCutTextEl) {
+      chaosRandomCutTextEl.classList.toggle("hidden", !isChaosMode());
+    }
+    if (chaosHandicapPanelEl) {
+      chaosHandicapPanelEl.classList.toggle("hidden", !isChaosMode());
+    }
+    if (chaosHandicapTargetSelect) {
+      chaosHandicapTargetSelect.disabled = !isChaosMode() || isRoomMode();
+    }
+    if (chaosHandicapBonusRow) {
+      chaosHandicapBonusRow.classList.toggle("hidden", isChaosMode() && state.chaosHandicapTarget === "both");
+    }
+    if (chaosHandicapSplitRow) {
+      chaosHandicapSplitRow.classList.toggle("hidden", !(isChaosMode() && state.chaosHandicapTarget === "both"));
+    }
+    if (chaosImmutableBonusRow) {
+      chaosImmutableBonusRow.classList.toggle("hidden", isChaosMode() && state.chaosHandicapTarget === "both");
+    }
+    if (chaosImmutableSplitRow) {
+      chaosImmutableSplitRow.classList.toggle("hidden", !(isChaosMode() && state.chaosHandicapTarget === "both"));
+    }
+    if (chaosDestroyBonusRow) {
+      chaosDestroyBonusRow.classList.toggle("hidden", isChaosMode() && state.chaosHandicapTarget === "both");
+    }
+    if (chaosDestroySplitRow) {
+      chaosDestroySplitRow.classList.toggle("hidden", !(isChaosMode() && state.chaosHandicapTarget === "both"));
+    }
+    if (chaosHandicapBonusSelect) {
+      chaosHandicapBonusSelect.disabled = !isChaosMode() || isRoomMode();
+    }
+    if (chaosHandicapBonusBlackSelect) {
+      chaosHandicapBonusBlackSelect.disabled = !isChaosMode() || isRoomMode() || state.chaosHandicapTarget !== "both";
+    }
+    if (chaosHandicapBonusWhiteSelect) {
+      chaosHandicapBonusWhiteSelect.disabled = !isChaosMode() || isRoomMode() || state.chaosHandicapTarget !== "both";
+    }
+    if (chaosImmutableBonusSelect) {
+      chaosImmutableBonusSelect.disabled = !isChaosMode() || isRoomMode();
+    }
+    if (chaosImmutableBonusBlackSelect) {
+      chaosImmutableBonusBlackSelect.disabled = !isChaosMode() || isRoomMode() || state.chaosHandicapTarget !== "both";
+    }
+    if (chaosImmutableBonusWhiteSelect) {
+      chaosImmutableBonusWhiteSelect.disabled = !isChaosMode() || isRoomMode() || state.chaosHandicapTarget !== "both";
+    }
+    if (chaosDestroyBonusSelect) {
+      chaosDestroyBonusSelect.disabled = !isChaosMode() || isRoomMode();
+    }
+    if (chaosDestroyBonusBlackSelect) {
+      chaosDestroyBonusBlackSelect.disabled = !isChaosMode() || isRoomMode() || state.chaosHandicapTarget !== "both";
+    }
+    if (chaosDestroyBonusWhiteSelect) {
+      chaosDestroyBonusWhiteSelect.disabled = !isChaosMode() || isRoomMode() || state.chaosHandicapTarget !== "both";
+    }
+    if (chaosRandomLineExcludeToggle) {
+      chaosRandomLineExcludeToggle.disabled = !isChaosMode() || isRoomMode();
+    }
+    updateChaosHandicapSummary();
     updateDifficultyIndicator();
+  }
+
+  function getChaosHandicapTargets() {
+    if (!isChaosMode()) return [];
+    const target = state.chaosHandicapTarget;
+    if (target === "black") return [BLACK];
+    if (target === "white") return [WHITE];
+    if (target === "both") return [BLACK, WHITE];
+    return [];
+  }
+
+  function applyChaosHandicapSettings() {
+    state.overwriteRemaining[BLACK] = CHAOS_OVERWRITE_BASE;
+    state.overwriteRemaining[WHITE] = CHAOS_OVERWRITE_BASE;
+    state.immutableChargesRemaining[BLACK] = 0;
+    state.immutableChargesRemaining[WHITE] = 0;
+    state.destroyChargesRemaining[BLACK] = 0;
+    state.destroyChargesRemaining[WHITE] = 0;
+
+    if (!isChaosMode()) return;
+
+    const bonus = clamp(Math.floor(Number(state.chaosHandicapBonus) || 0), 0, 3);
+    const blackBonus = clamp(Math.floor(Number(state.chaosHandicapBonusBlack) || 0), 0, 3);
+    const whiteBonus = clamp(Math.floor(Number(state.chaosHandicapBonusWhite) || 0), 0, 3);
+    const immutableBonus = clamp(Math.floor(Number(state.chaosImmutableBonus) || 0), 0, 2);
+    const immutableBlackBonus = clamp(Math.floor(Number(state.chaosImmutableBonusBlack) || 0), 0, 2);
+    const immutableWhiteBonus = clamp(Math.floor(Number(state.chaosImmutableBonusWhite) || 0), 0, 2);
+    const destroyBonus = clamp(Math.floor(Number(state.chaosDestroyBonus) || 0), 0, 2);
+    const destroyBlackBonus = clamp(Math.floor(Number(state.chaosDestroyBonusBlack) || 0), 0, 2);
+    const destroyWhiteBonus = clamp(Math.floor(Number(state.chaosDestroyBonusWhite) || 0), 0, 2);
+    if (state.chaosHandicapTarget === "both") {
+      state.overwriteRemaining[BLACK] += blackBonus;
+      state.overwriteRemaining[WHITE] += whiteBonus;
+      state.immutableChargesRemaining[BLACK] += immutableBlackBonus;
+      state.immutableChargesRemaining[WHITE] += immutableWhiteBonus;
+      state.destroyChargesRemaining[BLACK] += destroyBlackBonus;
+      state.destroyChargesRemaining[WHITE] += destroyWhiteBonus;
+      return;
+    }
+
+    getChaosHandicapTargets().forEach((player) => {
+      state.overwriteRemaining[player] += bonus;
+      state.immutableChargesRemaining[player] += immutableBonus;
+      state.destroyChargesRemaining[player] += destroyBonus;
+    });
+  }
+
+  function updateChaosHandicapSummary() {
+    if (!chaosHandicapSummaryEl) return;
+
+    const labelMap = {
+      none: "なし",
+      black: "黒",
+      white: "白",
+      both: "両者",
+    };
+    const targetLabel = labelMap[state.chaosHandicapTarget] ?? "なし";
+    const bonus = clamp(Math.floor(Number(state.chaosHandicapBonus) || 0), 0, 3);
+    const blackBonus = clamp(Math.floor(Number(state.chaosHandicapBonusBlack) || 0), 0, 3);
+    const whiteBonus = clamp(Math.floor(Number(state.chaosHandicapBonusWhite) || 0), 0, 3);
+    const immutableBonus = clamp(Math.floor(Number(state.chaosImmutableBonus) || 0), 0, 2);
+    const immutableBlackBonus = clamp(Math.floor(Number(state.chaosImmutableBonusBlack) || 0), 0, 2);
+    const immutableWhiteBonus = clamp(Math.floor(Number(state.chaosImmutableBonusWhite) || 0), 0, 2);
+    const destroyBonus = clamp(Math.floor(Number(state.chaosDestroyBonus) || 0), 0, 2);
+    const destroyBlackBonus = clamp(Math.floor(Number(state.chaosDestroyBonusBlack) || 0), 0, 2);
+    const destroyWhiteBonus = clamp(Math.floor(Number(state.chaosDestroyBonusWhite) || 0), 0, 2);
+    const randomCut = state.chaosRandomLineExcludeEnabled ? "ON" : "OFF";
+
+    const hasAnyBonus = state.chaosHandicapTarget === "both"
+      ? blackBonus > 0 || whiteBonus > 0 || immutableBlackBonus > 0 || immutableWhiteBonus > 0 || destroyBlackBonus > 0 || destroyWhiteBonus > 0
+      : bonus > 0 || immutableBonus > 0 || destroyBonus > 0;
+
+    if (targetLabel === "なし" || !hasAnyBonus) {
+      chaosHandicapSummaryEl.textContent = `適用: なし / ランダム1列無効 ${randomCut}`;
+      return;
+    }
+
+    if (state.chaosHandicapTarget === "both") {
+      chaosHandicapSummaryEl.textContent =
+        `適用: 両者 黒上書き+${blackBonus} 白上書き+${whiteBonus} 黒固定石+${immutableBlackBonus} 白固定石+${immutableWhiteBonus} 黒破壊+${destroyBlackBonus} 白破壊+${destroyWhiteBonus} / ランダム1列無効 ${randomCut}`;
+      return;
+    }
+
+    chaosHandicapSummaryEl.textContent =
+      `適用: ${targetLabel} 上書き+${bonus} 固定石+${immutableBonus} 破壊+${destroyBonus} / ランダム1列無効 ${randomCut}`;
+  }
+
+  function countPiecesWithExcludedLine(board, excludedLine = null) {
+    let black = 0;
+    let white = 0;
+    for (let row = 0; row < SIZE; row += 1) {
+      for (let col = 0; col < SIZE; col += 1) {
+        if (excludedLine?.kind === "row" && row === excludedLine.index) continue;
+        if (excludedLine?.kind === "col" && col === excludedLine.index) continue;
+        if (board[row][col] === BLACK) black += 1;
+        if (board[row][col] === WHITE) white += 1;
+      }
+    }
+    return { black, white };
   }
 
   function getDifficultySetting() {
@@ -882,305 +796,15 @@ export function initGame(options = {}) {
     return board;
   }
 
-  function resolveConfiguredOwner(ownerType) {
-    if (ownerType === "none") return null;
-    if (ownerType === "white") return WHITE;
-    if (ownerType === "player") {
-      if (state.gameMode === "cpu") return state.playerSide;
-      if (isRoomMode()) return state.roomPlayer;
-      return BLACK;
-    }
-    if (ownerType === "opponent") {
-      if (state.gameMode === "cpu") return state.cpuPlayer;
-      if (isRoomMode()) return opponentOf(state.roomPlayer);
-      return WHITE;
-    }
-    return BLACK;
-  }
-
-  function resolveConfiguredOwners(ownerType) {
-    if (ownerType === "none") {
-      return [];
-    }
-    if (ownerType === "both") {
-      return [BLACK, WHITE];
-    }
-    const owner = resolveConfiguredOwner(ownerType);
-    return owner === BLACK || owner === WHITE ? [owner] : [];
-  }
-
-  function resolveHandicapPlayers() {
-    return resolveConfiguredOwners(state.handicapTarget);
-  }
-
-  function resetImmutablePlacementState() {
-    state.immutableDiscs = createFalseMatrix();
-    state.immutablePlaceArmed[BLACK] = false;
-    state.immutablePlaceArmed[WHITE] = false;
-    state.destroySkillArmed[BLACK] = false;
-    state.destroySkillArmed[WHITE] = false;
-    state.destroySkillSelectedSelfSacrifices[BLACK] = [];
-    state.destroySkillSelectedSelfSacrifices[WHITE] = [];
-    state.immutablePlaceCharges[BLACK] = 0;
-    state.immutablePlaceCharges[WHITE] = 0;
-
-    if (!isChaosMode()) return;
-
-    if (state.handicapTarget === "both") {
-      if (state.bothHandicapType[BLACK] === "immutable1") {
-        state.immutablePlaceCharges[BLACK] = (state.immutablePlaceCharges[BLACK] ?? 0) + 1;
-      }
-      if (state.bothHandicapType[WHITE] === "immutable1") {
-        state.immutablePlaceCharges[WHITE] = (state.immutablePlaceCharges[WHITE] ?? 0) + 1;
-      }
-      return;
-    }
-
-    if (state.handicapType !== "immutable1") return;
-    const owners = resolveHandicapPlayers();
-    owners.forEach((owner) => {
-      state.immutablePlaceCharges[owner] = (state.immutablePlaceCharges[owner] ?? 0) + 1;
-    });
-  }
-
-  function applyOpeningHandicap() {
-    resetImmutablePlacementState();
-
-    const cells = HANDICAP_PATTERNS[state.handicapType] ?? HANDICAP_PATTERNS.none;
-    const owners = resolveHandicapPlayers();
-    const fallbackOwner = owners[0] ?? BLACK;
-
-    cells.forEach(([row, col], index) => {
-      state.board[row][col] = owners[index] ?? fallbackOwner;
-    });
-  }
-
-  function isImmutableDisc(row, col) {
-    return Boolean(state.immutableDiscs?.[row]?.[col]);
-  }
-
-  function isInteriorCell(row, col) {
-    return row > 0 && row < SIZE - 1 && col > 0 && col < SIZE - 1;
-  }
-
-  function canPlaceImmutableDisc(player, row, col) {
-    return (
-      isChaosMode() &&
-      ((state.immutablePlaceCharges[player] ?? 0) > 0 || state.immutablePlaceArmed[player]) &&
-      isInteriorCell(row, col) &&
-      state.board[row][col] === player &&
-      !isImmutableDisc(row, col) &&
-      (state.immutablePlaceCharges[player] ?? 0) > 0
-    );
-  }
-
-  function isDestroySacrificeCell(player, row, col) {
-    return isCorner(row, col) && state.board[row][col] === player && !isImmutableDisc(row, col);
-  }
-
-  function isDestroySelfSacrificeCell(player, row, col) {
-    return state.board[row][col] === player && !isImmutableDisc(row, col);
-  }
-
-  function isDestroyTargetCell(player, row, col) {
-    return state.board[row][col] === opponentOf(player) && !isImmutableDisc(row, col);
-  }
-
-  function countDestroyCandidates(player) {
-    const cornerSacrifices = [];
-    const selfSacrifices = [];
-    const targets = [];
-    for (let row = 0; row < SIZE; row += 1) {
-      for (let col = 0; col < SIZE; col += 1) {
-        if (isDestroySacrificeCell(player, row, col)) cornerSacrifices.push({ row, col });
-        if (isDestroySelfSacrificeCell(player, row, col)) selfSacrifices.push({ row, col });
-        if (isDestroyTargetCell(player, row, col)) targets.push({ row, col });
-      }
-    }
-    return { cornerSacrifices, selfSacrifices, targets };
-  }
-
-  function canUseDestroySkill(player) {
-    if (!isChaosMode()) return false;
-    const targetOwners = new Set(resolveConfiguredOwners(state.handicapTarget));
-    if (!targetOwners.has(player)) return false;
-    if ((state.destroySkillRemaining[player] ?? 0) <= 0) return false;
-    const { cornerSacrifices, selfSacrifices, targets } = countDestroyCandidates(player);
-    if (cornerSacrifices.length >= 1 && targets.length >= CORNER_SACRIFICE_DESTROY_COUNT) {
-      return true;
-    }
-    return (
-      cornerSacrifices.length === 0 &&
-      selfSacrifices.length >= NO_CORNER_SACRIFICE_COUNT &&
-      targets.length >= NO_CORNER_DESTROY_COUNT
-    );
-  }
-
-  function pickRandomCells(cells, count) {
-    const pool = [...cells];
-    for (let i = pool.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    return pool.slice(0, Math.max(0, count));
-  }
-
-  function executeDestroySkill(player, sacrifices, destroyedTargets, { isRemote = false } = {}) {
-    if (!Array.isArray(sacrifices) || sacrifices.length === 0 || !Array.isArray(destroyedTargets)) {
-      return false;
-    }
-    if ((state.destroySkillRemaining[player] ?? 0) <= 0) {
-      return false;
-    }
-
-    const sacrificeKeys = new Set(sacrifices.map(({ row, col }) => `${row}-${col}`));
-    if (sacrificeKeys.size !== sacrifices.length) return false;
-    const targetKeys = new Set(destroyedTargets.map(({ row, col }) => `${row}-${col}`));
-    if (targetKeys.size !== destroyedTargets.length) return false;
-
-    const { cornerSacrifices } = countDestroyCandidates(player);
-    const hasCorner = cornerSacrifices.length > 0;
-
-    if (hasCorner) {
-      if (sacrifices.length !== 1 || destroyedTargets.length !== CORNER_SACRIFICE_DESTROY_COUNT) return false;
-      const [corner] = sacrifices;
-      if (!isDestroySacrificeCell(player, corner.row, corner.col)) return false;
-    } else {
-      if (sacrifices.length !== NO_CORNER_SACRIFICE_COUNT || destroyedTargets.length !== NO_CORNER_DESTROY_COUNT) {
-        return false;
-      }
-      const validSacrifices = sacrifices.every(({ row, col }) => isDestroySelfSacrificeCell(player, row, col));
-      if (!validSacrifices) return false;
-    }
-
-    const validTargets = destroyedTargets.every(({ row, col }) => isDestroyTargetCell(player, row, col));
-    if (!validTargets) return false;
-
-    sacrifices.forEach(({ row, col }) => {
-      state.board[row][col] = EMPTY;
-    });
-    destroyedTargets.forEach(({ row, col }) => {
-      state.board[row][col] = EMPTY;
-    });
-
-    state.destroySkillArmed[player] = false;
-    state.destroySkillSelectedSelfSacrifices[player] = [];
-    state.destroySkillRemaining[player] = Math.max(0, (state.destroySkillRemaining[player] ?? 0) - 1);
-
-    if (isRoomMode() && !isRemote) {
-      options.onRoomMove?.({ action: "destroy-skill", sacrifices, destroyedTargets });
-    }
-
-    if (sacrifices.length === 1) {
-      messageEl.textContent = `${getDisplayName(player)}が角を犠牲にして敵駒3つを破壊しました（残り${state.destroySkillRemaining[player]}回）`;
-    } else {
-      messageEl.textContent = `${getDisplayName(player)}が自駒2つを犠牲にして敵駒1つを破壊しました（残り${state.destroySkillRemaining[player]}回）`;
-    }
-    nextTurnOrFinish({ forcedPlayer: player });
-    render();
-    scheduleCpuMove();
-    return true;
-  }
-
-  function handleDestroySkillClick(row, col, { isRemote = false } = {}) {
-    if (state.gameOver) return false;
-    if (!isRemote && !isLocalPlayersTurn()) return false;
-
-    const player = state.currentPlayer;
-    const armed = isRemote ? true : Boolean(state.destroySkillArmed[player]);
-    if (!armed) return false;
-
-    const { cornerSacrifices, selfSacrifices, targets } = countDestroyCandidates(player);
-    if (cornerSacrifices.length > 0) {
-      if (!isDestroySacrificeCell(player, row, col)) return false;
-      if (targets.length < CORNER_SACRIFICE_DESTROY_COUNT) return false;
-      const destroyedTargets = pickRandomCells(targets, CORNER_SACRIFICE_DESTROY_COUNT);
-      return executeDestroySkill(player, [{ row, col }], destroyedTargets, { isRemote });
-    }
-
-    if (selfSacrifices.length < NO_CORNER_SACRIFICE_COUNT || targets.length < NO_CORNER_DESTROY_COUNT) return false;
-
-    const selected = state.destroySkillSelectedSelfSacrifices[player] ?? [];
-    const selectedIndex = selected.findIndex((cell) => cell.row === row && cell.col === col);
-    const awaitingTarget = selected.length >= NO_CORNER_SACRIFICE_COUNT;
-
-    if (awaitingTarget && isDestroyTargetCell(player, row, col)) {
-      return executeDestroySkill(player, selected, [{ row, col }], { isRemote });
-    }
-
-    if (selectedIndex >= 0) {
-      const nextSelected = selected.filter((_, idx) => idx !== selectedIndex);
-      state.destroySkillSelectedSelfSacrifices[player] = nextSelected;
-      messageEl.textContent = `${getDisplayName(player)}は犠牲駒の選択を解除しました（${nextSelected.length}/${NO_CORNER_SACRIFICE_COUNT}）`;
-      render();
-      return true;
-    }
-
-    if (!isDestroySelfSacrificeCell(player, row, col)) return false;
-
-    if (selected.length >= NO_CORNER_SACRIFICE_COUNT) {
-      state.destroySkillSelectedSelfSacrifices[player] = [{ row, col }];
-      messageEl.textContent = `${getDisplayName(player)}は犠牲にする自駒をもう1つ選択してください（1/${NO_CORNER_SACRIFICE_COUNT}）`;
-      render();
-      return true;
-    }
-
-    const nextSelected = [...selected, { row, col }];
-    state.destroySkillSelectedSelfSacrifices[player] = nextSelected;
-    if (nextSelected.length < NO_CORNER_SACRIFICE_COUNT) {
-      messageEl.textContent = `${getDisplayName(player)}は犠牲にする自駒をもう1つ選択してください（${nextSelected.length}/${NO_CORNER_SACRIFICE_COUNT}）`;
-      render();
-      return true;
-    }
-
-    messageEl.textContent = `${getDisplayName(player)}は消す敵駒を1つ選択してください`;
-    render();
-    return true;
-  }
-
-  function placeImmutableDisc(row, col, { isRemote = false } = {}) {
-    if (state.gameOver) return;
-    if (!isRemote && !isLocalPlayersTurn()) return;
-
-    const player = state.currentPlayer;
-    const armed = isRemote ? true : Boolean(state.immutablePlaceArmed[player]);
-    if (!armed) return;
-    if (!canPlaceImmutableDisc(player, row, col)) return;
-
-    state.immutablePlaceArmed[player] = false;
-    state.immutablePlaceCharges[player] = Math.max(0, (state.immutablePlaceCharges[player] ?? 0) - 1);
-    state.immutableDiscs[row][col] = true;
-
-    if (isRoomMode() && !isRemote) {
-      options.onRoomMove?.({ action: "immutable-place", row, col });
-    }
-
-    messageEl.textContent = `${getDisplayName(player)}が固定石を指定しました`;
-    nextTurnOrFinish({ forcedPlayer: player });
-    render();
-    scheduleCpuMove();
-  }
-
   function resetGame({ fromRemote = false } = {}) {
     clearTimeout(state.cpuTimerId);
     state.cpuTimerId = null;
     stopTurnTimer({ reset: true });
     state.board = createInitialBoard();
     applyOpeningConfig();
-    applyOpeningHandicap();
     state.gameOver = false;
-    state.overwriteRemaining[BLACK] = getOverwriteLimitFor(BLACK);
-    state.overwriteRemaining[WHITE] = getOverwriteLimitFor(WHITE);
-    state.destroySkillRemaining[BLACK] = getDestroyLimitFor(BLACK);
-    state.destroySkillRemaining[WHITE] = getDestroyLimitFor(WHITE);
-    state.firstCornerTakenBonusUsed = false;
-    state.randomLineCountIgnoreLine = null;
-    state.doubleActionCharges[BLACK] = 0;
-    state.doubleActionCharges[WHITE] = 0;
-    state.doubleActionArmed[BLACK] = false;
-    state.doubleActionArmed[WHITE] = false;
-    state.cornerLossStreak[BLACK] = 0;
-    state.cornerLossStreak[WHITE] = 0;
+    state.chaosLastExcludedLine = null;
+    applyChaosHandicapSettings();
     resetDrawVotes();
     state.cpuMovesThisGame = [];
     state.opponentModel = createZeroMatrix();
@@ -1193,11 +817,8 @@ export function initGame(options = {}) {
       overlay.textContent = "";
     }
     if (isRoomMode()) {
-      state.roomSyncPending = Boolean(fromRemote && state.roomRole !== "host");
       if (state.roomLocked) {
         messageEl.textContent = state.roomLockMessage || "対戦相手を待っています...";
-      } else if (state.roomSyncPending) {
-        messageEl.textContent = "ホストの盤面同期を待っています...";
       } else {
         messageEl.textContent =
           state.currentPlayer === state.roomPlayer ? "あなたの手番です" : "相手の手番です";
@@ -1206,7 +827,6 @@ export function initGame(options = {}) {
         options.onRoomNewGame?.();
       }
     } else {
-      state.roomSyncPending = false;
       messageEl.textContent = isLocalMode() || isChaosMode()
         ? "黒の手番です"
         : isCpuVsCpuMode()
@@ -1230,52 +850,22 @@ export function initGame(options = {}) {
     state.gameOver = true;
     state.roomLocked = false;
     state.roomLockMessage = "";
-    state.roomSyncPending = false;
-    resetImmutablePlacementState();
-    state.overwriteRemaining[BLACK] = getOverwriteLimitFor(BLACK);
-    state.overwriteRemaining[WHITE] = getOverwriteLimitFor(WHITE);
-    state.destroySkillRemaining[BLACK] = getDestroyLimitFor(BLACK);
-    state.destroySkillRemaining[WHITE] = getDestroyLimitFor(WHITE);
-    state.firstCornerTakenBonusUsed = false;
-    state.randomLineCountIgnoreLine = null;
-    state.doubleActionCharges[BLACK] = 0;
-    state.doubleActionCharges[WHITE] = 0;
-    state.doubleActionArmed[BLACK] = false;
-    state.doubleActionArmed[WHITE] = false;
-    state.cornerLossStreak[BLACK] = 0;
-    state.cornerLossStreak[WHITE] = 0;
+    state.chaosLastExcludedLine = null;
+    applyChaosHandicapSettings();
     resetDrawVotes();
     overlay.style.opacity = "1";
-    overlay.textContent = t("ゲーム開始で開始", "게임 시작으로 시작");
-    messageEl.textContent = t("開始ボタンで開始してください", "시작 버튼을 눌러 시작하세요");
+    overlay.textContent = "GAME STARTで開始";
+    messageEl.textContent = "STARTボタンで開始してください";
     updateModeUiState();
     render();
   }
 
   function getPlayerName(player) {
-    return player === BLACK ? t("黒", "흑") : t("白", "백");
+    return player === BLACK ? "BLACK" : "WHITE";
   }
 
   function getDisplayName(player) {
-    return player === BLACK ? t("黒", "흑") : t("白", "백");
-  }
-
-  function outcomeName(player) {
-    if (isRoomMode()) {
-      return player === state.roomPlayer ? "あなた" : "相手";
-    }
-    if (isCpuVsCpuMode()) {
-      return `${getDisplayName(player)}CPU`;
-    }
-    if (isHumanVsCpuMode()) {
-      return player === state.cpuPlayer ? "CPU" : "あなた";
-    }
-    return getDisplayName(player);
-  }
-
-  function outcomeTextForWinner(winner) {
-    const loser = opponentOf(winner);
-    return `${outcomeName(winner)}: 勝ち / ${outcomeName(loser)}: 負け`;
+    return player === BLACK ? "黒" : "白";
   }
 
   function resetDrawVotes() {
@@ -1314,23 +904,8 @@ export function initGame(options = {}) {
       return;
     }
 
-    if (isRoomMode() && (state.roomPlayer === BLACK || state.roomPlayer === WHITE)) {
-      const opponent = opponentOf(state.roomPlayer);
-      if (state.drawVotes[opponent] && !state.drawVotes[state.roomPlayer]) {
-        messageEl.textContent = t(
-          "相手が再戦を希望しています。再戦ボタンで同意してください",
-          "상대가 재대전을 요청했습니다. 재대전 버튼으로 동의하세요",
-        );
-      } else if (state.drawVotes[state.roomPlayer] && !state.drawVotes[opponent]) {
-        messageEl.textContent = "リメイク希望を送信しました。相手の同意待ちです";
-      } else {
-        const waitingFor = state.drawVotes[BLACK] ? WHITE : BLACK;
-        messageEl.textContent = `${getDisplayName(waitingFor)}の投票待ちです`;
-      }
-    } else {
-      const waitingFor = state.drawVotes[BLACK] ? WHITE : BLACK;
-      messageEl.textContent = `${getDisplayName(waitingFor)}の投票待ちです`;
-    }
+    const waitingFor = state.drawVotes[BLACK] ? WHITE : BLACK;
+    messageEl.textContent = `${getDisplayName(waitingFor)}の投票待ちです`;
     render();
   }
 
@@ -1395,7 +970,6 @@ export function initGame(options = {}) {
     const cell = board[row][col];
     const isOverwrite =
       allowChaosOverwrite && isChaosMode() && cell === opponent && (state.overwriteRemaining[player] ?? 0) > 0;
-    if (isOverwrite && isImmutableDisc(row, col)) return null;
     if (cell !== EMPTY && !isOverwrite) return null;
 
     const flips = [];
@@ -1462,39 +1036,6 @@ export function initGame(options = {}) {
     return empty;
   }
 
-  function normalizeRandomLineCountIgnoreLine(value) {
-    if (!value || typeof value !== "object") return null;
-    const axis = value.axis === "col" ? "col" : value.axis === "row" ? "row" : null;
-    if (!axis) return null;
-    const index = normalizeNonNegativeInt(value.index, -1, SIZE - 1);
-    if (index < 0 || index >= SIZE) return null;
-    return { axis, index };
-  }
-
-  function pickRandomLineForCountIgnore() {
-    return {
-      axis: Math.random() < 0.5 ? "row" : "col",
-      index: Math.floor(Math.random() * SIZE),
-    };
-  }
-
-  function countPiecesWithIgnoredLine(board, ignoredLine) {
-    if (!ignoredLine) return countPieces(board);
-
-    let black = 0;
-    let white = 0;
-    for (let row = 0; row < SIZE; row += 1) {
-      for (let col = 0; col < SIZE; col += 1) {
-        if (ignoredLine.axis === "row" && row === ignoredLine.index) continue;
-        if (ignoredLine.axis === "col" && col === ignoredLine.index) continue;
-        if (board[row][col] === BLACK) black += 1;
-        if (board[row][col] === WHITE) white += 1;
-      }
-    }
-
-    return { black, white };
-  }
-
   function estimateStableEdgeDiscs(board, owner) {
     let stable = 0;
 
@@ -1529,7 +1070,6 @@ export function initGame(options = {}) {
     const next = cloneBoard(board);
     next[move.row][move.col] = player;
     move.flips.forEach(([r, c]) => {
-      if (isImmutableDisc(r, c)) return;
       next[r][c] = player;
     });
     return next;
@@ -1590,50 +1130,35 @@ export function initGame(options = {}) {
     blackCountEl.textContent = String(black);
     whiteCountEl.textContent = String(white);
     turnTextEl.textContent = getPlayerName(state.currentPlayer);
-
-    let visibleCounterPlayer = state.currentPlayer;
-    if (isRoomMode()) {
-      visibleCounterPlayer = state.roomPlayer;
-    } else if (state.gameMode === "cpu") {
-      visibleCounterPlayer = state.playerSide;
-    }
-
     if (chaosOverwriteTextEl) {
       if (isChaosMode()) {
-        const remain = state.overwriteRemaining[visibleCounterPlayer] ?? 0;
+        const remain = state.overwriteRemaining[state.currentPlayer] ?? 0;
         chaosOverwriteTextEl.textContent = `上書き残り: ${remain}`;
       } else {
         chaosOverwriteTextEl.textContent = "上書き残り: -";
       }
     }
-    if (doubleActionStockTextEl) {
+    if (chaosImmutableTextEl) {
       if (isChaosMode()) {
-        const stock = state.doubleActionCharges[visibleCounterPlayer] ?? 0;
-        const armed = state.doubleActionArmed[visibleCounterPlayer] ? "（発動予約中）" : "";
-        doubleActionStockTextEl.textContent = `2回行動: ${stock}${armed}`;
+        const remain = state.immutableChargesRemaining[state.currentPlayer] ?? 0;
+        chaosImmutableTextEl.textContent = `固定石チャージ: ${remain}`;
       } else {
-        doubleActionStockTextEl.textContent = "2回行動: -";
+        chaosImmutableTextEl.textContent = "固定石チャージ: -";
       }
     }
-    updateRemakeRequestUi();
-    updateModeUiState();
-  }
-
-  function updateRemakeRequestUi() {
-    if (!remakeBtn) return;
-    const defaultLabel = t("リメイク", "리메이크");
-    remakeBtn.dataset.defaultLabel = defaultLabel;
-
-    let opponentRequested = false;
-    if (isRoomMode() && (state.roomPlayer === BLACK || state.roomPlayer === WHITE)) {
-      const opponent = opponentOf(state.roomPlayer);
-      opponentRequested = Boolean(state.drawVotes[opponent]) && !Boolean(state.drawVotes[state.roomPlayer]);
+    if (chaosDestroyTextEl) {
+      if (isChaosMode()) {
+        const remain = state.destroyChargesRemaining[state.currentPlayer] ?? 0;
+        chaosDestroyTextEl.textContent = `駒破壊残り: ${remain}`;
+      } else {
+        chaosDestroyTextEl.textContent = "駒破壊残り: -";
+      }
     }
-
-    remakeBtn.classList.toggle("remake-requested-by-opponent", opponentRequested);
-    remakeBtn.textContent = opponentRequested
-      ? `${defaultLabel} !`
-      : defaultLabel;
+    if (chaosRandomCutTextEl) {
+      chaosRandomCutTextEl.textContent = isChaosMode() && state.chaosRandomLineExcludeEnabled
+        ? "終局ランダム1列無効: ON"
+        : "終局ランダム1列無効: OFF";
+    }
   }
 
   function isCpuTurn() {
@@ -1644,7 +1169,7 @@ export function initGame(options = {}) {
 
   function isLocalPlayersTurn() {
     if (isRoomMode()) {
-      return !state.roomLocked && !state.roomSyncPending && state.currentPlayer === state.roomPlayer;
+      return !state.roomLocked && state.currentPlayer === state.roomPlayer;
     }
     if (isChaosMode()) return true;
     if (isLocalMode()) return true;
@@ -1656,53 +1181,34 @@ export function initGame(options = {}) {
     clearTimeout(state.cpuTimerId);
     state.cpuTimerId = null;
     stopTurnTimer();
-    let ignoredLine = null;
-    if (isChaosMode() && state.randomLineCountIgnoreEnabled) {
-      ignoredLine = normalizeRandomLineCountIgnoreLine(state.randomLineCountIgnoreLine) ?? pickRandomLineForCountIgnore();
-      state.randomLineCountIgnoreLine = ignoredLine;
-    } else {
-      state.randomLineCountIgnoreLine = null;
+    let excludedLine = null;
+    if (isChaosMode() && state.chaosRandomLineExcludeEnabled) {
+      const kind = Math.random() < 0.5 ? "row" : "col";
+      const index = Math.floor(Math.random() * SIZE);
+      excludedLine = { kind, index };
     }
-    const { black, white } = countPiecesWithIgnoredLine(state.board, ignoredLine);
+    state.chaosLastExcludedLine = excludedLine;
+    const { black, white } = countPiecesWithExcludedLine(state.board, excludedLine);
 
     applyOutcomeLearning(white > black, white === black);
 
-    if (black > white) {
-      overlay.textContent = `ゲーム終了: ${outcomeTextForWinner(BLACK)} (${black} - ${white})`;
-    } else if (white > black) {
-      overlay.textContent = `ゲーム終了: ${outcomeTextForWinner(WHITE)} (${white} - ${black})`;
-    } else {
-      overlay.textContent = `ゲーム終了: 引き分け (${black} - ${white})`;
-    }
+    const excludedText = excludedLine
+      ? ` / 無効: ${excludedLine.kind === "row" ? "行" : "列"}${excludedLine.index + 1}`
+      : "";
 
-    if (ignoredLine) {
-      const lineLabel = ignoredLine.axis === "row" ? `横${ignoredLine.index + 1}列` : `縦${ignoredLine.index + 1}列`;
-      overlay.textContent += ` / ${lineLabel}はカウント対象外`;
+    if (black > white) {
+      overlay.textContent = `ゲーム終了: 黒の勝ち (${black} - ${white})${excludedText}`;
+    } else if (white > black) {
+      overlay.textContent = `ゲーム終了: 白の勝ち (${white} - ${black})${excludedText}`;
+    } else {
+      overlay.textContent = `ゲーム終了: 引き分け (${black} - ${white})${excludedText}`;
     }
 
     overlay.style.opacity = "1";
-    messageEl.textContent = t("ゲーム開始で再開できます", "게임 시작으로 재개할 수 있습니다");
+    messageEl.textContent = "GAME STARTで再開できます";
   }
 
-  function nextTurnOrFinish({ preferSamePlayer = false, forcedPlayer = state.currentPlayer } = {}) {
-    // In chaos mode, overwrite can keep producing legal moves on a full board.
-    // Match requested behavior: once the board is full, decide the winner immediately.
-    if (countEmptyCells(state.board) === 0) {
-      endGame();
-      return;
-    }
-
-    if (preferSamePlayer) {
-      const sameMoves = getValidMoves(state.board, forcedPlayer, { allowChaosOverwrite: isChaosMode() });
-      if (sameMoves.length > 0) {
-        state.currentPlayer = forcedPlayer;
-        startTurnTimer();
-        messageEl.textContent = `${getDisplayName(state.currentPlayer)}の2回行動が発動しました`;
-        return;
-      }
-    }
-
-    state.currentPlayer = forcedPlayer;
+  function nextTurnOrFinish() {
     const opponent = opponentOf(state.currentPlayer);
     const opponentMoves = getValidMoves(state.board, opponent, { allowChaosOverwrite: isChaosMode() });
 
@@ -1739,56 +1245,14 @@ export function initGame(options = {}) {
     }
     state.board[row][col] = player;
     flips.forEach(([r, c]) => {
-      if (isImmutableDisc(r, c)) return;
       state.board[r][c] = player;
     });
-  }
-
-  function applyFirstCornerTakenBonus(player, row, col) {
-    if (!isChaosMode()) return;
-    if (state.firstCornerTakenBonusUsed) return;
-    if (!isCorner(row, col)) return;
-
-    const bonusOwner = opponentOf(player);
-    state.overwriteRemaining[bonusOwner] = (state.overwriteRemaining[bonusOwner] ?? 0) + 1;
-    state.firstCornerTakenBonusUsed = true;
-  }
-
-  function applyConsecutiveCornerLossBonus(player, row, col) {
-    if (!isChaosMode()) return;
-    if (!isCorner(row, col)) return;
-
-    const victim = opponentOf(player);
-    state.cornerLossStreak[victim] = (state.cornerLossStreak[victim] ?? 0) + 1;
-    state.cornerLossStreak[player] = 0;
-
-    while (state.cornerLossStreak[victim] >= 2) {
-      state.doubleActionCharges[victim] = (state.doubleActionCharges[victim] ?? 0) + 1;
-      state.cornerLossStreak[victim] -= 2;
-    }
-  }
-
-  function consumeDoubleActionForMove(player, { isRemote = false, useDoubleAction = false } = {}) {
-    if (!isChaosMode()) return false;
-
-    const shouldUse = isRemote ? Boolean(useDoubleAction) : Boolean(state.doubleActionArmed[player]);
-    if (!shouldUse) return false;
-
-    if ((state.doubleActionCharges[player] ?? 0) <= 0) {
-      state.doubleActionArmed[player] = false;
-      return false;
-    }
-
-    state.doubleActionCharges[player] = Math.max(0, (state.doubleActionCharges[player] ?? 0) - 1);
-    state.doubleActionArmed[player] = false;
-    return true;
   }
 
   function simulateBoardAfterMove(board, move, player) {
     const next = cloneBoard(board);
     next[move.row][move.col] = player;
     move.flips.forEach(([r, c]) => {
-      if (isImmutableDisc(r, c)) return;
       next[r][c] = player;
     });
     return next;
@@ -2270,25 +1734,16 @@ export function initGame(options = {}) {
     stopTurnTimer();
   }
 
-  function syncRoomSnapshotIfHost() {
-    if (!isRoomMode() || state.roomRole !== "host") return;
-    options.onRoomSnapshot?.();
-  }
-
-  function handleMove(row, col, { isRemote = false, useDoubleAction = false } = {}) {
+  function handleMove(row, col, { isRemote = false } = {}) {
     if (state.gameOver) return;
     if (!isRemote && !isLocalPlayersTurn()) return;
 
-    const movePlayer = state.currentPlayer;
     const move = getMoveCandidate(state.board, row, col, state.currentPlayer, {
       allowChaosOverwrite: isChaosMode(),
     });
     if (!move) return;
 
-    const consumedDoubleAction = consumeDoubleActionForMove(movePlayer, { isRemote, useDoubleAction });
     placeMove(row, col, state.currentPlayer, move.flips, { isOverwrite: Boolean(move.isOverwrite) });
-    applyFirstCornerTakenBonus(state.currentPlayer, row, col);
-    applyConsecutiveCornerLossBonus(state.currentPlayer, row, col);
     if (isChaosMode() && move.isOverwrite) {
       const remain = state.overwriteRemaining[state.currentPlayer];
       messageEl.textContent = `上書きを使用しました（残り${remain}回）`;
@@ -2297,10 +1752,10 @@ export function initGame(options = {}) {
       recordPlayerMove(row, col);
     }
     if (isRoomMode() && !isRemote) {
-      options.onRoomMove?.({ row, col, useDoubleAction: consumedDoubleAction });
+      options.onRoomMove?.({ row, col });
     }
 
-    nextTurnOrFinish({ preferSamePlayer: consumedDoubleAction, forcedPlayer: movePlayer });
+    nextTurnOrFinish();
     render();
     scheduleCpuMove();
   }
@@ -2309,24 +1764,7 @@ export function initGame(options = {}) {
     boardEl.innerHTML = "";
     const validMoves = getValidMoves(state.board, state.currentPlayer, { allowChaosOverwrite: isChaosMode() });
     const validSet = new Set(validMoves.map((m) => `${m.row}-${m.col}`));
-    const ignoredLineForDisplay = state.gameOver
-      ? normalizeRandomLineCountIgnoreLine(state.randomLineCountIgnoreLine)
-      : null;
     const showValid = !state.gameOver && isLocalPlayersTurn();
-    const canPlaceImmutableNow =
-      !state.gameOver &&
-      isLocalPlayersTurn() &&
-      Boolean(state.immutablePlaceArmed[state.currentPlayer]);
-    const canUseDestroyNow =
-      !state.gameOver &&
-      isLocalPlayersTurn() &&
-      Boolean(state.destroySkillArmed[state.currentPlayer]);
-    const destroyContext = canUseDestroyNow ? countDestroyCandidates(state.currentPlayer) : null;
-    const useCornerDestroy = Boolean(destroyContext && destroyContext.cornerSacrifices.length > 0);
-    const selectedSacrificeSet = new Set(
-      (state.destroySkillSelectedSelfSacrifices[state.currentPlayer] ?? []).map(({ row, col }) => `${row}-${col}`),
-    );
-    const awaitingDestroyTarget = !useCornerDestroy && selectedSacrificeSet.size >= NO_CORNER_SACRIFICE_COUNT;
 
     for (let row = 0; row < SIZE; row += 1) {
       for (let col = 0; col < SIZE; col += 1) {
@@ -2337,46 +1775,9 @@ export function initGame(options = {}) {
 
         if (state.board[row][col] === BLACK) cell.classList.add("black");
         if (state.board[row][col] === WHITE) cell.classList.add("white");
-        if (isImmutableDisc(row, col)) cell.classList.add("locked");
-        if (canPlaceImmutableNow && canPlaceImmutableDisc(state.currentPlayer, row, col)) {
-          cell.classList.add("immutable-candidate");
-        }
-        if (canUseDestroyNow) {
-          if (awaitingDestroyTarget) {
-            if (isDestroyTargetCell(state.currentPlayer, row, col)) {
-              cell.classList.add("destroy-target-candidate");
-            }
-          } else {
-            const canSacrifice =
-              useCornerDestroy
-                ? isDestroySacrificeCell(state.currentPlayer, row, col)
-                : isDestroySelfSacrificeCell(state.currentPlayer, row, col);
-            if (canSacrifice) {
-              cell.classList.add("destroy-sacrifice-candidate");
-            }
-          }
-          if (selectedSacrificeSet.has(`${row}-${col}`)) {
-            cell.classList.add("destroy-sacrifice-selected");
-          }
-        }
         if (showValid && validSet.has(`${row}-${col}`)) cell.classList.add("valid");
-        if (ignoredLineForDisplay) {
-          const isIgnoredRow = ignoredLineForDisplay.axis === "row" && row === ignoredLineForDisplay.index;
-          const isIgnoredCol = ignoredLineForDisplay.axis === "col" && col === ignoredLineForDisplay.index;
-          if (isIgnoredRow || isIgnoredCol) {
-            cell.classList.add("count-ignore-line");
-          }
-        }
 
         cell.addEventListener("click", () => {
-          if (canUseDestroyNow) {
-            handleDestroySkillClick(row, col, { isRemote: false });
-            return;
-          }
-          if (canPlaceImmutableNow) {
-            placeImmutableDisc(row, col, { isRemote: false });
-            return;
-          }
           handleMove(row, col, { isRemote: false });
         });
 
@@ -2397,10 +1798,6 @@ export function initGame(options = {}) {
     const confirmed = window.confirm("ゲーム一覧に戻りますか？");
     if (!confirmed) return;
     stopGameLoop();
-    if (isRoomMode()) {
-      options.onBackToLobby?.();
-      return;
-    }
     options.onBackToMenu?.();
   });
 
@@ -2420,11 +1817,9 @@ export function initGame(options = {}) {
     modeSelect.addEventListener("change", () => {
       if (isRoomMode()) {
         state.roomRuleMode = modeSelect.value === "chaos" ? "chaos" : "local";
-        if (state.roomRuleMode === "chaos") {
-          state.handicapTarget = "none";
-        }
-        options.onRoomModeChange?.({ mode: state.roomRuleMode });
+        updateModeUiState();
         enterStandby();
+        options.onRoomRuleChange?.({ mode: state.roomRuleMode });
         return;
       }
 
@@ -2436,9 +1831,6 @@ export function initGame(options = {}) {
             : modeSelect.value === "chaos"
               ? "chaos"
               : "cpu";
-      if (state.gameMode === "chaos") {
-        state.handicapTarget = "none";
-      }
       enterStandby();
     });
   }
@@ -2457,153 +1849,131 @@ export function initGame(options = {}) {
     });
   }
 
-  if (handicapSelect) {
-    handicapSelect.addEventListener("change", () => {
-      state.handicapType = normalizeHandicapType(handicapSelect.value);
+  if (chaosHandicapTargetSelect) {
+    chaosHandicapTargetSelect.addEventListener("change", () => {
+      state.chaosHandicapTarget = chaosHandicapTargetSelect.value;
       updateModeUiState();
-      syncRoomSnapshotIfHost();
-    });
-  }
+      updateChaosHandicapSummary();
 
-  if (handicapTargetSelect) {
-    handicapTargetSelect.addEventListener("change", () => {
-      state.handicapTarget = normalizeOwnerType(handicapTargetSelect.value);
-      updateModeUiState();
-      syncRoomSnapshotIfHost();
-    });
-  }
-
-  if (bothBlackHandicapSelect) {
-    bothBlackHandicapSelect.addEventListener("change", () => {
-      state.bothHandicapType[BLACK] = normalizeHandicapType(bothBlackHandicapSelect.value);
-      updateModeUiState();
-      syncRoomSnapshotIfHost();
-    });
-  }
-
-  if (bothWhiteHandicapSelect) {
-    bothWhiteHandicapSelect.addEventListener("change", () => {
-      state.bothHandicapType[WHITE] = normalizeHandicapType(bothWhiteHandicapSelect.value);
-      updateModeUiState();
-      syncRoomSnapshotIfHost();
-    });
-  }
-
-  if (overwriteLimitSelect) {
-    overwriteLimitSelect.addEventListener("change", () => {
-      state.overwriteLimit = normalizeOverwriteLimit(overwriteLimitSelect.value);
-      updateModeUiState();
-    });
-  }
-
-  if (randomLineCountIgnoreSelect) {
-    randomLineCountIgnoreSelect.addEventListener("change", () => {
-      state.randomLineCountIgnoreEnabled = normalizeToggle(randomLineCountIgnoreSelect.value);
-      state.randomLineCountIgnoreLine = null;
-      updateModeUiState();
-    });
-  }
-
-  if (bothBlackOverwriteSelect) {
-    bothBlackOverwriteSelect.addEventListener("change", () => {
-      state.bothOverwriteLimit[BLACK] = normalizeOverwriteLimit(bothBlackOverwriteSelect.value);
-      updateModeUiState();
-    });
-  }
-
-  if (bothWhiteOverwriteSelect) {
-    bothWhiteOverwriteSelect.addEventListener("change", () => {
-      state.bothOverwriteLimit[WHITE] = normalizeOverwriteLimit(bothWhiteOverwriteSelect.value);
-      updateModeUiState();
-    });
-  }
-
-  if (destroyLimitBlackSelect) {
-    destroyLimitBlackSelect.addEventListener("change", () => {
-      state.destroySkillLimit[BLACK] = normalizeDestroyLimit(destroyLimitBlackSelect.value);
-      updateModeUiState();
-    });
-  }
-
-  if (destroyLimitWhiteSelect) {
-    destroyLimitWhiteSelect.addEventListener("change", () => {
-      state.destroySkillLimit[WHITE] = normalizeDestroyLimit(destroyLimitWhiteSelect.value);
-      updateModeUiState();
-    });
-  }
-
-  if (doubleActionBtn) {
-    doubleActionBtn.addEventListener("click", () => {
-      if (!isChaosMode() || state.gameOver || state.roomLocked || !isLocalPlayersTurn()) return;
-      const player = state.currentPlayer;
-      if (state.doubleActionArmed[player]) {
-        state.doubleActionArmed[player] = false;
-        messageEl.textContent = `${getDisplayName(player)}は2回行動の予約を解除しました`;
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
         render();
-        return;
       }
-      if ((state.doubleActionCharges[player] ?? 0) <= 0) return;
-      state.doubleActionArmed[player] = true;
-      messageEl.textContent = `${getDisplayName(player)}が2回行動を予約しました`;
-      render();
     });
   }
 
-  if (immutablePlaceBtn) {
-    immutablePlaceBtn.addEventListener("click", () => {
-      if (!isChaosMode() || state.gameOver || state.roomLocked || !isLocalPlayersTurn()) return;
-      const player = state.currentPlayer;
-      if (state.immutablePlaceArmed[player]) {
-        state.immutablePlaceArmed[player] = false;
-        messageEl.textContent = `${getDisplayName(player)}は固定石の指定を解除しました`;
+  if (chaosHandicapBonusSelect) {
+    chaosHandicapBonusSelect.addEventListener("change", () => {
+      state.chaosHandicapBonus = clamp(Math.floor(Number(chaosHandicapBonusSelect.value) || 0), 0, 3);
+      updateChaosHandicapSummary();
+
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
         render();
-        return;
       }
-      if ((state.immutablePlaceCharges[player] ?? 0) <= 0) return;
-      state.immutablePlaceArmed[player] = true;
-      state.destroySkillArmed[player] = false;
-      messageEl.textContent = `${getDisplayName(player)}は固定する石を選択してください`;
-      render();
     });
   }
 
-  if (destroySkillBtn) {
-    destroySkillBtn.addEventListener("click", () => {
-      if (!isChaosMode() || state.gameOver || state.roomLocked || !isLocalPlayersTurn()) return;
-      const player = state.currentPlayer;
-      if (state.destroySkillArmed[player]) {
-        state.destroySkillArmed[player] = false;
-        state.destroySkillSelectedSelfSacrifices[player] = [];
-        messageEl.textContent = `${getDisplayName(player)}は通常手番に戻りました`;
+  if (chaosHandicapBonusBlackSelect) {
+    chaosHandicapBonusBlackSelect.addEventListener("change", () => {
+      state.chaosHandicapBonusBlack = clamp(Math.floor(Number(chaosHandicapBonusBlackSelect.value) || 0), 0, 3);
+      updateChaosHandicapSummary();
+
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
         render();
-        return;
       }
-      if ((state.destroySkillRemaining[player] ?? 0) <= 0) {
-        messageEl.textContent = `${getDisplayName(player)}の駒破壊回数が不足しています`;
+    });
+  }
+
+  if (chaosHandicapBonusWhiteSelect) {
+    chaosHandicapBonusWhiteSelect.addEventListener("change", () => {
+      state.chaosHandicapBonusWhite = clamp(Math.floor(Number(chaosHandicapBonusWhiteSelect.value) || 0), 0, 3);
+      updateChaosHandicapSummary();
+
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
         render();
-        return;
       }
-      state.destroySkillArmed[player] = true;
-      state.destroySkillSelectedSelfSacrifices[player] = [];
-      state.immutablePlaceArmed[player] = false;
-      const { cornerSacrifices, selfSacrifices, targets } = countDestroyCandidates(player);
-      if (cornerSacrifices.length > 0 && targets.length >= CORNER_SACRIFICE_DESTROY_COUNT) {
-        messageEl.textContent = `${getDisplayName(player)}は犠牲にする角の駒を選択してください`;
-      } else if (
-        cornerSacrifices.length === 0 &&
-        selfSacrifices.length >= NO_CORNER_SACRIFICE_COUNT &&
-        targets.length >= NO_CORNER_DESTROY_COUNT
-      ) {
-        messageEl.textContent = `${getDisplayName(player)}は犠牲にする自駒を選択してください（2個犠牲で1個破壊）`;
-      } else if (cornerSacrifices.length === 0 && selfSacrifices.length < NO_CORNER_SACRIFICE_COUNT) {
-        messageEl.textContent = `${getDisplayName(player)}は犠牲にできる自駒が不足しています（必要: ${NO_CORNER_SACRIFICE_COUNT}）`;
-      } else if (cornerSacrifices.length === 0 && targets.length < NO_CORNER_DESTROY_COUNT) {
-        messageEl.textContent = `${getDisplayName(player)}は破壊対象が不足しています（必要: ${NO_CORNER_DESTROY_COUNT}）`;
-      } else if (targets.length < CORNER_SACRIFICE_DESTROY_COUNT) {
-        messageEl.textContent = `${getDisplayName(player)}は破壊対象が不足しています（必要: ${CORNER_SACRIFICE_DESTROY_COUNT}）`;
-      } else {
-        messageEl.textContent = `${getDisplayName(player)}は駒破壊を発動できません`;
+    });
+  }
+
+  if (chaosImmutableBonusSelect) {
+    chaosImmutableBonusSelect.addEventListener("change", () => {
+      state.chaosImmutableBonus = clamp(Math.floor(Number(chaosImmutableBonusSelect.value) || 0), 0, 2);
+      updateChaosHandicapSummary();
+
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
+        render();
       }
+    });
+  }
+
+  if (chaosImmutableBonusBlackSelect) {
+    chaosImmutableBonusBlackSelect.addEventListener("change", () => {
+      state.chaosImmutableBonusBlack = clamp(Math.floor(Number(chaosImmutableBonusBlackSelect.value) || 0), 0, 2);
+      updateChaosHandicapSummary();
+
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
+        render();
+      }
+    });
+  }
+
+  if (chaosImmutableBonusWhiteSelect) {
+    chaosImmutableBonusWhiteSelect.addEventListener("change", () => {
+      state.chaosImmutableBonusWhite = clamp(Math.floor(Number(chaosImmutableBonusWhiteSelect.value) || 0), 0, 2);
+      updateChaosHandicapSummary();
+
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
+        render();
+      }
+    });
+  }
+
+  if (chaosDestroyBonusSelect) {
+    chaosDestroyBonusSelect.addEventListener("change", () => {
+      state.chaosDestroyBonus = clamp(Math.floor(Number(chaosDestroyBonusSelect.value) || 0), 0, 2);
+      updateChaosHandicapSummary();
+
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
+        render();
+      }
+    });
+  }
+
+  if (chaosDestroyBonusBlackSelect) {
+    chaosDestroyBonusBlackSelect.addEventListener("change", () => {
+      state.chaosDestroyBonusBlack = clamp(Math.floor(Number(chaosDestroyBonusBlackSelect.value) || 0), 0, 2);
+      updateChaosHandicapSummary();
+
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
+        render();
+      }
+    });
+  }
+
+  if (chaosDestroyBonusWhiteSelect) {
+    chaosDestroyBonusWhiteSelect.addEventListener("change", () => {
+      state.chaosDestroyBonusWhite = clamp(Math.floor(Number(chaosDestroyBonusWhiteSelect.value) || 0), 0, 2);
+      updateChaosHandicapSummary();
+
+      if (isChaosMode() && state.gameOver) {
+        applyChaosHandicapSettings();
+        render();
+      }
+    });
+  }
+
+  if (chaosRandomLineExcludeToggle) {
+    chaosRandomLineExcludeToggle.addEventListener("change", () => {
+      state.chaosRandomLineExcludeEnabled = Boolean(chaosRandomLineExcludeToggle.checked);
+      updateChaosHandicapSummary();
       render();
     });
   }
@@ -2613,12 +1983,14 @@ export function initGame(options = {}) {
     startNewGame: (opts) => resetGame(opts),
     enterStandby,
     stop: stopGameLoop,
-    configureRoomMode: ({ roomCode, roomRole, roomPlayer }) => {
+    configureRoomMode: ({ roomCode, roomRole, roomPlayer, roomRuleMode }) => {
       state.gameMode = "room";
       state.roomCode = roomCode;
       state.roomRole = roomRole;
       state.roomPlayer = roomPlayer;
-      state.roomRuleMode = "local";
+      if (roomRuleMode === "chaos" || roomRuleMode === "local") {
+        state.roomRuleMode = roomRuleMode;
+      }
       updateModeUiState();
       options.onRoomStatusChange?.({ roomCode: state.roomCode, roomRole: state.roomRole });
     },
@@ -2628,14 +2000,25 @@ export function initGame(options = {}) {
       state.roomCode = null;
       state.roomRole = null;
       state.roomPlayer = BLACK;
-      state.roomRuleMode = "local";
       state.roomLocked = false;
       state.roomLockMessage = "";
       if (state.gameMode !== "cpu") {
         state.turnOrder = "player-first";
       }
+      state.roomRuleMode = "local";
       updateModeUiState();
       options.onRoomStatusChange?.({ roomCode: null, roomRole: null });
+    },
+    setRoomRuleMode: (mode, { fromRemote = false } = {}) => {
+      if (mode !== "chaos" && mode !== "local") return;
+      state.roomRuleMode = mode;
+      updateModeUiState();
+      if (state.gameOver) {
+        render();
+      }
+      if (!fromRemote) {
+        options.onRoomRuleChange?.({ mode: state.roomRuleMode });
+      }
     },
     setRoomLock: ({ locked, message }) => {
       state.roomLocked = Boolean(locked);
@@ -2649,169 +2032,35 @@ export function initGame(options = {}) {
       } else if (!state.gameOver) {
         overlay.textContent = "";
         overlay.style.opacity = "0";
-        messageEl.textContent = state.roomSyncPending
-          ? "ホストの盤面同期を待っています..."
-          : state.currentPlayer === state.roomPlayer
-            ? "あなたの手番です"
-            : "相手の手番です";
+        messageEl.textContent =
+          state.currentPlayer === state.roomPlayer ? "あなたの手番です" : "相手の手番です";
         startTurnTimer();
       }
 
       render();
     },
-    applyRemoteMove: ({ row, col, useDoubleAction, action, sacrifice, sacrifices, destroyedTargets }) => {
-      if (action === "immutable-place") {
-        if (!isChaosMode()) return;
-        placeImmutableDisc(row, col, { isRemote: true });
-        return;
-      }
-      if (action === "destroy-skill") {
-        if (!isChaosMode()) return;
-        const normalizedSacrifices = Array.isArray(sacrifices)
-          ? sacrifices
-          : sacrifice
-            ? [sacrifice]
-            : [];
-        executeDestroySkill(state.currentPlayer, normalizedSacrifices, destroyedTargets, { isRemote: true });
-        return;
-      }
-      handleMove(row, col, { isRemote: true, useDoubleAction: Boolean(useDoubleAction) });
+    applyRemoteMove: ({ row, col }) => {
+      handleMove(row, col, { isRemote: true });
     },
     applyRemoteDrawVote: ({ voter }) => {
       applyDrawVote(voter, { isRemote: true });
-    },
-    applyRoomMode: ({ mode }) => {
-      if (!isRoomMode()) return;
-      state.roomRuleMode = mode === "chaos" ? "chaos" : "local";
-      enterStandby();
     },
     getSnapshot: () => ({
       board: cloneBoard(state.board),
       currentPlayer: state.currentPlayer,
       gameOver: state.gameOver,
-      roomRuleMode: state.roomRuleMode,
-      handicapType: state.handicapType,
-      handicapTarget: state.handicapTarget,
-      bothHandicapType: { ...state.bothHandicapType },
-      overwriteRemaining: { ...state.overwriteRemaining },
-      overwriteLimit: state.overwriteLimit,
-      randomLineCountIgnoreEnabled: state.randomLineCountIgnoreEnabled,
-      randomLineCountIgnoreLine: state.randomLineCountIgnoreLine
-        ? { ...state.randomLineCountIgnoreLine }
-        : null,
-      bothOverwriteLimit: { ...state.bothOverwriteLimit },
-      destroySkillLimit: { ...state.destroySkillLimit },
-      destroySkillRemaining: { ...state.destroySkillRemaining },
-      immutableDiscs: normalizeBooleanMatrix(state.immutableDiscs),
-      immutablePlaceCharges: { ...state.immutablePlaceCharges },
-      immutablePlaceArmed: { ...state.immutablePlaceArmed },
-      destroySkillArmed: { ...state.destroySkillArmed },
-      firstCornerTakenBonusUsed: state.firstCornerTakenBonusUsed,
-      doubleActionCharges: { ...state.doubleActionCharges },
-      doubleActionArmed: { ...state.doubleActionArmed },
-      cornerLossStreak: { ...state.cornerLossStreak },
     }),
-    applySnapshot: ({
-      board,
-      currentPlayer,
-      gameOver,
-      roomRuleMode,
-      handicapType,
-      handicapTarget,
-      bothHandicapType,
-      overwriteRemaining,
-      overwriteLimit,
-      randomLineCountIgnoreEnabled,
-      randomLineCountIgnoreLine,
-      bothOverwriteLimit,
-      destroySkillLimit,
-      destroySkillRemaining,
-      immutableDiscs,
-      immutablePlaceCharges,
-      immutablePlaceArmed,
-      destroySkillArmed,
-      firstCornerTakenBonusUsed,
-      doubleActionCharges,
-      doubleActionArmed,
-      cornerLossStreak,
-    }) => {
+    applySnapshot: ({ board, currentPlayer, gameOver }) => {
       if (!board || !Array.isArray(board)) return;
       state.board = cloneBoard(board);
       state.currentPlayer = currentPlayer;
       state.gameOver = Boolean(gameOver);
-      if (isRoomMode()) {
-        state.roomRuleMode = roomRuleMode === "chaos" ? "chaos" : "local";
-      }
-      state.handicapType = normalizeHandicapType(handicapType ?? state.handicapType);
-      state.handicapTarget = normalizeOwnerType(handicapTarget ?? state.handicapTarget);
-      if (bothHandicapType && typeof bothHandicapType === "object") {
-        state.bothHandicapType[BLACK] = normalizeHandicapType(bothHandicapType[BLACK]);
-        state.bothHandicapType[WHITE] = normalizeHandicapType(bothHandicapType[WHITE]);
-      }
-      state.overwriteLimit = normalizeOverwriteLimit(overwriteLimit ?? state.overwriteLimit);
-      state.randomLineCountIgnoreEnabled = normalizeToggle(
-        randomLineCountIgnoreEnabled ?? state.randomLineCountIgnoreEnabled,
-      );
-      state.randomLineCountIgnoreLine = normalizeRandomLineCountIgnoreLine(randomLineCountIgnoreLine);
-      if (bothOverwriteLimit && typeof bothOverwriteLimit === "object") {
-        state.bothOverwriteLimit[BLACK] = normalizeOverwriteLimit(bothOverwriteLimit[BLACK]);
-        state.bothOverwriteLimit[WHITE] = normalizeOverwriteLimit(bothOverwriteLimit[WHITE]);
-      }
-      if (destroySkillLimit && typeof destroySkillLimit === "object") {
-        state.destroySkillLimit[BLACK] = normalizeDestroyLimit(destroySkillLimit[BLACK]);
-        state.destroySkillLimit[WHITE] = normalizeDestroyLimit(destroySkillLimit[WHITE]);
-      } else {
-        const sharedLimit = normalizeDestroyLimit(destroySkillLimit ?? state.destroySkillLimit[BLACK]);
-        state.destroySkillLimit[BLACK] = sharedLimit;
-        state.destroySkillLimit[WHITE] = sharedLimit;
-      }
-      if (destroySkillRemaining && typeof destroySkillRemaining === "object") {
-        state.destroySkillRemaining[BLACK] = Math.min(
-          normalizeNonNegativeInt(destroySkillRemaining[BLACK]),
-          getDestroyLimitFor(BLACK),
-        );
-        state.destroySkillRemaining[WHITE] = Math.min(
-          normalizeNonNegativeInt(destroySkillRemaining[WHITE]),
-          getDestroyLimitFor(WHITE),
-        );
-      }
-      state.immutableDiscs = normalizeBooleanMatrix(immutableDiscs ?? state.immutableDiscs);
-      if (immutablePlaceCharges && typeof immutablePlaceCharges === "object") {
-        state.immutablePlaceCharges[BLACK] = normalizeNonNegativeInt(immutablePlaceCharges[BLACK]);
-        state.immutablePlaceCharges[WHITE] = normalizeNonNegativeInt(immutablePlaceCharges[WHITE]);
-      }
-      if (immutablePlaceArmed && typeof immutablePlaceArmed === "object") {
-        state.immutablePlaceArmed[BLACK] = Boolean(immutablePlaceArmed[BLACK]);
-        state.immutablePlaceArmed[WHITE] = Boolean(immutablePlaceArmed[WHITE]);
-      }
-      if (destroySkillArmed && typeof destroySkillArmed === "object") {
-        state.destroySkillArmed[BLACK] = Boolean(destroySkillArmed[BLACK]);
-        state.destroySkillArmed[WHITE] = Boolean(destroySkillArmed[WHITE]);
-      }
-      state.firstCornerTakenBonusUsed = Boolean(firstCornerTakenBonusUsed);
-      if (overwriteRemaining && typeof overwriteRemaining === "object") {
-        state.overwriteRemaining[BLACK] = normalizeNonNegativeInt(overwriteRemaining[BLACK]);
-        state.overwriteRemaining[WHITE] = normalizeNonNegativeInt(overwriteRemaining[WHITE]);
-      }
-      if (doubleActionCharges && typeof doubleActionCharges === "object") {
-        state.doubleActionCharges[BLACK] = normalizeNonNegativeInt(doubleActionCharges[BLACK]);
-        state.doubleActionCharges[WHITE] = normalizeNonNegativeInt(doubleActionCharges[WHITE]);
-      }
-      if (doubleActionArmed && typeof doubleActionArmed === "object") {
-        state.doubleActionArmed[BLACK] = Boolean(doubleActionArmed[BLACK]);
-        state.doubleActionArmed[WHITE] = Boolean(doubleActionArmed[WHITE]);
-      }
-      if (cornerLossStreak && typeof cornerLossStreak === "object") {
-        state.cornerLossStreak[BLACK] = normalizeNonNegativeInt(cornerLossStreak[BLACK]);
-        state.cornerLossStreak[WHITE] = normalizeNonNegativeInt(cornerLossStreak[WHITE]);
-      }
       resetDrawVotes();
       if (state.gameOver || state.roomLocked) {
         stopTurnTimer();
       } else {
         startTurnTimer();
       }
-      state.roomSyncPending = false;
       render();
     },
   };
