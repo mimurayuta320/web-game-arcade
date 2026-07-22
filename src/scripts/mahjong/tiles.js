@@ -1,0 +1,41 @@
+export const MAHJONG_TILE_LABELS = [
+  "M1",
+  "M2",
+  "M3",
+  "M4",
+  "M5",
+  "M6",
+  "M7",
+  "M8",
+  "M9",
+  "P1",
+  "P2",
+  "P3",
+  "P4",
+  "P5",
+  "P6",
+  "P7",
+  "P8",
+  "P9",
+  "S1",
+  "S2",
+  "S3",
+  "S4",
+  "S5",
+  "S6",
+  "S7",
+  "S8",
+  "S9",
+  "E",
+  "S",
+  "W",
+  "N",
+  "Wh",
+  "G",
+  "R",
+];
+
+export function tileLabelOf(tileId) {
+  if (!Number.isInteger(tileId) || tileId < 0) return "";
+  return MAHJONG_TILE_LABELS[tileId % MAHJONG_TILE_LABELS.length] || "?";
+}

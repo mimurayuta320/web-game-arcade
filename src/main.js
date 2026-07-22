@@ -7,6 +7,7 @@ import { initGomoku } from "./scripts/gomoku.js";
 import { initSurvivors } from "./scripts/survivors.js";
 import { initFitPuzzle } from "./scripts/fitPuzzle.js";
 import { initSolitaire } from "./scripts/solitaire.js";
+import { initMahjong } from "./scripts/mahjong.js";
 import { cloudApiCandidates } from "./scripts/cloudApiClient.js";
 import { createRoomTransport, resolveRoomServerUrl } from "./scripts/roomTransport.js";
 
@@ -35,6 +36,7 @@ const gomokuScreen = document.getElementById("gomokuScreen");
 const survivorsScreen = document.getElementById("survivorsScreen");
 const fitPuzzleScreen = document.getElementById("fitPuzzleScreen");
 const solitaireScreen = document.getElementById("solitaireScreen");
+const mahjongScreen = document.getElementById("mahjongScreen");
 
 const playOthelloBtn = document.getElementById("playOthelloBtn");
 const playShogiBtn = document.getElementById("playShogiBtn");
@@ -43,6 +45,7 @@ const playUnoBtn = document.getElementById("playUnoBtn");
 const playGomokuBtn = document.getElementById("playGomokuBtn");
 const playSurvivorsBtn = document.getElementById("playSurvivorsBtn");
 const playFitPuzzleBtn = document.getElementById("playFitPuzzleBtn");
+const playMahjongBtn = document.getElementById("playMahjongBtn");
 const playSolitaireSingleBtn = document.getElementById("playSolitaireSingleBtn");
 const playSolitaireMultiBtn = document.getElementById("playSolitaireMultiBtn");
 const openCardListBtn = document.getElementById("openCardListBtn");
@@ -107,6 +110,7 @@ const lobbyStartGomokuBtn = document.getElementById("lobbyStartGomokuBtn");
 const lobbyStartSurvivorsBtn = document.getElementById("lobbyStartSurvivorsBtn");
 const lobbyStartFitPuzzleBtn = document.getElementById("lobbyStartFitPuzzleBtn");
 const lobbyStartSolitaireBtn = document.getElementById("lobbyStartSolitaireBtn");
+const lobbyStartMahjongBtn = document.getElementById("lobbyStartMahjongBtn");
 const lobbySwitchSpectateBtn = document.getElementById("lobbySwitchSpectateBtn");
 const lobbyBackBtn = document.getElementById("lobbyBackBtn");
 const copyInviteLinkBtn = document.getElementById("copyInviteLinkBtn");
@@ -152,6 +156,7 @@ const messages = {
     gomokuCardDesc: "五目並べ。先に5つ石を並べたプレイヤーの勝ち。",
     survivorsCardDesc: "2Dサバイバルアクション。移動しながら自動攻撃で敵の波をさばく。",
     fitPuzzleCardDesc: "ピースを枠内に収めるパズル。すべてのマスを埋めればクリア。",
+    mahjongCardDesc: "同じ牌を選んで消していくクリック型の麻雀ペアゲーム。",
     solitaireCardDesc: "定番のクロンダイク。AからKまで4組そろえるとクリア。",
     shogiDetailSummary: "詳細",
     shogiDetailTitle: "駒の名称と強さ（目安）",
@@ -172,6 +177,7 @@ const messages = {
     gomokuSubtitle: "黒白で交互に置き、先に5連を作った側の勝ち。",
     survivorsSubtitle: "WASD / 矢印キーで移動。自動攻撃で生き残れ。",
     fitPuzzleSubtitle: "ピースを選んで枠内に配置し、すべて埋めるとクリア。",
+    mahjongSubtitle: "同じ牌を2回まで曲がる線でつなげると消せます。すべて消したらクリア。",
     solitaireSubtitle: "ストックからめくって並べ替え、4つの土台を完成させよう。",
     unoModeCpu: "1P 対 CPU",
     unoModeLocal: "ローカル2人",
@@ -190,6 +196,7 @@ const messages = {
     survivorsStart: "サバイバー開始",
     fitPuzzleStart: "Fit Puzzle開始",
     solitaireStart: "ソリティア開始",
+    mahjongStart: "麻雀開始",
     bankGacha: "スキンガチャ",
     bankGacha10: "スキンガチャ x10",
     singlePlay: "シングル",
@@ -224,6 +231,8 @@ const messages = {
     newMatch: "ゲーム開始",
     menuJa: "メニュー",
     rotate: "回転",
+    shuffle: "シャッフル",
+    hint: "ヒント",
     reset: "リセット",
     resetEn: "RESET",
     playerNamePlaceholder: "あなたの名前",
@@ -323,6 +332,7 @@ const messages = {
     gomokuCardDesc: "오목. 먼저 돌 5개를 연속으로 놓는 플레이어가 승리합니다.",
     survivorsCardDesc: "2D 서바이벌 액션. 이동하며 자동 공격으로 적의 물결을 버티세요.",
     fitPuzzleCardDesc: "조각을 프레임 안에 배치하는 퍼즐. 모든 칸을 채우면 클리어.",
+    mahjongCardDesc: "같은 패를 클릭해 제거하는 클릭형 마작 페어 게임.",
     solitaireCardDesc: "클론다이크 솔리테어. A부터 K까지 4세트를 완성하면 클리어.",
     shogiDetailSummary: "상세",
     shogiDetailTitle: "말 이름과 강함(대략)",
@@ -343,6 +353,7 @@ const messages = {
     gomokuSubtitle: "흑/백이 번갈아 두고, 먼저 5목을 만들면 승리합니다.",
     survivorsSubtitle: "WASD / 방향키로 이동. 자동 공격으로 생존하세요.",
     fitPuzzleSubtitle: "조각을 선택해 프레임 안에 배치하고, 전부 채우면 클리어.",
+    mahjongSubtitle: "같은 패를 2번 이하로 꺾는 선으로 연결하면 제거됩니다. 전부 지우면 클리어.",
     solitaireSubtitle: "스톡에서 카드를 넘겨 정리하고, 4개의 파운데이션을 완성하세요.",
     unoModeCpu: "1P vs CPU",
     unoModeLocal: "2P LOCAL",
@@ -361,6 +372,7 @@ const messages = {
     survivorsStart: "서바이버 시작",
     fitPuzzleStart: "핏 퍼즐 시작",
     solitaireStart: "솔리테어 시작",
+    mahjongStart: "마작 시작",
     bankGacha: "SKIN GACHA",
     bankGacha10: "SKIN GACHA x10",
     singlePlay: "싱글",
@@ -395,6 +407,8 @@ const messages = {
     newMatch: "GAME START",
     menuJa: "메뉴",
     rotate: "회전",
+    shuffle: "셔플",
+    hint: "힌트",
     reset: "리셋",
     resetEn: "RESET",
     playerNamePlaceholder: "내 이름",
@@ -500,6 +514,7 @@ function applyStaticTranslations() {
   setTextById("gomokuCardDesc", tr("gomokuCardDesc"));
   setTextById("survivorsCardDesc", tr("survivorsCardDesc"));
   setTextById("fitPuzzleCardDesc", tr("fitPuzzleCardDesc"));
+  setTextById("mahjongCardDesc", tr("mahjongCardDesc"));
   setTextById("solitaireCardDesc", tr("solitaireCardDesc"));
   setTextById("shogiDetailSummary", tr("shogiDetailSummary"));
   setTextById("shogiDetailTitle", tr("shogiDetailTitle"));
@@ -520,6 +535,7 @@ function applyStaticTranslations() {
   setTextById("gomokuSubtitle", tr("gomokuSubtitle"));
   setTextById("survivorsSubtitle", tr("survivorsSubtitle"));
   setTextById("fitPuzzleSubtitle", tr("fitPuzzleSubtitle"));
+  setTextById("mahjongSubtitle", tr("mahjongSubtitle"));
   setTextById("solitaireSubtitle", tr("solitaireSubtitle"));
   setTextById("unoModeCpuOption", tr("unoModeCpu"));
   setTextById("unoModeLocalOption", tr("unoModeLocal"));
@@ -538,6 +554,7 @@ function applyStaticTranslations() {
   if (playGomokuBtn) playGomokuBtn.textContent = tr("play");
   if (playSurvivorsBtn) playSurvivorsBtn.textContent = tr("play");
   if (playFitPuzzleBtn) playFitPuzzleBtn.textContent = tr("play");
+  if (playMahjongBtn) playMahjongBtn.textContent = tr("play");
   if (playSolitaireSingleBtn) playSolitaireSingleBtn.textContent = tr("singlePlay");
   if (playSolitaireMultiBtn) playSolitaireMultiBtn.textContent = tr("multiPlay");
   if (quickMatchBtn) quickMatchBtn.textContent = tr("quickMatchMulti");
@@ -570,6 +587,7 @@ function applyStaticTranslations() {
   if (lobbyStartSurvivorsBtn) lobbyStartSurvivorsBtn.textContent = tr("survivorsStart");
   if (lobbyStartFitPuzzleBtn) lobbyStartFitPuzzleBtn.textContent = tr("fitPuzzleStart");
   if (lobbyStartSolitaireBtn) lobbyStartSolitaireBtn.textContent = tr("solitaireStart");
+  if (lobbyStartMahjongBtn) lobbyStartMahjongBtn.textContent = tr("mahjongStart");
   updateLobbySpectateToggleButton();
   if (lobbyBackBtn) lobbyBackBtn.textContent = tr("backToMenu");
   if (copyInviteLinkBtn) copyInviteLinkBtn.textContent = tr("copyInviteLink");
@@ -601,6 +619,10 @@ function applyStaticTranslations() {
   setTextById("fitPuzzleRotateBtn", tr("rotate"));
   setTextById("fitPuzzleResetBtn", tr("reset"));
   setTextById("fitPuzzleMenuBtn", tr("menu"));
+  setTextById("mahjongStartBtn", tr("newMatch"));
+  setTextById("mahjongShuffleBtn", tr("shuffle"));
+  setTextById("mahjongHintBtn", tr("hint"));
+  setTextById("mahjongMenuBtn", tr("menu"));
   setTextById("solitaireStartBtn", tr("newMatch"));
   setTextById("solitaireResetBtn", tr("resetEn"));
   setTextById("solitaireMenuBtn", tr("menu"));
@@ -800,6 +822,7 @@ const gameScreens = {
   survivors: survivorsScreen,
   fitPuzzle: fitPuzzleScreen,
   solitaire: solitaireScreen,
+  mahjong: mahjongScreen,
 };
 
 let games = null;
@@ -1243,6 +1266,7 @@ function showOnly(screen) {
   survivorsScreen.classList.add("hidden");
   fitPuzzleScreen.classList.add("hidden");
   solitaireScreen.classList.add("hidden");
+  mahjongScreen.classList.add("hidden");
   screen.classList.remove("hidden");
   updateFriendsAvailability();
 }
@@ -1355,6 +1379,7 @@ function updateLobbyView() {
     lobbyStartFitPuzzleBtn.title = "ROOM未対応";
   }
   lobbyStartSolitaireBtn.disabled = !hostCanStart;
+  if (lobbyStartMahjongBtn) lobbyStartMahjongBtn.disabled = !hostCanStart;
   updateLobbySpectateToggleButton();
   if (copyInviteLinkBtn) copyInviteLinkBtn.disabled = !roomSession.code;
   renderSpectatorBadge();
@@ -1564,7 +1589,12 @@ function enterRoomGame(gameKey) {
     controller.setRoomLock({ locked: true, message: tr("spectatorReadOnly") });
   } else if (roomSession.role === "host") {
     controller.setRoomLock({ locked: false, message: "" });
-    controller.startNewGame();
+    if (gameKey === "mahjong") {
+      // Mahjong room mode lets host pick VS or CPU-coop before pressing GAME START.
+      controller.enterStandby?.();
+    } else {
+      controller.startNewGame();
+    }
   } else {
     controller.setRoomLock({ locked: true, message: tr("gameWaitHostStart") });
   }
@@ -1642,6 +1672,10 @@ games = {
   fitPuzzle: {
     screen: fitPuzzleScreen,
     controller: initFitPuzzle(createGameCallbacks("fitPuzzle")),
+  },
+  mahjong: {
+    screen: mahjongScreen,
+    controller: initMahjong(createGameCallbacks("mahjong")),
   },
   solitaire: {
     screen: solitaireScreen,
@@ -2011,6 +2045,14 @@ playFitPuzzleBtn?.addEventListener("click", () => {
   controllerOf("fitPuzzle")?.enterStandby?.();
 });
 
+playMahjongBtn?.addEventListener("click", () => {
+  closeRoom();
+  configureAllStandardModes();
+  currentGameKey = "mahjong";
+  showGameScreen("mahjong");
+  controllerOf("mahjong")?.enterStandby?.();
+});
+
 openCardListBtn?.addEventListener("click", () => {
   closeRoom();
   configureAllStandardModes();
@@ -2232,6 +2274,18 @@ lobbyStartSolitaireBtn?.addEventListener("click", () => {
   roomSession.selectedGame = "solitaire";
   postRoomMessage({ type: "select-game", game: "solitaire" });
   enterRoomGame("solitaire");
+});
+
+lobbyStartMahjongBtn?.addEventListener("click", () => {
+  if (roomSession.role !== "host") return;
+  if (!roomSession.peerConnected) {
+    setLobbyMessage(tr("lobbyNoPeer"));
+    return;
+  }
+
+  roomSession.selectedGame = "mahjong";
+  postRoomMessage({ type: "select-game", game: "mahjong" });
+  enterRoomGame("mahjong");
 });
 
 lobbyBackBtn?.addEventListener("click", () => {

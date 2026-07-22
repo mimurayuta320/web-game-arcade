@@ -921,6 +921,183 @@ body {
   background: radial-gradient(circle at 30% 30%, #ffffff, #e6e6e6 60%, #bbbbbb 100%);
 }
 
+.mahjong-wrap {
+  background: linear-gradient(180deg, rgba(46, 23, 12, 0.9), rgba(16, 10, 6, 0.94));
+}
+
+.mahjong-board {
+  --mahjong-cols: 14;
+  width: min(100%, 1020px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(var(--mahjong-cols), minmax(0, 1fr));
+  gap: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 10px;
+  background: linear-gradient(180deg, rgba(29, 15, 8, 0.8), rgba(8, 5, 3, 0.8));
+}
+
+.mahjong-link-fx {
+  position: absolute;
+  inset: 0.9rem;
+  width: calc(100% - 1.8rem);
+  height: calc(100% - 1.8rem);
+  pointer-events: none;
+  overflow: visible;
+}
+
+.mahjong-link-fx .pair-link {
+  stroke: rgba(255, 215, 129, 0.95);
+  stroke-width: 5;
+  stroke-linecap: round;
+  fill: none;
+  filter: drop-shadow(0 0 5px rgba(255, 209, 102, 0.85));
+  animation: mahjongLinkFade 320ms ease-out forwards;
+}
+
+@keyframes mahjongLinkFade {
+  0% {
+    opacity: 1;
+    stroke-width: 6;
+  }
+  100% {
+    opacity: 0;
+    stroke-width: 3;
+  }
+}
+
+.mahjong-empty {
+  aspect-ratio: 1 / 1.3;
+}
+
+.mahjong-tile {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  min-height: 44px;
+  aspect-ratio: 1 / 1.3;
+  background: linear-gradient(160deg, #efe8da, #d5c8b2);
+  color: #1f1a12;
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 2px 5px rgba(0, 0, 0, 0.28);
+}
+
+.mahjong-tile:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.mahjong-tile.selected {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 209, 102, 0.95),
+    0 0 12px rgba(255, 209, 102, 0.35);
+}
+
+.mahjong-tile:disabled {
+  opacity: 0.68;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.mahjong-scorecalc {
+  margin-top: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: linear-gradient(160deg, rgba(17, 20, 28, 0.82), rgba(16, 10, 24, 0.74));
+}
+
+.mahjong-scorecalc h3 {
+  margin: 0 0 0.55rem;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+
+.mahjong-scorecalc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 0.5rem 0.7rem;
+  align-items: center;
+}
+
+.mahjong-scorecalc-grid label {
+  font-size: 0.86rem;
+  color: rgba(239, 247, 255, 0.9);
+}
+
+.mahjong-scorecalc-subgrid {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 0.5rem 0.7rem;
+  align-items: center;
+}
+
+.mahjong-scorecalc-check {
+  font-size: 0.86rem;
+  color: rgba(239, 247, 255, 0.92);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+}
+
+.mahjong-yaku-list {
+  margin-top: 0.62rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 0.28rem 0.6rem;
+}
+
+.mahjong-yaku-list label {
+  font-size: 0.84rem;
+  color: rgba(239, 247, 255, 0.9);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mahjong-scorecalc #mahjongCalcBtn {
+  margin: 0.7rem 0 0;
+}
+
+.mahjong-scorecalc-result {
+  margin: 0.55rem 0 0;
+  font-weight: 700;
+  color: rgba(255, 236, 172, 0.98);
+}
+
+.mahjong-scorecalc-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: rgba(239, 247, 255, 0.76);
+}
+
+#mahjongCoopOwnerText.mahjong-coop-flash {
+  animation: mahjongCoopOwnerFlash 460ms ease-out;
+}
+
+@keyframes mahjongCoopOwnerFlash {
+  0% {
+    color: #fff6cf;
+    text-shadow: 0 0 0 rgba(255, 209, 102, 0);
+    transform: scale(1);
+  }
+  45% {
+    color: #ffe2a6;
+    text-shadow: 0 0 16px rgba(255, 209, 102, 0.95);
+    transform: scale(1.06);
+  }
+  100% {
+    color: inherit;
+    text-shadow: 0 0 0 rgba(255, 209, 102, 0);
+    transform: scale(1);
+  }
+}
+
 .survivors-wrap {
   background: radial-gradient(circle at 50% 50%, rgba(22, 44, 68, 0.85), rgba(8, 17, 30, 0.95));
 }
@@ -2059,6 +2236,31 @@ body {
   .fit-piece-unit {
     width: 12px;
     height: 12px;
+  }
+
+  .mahjong-board {
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .mahjong-link-fx {
+    inset: 0.55rem;
+    width: calc(100% - 1.1rem);
+    height: calc(100% - 1.1rem);
+  }
+
+  .mahjong-tile {
+    font-size: 0.75rem;
+    min-height: 34px;
+  }
+
+  .mahjong-scorecalc-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mahjong-scorecalc-subgrid,
+  .mahjong-yaku-list {
+    grid-template-columns: 1fr;
   }
 }
 

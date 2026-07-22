@@ -175,6 +175,11 @@
             <p id="fitPuzzleCardDesc">ピースを枠内に収めるパズル。すべてのマスを埋めればクリア。</p>
             <button id="playFitPuzzleBtn" class="start-btn">PLAY</button>
           </article>
+          <article class="game-card">
+            <h2>Neon Mahjong</h2>
+            <p id="mahjongCardDesc">同じ牌を選んで消していくクリック型の麻雀ペアゲーム。</p>
+            <button id="playMahjongBtn" class="start-btn">PLAY</button>
+          </article>
           <article class="game-card menu-category-card">
             <h2>カードゲーム一覧</h2>
             <p>UNO / 7並べ / ソリティア / 大富豪 を選べます。</p>
@@ -334,6 +339,11 @@
               <h2>Solitaire</h2>
               <p>ルームでソリティア対戦を開始します。</p>
               <button id="lobbyStartSolitaireBtn" class="start-btn">SOLITAIRE START</button>
+            </article>
+            <article class="game-card game-list-item">
+              <h2>Mahjong</h2>
+              <p>ルームで麻雀ペア対戦を開始します。</p>
+              <button id="lobbyStartMahjongBtn" class="start-btn">MAHJONG START</button>
             </article>
           </div>
 
@@ -803,6 +813,190 @@
         </div>
 
         <p id="solitaireMessage" class="message">GAME STARTで開始</p>
+      </section>
+
+      <section id="mahjongScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Mahjong</h1>
+          <p id="mahjongSubtitle">同じ牌を2回まで曲がる線でつなげると消せます。すべて消したらクリア。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric metric-select">
+            <span class="label">MODE</span>
+            <select id="mahjongModeSelect" class="difficulty-select" aria-label="Mahjong mode">
+              <option value="cpu" selected>1P vs CPU</option>
+              <option value="local">2P LOCAL</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">DIFFICULTY</span>
+            <select id="mahjongDifficultySelect" class="difficulty-select" aria-label="Mahjong difficulty">
+              <option value="easy">EASY</option>
+              <option value="normal" selected>NORMAL</option>
+              <option value="hard">HARD</option>
+              <option value="expert">EXPERT</option>
+            </select>
+          </div>
+          <div class="metric">
+            <span class="label">TURN</span>
+            <span id="mahjongTurnText">PLAYER 1</span>
+          </div>
+          <div class="metric">
+            <span class="label">P1 SCORE</span>
+            <span id="mahjongP1ScoreText">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">P2 SCORE</span>
+            <span id="mahjongP2ScoreText">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">ROOM MODE</span>
+            <span id="mahjongRoomModeText">-</span>
+          </div>
+          <div class="metric">
+            <span class="label">COOP OWNER</span>
+            <span id="mahjongCoopOwnerText">-</span>
+          </div>
+          <div class="metric">
+            <span class="label">REMAIN PAIRS</span>
+            <span id="mahjongRemainText">56</span>
+          </div>
+          <div class="metric">
+            <span class="label">TIME</span>
+            <span id="mahjongTimeText">--:--</span>
+          </div>
+          <div class="metric">
+            <span class="label">ASSIST</span>
+            <span id="mahjongAssistText">H 0 / S 0</span>
+          </div>
+          <div class="metric">
+            <span class="label">STATUS</span>
+            <span id="mahjongStatusText">-</span>
+          </div>
+          <button id="mahjongStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="mahjongShuffleBtn" class="start-btn ghost">SHUFFLE</button>
+          <button id="mahjongHintBtn" class="start-btn ghost">HINT</button>
+          <button id="mahjongMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <section class="canvas-wrap mahjong-wrap">
+          <div id="mahjongBoard" class="mahjong-board" aria-label="Mahjong board"></div>
+          <svg id="mahjongLinkFx" class="mahjong-link-fx" aria-hidden="true"></svg>
+          <div id="mahjongOverlay" class="overlay">GAME STARTで開始</div>
+        </section>
+
+        <section class="mahjong-scorecalc" aria-live="polite">
+          <h3 id="mahjongScoreCalcTitle">本家点数計算（リーチ麻雀）</h3>
+          <div class="mahjong-scorecalc-grid">
+            <label for="mahjongCalcHan" id="mahjongCalcHanLabel">飜</label>
+            <select id="mahjongCalcHan" class="difficulty-select">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+              <option value="11">11</option>
+              <option value="12">12</option>
+              <option value="13" selected>13</option>
+              <option value="26">26</option>
+            </select>
+
+            <label for="mahjongCalcFu" id="mahjongCalcFuLabel">符</label>
+            <select id="mahjongCalcFu" class="difficulty-select">
+              <option value="20">20</option>
+              <option value="25">25</option>
+              <option value="30" selected>30</option>
+              <option value="40">40</option>
+              <option value="50">50</option>
+              <option value="60">60</option>
+              <option value="70">70</option>
+              <option value="80">80</option>
+              <option value="90">90</option>
+              <option value="100">100</option>
+              <option value="110">110</option>
+            </select>
+
+            <label for="mahjongCalcSeat" id="mahjongCalcSeatLabel">親子</label>
+            <select id="mahjongCalcSeat" class="difficulty-select">
+              <option value="child" selected>子</option>
+              <option value="dealer">親</option>
+            </select>
+
+            <label for="mahjongCalcRoundWind" id="mahjongCalcRoundWindLabel">場風</label>
+            <select id="mahjongCalcRoundWind" class="difficulty-select">
+              <option value="east" selected>東</option>
+              <option value="south">南</option>
+              <option value="west">西</option>
+              <option value="north">北</option>
+            </select>
+
+            <label for="mahjongCalcPlayerWind" id="mahjongCalcPlayerWindLabel">自風</label>
+            <select id="mahjongCalcPlayerWind" class="difficulty-select">
+              <option value="east" selected>東</option>
+              <option value="south">南</option>
+              <option value="west">西</option>
+              <option value="north">北</option>
+            </select>
+
+            <label for="mahjongCalcWin" id="mahjongCalcWinLabel">和了</label>
+            <select id="mahjongCalcWin" class="difficulty-select">
+              <option value="ron" selected>ロン</option>
+              <option value="tsumo">ツモ</option>
+            </select>
+
+            <label for="mahjongCalcHonba" id="mahjongCalcHonbaLabel">本場</label>
+            <input id="mahjongCalcHonba" class="room-input" type="number" min="0" max="20" value="0" />
+
+            <label for="mahjongCalcKyotaku" id="mahjongCalcKyotakuLabel">供託</label>
+            <input id="mahjongCalcKyotaku" class="room-input" type="number" min="0" max="20" value="0" />
+          </div>
+          <div class="mahjong-scorecalc-subgrid">
+            <label class="mahjong-scorecalc-check"><input id="mahjongCalcAutoHanToggle" type="checkbox" checked /> <span id="mahjongCalcAutoHanLabel">役チェックから飜を自動計算</span></label>
+            <label class="mahjong-scorecalc-check"><input id="mahjongCalcOpenHand" type="checkbox" /> <span id="mahjongCalcOpenHandLabel">鳴きあり（門前ではない）</span></label>
+            <label for="mahjongCalcDoraHan" id="mahjongCalcDoraHanLabel">ドラ飜</label>
+            <input id="mahjongCalcDoraHan" class="room-input" type="number" min="0" max="20" value="0" />
+          </div>
+
+          <div class="mahjong-yaku-list" id="mahjongYakuList">
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 立直</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 一発</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 門前清自摸和</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> 断么九</label>
+            <label><input id="mahjongCalcYakuPinfu" type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 平和</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 一盃口</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="1" /> 三色同順</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="1" /> 一気通貫</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="2" /> 対々和</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="2" /> 三暗刻</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="2" /> 混老頭</label>
+            <label><input id="mahjongCalcYakuChiitoi" type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="0" /> 七対子</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="1" /> 混全帯么九</label>
+            <label><input type="checkbox" data-yaku-han-closed="3" data-yaku-han-open="2" /> 純全帯么九</label>
+            <label><input type="checkbox" data-yaku-han-closed="3" data-yaku-han-open="2" /> 混一色</label>
+            <label><input type="checkbox" data-yaku-han-closed="6" data-yaku-han-open="5" /> 清一色</label>
+            <label><input id="mahjongCalcYakuRoundWind" type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> <span id="mahjongCalcYakuRoundWindText">場風牌（東）</span></label>
+            <label><input id="mahjongCalcYakuSeatWind" type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> <span id="mahjongCalcYakuSeatWindText">自風牌（東）</span></label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> 白</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> 發</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> 中</label>
+            <label><input type="checkbox" data-yakuman-count="1" /> 国士無双（役満）</label>
+            <label><input type="checkbox" data-yakuman-count="1" /> 四暗刻（役満）</label>
+            <label><input type="checkbox" data-yakuman-count="1" /> 大三元（役満）</label>
+            <label><input type="checkbox" data-yakuman-count="1" /> 字一色（役満）</label>
+          </div>
+          <p id="mahjongCalcHanAutoText" class="mahjong-scorecalc-note">自動飜: -</p>
+          <button id="mahjongCalcBtn" class="start-btn" type="button">点数計算</button>
+          <p id="mahjongCalcResult" class="mahjong-scorecalc-result">-</p>
+          <p id="mahjongCalcNote" class="mahjong-scorecalc-note">役判定は手入力（飜/符）です。点数計算は本家ルール準拠です。</p>
+        </section>
+
+        <p id="mahjongMessage" class="message">GAME STARTを押してください</p>
       </section>
 
       <button id="globalRematchBtn" class="start-btn rematch-floating hidden" type="button">RE-MATCH</button>
