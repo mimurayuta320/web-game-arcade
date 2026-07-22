@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
 import { WebSocketServer } from "ws";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -27,10 +26,6 @@ const MESSAGE_STATE_TTL_MS = Number(process.env.ROOM_MESSAGE_STATE_TTL_MS || 4 *
 const INVITE_TOKEN_TTL_MS = Number(process.env.ROOM_INVITE_TOKEN_TTL_MS || 5 * 60 * 1000);
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.SHARE_DB_PATH || path.join(DATA_DIR, "profiles.json");
-const ROOM_CHAT_DB_PATH = process.env.SHARE_CHAT_DB_PATH || path.join(DATA_DIR, "room-chat.sqlite");
-const ROOM_CHAT_HISTORY_LIMIT = Number(process.env.ROOM_CHAT_HISTORY_LIMIT || 80);
-
-let roomChatDb = null;
 
 const DEFAULT_PROFILE = {
   bankCoins: 0,
@@ -65,69 +60,6 @@ const MIME = {
 
 const rooms = new Map();
 const roomMeta = new Map();
-
-function initRoomChatDb() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  roomChatDb = new DatabaseSync(ROOM_CHAT_DB_PATH);
-  roomChatDb.exec(`
-    CREATE TABLE IF NOT EXISTS room_chat_messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      room_code TEXT NOT NULL,
-      channel TEXT NOT NULL,
-      message_id TEXT NOT NULL,
-      from_peer_id TEXT NOT NULL,
-      sender_name TEXT NOT NULL,
-      text TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_room_chat_messages_room_channel_time
-      ON room_chat_messages(room_code, channel, created_at DESC);
-  `);
-}
-
-function sanitizeChatText(raw) {
-  return String(raw || "").trim().slice(0, 200);
-}
-
-function persistRoomChatMessage({ roomCode, channel, messageId, fromPeerId, senderName, text, createdAt }) {
-  if (!roomChatDb) return;
-  const sanitizedText = sanitizeChatText(text);
-  if (!sanitizedText) return;
-  roomChatDb.prepare(`
-    INSERT INTO room_chat_messages (
-      room_code, channel, message_id, from_peer_id, sender_name, text, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    String(roomCode || ""),
-    String(channel || "room"),
-    String(messageId || ""),
-    String(fromPeerId || ""),
-    normalizePlayerName(senderName),
-    sanitizedText,
-    Number.isFinite(createdAt) ? Math.floor(createdAt) : nowTs(),
-  );
-}
-
-function loadRecentRoomChatMessages(roomCode, channel, limit = ROOM_CHAT_HISTORY_LIMIT) {
-  if (!roomChatDb) return [];
-  const max = Math.max(1, Math.min(200, Number(limit) || ROOM_CHAT_HISTORY_LIMIT));
-  const rows = roomChatDb.prepare(`
-    SELECT message_id, from_peer_id, sender_name, text, created_at
-    FROM room_chat_messages
-    WHERE room_code = ? AND channel = ?
-    ORDER BY created_at DESC, id DESC
-    LIMIT ?
-  `).all(String(roomCode || ""), String(channel || "room"), max);
-  return rows.reverse().map((row) => ({
-    messageId: String(row.message_id || ""),
-    from: String(row.from_peer_id || ""),
-    name: normalizePlayerName(row.sender_name),
-    text: sanitizeChatText(row.text),
-    createdAt: Number(row.created_at || 0),
-  }));
-}
 
 function roomMetaOf(code) {
   if (!roomMeta.has(code)) {
@@ -680,11 +612,6 @@ function validateAndTrackChatMutation(code, ws, payload) {
 
   const type = String(payload?.type || "");
   if (type === "chat") {
-    const text = sanitizeChatText(payload?.text);
-    if (!text) {
-      sendError(ws, "CHAT_EMPTY");
-      return { ok: false };
-    }
     const messageId = normalizeMessageId(payload?.messageId);
     if (!messageId) {
       sendError(ws, "MESSAGE_ID_REQUIRED");
@@ -697,7 +624,6 @@ function validateAndTrackChatMutation(code, ws, payload) {
       targetPeerId: String(payload?.to || "").trim() || "",
     });
     payload.messageId = messageId;
-    payload.text = text;
     return { ok: true };
   }
 
@@ -733,8 +659,6 @@ function validateAndTrackChatMutation(code, ws, payload) {
 
   return { ok: true };
 }
-
-initRoomChatDb();
 
 function resolveFilePath(urlPath) {
   const safePath = decodeURIComponent(urlPath.split("?")[0]).replace(/\\/g, "/");
@@ -803,6 +727,15 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (requestUrl.pathname.startsWith("/api/")) {
+    if (req.method === "OPTIONS") {
+      sendApiJson(res, 204, { ok: true });
+      return;
+    }
+    sendApiJson(res, 404, { ok: false, code: "NOT_FOUND", message: "Unknown API endpoint" });
+    return;
+  }
+
   if (!fs.existsSync(distDir)) {
     res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("dist directory not found. Run npm run build first.");
@@ -867,8 +800,6 @@ wss.on("connection", (ws) => {
     const code = ws.roomCode;
     if (!code) return;
 
-    const type = String(payload.type || "");
-
     if (typeof payload.name === "string") {
       ws.playerName = normalizePlayerName(payload.name);
     }
@@ -876,15 +807,7 @@ wss.on("connection", (ws) => {
       ws.playerAvatar = normalizeAvatarDataUrl(payload.avatar);
     }
 
-    if (joinResult.joined || type === "hello" || type === "presence") {
-      sendJson(ws, {
-        type: "chat-history",
-        room: code,
-        roomMessages: loadRecentRoomChatMessages(code, "room"),
-        spectatorMessages: loadRecentRoomChatMessages(code, "spectator"),
-      });
-    }
-
+    const type = String(payload.type || "");
     if (type === "host-mute") {
       handleHostMute(code, ws, payload);
       return;
@@ -933,15 +856,6 @@ wss.on("connection", (ws) => {
         name: ws.playerName || "Spectator",
         text,
       };
-      persistRoomChatMessage({
-        roomCode: code,
-        channel: "spectator",
-        messageId: normalizeMessageId(payload?.messageId) || `spectator-${nowTs()}-${Math.floor(Math.random() * 100000)}`,
-        fromPeerId: ws.peerId || "",
-        senderName: ws.playerName || "Spectator",
-        text,
-        createdAt: nowTs(),
-      });
       for (const member of members) {
         if (member.spectator || member === ws) {
           sendJson(member, envelope);
@@ -977,6 +891,17 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    if (type === "rematch-unvote") {
+      const meta = roomMetaOf(code);
+      if (!canVoteRematch(meta, ws)) {
+        sendError(ws, "REMATCH_VOTE_FORBIDDEN");
+        return;
+      }
+      meta.rematchVotes.delete(ws.peerId);
+      broadcastRematchVoteState(code);
+      return;
+    }
+
     let mutationResult = { ok: true };
     if (isChatMutatingType(type)) {
       mutationResult = validateAndTrackChatMutation(code, ws, payload);
@@ -998,19 +923,6 @@ wss.on("connection", (ws) => {
       room: code,
       from: ws.peerId || String(payload.from || ""),
     };
-
-    if (type === "chat") {
-      envelope.name = ws.playerName || "Player";
-      persistRoomChatMessage({
-        roomCode: code,
-        channel: "room",
-        messageId: normalizeMessageId(payload?.messageId) || `room-${nowTs()}-${Math.floor(Math.random() * 100000)}`,
-        fromPeerId: ws.peerId || "",
-        senderName: envelope.name,
-        text: payload.text,
-        createdAt: nowTs(),
-      });
-    }
 
     const members = rooms.get(code);
     if (!members) return;

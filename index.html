@@ -50,12 +50,6 @@
             <button id="entryGuestBtn" class="start-btn ghost">PLAY AS GUEST</button>
           </div>
           <p id="entryMessage" class="room-menu-message"></p>
-          <div id="entryConnectGauge" class="entry-connect-gauge hidden" aria-live="polite">
-            <div class="entry-connect-track">
-              <span id="entryConnectGaugeFill" class="entry-connect-fill"></span>
-            </div>
-            <p id="entryConnectGaugeLabel" class="entry-connect-label">接続中 0.0秒</p>
-          </div>
         </div>
       </section>
 
@@ -379,116 +373,12 @@
             <span class="piece-status-item">BLACK: <span id="blackCount">2</span></span>
             <span class="piece-status-item">WHITE: <span id="whiteCount">2</span></span>
             <span id="chaosOverwriteText" class="piece-status-item hidden">上書き残り: -</span>
-            <span id="chaosImmutableText" class="piece-status-item hidden">固定石チャージ: -</span>
-            <span id="chaosDestroyText" class="piece-status-item hidden">駒破壊残り: -</span>
-            <span id="chaosRandomCutText" class="piece-status-item hidden">終局ランダム1列無効: OFF</span>
           </div>
         </div>
 
-        <section class="canvas-wrap othello-wrap">
-          <div class="othello-board-wrap">
-            <div id="board" class="board" aria-label="Othello board"></div>
-            <div id="overlay" class="overlay">NEW GAMEで開始</div>
-          </div>
-          <aside id="chaosHandicapPanel" class="chaos-handicap-panel hidden" aria-label="カオスハンデ設定">
-            <h3>カオスハンデ</h3>
-            <label class="chaos-handicap-field" for="chaosHandicapTargetSelect">
-              <span>対象</span>
-              <select id="chaosHandicapTargetSelect" class="difficulty-select" aria-label="Chaos handicap target">
-                <option value="none" selected>なし</option>
-                <option value="black">黒</option>
-                <option value="white">白</option>
-                <option value="both">両者</option>
-              </select>
-            </label>
-            <label id="chaosHandicapBonusRow" class="chaos-handicap-field" for="chaosHandicapBonusSelect">
-              <span>上書き回数ボーナス</span>
-              <select id="chaosHandicapBonusSelect" class="difficulty-select" aria-label="Chaos overwrite bonus">
-                <option value="0" selected>+0</option>
-                <option value="1">+1</option>
-                <option value="2">+2</option>
-                <option value="3">+3</option>
-              </select>
-            </label>
-            <div id="chaosHandicapSplitRow" class="chaos-handicap-split hidden" aria-label="両者時の上書き個別ボーナス">
-              <label class="chaos-handicap-field" for="chaosHandicapBonusBlackSelect">
-                <span>黒 上書きボーナス</span>
-                <select id="chaosHandicapBonusBlackSelect" class="difficulty-select" aria-label="Chaos overwrite bonus black">
-                  <option value="0" selected>+0</option>
-                  <option value="1">+1</option>
-                  <option value="2">+2</option>
-                  <option value="3">+3</option>
-                </select>
-              </label>
-              <label class="chaos-handicap-field" for="chaosHandicapBonusWhiteSelect">
-                <span>白 上書きボーナス</span>
-                <select id="chaosHandicapBonusWhiteSelect" class="difficulty-select" aria-label="Chaos overwrite bonus white">
-                  <option value="0" selected>+0</option>
-                  <option value="1">+1</option>
-                  <option value="2">+2</option>
-                  <option value="3">+3</option>
-                </select>
-              </label>
-            </div>
-            <label id="chaosImmutableBonusRow" class="chaos-handicap-field" for="chaosImmutableBonusSelect">
-              <span>固定石チャージボーナス</span>
-              <select id="chaosImmutableBonusSelect" class="difficulty-select" aria-label="Chaos immutable bonus">
-                <option value="0" selected>+0</option>
-                <option value="1">+1</option>
-                <option value="2">+2</option>
-              </select>
-            </label>
-            <div id="chaosImmutableSplitRow" class="chaos-handicap-split hidden" aria-label="両者時の固定石個別ボーナス">
-              <label class="chaos-handicap-field" for="chaosImmutableBonusBlackSelect">
-                <span>黒 固定石ボーナス</span>
-                <select id="chaosImmutableBonusBlackSelect" class="difficulty-select" aria-label="Chaos immutable bonus black">
-                  <option value="0" selected>+0</option>
-                  <option value="1">+1</option>
-                  <option value="2">+2</option>
-                </select>
-              </label>
-              <label class="chaos-handicap-field" for="chaosImmutableBonusWhiteSelect">
-                <span>白 固定石ボーナス</span>
-                <select id="chaosImmutableBonusWhiteSelect" class="difficulty-select" aria-label="Chaos immutable bonus white">
-                  <option value="0" selected>+0</option>
-                  <option value="1">+1</option>
-                  <option value="2">+2</option>
-                </select>
-              </label>
-            </div>
-            <label id="chaosDestroyBonusRow" class="chaos-handicap-field" for="chaosDestroyBonusSelect">
-              <span>駒破壊回数ボーナス</span>
-              <select id="chaosDestroyBonusSelect" class="difficulty-select" aria-label="Chaos destroy bonus">
-                <option value="0" selected>+0</option>
-                <option value="1">+1</option>
-                <option value="2">+2</option>
-              </select>
-            </label>
-            <div id="chaosDestroySplitRow" class="chaos-handicap-split hidden" aria-label="両者時の駒破壊個別ボーナス">
-              <label class="chaos-handicap-field" for="chaosDestroyBonusBlackSelect">
-                <span>黒 破壊ボーナス</span>
-                <select id="chaosDestroyBonusBlackSelect" class="difficulty-select" aria-label="Chaos destroy bonus black">
-                  <option value="0" selected>+0</option>
-                  <option value="1">+1</option>
-                  <option value="2">+2</option>
-                </select>
-              </label>
-              <label class="chaos-handicap-field" for="chaosDestroyBonusWhiteSelect">
-                <span>白 破壊ボーナス</span>
-                <select id="chaosDestroyBonusWhiteSelect" class="difficulty-select" aria-label="Chaos destroy bonus white">
-                  <option value="0" selected>+0</option>
-                  <option value="1">+1</option>
-                  <option value="2">+2</option>
-                </select>
-              </label>
-            </div>
-            <label class="chaos-handicap-toggle" for="chaosRandomLineExcludeToggle">
-              <input id="chaosRandomLineExcludeToggle" type="checkbox" />
-              <span>終局時にランダム1行/1列をカウント無効</span>
-            </label>
-            <p id="chaosHandicapSummary" class="chaos-handicap-summary">適用: なし</p>
-            <p class="chaos-handicap-note">設定は次回NEW GAME開始時にも適用されます。</p>
-          </aside>
+        <section class="canvas-wrap">
+          <div id="board" class="board" aria-label="Othello board"></div>
+          <div id="overlay" class="overlay">NEW GAMEで開始</div>
         </section>
 
         <p id="message" class="message">黒の手番です</p>
@@ -512,9 +402,8 @@
           <div class="metric metric-select">
             <span class="label">MODE</span>
             <select id="shogiModeSelect" class="difficulty-select" aria-label="Shogi mode">
-              <option id="shogiModeLocalOption" value="local" selected>ローカル2人</option>
-              <option id="shogiModeCpuOption" value="cpu">1P 対 CPU</option>
-              <option id="shogiModeChaosOption" value="chaos">カオス</option>
+              <option value="local" selected>ローカル2人</option>
+              <option value="cpu">1P 対 CPU</option>
             </select>
           </div>
           <div class="metric metric-select">
@@ -526,139 +415,9 @@
               <option value="pro">プロ</option>
             </select>
           </div>
-          <div class="metric metric-select">
-            <span id="shogiTurnOrderLabel" class="label">先攻後攻</span>
-            <select id="shogiTurnOrderSelect" class="difficulty-select" aria-label="Shogi turn order">
-              <option value="first" selected>先攻</option>
-              <option value="second">後攻</option>
-              <option value="random">ランダム</option>
-            </select>
-          </div>
-          <div class="metric metric-select">
-            <span id="shogiMyPieceColorLabel" class="label">自分の駒色</span>
-            <select id="shogiMyPieceColorSelect" class="difficulty-select" aria-label="Shogi piece color">
-              <option value="amber" selected>AMBER</option>
-              <option value="cyan">CYAN</option>
-              <option value="lime">LIME</option>
-              <option value="magenta">MAGENTA</option>
-            </select>
-          </div>
           <button id="shogiStartBtn" class="start-btn hud-primary">新規対局</button>
           <button id="shogiRemakeBtn" class="start-btn ghost">リメイク</button>
           <button id="shogiMenuBtn" class="start-btn ghost">メニュー</button>
-        </section>
-
-        <section id="shogiChaosPanel" class="hud">
-          <div id="shogiPlayerSetting1" class="metric metric-select hidden">
-            <span class="label">1P</span>
-            <span id="shogiBlackHandicapLabel" class="label">ハンデ</span>
-            <select id="shogiBlackHandicapSelect" class="difficulty-select" aria-label="Shogi handicap player1">
-              <option value="none" selected>なし</option>
-              <option value="rook">飛車落ち</option>
-              <option value="bishop">角落ち</option>
-              <option value="rookBishop">二枚落ち（飛角）</option>
-              <option value="fourPiece">四枚落ち（飛角香香）</option>
-            </select>
-            <span id="shogiBlackMineCountLabel" class="label">地雷数</span>
-            <select id="shogiBlackMineCountSelect" class="difficulty-select" aria-label="Shogi mine player1">
-              <option value="0" selected>0</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-            </select>
-          </div>
-          <div id="shogiPlayerSetting2" class="metric metric-select hidden">
-            <span class="label">2P</span>
-            <span id="shogiWhiteHandicapLabel" class="label">ハンデ</span>
-            <select id="shogiWhiteHandicapSelect" class="difficulty-select" aria-label="Shogi handicap player2">
-              <option value="none" selected>なし</option>
-              <option value="rook">飛車落ち</option>
-              <option value="bishop">角落ち</option>
-              <option value="rookBishop">二枚落ち（飛角）</option>
-              <option value="fourPiece">四枚落ち（飛角香香）</option>
-            </select>
-            <span id="shogiWhiteMineCountLabel" class="label">地雷数</span>
-            <select id="shogiWhiteMineCountSelect" class="difficulty-select" aria-label="Shogi mine player2">
-              <option value="0" selected>0</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-            </select>
-          </div>
-          <div id="shogiPlayerSetting3" class="metric metric-select hidden">
-            <span class="label">3P</span>
-            <span id="shogiThirdHandicapLabel" class="label">ハンデ</span>
-            <select id="shogiThirdHandicapSelect" class="difficulty-select" aria-label="Shogi handicap player3">
-              <option value="none" selected>なし</option>
-              <option value="rook">飛車落ち</option>
-              <option value="bishop">角落ち</option>
-              <option value="rookBishop">二枚落ち（飛角）</option>
-              <option value="fourPiece">四枚落ち（飛角香香）</option>
-            </select>
-            <span id="shogiThirdMineCountLabel" class="label">地雷数</span>
-            <select id="shogiThirdMineCountSelect" class="difficulty-select" aria-label="Shogi mine player3">
-              <option value="0" selected>0</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-            </select>
-          </div>
-          <div id="shogiPlayerSetting4" class="metric metric-select hidden">
-            <span class="label">4P</span>
-            <span id="shogiFourthHandicapLabel" class="label">ハンデ</span>
-            <select id="shogiFourthHandicapSelect" class="difficulty-select" aria-label="Shogi handicap player4">
-              <option value="none" selected>なし</option>
-              <option value="rook">飛車落ち</option>
-              <option value="bishop">角落ち</option>
-              <option value="rookBishop">二枚落ち（飛角）</option>
-              <option value="fourPiece">四枚落ち（飛角香香）</option>
-            </select>
-            <span id="shogiFourthMineCountLabel" class="label">地雷数</span>
-            <select id="shogiFourthMineCountSelect" class="difficulty-select" aria-label="Shogi mine player4">
-              <option value="0" selected>0</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-            </select>
-          </div>
-          <div class="metric metric-select hidden">
-            <span class="label">共通ハンデ</span>
-            <select id="shogiHandicapSelect" class="difficulty-select" aria-label="Shogi legacy handicap">
-              <option value="none" selected>なし</option>
-              <option value="rook">飛車落ち</option>
-              <option value="bishop">角落ち</option>
-              <option value="rookBishop">二枚落ち（飛角）</option>
-              <option value="fourPiece">四枚落ち（飛角香香）</option>
-            </select>
-          </div>
-          <div class="metric metric-select hidden">
-            <span class="label">共通ハンデ対象</span>
-            <select id="shogiHandicapTargetSelect" class="difficulty-select" aria-label="Shogi legacy handicap target">
-              <option value="opponent" selected>相手</option>
-              <option value="self">自分</option>
-              <option value="both">両者</option>
-              <option value="black">先手</option>
-              <option value="white">後手</option>
-            </select>
-          </div>
-          <div class="metric metric-select">
-            <span class="label">王吸収</span>
-            <select id="shogiKingAbsorbSelect" class="difficulty-select" aria-label="Shogi king absorb">
-              <option value="on" selected>ON</option>
-              <option value="off">OFF</option>
-            </select>
-          </div>
-          <div class="metric metric-select">
-            <span class="label">人数</span>
-            <select id="shogiChaosPlayerModeSelect" class="difficulty-select" aria-label="Shogi chaos player mode">
-              <option value="2p" selected>2人</option>
-              <option value="4p">4人</option>
-            </select>
-          </div>
-          <div id="shogiChaosRuleMetric" class="metric">
-            <span class="label">カオス設定</span>
-            <span id="shogiChaosRuleText">-</span>
-          </div>
         </section>
 
         <section class="shogi-hands">
@@ -1014,7 +773,6 @@
         <p id="solitaireMessage" class="message">GAME STARTで開始</p>
       </section>
 
-      <button id="globalRoomBackBtn" class="start-btn ghost room-back-inline hidden" type="button">ルームへ戻る</button>
       <button id="globalRematchBtn" class="start-btn rematch-floating hidden" type="button">RE-MATCH</button>
     </main>
 
