@@ -7,6 +7,7 @@ import { initGomoku } from "./scripts/gomoku.js";
 import { initSurvivors } from "./scripts/survivors.js";
 import { initFitPuzzle } from "./scripts/fitPuzzle.js";
 import { initSolitaire } from "./scripts/solitaire.js";
+import { initMahjong } from "./scripts/mahjong.js";
 import { cloudApiCandidates } from "./scripts/cloudApiClient.js";
 import { createRoomTransport, resolveRoomServerUrl } from "./scripts/roomTransport.js";
 
@@ -35,6 +36,7 @@ const gomokuScreen = document.getElementById("gomokuScreen");
 const survivorsScreen = document.getElementById("survivorsScreen");
 const fitPuzzleScreen = document.getElementById("fitPuzzleScreen");
 const solitaireScreen = document.getElementById("solitaireScreen");
+const mahjongScreen = document.getElementById("mahjongScreen");
 
 const playOthelloBtn = document.getElementById("playOthelloBtn");
 const playShogiBtn = document.getElementById("playShogiBtn");
@@ -43,6 +45,7 @@ const playUnoBtn = document.getElementById("playUnoBtn");
 const playGomokuBtn = document.getElementById("playGomokuBtn");
 const playSurvivorsBtn = document.getElementById("playSurvivorsBtn");
 const playFitPuzzleBtn = document.getElementById("playFitPuzzleBtn");
+const playMahjongBtn = document.getElementById("playMahjongBtn");
 const playSolitaireSingleBtn = document.getElementById("playSolitaireSingleBtn");
 const playSolitaireMultiBtn = document.getElementById("playSolitaireMultiBtn");
 const openCardListBtn = document.getElementById("openCardListBtn");
@@ -72,11 +75,24 @@ const entryLoginBtn = document.getElementById("entryLoginBtn");
 const entryRegisterBtn = document.getElementById("entryRegisterBtn");
 const entryGuestBtn = document.getElementById("entryGuestBtn");
 const entryMessage = document.getElementById("entryMessage");
+const entryLoadingPanel = document.getElementById("entryLoadingPanel");
+const entryLoadingText = document.getElementById("entryLoadingText");
+const entryLoadingFill = document.getElementById("entryLoadingFill");
+const entryLoadingElapsed = document.getElementById("entryLoadingElapsed");
 const cloudUserIdInput = document.getElementById("cloudUserIdInput");
 const cloudPasswordInput = document.getElementById("cloudPasswordInput");
 const saveCloudAuthBtn = document.getElementById("saveCloudAuthBtn");
 const backToEntryBtn = document.getElementById("backToEntryBtn");
 const roomMenuMessage = document.getElementById("roomMenuMessage");
+const friendsPanel = document.getElementById("friendsPanel");
+const friendsTitle = document.getElementById("friendsTitle");
+const friendsHint = document.getElementById("friendsHint");
+const friendUserIdInput = document.getElementById("friendUserIdInput");
+const friendAddBtn = document.getElementById("friendAddBtn");
+const friendRemoveBtn = document.getElementById("friendRemoveBtn");
+const friendReloadBtn = document.getElementById("friendReloadBtn");
+const friendsList = document.getElementById("friendsList");
+const friendsMessage = document.getElementById("friendsMessage");
 
 const lobbyRoomCodeText = document.getElementById("lobbyRoomCodeText");
 const lobbyRoleText = document.getElementById("lobbyRoleText");
@@ -94,6 +110,7 @@ const lobbyStartGomokuBtn = document.getElementById("lobbyStartGomokuBtn");
 const lobbyStartSurvivorsBtn = document.getElementById("lobbyStartSurvivorsBtn");
 const lobbyStartFitPuzzleBtn = document.getElementById("lobbyStartFitPuzzleBtn");
 const lobbyStartSolitaireBtn = document.getElementById("lobbyStartSolitaireBtn");
+const lobbyStartMahjongBtn = document.getElementById("lobbyStartMahjongBtn");
 const lobbySwitchSpectateBtn = document.getElementById("lobbySwitchSpectateBtn");
 const lobbyBackBtn = document.getElementById("lobbyBackBtn");
 const copyInviteLinkBtn = document.getElementById("copyInviteLinkBtn");
@@ -111,6 +128,7 @@ const roomStatus = document.getElementById("roomStatus");
 const roomCodeText = document.getElementById("roomCodeText");
 const roomRoleText = document.getElementById("roomRoleText");
 const langSelect = document.getElementById("langSelect");
+const friendsToggleBtn = document.getElementById("friendsToggleBtn");
 
 const messages = {
   ja: {
@@ -138,6 +156,7 @@ const messages = {
     gomokuCardDesc: "五目並べ。先に5つ石を並べたプレイヤーの勝ち。",
     survivorsCardDesc: "2Dサバイバルアクション。移動しながら自動攻撃で敵の波をさばく。",
     fitPuzzleCardDesc: "ピースを枠内に収めるパズル。すべてのマスを埋めればクリア。",
+    mahjongCardDesc: "同じ牌を選んで消していくクリック型の麻雀ペアゲーム。",
     solitaireCardDesc: "定番のクロンダイク。AからKまで4組そろえるとクリア。",
     shogiDetailSummary: "詳細",
     shogiDetailTitle: "駒の名称と強さ（目安）",
@@ -158,6 +177,7 @@ const messages = {
     gomokuSubtitle: "黒白で交互に置き、先に5連を作った側の勝ち。",
     survivorsSubtitle: "WASD / 矢印キーで移動。自動攻撃で生き残れ。",
     fitPuzzleSubtitle: "ピースを選んで枠内に配置し、すべて埋めるとクリア。",
+    mahjongSubtitle: "同じ牌を2回まで曲がる線でつなげると消せます。すべて消したらクリア。",
     solitaireSubtitle: "ストックからめくって並べ替え、4つの土台を完成させよう。",
     unoModeCpu: "1P 対 CPU",
     unoModeLocal: "ローカル2人",
@@ -176,6 +196,7 @@ const messages = {
     survivorsStart: "サバイバー開始",
     fitPuzzleStart: "Fit Puzzle開始",
     solitaireStart: "ソリティア開始",
+    mahjongStart: "麻雀開始",
     bankGacha: "スキンガチャ",
     bankGacha10: "スキンガチャ x10",
     singlePlay: "シングル",
@@ -210,6 +231,8 @@ const messages = {
     newMatch: "ゲーム開始",
     menuJa: "メニュー",
     rotate: "回転",
+    shuffle: "シャッフル",
+    hint: "ヒント",
     reset: "リセット",
     resetEn: "RESET",
     playerNamePlaceholder: "あなたの名前",
@@ -220,6 +243,25 @@ const messages = {
     confirmBackToLogin: "ログイン画面に戻ります。よろしいですか？",
     cloudAuthSaved: "クラウド認証情報を保存しました",
     cloudAuthInvalid: "クラウドID/パスワードを入力してください",
+    friendsTitle: "フレンド",
+    friendsToggle: "フレンド一覧",
+    friendsClose: "閉じる",
+    friendsHintNoAuth: "ログインするとフレンド一覧を読み込みます",
+    friendsHintReady: "フレンドIDで追加/削除できます",
+    friendIdPlaceholder: "フレンドID",
+    friendAdd: "追加",
+    friendRemove: "削除",
+    friendReload: "再読込",
+    friendsLoading: "フレンド一覧を読み込み中...",
+    friendsListEmpty: "フレンドはまだいません",
+    friendsLoadFailed: "フレンド取得に失敗しました",
+    friendIdRequired: "フレンドIDを入力してください",
+    friendAddSuccess: "フレンドを追加しました",
+    friendRemoveSuccess: "フレンドを削除しました",
+    friendAddFailed: "フレンド追加に失敗しました",
+    friendRemoveFailed: "フレンド削除に失敗しました",
+    friendNotFound: "指定したIDのユーザーが見つかりません",
+    friendSelfForbidden: "自分自身は追加できません",
     cloudUserNotFound: "ユーザーが存在しません。新規登録してください",
     cloudIdDuplicateWarn: "このIDは既に使用されています。別のIDか、正しいパスワードを入力してください",
     cloudCheckFailed: "クラウド確認に失敗しました。サーバー起動後にもう一度お試しください",
@@ -290,6 +332,7 @@ const messages = {
     gomokuCardDesc: "오목. 먼저 돌 5개를 연속으로 놓는 플레이어가 승리합니다.",
     survivorsCardDesc: "2D 서바이벌 액션. 이동하며 자동 공격으로 적의 물결을 버티세요.",
     fitPuzzleCardDesc: "조각을 프레임 안에 배치하는 퍼즐. 모든 칸을 채우면 클리어.",
+    mahjongCardDesc: "같은 패를 클릭해 제거하는 클릭형 마작 페어 게임.",
     solitaireCardDesc: "클론다이크 솔리테어. A부터 K까지 4세트를 완성하면 클리어.",
     shogiDetailSummary: "상세",
     shogiDetailTitle: "말 이름과 강함(대략)",
@@ -310,6 +353,7 @@ const messages = {
     gomokuSubtitle: "흑/백이 번갈아 두고, 먼저 5목을 만들면 승리합니다.",
     survivorsSubtitle: "WASD / 방향키로 이동. 자동 공격으로 생존하세요.",
     fitPuzzleSubtitle: "조각을 선택해 프레임 안에 배치하고, 전부 채우면 클리어.",
+    mahjongSubtitle: "같은 패를 2번 이하로 꺾는 선으로 연결하면 제거됩니다. 전부 지우면 클리어.",
     solitaireSubtitle: "스톡에서 카드를 넘겨 정리하고, 4개의 파운데이션을 완성하세요.",
     unoModeCpu: "1P vs CPU",
     unoModeLocal: "2P LOCAL",
@@ -328,6 +372,7 @@ const messages = {
     survivorsStart: "서바이버 시작",
     fitPuzzleStart: "핏 퍼즐 시작",
     solitaireStart: "솔리테어 시작",
+    mahjongStart: "마작 시작",
     bankGacha: "SKIN GACHA",
     bankGacha10: "SKIN GACHA x10",
     singlePlay: "싱글",
@@ -362,6 +407,8 @@ const messages = {
     newMatch: "GAME START",
     menuJa: "메뉴",
     rotate: "회전",
+    shuffle: "셔플",
+    hint: "힌트",
     reset: "리셋",
     resetEn: "RESET",
     playerNamePlaceholder: "내 이름",
@@ -372,6 +419,25 @@ const messages = {
     confirmBackToLogin: "로그인 화면으로 돌아갑니다. 계속할까요?",
     cloudAuthSaved: "클라우드 인증 정보를 저장했습니다",
     cloudAuthInvalid: "클라우드 ID/비밀번호를 입력하세요",
+    friendsTitle: "친구",
+    friendsToggle: "친구 목록",
+    friendsClose: "닫기",
+    friendsHintNoAuth: "로그인하면 친구 목록을 불러옵니다",
+    friendsHintReady: "친구 ID로 추가/삭제할 수 있습니다",
+    friendIdPlaceholder: "친구 ID",
+    friendAdd: "추가",
+    friendRemove: "삭제",
+    friendReload: "새로고침",
+    friendsLoading: "친구 목록을 불러오는 중...",
+    friendsListEmpty: "친구가 아직 없습니다",
+    friendsLoadFailed: "친구 목록을 불러오지 못했습니다",
+    friendIdRequired: "친구 ID를 입력하세요",
+    friendAddSuccess: "친구를 추가했습니다",
+    friendRemoveSuccess: "친구를 삭제했습니다",
+    friendAddFailed: "친구 추가에 실패했습니다",
+    friendRemoveFailed: "친구 삭제에 실패했습니다",
+    friendNotFound: "해당 ID의 사용자를 찾을 수 없습니다",
+    friendSelfForbidden: "자기 자신은 추가할 수 없습니다",
     cloudUserNotFound: "사용자가 존재하지 않습니다. 회원가입을 진행해 주세요",
     cloudIdDuplicateWarn: "이 ID는 이미 사용 중입니다. 다른 ID 또는 올바른 비밀번호를 입력하세요",
     cloudCheckFailed: "클라우드 확인에 실패했습니다. 서버 실행 후 다시 시도하세요",
@@ -448,6 +514,7 @@ function applyStaticTranslations() {
   setTextById("gomokuCardDesc", tr("gomokuCardDesc"));
   setTextById("survivorsCardDesc", tr("survivorsCardDesc"));
   setTextById("fitPuzzleCardDesc", tr("fitPuzzleCardDesc"));
+  setTextById("mahjongCardDesc", tr("mahjongCardDesc"));
   setTextById("solitaireCardDesc", tr("solitaireCardDesc"));
   setTextById("shogiDetailSummary", tr("shogiDetailSummary"));
   setTextById("shogiDetailTitle", tr("shogiDetailTitle"));
@@ -468,6 +535,7 @@ function applyStaticTranslations() {
   setTextById("gomokuSubtitle", tr("gomokuSubtitle"));
   setTextById("survivorsSubtitle", tr("survivorsSubtitle"));
   setTextById("fitPuzzleSubtitle", tr("fitPuzzleSubtitle"));
+  setTextById("mahjongSubtitle", tr("mahjongSubtitle"));
   setTextById("solitaireSubtitle", tr("solitaireSubtitle"));
   setTextById("unoModeCpuOption", tr("unoModeCpu"));
   setTextById("unoModeLocalOption", tr("unoModeLocal"));
@@ -486,6 +554,7 @@ function applyStaticTranslations() {
   if (playGomokuBtn) playGomokuBtn.textContent = tr("play");
   if (playSurvivorsBtn) playSurvivorsBtn.textContent = tr("play");
   if (playFitPuzzleBtn) playFitPuzzleBtn.textContent = tr("play");
+  if (playMahjongBtn) playMahjongBtn.textContent = tr("play");
   if (playSolitaireSingleBtn) playSolitaireSingleBtn.textContent = tr("singlePlay");
   if (playSolitaireMultiBtn) playSolitaireMultiBtn.textContent = tr("multiPlay");
   if (quickMatchBtn) quickMatchBtn.textContent = tr("quickMatchMulti");
@@ -500,6 +569,16 @@ function applyStaticTranslations() {
   if (entryGuestBtn) entryGuestBtn.textContent = tr("playAsGuest");
   if (saveCloudAuthBtn) saveCloudAuthBtn.textContent = tr("saveCloudAuth");
   if (backToEntryBtn) backToEntryBtn.textContent = tr("backToLogin");
+  if (friendsTitle) friendsTitle.textContent = tr("friendsTitle");
+  if (friendsHint) friendsHint.textContent = tr("friendsHintNoAuth");
+  if (friendUserIdInput) friendUserIdInput.placeholder = tr("friendIdPlaceholder");
+  if (friendAddBtn) friendAddBtn.textContent = tr("friendAdd");
+  if (friendRemoveBtn) friendRemoveBtn.textContent = tr("friendRemove");
+  if (friendReloadBtn) friendReloadBtn.textContent = tr("friendReload");
+  if (friendsToggleBtn) {
+    const isOpen = friendsPanel && !friendsPanel.classList.contains("hidden");
+    friendsToggleBtn.textContent = isOpen ? tr("friendsClose") : tr("friendsToggle");
+  }
   if (lobbyStartOthelloBtn) lobbyStartOthelloBtn.textContent = tr("othelloStart");
   if (lobbyStartShogiBtn) lobbyStartShogiBtn.textContent = tr("shogiStart");
   if (lobbyStartChessBtn) lobbyStartChessBtn.textContent = tr("chessStart");
@@ -508,6 +587,7 @@ function applyStaticTranslations() {
   if (lobbyStartSurvivorsBtn) lobbyStartSurvivorsBtn.textContent = tr("survivorsStart");
   if (lobbyStartFitPuzzleBtn) lobbyStartFitPuzzleBtn.textContent = tr("fitPuzzleStart");
   if (lobbyStartSolitaireBtn) lobbyStartSolitaireBtn.textContent = tr("solitaireStart");
+  if (lobbyStartMahjongBtn) lobbyStartMahjongBtn.textContent = tr("mahjongStart");
   updateLobbySpectateToggleButton();
   if (lobbyBackBtn) lobbyBackBtn.textContent = tr("backToMenu");
   if (copyInviteLinkBtn) copyInviteLinkBtn.textContent = tr("copyInviteLink");
@@ -539,6 +619,10 @@ function applyStaticTranslations() {
   setTextById("fitPuzzleRotateBtn", tr("rotate"));
   setTextById("fitPuzzleResetBtn", tr("reset"));
   setTextById("fitPuzzleMenuBtn", tr("menu"));
+  setTextById("mahjongStartBtn", tr("newMatch"));
+  setTextById("mahjongShuffleBtn", tr("shuffle"));
+  setTextById("mahjongHintBtn", tr("hint"));
+  setTextById("mahjongMenuBtn", tr("menu"));
   setTextById("solitaireStartBtn", tr("newMatch"));
   setTextById("solitaireResetBtn", tr("resetEn"));
   setTextById("solitaireMenuBtn", tr("menu"));
@@ -546,6 +630,133 @@ function applyStaticTranslations() {
   const menuTitle = menuScreen?.querySelector(".top-bar h1");
   if (menuTitle) menuTitle.textContent = tr("gameSelectTitle");
   updateConnectionText();
+}
+
+function setFriendsPanelOpen(open) {
+  if (!friendsPanel || !friendsToggleBtn) return;
+  if (friendsToggleBtn.classList.contains("hidden")) {
+    friendsPanel.classList.add("hidden");
+    friendsToggleBtn.setAttribute("aria-expanded", "false");
+    return;
+  }
+  friendsPanel.classList.toggle("hidden", !open);
+  friendsToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  friendsToggleBtn.textContent = open ? tr("friendsClose") : tr("friendsToggle");
+  if (open) {
+    void refreshFriendsList();
+  }
+}
+
+function updateFriendsAvailability() {
+  if (!friendsToggleBtn) return;
+  const auth = getCloudAuthFromStorage();
+  const inMenu = !menuScreen.classList.contains("hidden");
+  const enabled = Boolean(auth && inMenu);
+
+  friendsToggleBtn.classList.toggle("hidden", !enabled);
+  if (!enabled) {
+    setFriendsPanelOpen(false);
+    return;
+  }
+
+  const isOpen = friendsPanel && !friendsPanel.classList.contains("hidden");
+  friendsToggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  friendsToggleBtn.textContent = isOpen ? tr("friendsClose") : tr("friendsToggle");
+}
+
+function setFriendsMessage(text) {
+  if (!friendsMessage) return;
+  friendsMessage.textContent = text;
+}
+
+function setFriendsButtonsEnabled(enabled) {
+  if (friendAddBtn) friendAddBtn.disabled = !enabled;
+  if (friendRemoveBtn) friendRemoveBtn.disabled = !enabled;
+  if (friendReloadBtn) friendReloadBtn.disabled = !enabled;
+  if (friendUserIdInput) friendUserIdInput.disabled = !enabled;
+}
+
+function renderFriendsList(friends) {
+  if (!friendsList) return;
+  friendsList.innerHTML = "";
+  if (!Array.isArray(friends) || friends.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = tr("friendsListEmpty");
+    friendsList.appendChild(li);
+    return;
+  }
+
+  friends.forEach((id) => {
+    const li = document.createElement("li");
+    li.textContent = String(id);
+    friendsList.appendChild(li);
+  });
+}
+
+async function refreshFriendsList() {
+  if (!friendsPanel) return;
+  if (friendsPanel.classList.contains("hidden")) return;
+  const auth = getCloudAuthFromStorage();
+  if (!auth) {
+    renderFriendsList([]);
+    if (friendsHint) friendsHint.textContent = tr("friendsHintNoAuth");
+    setFriendsMessage("");
+    setFriendsButtonsEnabled(false);
+    return;
+  }
+
+  if (friendsHint) friendsHint.textContent = tr("friendsHintReady");
+  setFriendsButtonsEnabled(false);
+  setFriendsMessage(tr("friendsLoading"));
+  try {
+    const { data } = await cloudApiRequest("/api/friends/list", {
+      userId: auth.userId,
+      password: auth.password,
+    });
+    renderFriendsList(data?.friends || []);
+    setFriendsMessage("");
+  } catch {
+    renderFriendsList([]);
+    setFriendsMessage(tr("friendsLoadFailed"));
+  } finally {
+    setFriendsButtonsEnabled(true);
+  }
+}
+
+async function mutateFriend(action) {
+  const auth = getCloudAuthFromStorage();
+  if (!auth) {
+    setFriendsMessage(tr("cloudAuthInvalid"));
+    return;
+  }
+  const friendUserId = String(friendUserIdInput?.value || "").trim().slice(0, 24);
+  if (!friendUserId) {
+    setFriendsMessage(tr("friendIdRequired"));
+    return;
+  }
+
+  setFriendsButtonsEnabled(false);
+  try {
+    const endpoint = action === "add" ? "/api/friends/add" : "/api/friends/remove";
+    const { data } = await cloudApiRequest(endpoint, {
+      userId: auth.userId,
+      password: auth.password,
+      friendUserId,
+    });
+    renderFriendsList(data?.friends || []);
+    setFriendsMessage(tr(action === "add" ? "friendAddSuccess" : "friendRemoveSuccess"));
+  } catch (err) {
+    const code = String(err?.code || "");
+    if (code === "FRIEND_NOT_FOUND") {
+      setFriendsMessage(tr("friendNotFound"));
+    } else if (code === "FRIEND_SELF_FORBIDDEN") {
+      setFriendsMessage(tr("friendSelfForbidden"));
+    } else {
+      setFriendsMessage(tr(action === "add" ? "friendAddFailed" : "friendRemoveFailed"));
+    }
+  } finally {
+    setFriendsButtonsEnabled(true);
+  }
 }
 
 function setLanguage(lang) {
@@ -611,10 +822,16 @@ const gameScreens = {
   survivors: survivorsScreen,
   fitPuzzle: fitPuzzleScreen,
   solitaire: solitaireScreen,
+  mahjong: mahjongScreen,
 };
 
 let games = null;
 let currentGameKey = "othello";
+let entryLoadingTimerId = 0;
+let entryLoadingStartedAt = 0;
+
+const CLOUD_API_TIMEOUT_MS = 1800;
+const LOGIN_FLOW_TIMEOUT_MS = 6000;
 
 function normalizeName(raw) {
   const trimmed = String(raw ?? "").trim().replace(/\s+/g, " ");
@@ -720,19 +937,64 @@ function setEntryMessage(text) {
 }
 
 function setEntryActionButtonsVisible(visible) {
-  const display = visible ? "" : "none";
   if (entryLoginBtn) {
-    entryLoginBtn.style.display = display;
     entryLoginBtn.disabled = !visible;
   }
   if (entryRegisterBtn) {
-    entryRegisterBtn.style.display = display;
     entryRegisterBtn.disabled = !visible;
   }
   if (entryGuestBtn) {
-    entryGuestBtn.style.display = display;
     entryGuestBtn.disabled = !visible;
   }
+  if (entryCloudUserIdInput) entryCloudUserIdInput.disabled = !visible;
+  if (entryCloudPasswordInput) entryCloudPasswordInput.disabled = !visible;
+}
+
+function renderEntryLoadingProgress() {
+  if (!entryLoadingFill || !entryLoadingElapsed || !entryLoadingPanel) return;
+  const elapsedMs = Math.max(0, performance.now() - entryLoadingStartedAt);
+  const elapsedSec = elapsedMs / 1000;
+  const rawRatio = elapsedMs / LOGIN_FLOW_TIMEOUT_MS;
+  let progress = rawRatio * 100;
+  if (progress > 100) {
+    progress = 92 + ((Math.sin(elapsedMs / 220) + 1) * 4);
+  }
+
+  let stage = "fast";
+  if (rawRatio >= 0.85) {
+    stage = "slow";
+  } else if (rawRatio >= 0.5) {
+    stage = "mid";
+  }
+  entryLoadingPanel.dataset.stage = stage;
+
+  entryLoadingFill.style.width = `${Math.max(0, Math.min(100, progress)).toFixed(1)}%`;
+  entryLoadingElapsed.textContent = `${elapsedSec.toFixed(1)}秒`;
+}
+
+function startEntryLoading(text = "接続中...") {
+  if (!entryLoadingPanel) return;
+  if (entryLoadingTimerId) {
+    window.clearInterval(entryLoadingTimerId);
+    entryLoadingTimerId = 0;
+  }
+  entryLoadingStartedAt = performance.now();
+  entryLoadingPanel.dataset.stage = "fast";
+  entryLoadingPanel.classList.remove("hidden");
+  if (entryLoadingText) entryLoadingText.textContent = text;
+  renderEntryLoadingProgress();
+  entryLoadingTimerId = window.setInterval(renderEntryLoadingProgress, 80);
+}
+
+function stopEntryLoading() {
+  if (entryLoadingTimerId) {
+    window.clearInterval(entryLoadingTimerId);
+    entryLoadingTimerId = 0;
+  }
+  if (entryLoadingFill) entryLoadingFill.style.width = "0%";
+  if (entryLoadingElapsed) entryLoadingElapsed.textContent = "0.0秒";
+  if (entryLoadingPanel) entryLoadingPanel.dataset.stage = "fast";
+  entryLoadingPanel?.classList.add("hidden");
 }
 
 function setLobbyMessage(text) {
@@ -876,10 +1138,13 @@ async function cloudApiRequest(path, payload) {
   let lastError = null;
   for (let i = 0; i < candidates.length; i += 1) {
     const base = candidates[i];
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), CLOUD_API_TIMEOUT_MS);
     try {
       const res = await fetch(`${base}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
@@ -906,10 +1171,24 @@ async function cloudApiRequest(path, payload) {
       return { res, data };
     } catch (err) {
       lastError = err;
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   }
 
   throw lastError || new Error("Cloud API request failed");
+}
+
+function withTimeout(promise, timeoutMs, timeoutMessage = "Request timeout") {
+  let timeoutId = 0;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
 }
 
 async function verifyCloudAuth(userId, password) {
@@ -987,15 +1266,19 @@ function showOnly(screen) {
   survivorsScreen.classList.add("hidden");
   fitPuzzleScreen.classList.add("hidden");
   solitaireScreen.classList.add("hidden");
+  mahjongScreen.classList.add("hidden");
   screen.classList.remove("hidden");
+  updateFriendsAvailability();
 }
 
 function showEntryScreen() {
   showOnly(entryScreen);
+  setFriendsPanelOpen(false);
 }
 
 function showMenuScreen() {
   showOnly(menuScreen);
+  void refreshFriendsList();
 }
 
 function showCardListScreen() {
@@ -1096,6 +1379,7 @@ function updateLobbyView() {
     lobbyStartFitPuzzleBtn.title = "ROOM未対応";
   }
   lobbyStartSolitaireBtn.disabled = !hostCanStart;
+  if (lobbyStartMahjongBtn) lobbyStartMahjongBtn.disabled = !hostCanStart;
   updateLobbySpectateToggleButton();
   if (copyInviteLinkBtn) copyInviteLinkBtn.disabled = !roomSession.code;
   renderSpectatorBadge();
@@ -1305,7 +1589,12 @@ function enterRoomGame(gameKey) {
     controller.setRoomLock({ locked: true, message: tr("spectatorReadOnly") });
   } else if (roomSession.role === "host") {
     controller.setRoomLock({ locked: false, message: "" });
-    controller.startNewGame();
+    if (gameKey === "mahjong") {
+      // Mahjong room mode lets host pick VS or CPU-coop before pressing GAME START.
+      controller.enterStandby?.();
+    } else {
+      controller.startNewGame();
+    }
   } else {
     controller.setRoomLock({ locked: true, message: tr("gameWaitHostStart") });
   }
@@ -1383,6 +1672,10 @@ games = {
   fitPuzzle: {
     screen: fitPuzzleScreen,
     controller: initFitPuzzle(createGameCallbacks("fitPuzzle")),
+  },
+  mahjong: {
+    screen: mahjongScreen,
+    controller: initMahjong(createGameCallbacks("mahjong")),
   },
   solitaire: {
     screen: solitaireScreen,
@@ -1752,6 +2045,14 @@ playFitPuzzleBtn?.addEventListener("click", () => {
   controllerOf("fitPuzzle")?.enterStandby?.();
 });
 
+playMahjongBtn?.addEventListener("click", () => {
+  closeRoom();
+  configureAllStandardModes();
+  currentGameKey = "mahjong";
+  showGameScreen("mahjong");
+  controllerOf("mahjong")?.enterStandby?.();
+});
+
 openCardListBtn?.addEventListener("click", () => {
   closeRoom();
   configureAllStandardModes();
@@ -1975,6 +2276,18 @@ lobbyStartSolitaireBtn?.addEventListener("click", () => {
   enterRoomGame("solitaire");
 });
 
+lobbyStartMahjongBtn?.addEventListener("click", () => {
+  if (roomSession.role !== "host") return;
+  if (!roomSession.peerConnected) {
+    setLobbyMessage(tr("lobbyNoPeer"));
+    return;
+  }
+
+  roomSession.selectedGame = "mahjong";
+  postRoomMessage({ type: "select-game", game: "mahjong" });
+  enterRoomGame("mahjong");
+});
+
 lobbyBackBtn?.addEventListener("click", () => {
   if (roomSession.code) {
     postRoomMessage({ type: "return-lobby" });
@@ -2078,85 +2391,105 @@ langSelect?.addEventListener("change", () => {
 
 entryLoginBtn?.addEventListener("click", async () => {
   setEntryActionButtonsVisible(false);
+  startEntryLoading("ログイン接続中...");
+  setEntryMessage("接続を確認中...");
 
-  const userId = String(entryCloudUserIdInput?.value || "").trim();
-  const password = String(entryCloudPasswordInput?.value || "");
-  if (!userId || !password) {
-    setEntryMessage(tr("cloudAuthInvalid"));
+  try {
+    const userId = String(entryCloudUserIdInput?.value || "").trim();
+    const password = String(entryCloudPasswordInput?.value || "");
+    if (!userId || !password) {
+      setEntryMessage(tr("cloudAuthInvalid"));
+      return;
+    }
+
+    if (!window.confirm(tr("loginConfirmPrompt"))) {
+      setEntryMessage(tr("loginCanceled"));
+      return;
+    }
+
+    const check = await withTimeout(
+      verifyCloudAuth(userId, password),
+      LOGIN_FLOW_TIMEOUT_MS,
+      "Login timeout",
+    );
+    if (!check.ok) {
+      const key = check.reason === "duplicate"
+        ? "cloudIdDuplicateWarn"
+        : (check.reason === "not_found" ? "cloudUserNotFound" : "cloudCheckFailed");
+      setEntryMessage(tr(key));
+      return;
+    }
+
+    const cloudName = check.profile?.playerName ? normalizeName(check.profile.playerName) : "";
+    if (cloudName) {
+      setPlayerName(cloudName);
+    } else {
+      void syncPlayerNameToCloud(userId, password, check.profile).catch(() => {});
+    }
+
+    localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
+    localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+    if (cloudUserIdInput) cloudUserIdInput.value = userId;
+    if (cloudPasswordInput) cloudPasswordInput.value = password;
+    setEntryMessage("");
+    showMenuScreen();
+    setMenuMessage(tr("cloudAuthSaved"));
+  } catch {
+    setEntryMessage(tr("cloudCheckFailed"));
+  } finally {
+    stopEntryLoading();
     setEntryActionButtonsVisible(true);
-    return;
   }
-
-  if (!window.confirm(tr("loginConfirmPrompt"))) {
-    setEntryMessage(tr("loginCanceled"));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const check = await verifyCloudAuth(userId, password);
-  if (!check.ok) {
-    const key = check.reason === "duplicate"
-      ? "cloudIdDuplicateWarn"
-      : (check.reason === "not_found" ? "cloudUserNotFound" : "cloudCheckFailed");
-    setEntryMessage(tr(key));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const cloudName = check.profile?.playerName ? normalizeName(check.profile.playerName) : "";
-  if (cloudName) {
-    setPlayerName(cloudName);
-  } else {
-    await syncPlayerNameToCloud(userId, password, check.profile);
-  }
-
-  localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
-  localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
-  if (cloudUserIdInput) cloudUserIdInput.value = userId;
-  if (cloudPasswordInput) cloudPasswordInput.value = password;
-  setEntryMessage("");
-  showMenuScreen();
-  setMenuMessage(tr("cloudAuthSaved"));
 });
 
 entryRegisterBtn?.addEventListener("click", async () => {
   setEntryActionButtonsVisible(false);
+  startEntryLoading("新規登録中...");
+  setEntryMessage("接続を確認中...");
 
-  const userId = String(entryCloudUserIdInput?.value || "").trim();
-  const password = String(entryCloudPasswordInput?.value || "");
-  if (!userId || !password) {
-    setEntryMessage(tr("cloudAuthInvalid"));
+  try {
+    const userId = String(entryCloudUserIdInput?.value || "").trim();
+    const password = String(entryCloudPasswordInput?.value || "");
+    if (!userId || !password) {
+      setEntryMessage(tr("cloudAuthInvalid"));
+      return;
+    }
+
+    if (!window.confirm(tr("registerConfirmPrompt"))) {
+      setEntryMessage(tr("registerCanceled"));
+      return;
+    }
+
+    const created = await withTimeout(
+      registerCloudAuth(userId, password),
+      LOGIN_FLOW_TIMEOUT_MS,
+      "Register timeout",
+    );
+    if (!created.ok) {
+      setEntryMessage(tr(created.reason === "duplicate" ? "registerDuplicate" : "cloudCheckFailed"));
+      return;
+    }
+
+    const cloudName = created.profile?.playerName ? normalizeName(created.profile.playerName) : "";
+    if (cloudName) {
+      setPlayerName(cloudName);
+    } else {
+      void syncPlayerNameToCloud(userId, password, created.profile).catch(() => {});
+    }
+
+    localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
+    localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+    if (cloudUserIdInput) cloudUserIdInput.value = userId;
+    if (cloudPasswordInput) cloudPasswordInput.value = password;
+    setEntryMessage("");
+    showMenuScreen();
+    setMenuMessage(tr("registerSuccess"));
+  } catch {
+    setEntryMessage(tr("cloudCheckFailed"));
+  } finally {
+    stopEntryLoading();
     setEntryActionButtonsVisible(true);
-    return;
   }
-
-  if (!window.confirm(tr("registerConfirmPrompt"))) {
-    setEntryMessage(tr("registerCanceled"));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const created = await registerCloudAuth(userId, password);
-  if (!created.ok) {
-    setEntryMessage(tr(created.reason === "duplicate" ? "registerDuplicate" : "cloudCheckFailed"));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const cloudName = created.profile?.playerName ? normalizeName(created.profile.playerName) : "";
-  if (cloudName) {
-    setPlayerName(cloudName);
-  } else {
-    await syncPlayerNameToCloud(userId, password, created.profile);
-  }
-
-  localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
-  localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
-  if (cloudUserIdInput) cloudUserIdInput.value = userId;
-  if (cloudPasswordInput) cloudPasswordInput.value = password;
-  setEntryMessage("");
-  showMenuScreen();
-  setMenuMessage(tr("registerSuccess"));
 });
 
 entryGuestBtn?.addEventListener("click", () => {
@@ -2208,6 +2541,40 @@ saveCloudAuthBtn?.addEventListener("click", async () => {
   if (entryCloudUserIdInput) entryCloudUserIdInput.value = userId;
   if (entryCloudPasswordInput) entryCloudPasswordInput.value = password;
   setMenuMessage(tr("cloudAuthSaved"));
+  updateFriendsAvailability();
+  void refreshFriendsList();
+});
+
+friendReloadBtn?.addEventListener("click", () => {
+  void refreshFriendsList();
+});
+
+friendAddBtn?.addEventListener("click", () => {
+  void mutateFriend("add");
+});
+
+friendRemoveBtn?.addEventListener("click", () => {
+  void mutateFriend("remove");
+});
+
+friendUserIdInput?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  void mutateFriend("add");
+});
+
+friendsToggleBtn?.addEventListener("click", () => {
+  const nextOpen = friendsPanel?.classList.contains("hidden") !== true;
+  setFriendsPanelOpen(!nextOpen);
+});
+
+document.addEventListener("click", (event) => {
+  if (!friendsPanel || !friendsToggleBtn) return;
+  if (friendsPanel.classList.contains("hidden")) return;
+  const target = event.target;
+  if (!(target instanceof Node)) return;
+  if (friendsPanel.contains(target) || friendsToggleBtn.contains(target)) return;
+  setFriendsPanelOpen(false);
 });
 
 backToEntryBtn?.addEventListener("click", () => {
@@ -2260,6 +2627,8 @@ if (entryCloudPasswordInput) {
 
 setPlayerName(localStorage.getItem(STORAGE_PLAYER_NAME_KEY) || "Player");
 setEntryActionButtonsVisible(true);
+setFriendsButtonsEnabled(false);
+renderFriendsList([]);
 
 updateLobbyView();
 showEntryScreen();
