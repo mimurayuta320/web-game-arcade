@@ -284,6 +284,33 @@ function authenticateOrCreate(db, userId, password) {
   return { ok: true, created: false, user };
 }
 
+function authenticateOnly(db, userId, password) {
+  const user = db.users[userId];
+  if (!user) {
+    return { ok: false, code: "USER_NOT_FOUND" };
+  }
+  const ok = verifyPassword(password, user.passSaltHex, user.passHashHex);
+  if (!ok) {
+    return { ok: false, code: "INVALID_PASSWORD" };
+  }
+  return { ok: true, user };
+}
+
+function registerUser(db, userId, password) {
+  if (db.users[userId]) {
+    return { ok: false, code: "USER_ALREADY_EXISTS" };
+  }
+  const pass = hashPassword(password);
+  db.users[userId] = {
+    passSaltHex: pass.saltHex,
+    passHashHex: pass.hashHex,
+    profile: { ...DEFAULT_PROFILE },
+    updatedAt: Date.now(),
+    createdAt: Date.now(),
+  };
+  return { ok: true, user: db.users[userId] };
+}
+
 function roomOf(code) {
   if (!rooms.has(code)) {
     rooms.set(code, new Set());
@@ -673,7 +700,12 @@ function resolveFilePath(urlPath) {
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
-  if (requestUrl.pathname === "/api/profile/load" || requestUrl.pathname === "/api/profile/save") {
+  if (
+    requestUrl.pathname === "/api/auth/login"
+    || requestUrl.pathname === "/api/auth/register"
+    || requestUrl.pathname === "/api/profile/load"
+    || requestUrl.pathname === "/api/profile/save"
+  ) {
     if (req.method === "OPTIONS") {
       sendApiJson(res, 204, { ok: true });
       return;
@@ -695,17 +727,50 @@ const server = http.createServer(async (req, res) => {
       }
 
       const db = readDb();
-      const auth = authenticateOrCreate(db, userId, password);
+
+      if (requestUrl.pathname === "/api/auth/register") {
+        const registered = registerUser(db, userId, password);
+        if (!registered.ok) {
+          if (registered.code === "USER_ALREADY_EXISTS") {
+            sendApiJson(res, 409, { ok: false, code: "USER_ALREADY_EXISTS", message: "User already exists" });
+            return;
+          }
+          sendApiJson(res, 400, { ok: false, code: "REGISTER_FAILED", message: "Register failed" });
+          return;
+        }
+        writeDb(db);
+        sendApiJson(res, 200, {
+          ok: true,
+          created: true,
+          profile: sanitizeProfile(registered.user.profile || DEFAULT_PROFILE),
+        });
+        return;
+      }
+
+      if (requestUrl.pathname === "/api/auth/login") {
+        const auth = authenticateOnly(db, userId, password);
+        if (!auth.ok) {
+          const status = auth.code === "USER_NOT_FOUND" ? 404 : 401;
+          sendApiJson(res, status, { ok: false, code: auth.code, message: "Login failed" });
+          return;
+        }
+        sendApiJson(res, 200, {
+          ok: true,
+          profile: sanitizeProfile(auth.user.profile || DEFAULT_PROFILE),
+        });
+        return;
+      }
+
+      const auth = authenticateOnly(db, userId, password);
       if (!auth.ok) {
-        sendApiJson(res, 401, { ok: false, code: "INVALID_PASSWORD", message: "Invalid password" });
+        const status = auth.code === "USER_NOT_FOUND" ? 404 : 401;
+        sendApiJson(res, status, { ok: false, code: auth.code, message: "Authentication failed" });
         return;
       }
 
       if (requestUrl.pathname === "/api/profile/load") {
-        writeDb(db);
         sendApiJson(res, 200, {
           ok: true,
-          created: auth.created,
           profile: sanitizeProfile(auth.user.profile || DEFAULT_PROFILE),
         });
         return;

@@ -14,14 +14,6 @@
   <body>
     <div class="app-bg"></div>
     <main class="game-shell">
-      <div class="lang-switch">
-        <label for="langSelect">Language</label>
-        <select id="langSelect" class="difficulty-select" aria-label="Language select">
-          <option value="ja">日本語</option>
-          <option value="ko">한국어</option>
-        </select>
-      </div>
-
       <section id="entryScreen" class="menu-screen">
         <header class="top-bar">
           <h1 id="entryTitle">Start Session</h1>
@@ -50,13 +42,63 @@
             <button id="entryGuestBtn" class="start-btn ghost">PLAY AS GUEST</button>
           </div>
           <p id="entryMessage" class="room-menu-message"></p>
+          <div id="entryLoadingPanel" class="entry-loading-panel hidden" aria-live="polite" aria-atomic="true">
+            <div class="entry-loading-head">
+              <span class="entry-loading-spinner" aria-hidden="true"></span>
+              <span id="entryLoadingText">接続中...</span>
+            </div>
+            <div class="entry-loading-track">
+              <span id="entryLoadingFill" class="entry-loading-fill"></span>
+            </div>
+            <p id="entryLoadingElapsed" class="entry-loading-elapsed">0.0秒</p>
+          </div>
         </div>
       </section>
 
       <section id="menuScreen" class="menu-screen hidden">
-        <header class="top-bar">
-          <h1>Game Select</h1>
-          <p id="menuSubtitle">遊びたいゲームを選択してください</p>
+        <header class="top-bar menu-top-bar">
+          <div class="menu-top-bar-main">
+            <h1>Game Select</h1>
+            <p id="menuSubtitle">遊びたいゲームを選択してください</p>
+          </div>
+          <div id="menuMore" class="menu-more">
+            <button id="menuMoreBtn" class="menu-more-btn" type="button" aria-label="option" aria-expanded="false">option</button>
+            <button id="friendsToggleBtn" class="friends-toggle-btn" type="button" aria-expanded="false">フレンド一覧</button>
+            <section id="menuMorePanel" class="menu-more-panel hidden" aria-label="Menu options">
+              <label id="langSelectLabel" for="langSelect">Language</label>
+              <select id="langSelect" class="difficulty-select" aria-label="Language select">
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+              </select>
+              <button id="backToEntryBtn" class="start-btn ghost menu-top-bar-back" type="button">ログイン画面に戻る</button>
+            </section>
+            <section id="friendsPanel" class="friends-panel menu-friends-panel hidden" aria-live="polite">
+              <h3 id="friendsTitle">フレンド</h3>
+              <p id="friendsHint" class="friends-hint">ログインするとフレンド一覧を読み込みます</p>
+              <div class="friends-tabs" role="tablist" aria-label="Friends tabs">
+                <button id="friendsTabFriendsBtn" class="friends-tab-btn active" type="button" role="tab" aria-selected="true">フレンド</button>
+                <button id="friendsTabIncomingBtn" class="friends-tab-btn" type="button" role="tab" aria-selected="false">承認待ち</button>
+                <button id="friendsTabOutgoingBtn" class="friends-tab-btn" type="button" role="tab" aria-selected="false">申請中</button>
+              </div>
+              <div class="friends-row">
+                <input
+                  id="friendUserIdInput"
+                  class="room-input"
+                  type="text"
+                  maxlength="24"
+                  placeholder="フレンドID"
+                  aria-label="Friend user id"
+                />
+                <button id="friendAddBtn" class="start-btn" type="button">追加</button>
+                <button id="friendRemoveBtn" class="start-btn ghost" type="button">削除</button>
+                <button id="friendReloadBtn" class="start-btn ghost" type="button">再読込</button>
+              </div>
+              <ul id="friendsList" class="friends-list">
+                <li>-</li>
+              </ul>
+              <p id="friendsMessage" class="room-menu-message"></p>
+            </section>
+          </div>
         </header>
 
         <div class="game-grid">
@@ -72,12 +114,21 @@
                 placeholder="あなたの名前"
                 aria-label="Player name"
               />
-              <button id="quickMatchBtn" class="start-btn">クイックマッチ（マルチ）</button>
-              <label class="room-visibility-toggle" for="roomPublicToggle">
-                <input id="roomPublicToggle" type="checkbox" checked />
-                <span id="roomPublicLabel">公開ルーム（クイックマッチ対象）</span>
-              </label>
-              <button id="createRoomBtn" class="start-btn">CREATE ROOM</button>
+              <fieldset class="room-visibility-group" aria-label="Room visibility">
+                <legend class="room-visibility-legend">ルーム公開設定</legend>
+                <label class="room-visibility-option" for="roomPublicRadio">
+                  <input id="roomPublicRadio" name="roomVisibility" type="radio" value="public" checked />
+                  <span id="roomPublicOptionLabel">公開ルーム（クイックマッチ対象）</span>
+                </label>
+                <label class="room-visibility-option" for="roomPrivateRadio">
+                  <input id="roomPrivateRadio" name="roomVisibility" type="radio" value="private" />
+                  <span id="roomPrivateOptionLabel">非公開ルーム（招待のみ）</span>
+                </label>
+              </fieldset>
+              <div class="room-main-actions">
+                <button id="quickMatchBtn" class="start-btn">クイックマッチ（マルチ）</button>
+                <button id="createRoomBtn" class="start-btn">CREATE ROOM</button>
+              </div>
               <div class="join-row">
                 <input
                   id="roomCodeInput"
@@ -91,7 +142,6 @@
                 <button id="joinRoomBtn" class="start-btn">JOIN</button>
                 <button id="spectateRoomBtn" class="start-btn ghost">SPECTATE</button>
               </div>
-              <button id="backToEntryBtn" class="start-btn ghost">ログイン画面に戻る</button>
               <p id="roomMenuMessage" class="room-menu-message"></p>
             </div>
           </article>
@@ -142,6 +192,16 @@
             <h2>Neon Fit Puzzle</h2>
             <p id="fitPuzzleCardDesc">ピースを枠内に収めるパズル。すべてのマスを埋めればクリア。</p>
             <button id="playFitPuzzleBtn" class="start-btn">PLAY</button>
+          </article>
+          <article class="game-card">
+            <h2>Neon Minesweeper</h2>
+            <p id="minesweeperCardDesc">VSプレイヤーや級力モードに対応したマインスイーパー。</p>
+            <button id="playMinesweeperBtn" class="start-btn">PLAY</button>
+          </article>
+          <article class="game-card">
+            <h2>Neon Mahjong</h2>
+            <p id="mahjongCardDesc">同じ牌を選んで消していくクリック型の麻雀ペアゲーム。</p>
+            <button id="playMahjongBtn" class="start-btn">PLAY</button>
           </article>
           <article class="game-card menu-category-card">
             <h2>カードゲーム一覧</h2>
@@ -232,6 +292,7 @@
             <div class="lobby-meta-block">
               <p id="lobbyRoomCodeText" class="lobby-line">ROOM: -</p>
               <p id="lobbyRoleText" class="lobby-line">ROLE: -</p>
+              <p id="lobbyParticipantsText" class="lobby-line">PARTICIPANTS: 0 / 8</p>
               <p id="lobbySelfNameText" class="lobby-line">YOU: -</p>
               <p id="lobbyPeerNameText" class="lobby-line">PEER: -</p>
               <p id="lobbyPeerText" class="lobby-line">STATUS: 参加者待機中</p>
@@ -264,44 +325,49 @@
 
           <div class="game-grid lobby-game-grid">
             <article class="game-card game-list-item">
-              <h2>Othello</h2>
+              <h2>Othello <span class="lobby-game-count" data-lobby-game-count="othello">0/0</span></h2>
               <p>ルームでオセロ対戦を開始します。</p>
               <button id="lobbyStartOthelloBtn" class="start-btn">OTHELLO START</button>
             </article>
             <article class="game-card game-list-item">
-              <h2>Shogi</h2>
+              <h2>Shogi <span class="lobby-game-count" data-lobby-game-count="shogi">0/0</span></h2>
               <p>ルームで将棋対戦を開始します。</p>
               <button id="lobbyStartShogiBtn" class="start-btn">SHOGI START</button>
             </article>
             <article class="game-card game-list-item">
-              <h2>Chess</h2>
+              <h2>Chess <span class="lobby-game-count" data-lobby-game-count="chess">0/0</span></h2>
               <p>ルームでチェス対戦を開始します。</p>
               <button id="lobbyStartChessBtn" class="start-btn">CHESS START</button>
             </article>
             <article class="game-card game-list-item">
-              <h2>UNO</h2>
-              <p>ルームでUNO対戦を開始します。</p>
-              <button id="lobbyStartUnoBtn" class="start-btn">UNO START</button>
+              <h2 id="lobbyCardGamesTitle">カードゲーム一覧</h2>
+              <p id="lobbyCardGamesDesc">ルームで遊べるカードゲームをここから選択します。</p>
+              <button id="lobbyOpenCardGamesBtn" class="start-btn">一覧表示</button>
             </article>
             <article class="game-card game-list-item">
-              <h2>Gomoku</h2>
+              <h2>Gomoku <span class="lobby-game-count" data-lobby-game-count="gomoku">0/0</span></h2>
               <p>ルームで五目並べ対戦を開始します。</p>
               <button id="lobbyStartGomokuBtn" class="start-btn">GOMOKU START</button>
             </article>
             <article class="game-card game-list-item">
-              <h2>Survivors</h2>
+              <h2>Survivors <span class="lobby-game-count" data-lobby-game-count="survivors">0/0</span></h2>
               <p>ルームでサバイバーを開始します。</p>
               <button id="lobbyStartSurvivorsBtn" class="start-btn">SURVIVORS START</button>
             </article>
             <article class="game-card game-list-item">
-              <h2>Fit Puzzle</h2>
-              <p>ROOM未対応のため現在は選択不可です。</p>
-              <button id="lobbyStartFitPuzzleBtn" class="start-btn ghost" disabled>FIT PUZZLE START</button>
+              <h2>Fit Puzzle <span class="lobby-game-count" data-lobby-game-count="fitPuzzle">0/0</span></h2>
+              <p>ルームでFit Puzzle対戦を開始します。</p>
+              <button id="lobbyStartFitPuzzleBtn" class="start-btn">FIT PUZZLE START</button>
             </article>
             <article class="game-card game-list-item">
-              <h2>Solitaire</h2>
-              <p>ルームでソリティア対戦を開始します。</p>
-              <button id="lobbyStartSolitaireBtn" class="start-btn">SOLITAIRE START</button>
+              <h2>Minesweeper <span class="lobby-game-count" data-lobby-game-count="minesweeper">0/0</span></h2>
+              <p>ルームでマインスイーパー対戦を開始します。</p>
+              <button id="lobbyStartMinesweeperBtn" class="start-btn">MINESWEEPER START</button>
+            </article>
+            <article class="game-card game-list-item">
+              <h2>Mahjong <span class="lobby-game-count" data-lobby-game-count="mahjong">0/0</span></h2>
+              <p>ルームで麻雀ペア対戦を開始します。</p>
+              <button id="lobbyStartMahjongBtn" class="start-btn">MAHJONG START</button>
             </article>
           </div>
 
@@ -314,6 +380,93 @@
             </div>
           </aside>
         </div>
+      </section>
+
+      <section id="minesweeperScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Minesweeper</h1>
+          <p id="minesweeperSubtitle">VSプレイヤーや級力モードを選び、マインスイーパーで対戦できます。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric metric-select">
+            <span id="minesweeperModeLabel" class="label">MODE</span>
+            <select id="minesweeperModeSelect" class="difficulty-select" aria-label="Minesweeper mode">
+              <option value="solo">SINGLE</option>
+              <option value="duel">DUEL</option>
+              <option value="battle">BATTLE</option>
+              <option value="coop">COOP</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span id="minesweeperPlayerCountLabel" class="label">PLAYERS</span>
+            <select id="minesweeperPlayerCountSelect" class="difficulty-select" aria-label="Minesweeper player count">
+              <option value="2" selected>2P</option>
+              <option value="3">3P</option>
+              <option value="4">4P</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span id="minesweeperCoopLivesLabel" class="label">LIVES</span>
+            <select id="minesweeperCoopLivesSelect" class="difficulty-select" aria-label="Minesweeper coop lives">
+              <option value="1">1</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span id="minesweeperDifficultyLabel" class="label">級力モード</span>
+            <select id="minesweeperDifficultySelect" class="difficulty-select" aria-label="Minesweeper difficulty">
+              <option value="easy">かんたん</option>
+              <option value="normal" selected>ふつう</option>
+              <option value="hard">むずかしい</option>
+              <option value="expert">エキスパート</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span id="minesweeperBoardSizeLabel" class="label">BOARD SIZE</span>
+            <select id="minesweeperBoardSizeSelect" class="difficulty-select" aria-label="Minesweeper board size">
+              <option value="9">9x9</option>
+              <option value="12" selected>12x12</option>
+              <option value="16">16x16</option>
+              <option value="20">20x20</option>
+            </select>
+          </div>
+          <button id="minesweeperStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="minesweeperRemakeBtn" class="start-btn ghost">REMAKE</button>
+          <button id="minesweeperMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <p id="minesweeperMessage" class="room-menu-message">NEW GAMEで開始</p>
+
+        <section id="minesweeperPlayLayout" class="minesweeper-play-layout" aria-label="Minesweeper board and status">
+          <div class="minesweeper-main-area">
+            <div class="minesweeper-row-metrics" aria-label="Minesweeper quick status">
+              <span><strong>MINE:</strong> <span id="minesweeperMineCount">0</span></span>
+              <span><strong>FLAG:</strong> <span id="minesweeperFlagCount">0</span></span>
+              <span><strong>TIME:</strong> <span id="minesweeperTimer">00:00</span></span>
+              <span><strong id="minesweeperTurnLabel">TURN</strong>: <span id="minesweeperTurnText">P1</span></span>
+              <span><strong id="minesweeperScoreLabel">SCORE</strong>: <span id="minesweeperScoreText">0</span></span>
+            </div>
+
+            <div id="minesweeperBoardViewport" class="minesweeper-board-viewport">
+              <div id="minesweeperStartOverlay" class="minesweeper-start-overlay">READY</div>
+              <div id="minesweeperBoard" class="minesweeper-board" role="grid"></div>
+            </div>
+          </div>
+
+          <aside id="minesweeperEnemyPanel" class="minesweeper-side-panel hidden" aria-live="polite">
+            <h3 id="minesweeperEnemyLabel">ENEMY BOARD</h3>
+            <p id="minesweeperEnemyCountdown" class="friends-hint">-</p>
+            <div id="minesweeperEnemyBoard" class="minesweeper-enemy-board"></div>
+          </aside>
+
+          <aside id="minesweeperOverviewPanel" class="minesweeper-side-panel hidden" aria-live="polite">
+            <h3 id="minesweeperOverviewLabel">BOARD OVERVIEW</h3>
+            <canvas id="minesweeperOverviewCanvas" width="180" height="180"></canvas>
+            <p class="friends-hint"><span id="minesweeperCoopLifeLeftLabel">LIFE LEFT</span>: <span id="minesweeperCoopLifeLeftText">-</span></p>
+            <p class="friends-hint"><span>TIME</span>: <span id="minesweeperSideTime">00:00</span></p>
+            <p class="friends-hint"><span>LIFE</span>: <span id="minesweeperSideLife">-</span></p>
+          </aside>
+        </section>
       </section>
 
       <section id="othelloScreen" class="game-screen hidden">
@@ -376,9 +529,137 @@
           </div>
         </div>
 
-        <section class="canvas-wrap">
-          <div id="board" class="board" aria-label="Othello board"></div>
-          <div id="overlay" class="overlay">NEW GAMEで開始</div>
+        <section class="othello-play-area">
+          <div class="canvas-wrap">
+            <div id="board" class="board" aria-label="Othello board"></div>
+            <div id="overlay" class="overlay">NEW GAMEで開始</div>
+          </div>
+
+          <aside id="othelloSkillPanel" class="othello-skill-panel hidden" aria-label="Othello skills">
+            <button id="immutablePlaceBtn" class="start-btn ghost hidden" type="button">固定石</button>
+            <button id="destroySkillBtn" class="start-btn ghost hidden" type="button">駒破壊</button>
+            <button id="doubleActionBtn" class="start-btn ghost hidden" type="button">2回行動</button>
+            <div class="othello-skill-limits">
+              <div id="handicapTargetMetric" class="metric metric-select hidden">
+                <span class="label">カオス対象</span>
+                <select id="handicapTargetSelect" class="difficulty-select" aria-label="Chaos target">
+                  <option value="none" selected>なし</option>
+                  <option value="black">黒</option>
+                  <option value="white">白</option>
+                  <option value="both">両方</option>
+                  <option value="player">プレイヤー</option>
+                  <option value="opponent">相手</option>
+                </select>
+              </div>
+              <div id="handicapMetric" class="metric metric-select hidden">
+                <span class="label">固定石</span>
+                <select id="handicapSelect" class="difficulty-select" aria-label="Chaos handicap">
+                  <option value="none" selected>なし</option>
+                  <option value="immutable1">1個固定</option>
+                </select>
+              </div>
+              <div id="randomLineCountIgnoreMetric" class="metric metric-select hidden">
+                <span class="label">直線無視</span>
+                <select id="randomLineCountIgnoreSelect" class="difficulty-select" aria-label="Random line count ignore">
+                  <option value="off" selected>OFF</option>
+                  <option value="on">ON</option>
+                </select>
+              </div>
+              <div id="overwriteLimitMetric" class="metric metric-select hidden">
+                <span class="label">上書き回数</span>
+                <select id="overwriteLimitSelect" class="difficulty-select" aria-label="Overwrite limit">
+                  <option value="0">0</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3" selected>3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                </select>
+              </div>
+            </div>
+            <div class="othello-side-settings">
+              <section id="sideBlackCard" class="othello-side-card hidden" aria-label="Black side settings">
+                <h3 class="othello-side-title">黒サイド</h3>
+                <div id="bothBlackHandicapMetric" class="metric metric-select hidden">
+                  <span class="label">黒の固定石</span>
+                  <select id="bothBlackHandicapSelect" class="difficulty-select" aria-label="Black chaos handicap">
+                    <option value="none" selected>なし</option>
+                    <option value="immutable1">1個固定</option>
+                  </select>
+                </div>
+                <div id="bothBlackOverwriteMetric" class="metric metric-select hidden">
+                  <span class="label">黒上書き回数</span>
+                  <select id="bothBlackOverwriteSelect" class="difficulty-select" aria-label="Black overwrite limit">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3" selected>3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                  </select>
+                </div>
+                <div id="destroyLimitPanel" class="othello-skill-limit-row hidden">
+                  <span class="label">黒破壊回数</span>
+                  <select id="destroyLimitBlackSelect" class="difficulty-select" aria-label="Black destroy limit">
+                    <option value="0">0</option>
+                    <option value="1" selected>1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                  </select>
+                </div>
+              </section>
+              <section id="sideWhiteCard" class="othello-side-card hidden" aria-label="White side settings">
+                <h3 class="othello-side-title">白サイド</h3>
+                <div id="bothWhiteHandicapMetric" class="metric metric-select hidden">
+                  <span class="label">白の固定石</span>
+                  <select id="bothWhiteHandicapSelect" class="difficulty-select" aria-label="White chaos handicap">
+                    <option value="none" selected>なし</option>
+                    <option value="immutable1">1個固定</option>
+                  </select>
+                </div>
+                <div id="bothWhiteOverwriteMetric" class="metric metric-select hidden">
+                  <span class="label">白上書き回数</span>
+                  <select id="bothWhiteOverwriteSelect" class="difficulty-select" aria-label="White overwrite limit">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3" selected>3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                  </select>
+                </div>
+                <div id="destroyLimitWhitePanel" class="othello-skill-limit-row hidden">
+                  <span class="label">白破壊回数</span>
+                  <select id="destroyLimitWhiteSelect" class="difficulty-select" aria-label="White destroy limit">
+                    <option value="0">0</option>
+                    <option value="1" selected>1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                  </select>
+                </div>
+              </section>
+            </div>
+            <span id="doubleActionStockText" class="piece-status-item hidden">2回行動残り: -</span>
+          </aside>
         </section>
 
         <p id="message" class="message">黒の手番です</p>
@@ -666,7 +947,12 @@
         </section>
 
         <section class="canvas-wrap survivors-wrap">
-          <div id="survivorsField" class="survivors-field" aria-label="Survivors arena"></div>
+          <div id="survivorsField" class="survivors-field" aria-label="Survivors arena">
+            <div id="survivorsQuickStatus" class="survivors-quick-status" aria-live="polite">
+              <p><span>HP</span>: <strong id="survivorsQuickHpText">100 / 100</strong></p>
+              <p><span>SKILL</span>: <strong id="survivorsQuickSkillText">-</strong></p>
+            </div>
+          </div>
           <div id="survivorsOverlay" class="overlay">GAME STARTで開始</div>
           <div id="survivorsAugmentPanel" class="survivors-augment hidden" aria-live="polite">
             <p class="survivors-augment-title">AUGMENT REWARD</p>
@@ -771,6 +1057,383 @@
         </div>
 
         <p id="solitaireMessage" class="message">GAME STARTで開始</p>
+      </section>
+
+      <section id="mahjongScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Mahjong</h1>
+          <p id="mahjongSubtitle">同じ牌を2回まで曲がる線でつなげると消せます。すべて消したらクリア。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric metric-select">
+            <span class="label">MODE</span>
+            <select id="mahjongModeSelect" class="difficulty-select" aria-label="Mahjong mode">
+              <option value="cpu" selected>1P vs CPU</option>
+              <option value="local">2P LOCAL</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">DIFFICULTY</span>
+            <select id="mahjongDifficultySelect" class="difficulty-select" aria-label="Mahjong difficulty">
+              <option value="easy">EASY</option>
+              <option value="normal" selected>NORMAL</option>
+              <option value="hard">HARD</option>
+              <option value="expert">EXPERT</option>
+            </select>
+          </div>
+          <div class="metric">
+            <span class="label">TURN</span>
+            <span id="mahjongTurnText">PLAYER 1</span>
+          </div>
+          <div class="metric">
+            <span class="label">P1 SCORE</span>
+            <span id="mahjongP1ScoreText">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">P2 SCORE</span>
+            <span id="mahjongP2ScoreText">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">ROOM MODE</span>
+            <span id="mahjongRoomModeText">-</span>
+          </div>
+          <div class="metric">
+            <span class="label">COOP OWNER</span>
+            <span id="mahjongCoopOwnerText">-</span>
+          </div>
+          <div class="metric">
+            <span class="label">REMAIN PAIRS</span>
+            <span id="mahjongRemainText">56</span>
+          </div>
+          <div class="metric">
+            <span class="label">TIME</span>
+            <span id="mahjongTimeText">--:--</span>
+          </div>
+          <div class="metric">
+            <span class="label">ASSIST</span>
+            <span id="mahjongAssistText">H 0 / S 0</span>
+          </div>
+          <div class="metric">
+            <span class="label">STATUS</span>
+            <span id="mahjongStatusText">-</span>
+          </div>
+          <button id="mahjongStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="mahjongShuffleBtn" class="start-btn ghost">SHUFFLE</button>
+          <button id="mahjongHintBtn" class="start-btn ghost">HINT</button>
+          <button id="mahjongMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <section class="canvas-wrap mahjong-wrap">
+          <div id="mahjongBoard" class="mahjong-board" aria-label="Mahjong board"></div>
+          <svg id="mahjongLinkFx" class="mahjong-link-fx" aria-hidden="true"></svg>
+          <div id="mahjongOverlay" class="overlay">GAME STARTで開始</div>
+        </section>
+
+        <section class="mahjong-scorecalc" aria-live="polite">
+          <h3 id="mahjongScoreCalcTitle">本家点数計算（リーチ麻雀）</h3>
+          <div class="mahjong-scorecalc-grid">
+            <label for="mahjongCalcHan" id="mahjongCalcHanLabel">飜</label>
+            <select id="mahjongCalcHan" class="difficulty-select">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+              <option value="11">11</option>
+              <option value="12">12</option>
+              <option value="13" selected>13</option>
+              <option value="26">26</option>
+            </select>
+
+            <label for="mahjongCalcFu" id="mahjongCalcFuLabel">符</label>
+            <select id="mahjongCalcFu" class="difficulty-select">
+              <option value="20">20</option>
+              <option value="25">25</option>
+              <option value="30" selected>30</option>
+              <option value="40">40</option>
+              <option value="50">50</option>
+              <option value="60">60</option>
+              <option value="70">70</option>
+              <option value="80">80</option>
+              <option value="90">90</option>
+              <option value="100">100</option>
+              <option value="110">110</option>
+            </select>
+
+            <label for="mahjongCalcSeat" id="mahjongCalcSeatLabel">親子</label>
+            <select id="mahjongCalcSeat" class="difficulty-select">
+              <option value="child" selected>子</option>
+              <option value="dealer">親</option>
+            </select>
+
+            <label for="mahjongCalcRoundWind" id="mahjongCalcRoundWindLabel">場風</label>
+            <select id="mahjongCalcRoundWind" class="difficulty-select">
+              <option value="east" selected>東</option>
+              <option value="south">南</option>
+              <option value="west">西</option>
+              <option value="north">北</option>
+            </select>
+
+            <label for="mahjongCalcPlayerWind" id="mahjongCalcPlayerWindLabel">自風</label>
+            <select id="mahjongCalcPlayerWind" class="difficulty-select">
+              <option value="east" selected>東</option>
+              <option value="south">南</option>
+              <option value="west">西</option>
+              <option value="north">北</option>
+            </select>
+
+            <label for="mahjongCalcWin" id="mahjongCalcWinLabel">和了</label>
+            <select id="mahjongCalcWin" class="difficulty-select">
+              <option value="ron" selected>ロン</option>
+              <option value="tsumo">ツモ</option>
+            </select>
+
+            <label for="mahjongCalcHonba" id="mahjongCalcHonbaLabel">本場</label>
+            <input id="mahjongCalcHonba" class="room-input" type="number" min="0" max="20" value="0" />
+
+            <label for="mahjongCalcKyotaku" id="mahjongCalcKyotakuLabel">供託</label>
+            <input id="mahjongCalcKyotaku" class="room-input" type="number" min="0" max="20" value="0" />
+          </div>
+          <div class="mahjong-scorecalc-subgrid">
+            <label class="mahjong-scorecalc-check"><input id="mahjongCalcAutoHanToggle" type="checkbox" checked /> <span id="mahjongCalcAutoHanLabel">役チェックから飜を自動計算</span></label>
+            <label class="mahjong-scorecalc-check"><input id="mahjongCalcOpenHand" type="checkbox" /> <span id="mahjongCalcOpenHandLabel">鳴きあり（門前ではない）</span></label>
+            <label for="mahjongCalcDoraHan" id="mahjongCalcDoraHanLabel">ドラ飜</label>
+            <input id="mahjongCalcDoraHan" class="room-input" type="number" min="0" max="20" value="0" />
+          </div>
+
+          <div class="mahjong-yaku-list" id="mahjongYakuList">
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 立直</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 一発</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 門前清自摸和</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> 断么九</label>
+            <label><input id="mahjongCalcYakuPinfu" type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 平和</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="0" /> 一盃口</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="1" /> 三色同順</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="1" /> 一気通貫</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="2" /> 対々和</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="2" /> 三暗刻</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="2" /> 混老頭</label>
+            <label><input id="mahjongCalcYakuChiitoi" type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="0" /> 七対子</label>
+            <label><input type="checkbox" data-yaku-han-closed="2" data-yaku-han-open="1" /> 混全帯么九</label>
+            <label><input type="checkbox" data-yaku-han-closed="3" data-yaku-han-open="2" /> 純全帯么九</label>
+            <label><input type="checkbox" data-yaku-han-closed="3" data-yaku-han-open="2" /> 混一色</label>
+            <label><input type="checkbox" data-yaku-han-closed="6" data-yaku-han-open="5" /> 清一色</label>
+            <label><input id="mahjongCalcYakuRoundWind" type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> <span id="mahjongCalcYakuRoundWindText">場風牌（東）</span></label>
+            <label><input id="mahjongCalcYakuSeatWind" type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> <span id="mahjongCalcYakuSeatWindText">自風牌（東）</span></label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> 白</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> 發</label>
+            <label><input type="checkbox" data-yaku-han-closed="1" data-yaku-han-open="1" /> 中</label>
+            <label><input type="checkbox" data-yakuman-count="1" /> 国士無双（役満）</label>
+            <label><input type="checkbox" data-yakuman-count="1" /> 四暗刻（役満）</label>
+            <label><input type="checkbox" data-yakuman-count="1" /> 大三元（役満）</label>
+            <label><input type="checkbox" data-yakuman-count="1" /> 字一色（役満）</label>
+          </div>
+          <p id="mahjongCalcHanAutoText" class="mahjong-scorecalc-note">自動飜: -</p>
+          <button id="mahjongCalcBtn" class="start-btn" type="button">点数計算</button>
+          <p id="mahjongCalcResult" class="mahjong-scorecalc-result">-</p>
+          <p id="mahjongCalcNote" class="mahjong-scorecalc-note">役判定は手入力（飜/符）です。点数計算は本家ルール準拠です。</p>
+        </section>
+
+        <p id="mahjongMessage" class="message">GAME STARTを押してください</p>
+      </section>
+
+      <section id="sevensScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon Sevens</h1>
+          <p>7を起点にカードをつないで先に手札をなくした方が勝ち。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric metric-select">
+            <span class="label">MODE</span>
+            <select id="sevensModeSelect" class="difficulty-select" aria-label="Sevens mode">
+              <option value="cpu" selected>1P vs CPU</option>
+              <option value="local">2P LOCAL</option>
+            </select>
+          </div>
+          <div class="metric">
+            <span class="label">TURN</span>
+            <span id="sevensTurnText">-</span>
+          </div>
+          <div class="metric">
+            <span class="label">P1 CARDS</span>
+            <span id="sevensP1Count">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">P2 CARDS</span>
+            <span id="sevensP2Count">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">PASS</span>
+            <span id="sevensPassText">0 / 0</span>
+          </div>
+          <button id="sevensStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="sevensPassBtn" class="start-btn ghost">PASS</button>
+          <button id="sevensMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <section class="canvas-wrap">
+          <div id="sevensBoard" aria-label="Sevens board"></div>
+          <div id="sevensOverlay" class="overlay">GAME STARTで開始</div>
+        </section>
+
+        <section class="canvas-wrap">
+          <div>
+            <p class="label">OPPONENT</p>
+            <div id="sevensOpponentHand"></div>
+          </div>
+          <div>
+            <p id="sevensHandTitle" class="label">あなたの手札</p>
+            <div id="sevensPlayerHand"></div>
+          </div>
+        </section>
+
+        <p id="sevensMessage" class="message">GAME STARTを押してください</p>
+      </section>
+
+      <section id="numeronScreen" class="game-screen hidden">
+        <header class="top-bar">
+          <h1>Neon NUMERON</h1>
+          <p>数字を推理して先に正解した方が勝ち。</p>
+        </header>
+
+        <section class="hud">
+          <div class="metric metric-select">
+            <span class="label">MODE</span>
+            <select id="numeronModeSelect" class="difficulty-select" aria-label="Numeron mode">
+              <option value="cpu" selected>1P vs CPU</option>
+              <option value="local">2P LOCAL</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">OPENING</span>
+            <select id="numeronOpeningSelect" class="difficulty-select" aria-label="Numeron opening">
+              <option value="first" selected>PLAYER 1 FIRST</option>
+              <option value="second">PLAYER 2 FIRST</option>
+              <option value="random">RANDOM</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span class="label">DIGITS</span>
+            <select id="numeronDigitCountSelect" class="difficulty-select" aria-label="Numeron digit count">
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+            </select>
+          </div>
+          <div class="metric">
+            <span class="label">TURN</span>
+            <span id="numeronTurnText">-</span>
+          </div>
+          <div class="metric">
+            <span class="label">P1 TRIES</span>
+            <span id="numeronP1TryCount">0</span>
+          </div>
+          <div class="metric">
+            <span class="label">P2 TRIES</span>
+            <span id="numeronP2TryCount">0</span>
+          </div>
+          <button id="numeronStartBtn" class="start-btn hud-primary">GAME START</button>
+          <button id="numeronRemakeBtn" class="start-btn ghost">REMAKE</button>
+          <button id="numeronMenuBtn" class="start-btn ghost">MENU</button>
+        </section>
+
+        <section class="canvas-wrap">
+          <div class="metric">
+            <span class="label">STATUS</span>
+            <span id="numeronStatusText">-</span>
+          </div>
+          <div class="metric">
+            <span class="label">SETUP</span>
+            <span id="numeronSecretStageText">秘密数字は設定済み</span>
+          </div>
+          <div class="metric">
+            <span class="label">ITEMS P1</span>
+            <span id="numeronP1Items">D:1 H:1 S:1</span>
+          </div>
+          <div class="metric">
+            <span class="label">ITEMS P2</span>
+            <span id="numeronP2Items">D:1 H:1 S:1</span>
+          </div>
+        </section>
+
+        <section class="canvas-wrap">
+          <div>
+            <p class="label">YOUR SECRET</p>
+            <div id="numeronSecretSlots"></div>
+            <div id="numeronSecretDeck"></div>
+            <div class="entry-actions">
+              <button id="numeronSecretSetBtn" class="start-btn" type="button">SET</button>
+              <button id="numeronSecretClearBtn" class="start-btn ghost" type="button">CLEAR</button>
+            </div>
+          </div>
+          <div id="numeronOpponentSecretBlock">
+            <p class="label">OPPONENT SECRET</p>
+            <div id="numeronOpponentSecretSlots"></div>
+          </div>
+        </section>
+
+        <section class="canvas-wrap">
+          <div>
+            <p class="label">YOUR GUESS</p>
+            <div id="numeronGuessSlots"></div>
+            <div id="numeronGuessDeck"></div>
+            <div class="entry-actions">
+              <button id="numeronGuessBtn" class="start-btn" type="button">GUESS</button>
+              <button id="numeronGuessClearBtn" class="start-btn ghost" type="button">CLEAR</button>
+            </div>
+          </div>
+          <div>
+            <p class="label">ITEMS</p>
+            <div class="entry-actions">
+              <button id="numeronItemDoubleBtn" class="start-btn ghost" type="button">DOUBLE</button>
+              <button id="numeronItemShuffleBtn" class="start-btn ghost" type="button">SHUFFLE</button>
+              <button id="numeronItemHighLowBtn" class="start-btn ghost" type="button">HIGH&LOW</button>
+            </div>
+            <label class="label" for="numeronHighLowDigitSelect">HIGH&LOW DIGIT</label>
+            <select id="numeronHighLowDigitSelect" class="difficulty-select" aria-label="Numeron high low digit">
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+            </select>
+            <p id="numeronItemResultText" class="message">アイテム結果: -</p>
+          </div>
+        </section>
+
+        <section class="canvas-wrap">
+          <div>
+            <p class="label">YOUR HISTORY</p>
+            <ul id="numeronSelfHistory">
+              <li>-</li>
+            </ul>
+          </div>
+          <div>
+            <p class="label">OPPONENT HISTORY</p>
+            <ul id="numeronOpponentHistory">
+              <li>-</li>
+            </ul>
+          </div>
+          <div>
+            <p class="label">MEMO</p>
+            <textarea id="numeronMemoPad" class="room-input" rows="8" placeholder="メモ"></textarea>
+            <button id="numeronMemoClearBtn" class="start-btn ghost" type="button">MEMO CLEAR</button>
+          </div>
+        </section>
+
+        <div id="numeronOverlay" class="overlay">GAME STARTで開始</div>
+        <p id="numeronMessage" class="message">GAME STARTを押してください</p>
       </section>
 
       <button id="globalRematchBtn" class="start-btn rematch-floating hidden" type="button">RE-MATCH</button>

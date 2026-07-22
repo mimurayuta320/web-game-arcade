@@ -61,6 +61,16 @@ const SKINS = [
 ];
 
 const DEFAULT_SKIN_ID = "hammer_default";
+const ACTIVE_SKILL_PRESETS = {
+  default: { label: "PULSE DRIVE", cooldown: 8, radius: 136, damageMul: 1.9, knockback: 52, heal: 2 },
+  ranger: { label: "FOCUS BLAST", cooldown: 9, radius: 148, damageMul: 2.1, knockback: 58, heal: 1 },
+  brawler: { label: "EARTH SHOCK", cooldown: 7, radius: 170, damageMul: 2.05, knockback: 64, heal: 4 },
+  demolition: { label: "NOVA CHARGE", cooldown: 8.5, radius: 176, damageMul: 2.15, knockback: 60, heal: 2 },
+  medic: { label: "AID BURST", cooldown: 8, radius: 142, damageMul: 1.7, knockback: 48, heal: 8 },
+  assassin: { label: "VOID STEP", cooldown: 6.8, radius: 128, damageMul: 2.35, knockback: 54, heal: 3 },
+  engineer: { label: "PULSE OVERLOAD", cooldown: 8.2, radius: 160, damageMul: 2, knockback: 62, heal: 2 },
+  fairy: { label: "CABBAGE STORM", cooldown: 7.2, radius: 154, damageMul: 1.95, knockback: 56, heal: 3 },
+};
 const CHARACTER_PRESETS = {
   default: {
     id: "default",
@@ -809,6 +819,10 @@ function rarityRank(rarity) {
   return 0;
 }
 
+function resolveActiveSkillPreset(characterId) {
+  return ACTIVE_SKILL_PRESETS[characterId] || ACTIVE_SKILL_PRESETS.default;
+}
+
 export function initSurvivors(options = {}) {
   preloadCommonFrames();
   const initialCloudAuth = readCloudAuth();
@@ -839,6 +853,8 @@ export function initSurvivors(options = {}) {
   const weaponSlotsTextEl = document.getElementById("survivorsWeaponSlotsText");
   const playersTextEl = document.getElementById("survivorsPlayersText");
   const posTextEl = document.getElementById("survivorsPosText");
+  const quickHpTextEl = document.getElementById("survivorsQuickHpText");
+  const quickSkillTextEl = document.getElementById("survivorsQuickSkillText");
   const characterSelectEl = document.getElementById("survivorsCharacterSelect");
   const passiveTextEl = document.getElementById("survivorsPassiveText");
   const messageEl = document.getElementById("survivorsMessage");
@@ -930,6 +946,7 @@ export function initSurvivors(options = {}) {
     entities: {
       player: null,
       playerSprite: null,
+      fairyOrbiters: [],
       bullets: new Map(),
       enemies: new Map(),
       orbs: new Map(),
@@ -944,6 +961,7 @@ export function initSurvivors(options = {}) {
       movingUp: false,
       verticalInput: 0,
       lastVerticalInput: 0,
+      orbitPhase: 0,
       customSpriteFallback: false,
     },
     augment: {
@@ -1004,6 +1022,15 @@ export function initSurvivors(options = {}) {
       shieldReady: false,
       shieldTimer: 0,
     },
+    activeSkill: {
+      label: "PULSE DRIVE",
+      cooldown: 8,
+      timer: 0,
+      radius: 136,
+      damageMul: 1.9,
+      knockback: 52,
+      heal: 2,
+    },
     cloud: {
       auth: initialCloudAuth,
       saving: false,
@@ -1025,6 +1052,7 @@ export function initSurvivors(options = {}) {
   function applyCharacterPresetToPlayer(preset) {
     const stats = preset?.baseStats || CHARACTER_PRESETS.default.baseStats;
     const passive = preset?.passive || {};
+    const activeSkill = resolveActiveSkillPreset(preset?.id || "default");
     state.player.damage = stats.damage;
     state.player.rangedMul = stats.rangedMul;
     state.player.meleeDamage = stats.meleeDamage;
@@ -1051,17 +1079,33 @@ export function initSurvivors(options = {}) {
     if (state.passive.shieldInterval > 0) {
       state.passive.shieldReady = true;
     }
+    state.activeSkill = {
+      ...activeSkill,
+      timer: 0,
+    };
   }
 
   function passiveStatusText() {
+    const passiveLabel = state.passive.label || state.character?.passive?.label || "Passive";
     if (state.passive.shieldInterval > 0) {
       if (state.passive.shieldReady) {
-        return `${state.passive.label} READY`;
+        return `${passiveLabel} READY`;
       }
       const remain = Math.max(0, state.passive.shieldInterval - state.passive.shieldTimer);
-      return `${state.passive.label} ${remain.toFixed(1)}s`;
+      return `${passiveLabel} ${remain.toFixed(1)}s`;
     }
-    return state.passive.label || "-";
+    return passiveLabel;
+  }
+
+  function activeSkillStatusText() {
+    const label = state.activeSkill.label || "SKILL";
+    if (state.player.downed) {
+      return `${label} DOWN`;
+    }
+    if (state.activeSkill.timer <= 0) {
+      return `${label} READY`;
+    }
+    return `${label} ${state.activeSkill.timer.toFixed(1)}s`;
   }
 
   function setCharacterPreset(characterId) {
@@ -1083,11 +1127,11 @@ export function initSurvivors(options = {}) {
     if (state.entities.playerSprite) {
       state.entities.playerSprite.src = playerFrames(state)[0];
     }
-    render();
     if (!state.running) {
       applyCharacterPresetToPlayer(state.character);
       resetWeaponSlots();
     }
+    render();
   }
 
   function syncCharacterFromSelection() {
@@ -2003,6 +2047,7 @@ export function initSurvivors(options = {}) {
     const hpMax = Math.max(1, Math.round(state.player.maxHp));
     const hpRate = clamp(hpCurrent / hpMax, 0, 1);
     setHudText(hpTextEl, `${hpCurrent} / ${hpMax}`);
+    setHudText(quickHpTextEl, `${hpCurrent} / ${hpMax}`);
     if (hpFillEl) {
       hpFillEl.style.width = `${(hpRate * 100).toFixed(1)}%`;
     }
@@ -2058,6 +2103,9 @@ export function initSurvivors(options = {}) {
     }
     if (passiveTextEl) {
       setHudText(passiveTextEl, passiveStatusText());
+    }
+    if (quickSkillTextEl) {
+      setHudText(quickSkillTextEl, activeSkillStatusText());
     }
     if (waveTextEl) {
       if (state.betweenWaves) {
@@ -2128,12 +2176,37 @@ export function initSurvivors(options = {}) {
   }
 
   function clearDomEntities() {
-    fieldEl.querySelectorAll(".sv-bullet,.sv-enemy,.sv-orb,.sv-particle,.sv-level-fx,.sv-ally,.sv-pulse-ring").forEach((el) => el.remove());
+    fieldEl.querySelectorAll(".sv-bullet,.sv-enemy,.sv-orb,.sv-particle,.sv-level-fx,.sv-ally,.sv-pulse-ring,.sv-fairy-orbit").forEach((el) => el.remove());
     state.entities.bullets.clear();
     state.entities.enemies.clear();
     state.entities.orbs.clear();
     state.entities.particles.clear();
     state.entities.allies.clear();
+    state.entities.fairyOrbiters = [];
+  }
+
+  function ensureFairyOrbiters() {
+    if (state.entities.fairyOrbiters.length >= 3) return state.entities.fairyOrbiters;
+    const orbiters = [];
+    for (let i = 0; i < 3; i += 1) {
+      const el = document.createElement("div");
+      el.className = "sv-fairy-orbit";
+      const img = document.createElement("img");
+      img.className = "sv-fairy-orbit-sprite";
+      img.alt = "";
+      img.draggable = false;
+      img.src = FAIRY_IDLE_FRAME;
+      el.appendChild(img);
+      fieldEl.appendChild(el);
+      orbiters.push(el);
+    }
+    state.entities.fairyOrbiters = orbiters;
+    return orbiters;
+  }
+
+  function clearFairyOrbiters() {
+    state.entities.fairyOrbiters.forEach((el) => el.remove());
+    state.entities.fairyOrbiters = [];
   }
 
   function ensurePlayerEl() {
@@ -2194,6 +2267,16 @@ export function initSurvivors(options = {}) {
       const useSkinFilter = state.character?.sprite?.useSkinFilter !== false || state.anim.customSpriteFallback;
       state.entities.playerSprite.style.filter = useSkinFilter ? activeSkin.filter || "none" : "none";
     }
+
+    const orbiters = ensureFairyOrbiters();
+    orbiters.forEach((el, index) => {
+      const angle = state.anim.orbitPhase + (Math.PI * 2 * index) / orbiters.length;
+      const radius = 34 + Math.sin(state.elapsed * 2.4 + index) * 4;
+      const ox = state.player.x + Math.cos(angle) * radius;
+      const oy = state.player.y + Math.sin(angle) * radius;
+      const p = toViewPos({ x: ox, y: oy });
+      el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    });
 
     syncEntityMap(state.bullets, state.entities.bullets, "sv-bullet");
     syncEntityMap(state.enemies, state.entities.enemies, "sv-enemy");
@@ -2436,6 +2519,58 @@ export function initSurvivors(options = {}) {
     }
   }
 
+  function tryUseActiveSkill() {
+    if (!state.running || state.player.downed) return false;
+    if (state.pausedForAugment || state.shop.open || state.betweenWaves) return false;
+    if (state.activeSkill.timer > 0) return false;
+
+    const radius = Math.max(72, Number(state.activeSkill.radius) || 136);
+    const radiusSq = radius * radius;
+    const baseDamage = Math.max(8, state.player.damage * 1.4 + state.player.explosionDamage * 0.8 + state.player.meleeDamage * 0.45);
+    const damage = baseDamage * Math.max(0.6, Number(state.activeSkill.damageMul) || 1.9);
+    const knockback = Math.max(16, Number(state.activeSkill.knockback) || 52);
+    let hitCount = 0;
+
+    for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
+      const enemy = state.enemies[i];
+      const dx = enemy.x - state.player.x;
+      const dy = enemy.y - state.player.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > radiusSq) continue;
+
+      hitCount += 1;
+      enemy.hp -= damage;
+      spawnBurst(enemy.x, enemy.y, 5);
+      if (enemy.hp <= 0) {
+        const deadX = enemy.x;
+        const deadY = enemy.y;
+        grantKillRewards(enemy, "skill");
+        state.enemies.splice(i, 1);
+        triggerKillNova(deadX, deadY);
+      } else {
+        const len = Math.hypot(dx, dy) || 1;
+        enemy.x = clamp(enemy.x + (dx / len) * knockback, 8, WORLD_W - 8);
+        enemy.y = clamp(enemy.y + (dy / len) * knockback, 8, WORLD_H - 8);
+      }
+    }
+
+    spawnPulseRing(state.player.x, state.player.y, radius * 2, "explosion");
+    spawnBurst(state.player.x, state.player.y, 12);
+    const healAmount = Math.max(0, Number(state.activeSkill.heal) || 0);
+    if (healAmount > 0) {
+      state.player.hp = Math.min(state.player.maxHp, state.player.hp + healAmount);
+    }
+    state.activeSkill.timer = Math.max(0.8, Number(state.activeSkill.cooldown) || 8);
+    state.hitCooldown = Math.max(state.hitCooldown, 0.18);
+    state.anim.attacking = true;
+    state.anim.timer = 0;
+    state.anim.frameIndex = 0;
+    messageEl.textContent = hitCount > 0
+      ? `${state.activeSkill.label}! ${hitCount}体ヒット`
+      : `${state.activeSkill.label}!`;
+    return true;
+  }
+
   function applyLevelUp() {
     while (state.xp >= state.xpNeed) {
       state.xp -= state.xpNeed;
@@ -2488,6 +2623,8 @@ export function initSurvivors(options = {}) {
     }
 
     state.elapsed += dt;
+    state.anim.orbitPhase += dt * 2.2;
+    state.activeSkill.timer = Math.max(0, state.activeSkill.timer - dt);
 
     if (state.passive.shieldInterval > 0 && !state.passive.shieldReady) {
       state.passive.shieldTimer += dt;
@@ -2857,6 +2994,14 @@ export function initSurvivors(options = {}) {
       return;
     }
 
+    if (key === " ") {
+      if (tryUseActiveSkill()) {
+        render();
+      }
+      e.preventDefault();
+      return;
+    }
+
     if (state.shop.open || state.betweenWaves) {
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", " "].includes(key)) {
         e.preventDefault();
@@ -2949,6 +3094,7 @@ export function initSurvivors(options = {}) {
     state.fireTimer = 0.15;
     state.meleeTimer = 0.35;
     state.hitCooldown = 0;
+    state.activeSkill.timer = 0;
     state.elapsed = 0;
     state.kills = 0;
     state.level = 1;
@@ -3030,6 +3176,7 @@ export function initSurvivors(options = {}) {
     state.waveClearElapsed = 0;
     state.nextWaveDelay = 2;
     state.meleeTimer = 0;
+    state.activeSkill.timer = 0;
     state.coins = 0;
     state.shop.open = false;
     state.shop.rerollCost = 10;

@@ -17,7 +17,7 @@ npm run share
 3. 表示されたURLを相手に共有
 
 例:
-http://<このPCのIP>:4173/#ToufuGameshow
+http://<このPCのIP>:4173/#NeonBoardArcade
 
 ## 2) 開発向けに分離起動する
 
@@ -36,7 +36,7 @@ npm run room
 npm run dev
 
 アクセス例:
-http://<このPCのIP>:5173/#ToufuGameshow
+http://<このPCのIP>:5173/#NeonBoardArcade
 
 ## 2.5) 本番稼働中でもテスト環境を並行起動する
 
@@ -55,7 +55,7 @@ npm run room:test
 npm run dev:test
 
 アクセス例（同一PC）:
-http://localhost:5174/?cloudApi=http://localhost:18787&roomServer=ws://localhost:18788#ToufuGameshow
+http://localhost:5174/?cloudApi=http://localhost:18787&roomServer=ws://localhost:18788#NeonBoardArcade
 
 補足:
 - `cloudApi` はクラウドAPI接続先を固定するクエリです（初回アクセス時にlocalStorageへ保存）。
