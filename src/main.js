@@ -72,11 +72,24 @@ const entryLoginBtn = document.getElementById("entryLoginBtn");
 const entryRegisterBtn = document.getElementById("entryRegisterBtn");
 const entryGuestBtn = document.getElementById("entryGuestBtn");
 const entryMessage = document.getElementById("entryMessage");
+const entryLoadingPanel = document.getElementById("entryLoadingPanel");
+const entryLoadingText = document.getElementById("entryLoadingText");
+const entryLoadingFill = document.getElementById("entryLoadingFill");
+const entryLoadingElapsed = document.getElementById("entryLoadingElapsed");
 const cloudUserIdInput = document.getElementById("cloudUserIdInput");
 const cloudPasswordInput = document.getElementById("cloudPasswordInput");
 const saveCloudAuthBtn = document.getElementById("saveCloudAuthBtn");
 const backToEntryBtn = document.getElementById("backToEntryBtn");
 const roomMenuMessage = document.getElementById("roomMenuMessage");
+const friendsPanel = document.getElementById("friendsPanel");
+const friendsTitle = document.getElementById("friendsTitle");
+const friendsHint = document.getElementById("friendsHint");
+const friendUserIdInput = document.getElementById("friendUserIdInput");
+const friendAddBtn = document.getElementById("friendAddBtn");
+const friendRemoveBtn = document.getElementById("friendRemoveBtn");
+const friendReloadBtn = document.getElementById("friendReloadBtn");
+const friendsList = document.getElementById("friendsList");
+const friendsMessage = document.getElementById("friendsMessage");
 
 const lobbyRoomCodeText = document.getElementById("lobbyRoomCodeText");
 const lobbyRoleText = document.getElementById("lobbyRoleText");
@@ -111,6 +124,7 @@ const roomStatus = document.getElementById("roomStatus");
 const roomCodeText = document.getElementById("roomCodeText");
 const roomRoleText = document.getElementById("roomRoleText");
 const langSelect = document.getElementById("langSelect");
+const friendsToggleBtn = document.getElementById("friendsToggleBtn");
 
 const messages = {
   ja: {
@@ -220,6 +234,25 @@ const messages = {
     confirmBackToLogin: "ログイン画面に戻ります。よろしいですか？",
     cloudAuthSaved: "クラウド認証情報を保存しました",
     cloudAuthInvalid: "クラウドID/パスワードを入力してください",
+    friendsTitle: "フレンド",
+    friendsToggle: "フレンド一覧",
+    friendsClose: "閉じる",
+    friendsHintNoAuth: "ログインするとフレンド一覧を読み込みます",
+    friendsHintReady: "フレンドIDで追加/削除できます",
+    friendIdPlaceholder: "フレンドID",
+    friendAdd: "追加",
+    friendRemove: "削除",
+    friendReload: "再読込",
+    friendsLoading: "フレンド一覧を読み込み中...",
+    friendsListEmpty: "フレンドはまだいません",
+    friendsLoadFailed: "フレンド取得に失敗しました",
+    friendIdRequired: "フレンドIDを入力してください",
+    friendAddSuccess: "フレンドを追加しました",
+    friendRemoveSuccess: "フレンドを削除しました",
+    friendAddFailed: "フレンド追加に失敗しました",
+    friendRemoveFailed: "フレンド削除に失敗しました",
+    friendNotFound: "指定したIDのユーザーが見つかりません",
+    friendSelfForbidden: "自分自身は追加できません",
     cloudUserNotFound: "ユーザーが存在しません。新規登録してください",
     cloudIdDuplicateWarn: "このIDは既に使用されています。別のIDか、正しいパスワードを入力してください",
     cloudCheckFailed: "クラウド確認に失敗しました。サーバー起動後にもう一度お試しください",
@@ -372,6 +405,25 @@ const messages = {
     confirmBackToLogin: "로그인 화면으로 돌아갑니다. 계속할까요?",
     cloudAuthSaved: "클라우드 인증 정보를 저장했습니다",
     cloudAuthInvalid: "클라우드 ID/비밀번호를 입력하세요",
+    friendsTitle: "친구",
+    friendsToggle: "친구 목록",
+    friendsClose: "닫기",
+    friendsHintNoAuth: "로그인하면 친구 목록을 불러옵니다",
+    friendsHintReady: "친구 ID로 추가/삭제할 수 있습니다",
+    friendIdPlaceholder: "친구 ID",
+    friendAdd: "추가",
+    friendRemove: "삭제",
+    friendReload: "새로고침",
+    friendsLoading: "친구 목록을 불러오는 중...",
+    friendsListEmpty: "친구가 아직 없습니다",
+    friendsLoadFailed: "친구 목록을 불러오지 못했습니다",
+    friendIdRequired: "친구 ID를 입력하세요",
+    friendAddSuccess: "친구를 추가했습니다",
+    friendRemoveSuccess: "친구를 삭제했습니다",
+    friendAddFailed: "친구 추가에 실패했습니다",
+    friendRemoveFailed: "친구 삭제에 실패했습니다",
+    friendNotFound: "해당 ID의 사용자를 찾을 수 없습니다",
+    friendSelfForbidden: "자기 자신은 추가할 수 없습니다",
     cloudUserNotFound: "사용자가 존재하지 않습니다. 회원가입을 진행해 주세요",
     cloudIdDuplicateWarn: "이 ID는 이미 사용 중입니다. 다른 ID 또는 올바른 비밀번호를 입력하세요",
     cloudCheckFailed: "클라우드 확인에 실패했습니다. 서버 실행 후 다시 시도하세요",
@@ -500,6 +552,16 @@ function applyStaticTranslations() {
   if (entryGuestBtn) entryGuestBtn.textContent = tr("playAsGuest");
   if (saveCloudAuthBtn) saveCloudAuthBtn.textContent = tr("saveCloudAuth");
   if (backToEntryBtn) backToEntryBtn.textContent = tr("backToLogin");
+  if (friendsTitle) friendsTitle.textContent = tr("friendsTitle");
+  if (friendsHint) friendsHint.textContent = tr("friendsHintNoAuth");
+  if (friendUserIdInput) friendUserIdInput.placeholder = tr("friendIdPlaceholder");
+  if (friendAddBtn) friendAddBtn.textContent = tr("friendAdd");
+  if (friendRemoveBtn) friendRemoveBtn.textContent = tr("friendRemove");
+  if (friendReloadBtn) friendReloadBtn.textContent = tr("friendReload");
+  if (friendsToggleBtn) {
+    const isOpen = friendsPanel && !friendsPanel.classList.contains("hidden");
+    friendsToggleBtn.textContent = isOpen ? tr("friendsClose") : tr("friendsToggle");
+  }
   if (lobbyStartOthelloBtn) lobbyStartOthelloBtn.textContent = tr("othelloStart");
   if (lobbyStartShogiBtn) lobbyStartShogiBtn.textContent = tr("shogiStart");
   if (lobbyStartChessBtn) lobbyStartChessBtn.textContent = tr("chessStart");
@@ -546,6 +608,133 @@ function applyStaticTranslations() {
   const menuTitle = menuScreen?.querySelector(".top-bar h1");
   if (menuTitle) menuTitle.textContent = tr("gameSelectTitle");
   updateConnectionText();
+}
+
+function setFriendsPanelOpen(open) {
+  if (!friendsPanel || !friendsToggleBtn) return;
+  if (friendsToggleBtn.classList.contains("hidden")) {
+    friendsPanel.classList.add("hidden");
+    friendsToggleBtn.setAttribute("aria-expanded", "false");
+    return;
+  }
+  friendsPanel.classList.toggle("hidden", !open);
+  friendsToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  friendsToggleBtn.textContent = open ? tr("friendsClose") : tr("friendsToggle");
+  if (open) {
+    void refreshFriendsList();
+  }
+}
+
+function updateFriendsAvailability() {
+  if (!friendsToggleBtn) return;
+  const auth = getCloudAuthFromStorage();
+  const inMenu = !menuScreen.classList.contains("hidden");
+  const enabled = Boolean(auth && inMenu);
+
+  friendsToggleBtn.classList.toggle("hidden", !enabled);
+  if (!enabled) {
+    setFriendsPanelOpen(false);
+    return;
+  }
+
+  const isOpen = friendsPanel && !friendsPanel.classList.contains("hidden");
+  friendsToggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  friendsToggleBtn.textContent = isOpen ? tr("friendsClose") : tr("friendsToggle");
+}
+
+function setFriendsMessage(text) {
+  if (!friendsMessage) return;
+  friendsMessage.textContent = text;
+}
+
+function setFriendsButtonsEnabled(enabled) {
+  if (friendAddBtn) friendAddBtn.disabled = !enabled;
+  if (friendRemoveBtn) friendRemoveBtn.disabled = !enabled;
+  if (friendReloadBtn) friendReloadBtn.disabled = !enabled;
+  if (friendUserIdInput) friendUserIdInput.disabled = !enabled;
+}
+
+function renderFriendsList(friends) {
+  if (!friendsList) return;
+  friendsList.innerHTML = "";
+  if (!Array.isArray(friends) || friends.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = tr("friendsListEmpty");
+    friendsList.appendChild(li);
+    return;
+  }
+
+  friends.forEach((id) => {
+    const li = document.createElement("li");
+    li.textContent = String(id);
+    friendsList.appendChild(li);
+  });
+}
+
+async function refreshFriendsList() {
+  if (!friendsPanel) return;
+  if (friendsPanel.classList.contains("hidden")) return;
+  const auth = getCloudAuthFromStorage();
+  if (!auth) {
+    renderFriendsList([]);
+    if (friendsHint) friendsHint.textContent = tr("friendsHintNoAuth");
+    setFriendsMessage("");
+    setFriendsButtonsEnabled(false);
+    return;
+  }
+
+  if (friendsHint) friendsHint.textContent = tr("friendsHintReady");
+  setFriendsButtonsEnabled(false);
+  setFriendsMessage(tr("friendsLoading"));
+  try {
+    const { data } = await cloudApiRequest("/api/friends/list", {
+      userId: auth.userId,
+      password: auth.password,
+    });
+    renderFriendsList(data?.friends || []);
+    setFriendsMessage("");
+  } catch {
+    renderFriendsList([]);
+    setFriendsMessage(tr("friendsLoadFailed"));
+  } finally {
+    setFriendsButtonsEnabled(true);
+  }
+}
+
+async function mutateFriend(action) {
+  const auth = getCloudAuthFromStorage();
+  if (!auth) {
+    setFriendsMessage(tr("cloudAuthInvalid"));
+    return;
+  }
+  const friendUserId = String(friendUserIdInput?.value || "").trim().slice(0, 24);
+  if (!friendUserId) {
+    setFriendsMessage(tr("friendIdRequired"));
+    return;
+  }
+
+  setFriendsButtonsEnabled(false);
+  try {
+    const endpoint = action === "add" ? "/api/friends/add" : "/api/friends/remove";
+    const { data } = await cloudApiRequest(endpoint, {
+      userId: auth.userId,
+      password: auth.password,
+      friendUserId,
+    });
+    renderFriendsList(data?.friends || []);
+    setFriendsMessage(tr(action === "add" ? "friendAddSuccess" : "friendRemoveSuccess"));
+  } catch (err) {
+    const code = String(err?.code || "");
+    if (code === "FRIEND_NOT_FOUND") {
+      setFriendsMessage(tr("friendNotFound"));
+    } else if (code === "FRIEND_SELF_FORBIDDEN") {
+      setFriendsMessage(tr("friendSelfForbidden"));
+    } else {
+      setFriendsMessage(tr(action === "add" ? "friendAddFailed" : "friendRemoveFailed"));
+    }
+  } finally {
+    setFriendsButtonsEnabled(true);
+  }
 }
 
 function setLanguage(lang) {
@@ -615,6 +804,11 @@ const gameScreens = {
 
 let games = null;
 let currentGameKey = "othello";
+let entryLoadingTimerId = 0;
+let entryLoadingStartedAt = 0;
+
+const CLOUD_API_TIMEOUT_MS = 1800;
+const LOGIN_FLOW_TIMEOUT_MS = 6000;
 
 function normalizeName(raw) {
   const trimmed = String(raw ?? "").trim().replace(/\s+/g, " ");
@@ -720,19 +914,64 @@ function setEntryMessage(text) {
 }
 
 function setEntryActionButtonsVisible(visible) {
-  const display = visible ? "" : "none";
   if (entryLoginBtn) {
-    entryLoginBtn.style.display = display;
     entryLoginBtn.disabled = !visible;
   }
   if (entryRegisterBtn) {
-    entryRegisterBtn.style.display = display;
     entryRegisterBtn.disabled = !visible;
   }
   if (entryGuestBtn) {
-    entryGuestBtn.style.display = display;
     entryGuestBtn.disabled = !visible;
   }
+  if (entryCloudUserIdInput) entryCloudUserIdInput.disabled = !visible;
+  if (entryCloudPasswordInput) entryCloudPasswordInput.disabled = !visible;
+}
+
+function renderEntryLoadingProgress() {
+  if (!entryLoadingFill || !entryLoadingElapsed || !entryLoadingPanel) return;
+  const elapsedMs = Math.max(0, performance.now() - entryLoadingStartedAt);
+  const elapsedSec = elapsedMs / 1000;
+  const rawRatio = elapsedMs / LOGIN_FLOW_TIMEOUT_MS;
+  let progress = rawRatio * 100;
+  if (progress > 100) {
+    progress = 92 + ((Math.sin(elapsedMs / 220) + 1) * 4);
+  }
+
+  let stage = "fast";
+  if (rawRatio >= 0.85) {
+    stage = "slow";
+  } else if (rawRatio >= 0.5) {
+    stage = "mid";
+  }
+  entryLoadingPanel.dataset.stage = stage;
+
+  entryLoadingFill.style.width = `${Math.max(0, Math.min(100, progress)).toFixed(1)}%`;
+  entryLoadingElapsed.textContent = `${elapsedSec.toFixed(1)}秒`;
+}
+
+function startEntryLoading(text = "接続中...") {
+  if (!entryLoadingPanel) return;
+  if (entryLoadingTimerId) {
+    window.clearInterval(entryLoadingTimerId);
+    entryLoadingTimerId = 0;
+  }
+  entryLoadingStartedAt = performance.now();
+  entryLoadingPanel.dataset.stage = "fast";
+  entryLoadingPanel.classList.remove("hidden");
+  if (entryLoadingText) entryLoadingText.textContent = text;
+  renderEntryLoadingProgress();
+  entryLoadingTimerId = window.setInterval(renderEntryLoadingProgress, 80);
+}
+
+function stopEntryLoading() {
+  if (entryLoadingTimerId) {
+    window.clearInterval(entryLoadingTimerId);
+    entryLoadingTimerId = 0;
+  }
+  if (entryLoadingFill) entryLoadingFill.style.width = "0%";
+  if (entryLoadingElapsed) entryLoadingElapsed.textContent = "0.0秒";
+  if (entryLoadingPanel) entryLoadingPanel.dataset.stage = "fast";
+  entryLoadingPanel?.classList.add("hidden");
 }
 
 function setLobbyMessage(text) {
@@ -876,10 +1115,13 @@ async function cloudApiRequest(path, payload) {
   let lastError = null;
   for (let i = 0; i < candidates.length; i += 1) {
     const base = candidates[i];
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), CLOUD_API_TIMEOUT_MS);
     try {
       const res = await fetch(`${base}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
@@ -906,10 +1148,24 @@ async function cloudApiRequest(path, payload) {
       return { res, data };
     } catch (err) {
       lastError = err;
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   }
 
   throw lastError || new Error("Cloud API request failed");
+}
+
+function withTimeout(promise, timeoutMs, timeoutMessage = "Request timeout") {
+  let timeoutId = 0;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
 }
 
 async function verifyCloudAuth(userId, password) {
@@ -988,14 +1244,17 @@ function showOnly(screen) {
   fitPuzzleScreen.classList.add("hidden");
   solitaireScreen.classList.add("hidden");
   screen.classList.remove("hidden");
+  updateFriendsAvailability();
 }
 
 function showEntryScreen() {
   showOnly(entryScreen);
+  setFriendsPanelOpen(false);
 }
 
 function showMenuScreen() {
   showOnly(menuScreen);
+  void refreshFriendsList();
 }
 
 function showCardListScreen() {
@@ -2078,85 +2337,105 @@ langSelect?.addEventListener("change", () => {
 
 entryLoginBtn?.addEventListener("click", async () => {
   setEntryActionButtonsVisible(false);
+  startEntryLoading("ログイン接続中...");
+  setEntryMessage("接続を確認中...");
 
-  const userId = String(entryCloudUserIdInput?.value || "").trim();
-  const password = String(entryCloudPasswordInput?.value || "");
-  if (!userId || !password) {
-    setEntryMessage(tr("cloudAuthInvalid"));
+  try {
+    const userId = String(entryCloudUserIdInput?.value || "").trim();
+    const password = String(entryCloudPasswordInput?.value || "");
+    if (!userId || !password) {
+      setEntryMessage(tr("cloudAuthInvalid"));
+      return;
+    }
+
+    if (!window.confirm(tr("loginConfirmPrompt"))) {
+      setEntryMessage(tr("loginCanceled"));
+      return;
+    }
+
+    const check = await withTimeout(
+      verifyCloudAuth(userId, password),
+      LOGIN_FLOW_TIMEOUT_MS,
+      "Login timeout",
+    );
+    if (!check.ok) {
+      const key = check.reason === "duplicate"
+        ? "cloudIdDuplicateWarn"
+        : (check.reason === "not_found" ? "cloudUserNotFound" : "cloudCheckFailed");
+      setEntryMessage(tr(key));
+      return;
+    }
+
+    const cloudName = check.profile?.playerName ? normalizeName(check.profile.playerName) : "";
+    if (cloudName) {
+      setPlayerName(cloudName);
+    } else {
+      void syncPlayerNameToCloud(userId, password, check.profile).catch(() => {});
+    }
+
+    localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
+    localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+    if (cloudUserIdInput) cloudUserIdInput.value = userId;
+    if (cloudPasswordInput) cloudPasswordInput.value = password;
+    setEntryMessage("");
+    showMenuScreen();
+    setMenuMessage(tr("cloudAuthSaved"));
+  } catch {
+    setEntryMessage(tr("cloudCheckFailed"));
+  } finally {
+    stopEntryLoading();
     setEntryActionButtonsVisible(true);
-    return;
   }
-
-  if (!window.confirm(tr("loginConfirmPrompt"))) {
-    setEntryMessage(tr("loginCanceled"));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const check = await verifyCloudAuth(userId, password);
-  if (!check.ok) {
-    const key = check.reason === "duplicate"
-      ? "cloudIdDuplicateWarn"
-      : (check.reason === "not_found" ? "cloudUserNotFound" : "cloudCheckFailed");
-    setEntryMessage(tr(key));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const cloudName = check.profile?.playerName ? normalizeName(check.profile.playerName) : "";
-  if (cloudName) {
-    setPlayerName(cloudName);
-  } else {
-    await syncPlayerNameToCloud(userId, password, check.profile);
-  }
-
-  localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
-  localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
-  if (cloudUserIdInput) cloudUserIdInput.value = userId;
-  if (cloudPasswordInput) cloudPasswordInput.value = password;
-  setEntryMessage("");
-  showMenuScreen();
-  setMenuMessage(tr("cloudAuthSaved"));
 });
 
 entryRegisterBtn?.addEventListener("click", async () => {
   setEntryActionButtonsVisible(false);
+  startEntryLoading("新規登録中...");
+  setEntryMessage("接続を確認中...");
 
-  const userId = String(entryCloudUserIdInput?.value || "").trim();
-  const password = String(entryCloudPasswordInput?.value || "");
-  if (!userId || !password) {
-    setEntryMessage(tr("cloudAuthInvalid"));
+  try {
+    const userId = String(entryCloudUserIdInput?.value || "").trim();
+    const password = String(entryCloudPasswordInput?.value || "");
+    if (!userId || !password) {
+      setEntryMessage(tr("cloudAuthInvalid"));
+      return;
+    }
+
+    if (!window.confirm(tr("registerConfirmPrompt"))) {
+      setEntryMessage(tr("registerCanceled"));
+      return;
+    }
+
+    const created = await withTimeout(
+      registerCloudAuth(userId, password),
+      LOGIN_FLOW_TIMEOUT_MS,
+      "Register timeout",
+    );
+    if (!created.ok) {
+      setEntryMessage(tr(created.reason === "duplicate" ? "registerDuplicate" : "cloudCheckFailed"));
+      return;
+    }
+
+    const cloudName = created.profile?.playerName ? normalizeName(created.profile.playerName) : "";
+    if (cloudName) {
+      setPlayerName(cloudName);
+    } else {
+      void syncPlayerNameToCloud(userId, password, created.profile).catch(() => {});
+    }
+
+    localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
+    localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+    if (cloudUserIdInput) cloudUserIdInput.value = userId;
+    if (cloudPasswordInput) cloudPasswordInput.value = password;
+    setEntryMessage("");
+    showMenuScreen();
+    setMenuMessage(tr("registerSuccess"));
+  } catch {
+    setEntryMessage(tr("cloudCheckFailed"));
+  } finally {
+    stopEntryLoading();
     setEntryActionButtonsVisible(true);
-    return;
   }
-
-  if (!window.confirm(tr("registerConfirmPrompt"))) {
-    setEntryMessage(tr("registerCanceled"));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const created = await registerCloudAuth(userId, password);
-  if (!created.ok) {
-    setEntryMessage(tr(created.reason === "duplicate" ? "registerDuplicate" : "cloudCheckFailed"));
-    setEntryActionButtonsVisible(true);
-    return;
-  }
-
-  const cloudName = created.profile?.playerName ? normalizeName(created.profile.playerName) : "";
-  if (cloudName) {
-    setPlayerName(cloudName);
-  } else {
-    await syncPlayerNameToCloud(userId, password, created.profile);
-  }
-
-  localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
-  localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
-  if (cloudUserIdInput) cloudUserIdInput.value = userId;
-  if (cloudPasswordInput) cloudPasswordInput.value = password;
-  setEntryMessage("");
-  showMenuScreen();
-  setMenuMessage(tr("registerSuccess"));
 });
 
 entryGuestBtn?.addEventListener("click", () => {
@@ -2208,6 +2487,40 @@ saveCloudAuthBtn?.addEventListener("click", async () => {
   if (entryCloudUserIdInput) entryCloudUserIdInput.value = userId;
   if (entryCloudPasswordInput) entryCloudPasswordInput.value = password;
   setMenuMessage(tr("cloudAuthSaved"));
+  updateFriendsAvailability();
+  void refreshFriendsList();
+});
+
+friendReloadBtn?.addEventListener("click", () => {
+  void refreshFriendsList();
+});
+
+friendAddBtn?.addEventListener("click", () => {
+  void mutateFriend("add");
+});
+
+friendRemoveBtn?.addEventListener("click", () => {
+  void mutateFriend("remove");
+});
+
+friendUserIdInput?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  void mutateFriend("add");
+});
+
+friendsToggleBtn?.addEventListener("click", () => {
+  const nextOpen = friendsPanel?.classList.contains("hidden") !== true;
+  setFriendsPanelOpen(!nextOpen);
+});
+
+document.addEventListener("click", (event) => {
+  if (!friendsPanel || !friendsToggleBtn) return;
+  if (friendsPanel.classList.contains("hidden")) return;
+  const target = event.target;
+  if (!(target instanceof Node)) return;
+  if (friendsPanel.contains(target) || friendsToggleBtn.contains(target)) return;
+  setFriendsPanelOpen(false);
 });
 
 backToEntryBtn?.addEventListener("click", () => {
@@ -2260,6 +2573,8 @@ if (entryCloudPasswordInput) {
 
 setPlayerName(localStorage.getItem(STORAGE_PLAYER_NAME_KEY) || "Player");
 setEntryActionButtonsVisible(true);
+setFriendsButtonsEnabled(false);
+renderFriendsList([]);
 
 updateLobbyView();
 showEntryScreen();

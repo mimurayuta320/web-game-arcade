@@ -102,6 +102,14 @@ function initSqlite() {
     );
     CREATE INDEX IF NOT EXISTS idx_friends_user
       ON friends(user_id);
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      requester_user_id TEXT NOT NULL,
+      target_user_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (requester_user_id, target_user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_friend_requests_target
+      ON friend_requests(target_user_id);
   `);
 
   ensureAuthColumns();
@@ -378,6 +386,127 @@ function removeFriendBothWays(userId, friendUserId) {
   del.run(userId, friendUserId, friendUserId, userId);
 }
 
+function areAlreadyFriends(userId, friendUserId) {
+  const row = db.prepare(`
+    SELECT 1 AS ok
+    FROM friends
+    WHERE user_id = ? AND friend_user_id = ?
+    LIMIT 1
+  `).get(userId, friendUserId);
+  return Boolean(row);
+}
+
+function hasPendingRequest(requesterUserId, targetUserId) {
+  const row = db.prepare(`
+    SELECT 1 AS ok
+    FROM friend_requests
+    WHERE requester_user_id = ? AND target_user_id = ?
+    LIMIT 1
+  `).get(requesterUserId, targetUserId);
+  return Boolean(row);
+}
+
+function sendFriendRequest(requesterUserId, targetUserId) {
+  if (requesterUserId === targetUserId) {
+    return { ok: false, code: "FRIEND_SELF_FORBIDDEN" };
+  }
+  const targetUser = readUser(targetUserId);
+  if (!targetUser) {
+    return { ok: false, code: "FRIEND_NOT_FOUND" };
+  }
+  if (areAlreadyFriends(requesterUserId, targetUserId)) {
+    return { ok: false, code: "ALREADY_FRIENDS" };
+  }
+  if (hasPendingRequest(requesterUserId, targetUserId)) {
+    return { ok: false, code: "REQUEST_ALREADY_SENT" };
+  }
+  if (hasPendingRequest(targetUserId, requesterUserId)) {
+    return { ok: false, code: "REQUEST_ALREADY_RECEIVED" };
+  }
+
+  db.prepare(`
+    INSERT INTO friend_requests (requester_user_id, target_user_id, created_at)
+    VALUES (?, ?, ?)
+  `).run(requesterUserId, targetUserId, Date.now());
+
+  return { ok: true };
+}
+
+function listIncomingFriendRequests(userId) {
+  const rows = db.prepare(`
+    SELECT requester_user_id
+    FROM friend_requests
+    WHERE target_user_id = ?
+    ORDER BY created_at DESC
+  `).all(userId);
+  return rows
+    .map((row) => normalizeUserId(row?.requester_user_id || ""))
+    .filter(Boolean);
+}
+
+function listOutgoingFriendRequests(userId) {
+  const rows = db.prepare(`
+    SELECT target_user_id
+    FROM friend_requests
+    WHERE requester_user_id = ?
+    ORDER BY created_at DESC
+  `).all(userId);
+  return rows
+    .map((row) => normalizeUserId(row?.target_user_id || ""))
+    .filter(Boolean);
+}
+
+function approveFriendRequest(targetUserId, requesterUserId) {
+  if (!hasPendingRequest(requesterUserId, targetUserId)) {
+    return { ok: false, code: "REQUEST_NOT_FOUND" };
+  }
+
+  db.prepare(`
+    DELETE FROM friend_requests
+    WHERE requester_user_id = ? AND target_user_id = ?
+  `).run(requesterUserId, targetUserId);
+
+  addFriendBothWays(targetUserId, requesterUserId);
+  return { ok: true };
+}
+
+function rejectFriendRequest(targetUserId, requesterUserId) {
+  const result = db.prepare(`
+    DELETE FROM friend_requests
+    WHERE requester_user_id = ? AND target_user_id = ?
+  `).run(requesterUserId, targetUserId);
+  if (!result?.changes) {
+    return { ok: false, code: "REQUEST_NOT_FOUND" };
+  }
+  return { ok: true };
+}
+
+function cancelFriendRequest(requesterUserId, targetUserId) {
+  const result = db.prepare(`
+    DELETE FROM friend_requests
+    WHERE requester_user_id = ? AND target_user_id = ?
+  `).run(requesterUserId, targetUserId);
+  if (!result?.changes) {
+    return { ok: false, code: "REQUEST_NOT_FOUND" };
+  }
+  return { ok: true };
+}
+
+function searchUsers(userId, query) {
+  const q = normalizeUserId(query).toLowerCase();
+  if (!q) return [];
+  const rows = db.prepare(`
+    SELECT user_id
+    FROM users
+    WHERE lower(user_id) LIKE ?
+    ORDER BY user_id COLLATE NOCASE ASC
+    LIMIT 20
+  `).all(`${q}%`);
+  return rows
+    .map((row) => normalizeUserId(row?.user_id || ""))
+    .filter((id) => id && id !== userId);
+}
+
 function applyMatchRecord(profile, rawRecord) {
   const game = normalizeGameKey(rawRecord?.game);
   const result = normalizeMatchResult(rawRecord?.result);
@@ -534,6 +663,13 @@ const server = http.createServer(async (req, res) => {
     && req.url !== "/api/friends/list"
     && req.url !== "/api/friends/add"
     && req.url !== "/api/friends/remove"
+    && req.url !== "/api/friends/request/send"
+    && req.url !== "/api/friends/request/incoming"
+    && req.url !== "/api/friends/request/outgoing"
+    && req.url !== "/api/friends/request/approve"
+    && req.url !== "/api/friends/request/reject"
+    && req.url !== "/api/friends/request/cancel"
+    && req.url !== "/api/friends/search"
   ) {
     return sendJson(res, 404, { ok: false, code: "NOT_FOUND", message: "Unknown endpoint" });
   }
@@ -617,6 +753,72 @@ const server = http.createServer(async (req, res) => {
       removeFriendBothWays(userId, friendUserId);
       const friends = listFriends(userId);
       return sendJson(res, 200, { ok: true, friends });
+    }
+
+    if (req.url === "/api/friends/request/send") {
+      const targetUserId = normalizeUserId(body?.targetUserId || body?.friendUserId || "");
+      if (!targetUserId) {
+        return sendJson(res, 400, { ok: false, code: "FRIEND_ID_REQUIRED", message: "targetUserId is required" });
+      }
+      const sent = sendFriendRequest(userId, targetUserId);
+      if (!sent.ok) {
+        const status = sent.code === "FRIEND_NOT_FOUND" ? 404 : 400;
+        return sendJson(res, status, { ok: false, code: sent.code, message: "Send request failed" });
+      }
+      return sendJson(res, 200, { ok: true, outgoing: listOutgoingFriendRequests(userId) });
+    }
+
+    if (req.url === "/api/friends/request/incoming") {
+      return sendJson(res, 200, { ok: true, incoming: listIncomingFriendRequests(userId) });
+    }
+
+    if (req.url === "/api/friends/request/outgoing") {
+      return sendJson(res, 200, { ok: true, outgoing: listOutgoingFriendRequests(userId) });
+    }
+
+    if (req.url === "/api/friends/request/approve") {
+      const requesterUserId = normalizeUserId(body?.requesterUserId || "");
+      if (!requesterUserId) {
+        return sendJson(res, 400, { ok: false, code: "REQUESTER_ID_REQUIRED", message: "requesterUserId is required" });
+      }
+      const approved = approveFriendRequest(userId, requesterUserId);
+      if (!approved.ok) {
+        return sendJson(res, 404, { ok: false, code: approved.code, message: "Request not found" });
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        friends: listFriends(userId),
+        incoming: listIncomingFriendRequests(userId),
+      });
+    }
+
+    if (req.url === "/api/friends/request/reject") {
+      const requesterUserId = normalizeUserId(body?.requesterUserId || "");
+      if (!requesterUserId) {
+        return sendJson(res, 400, { ok: false, code: "REQUESTER_ID_REQUIRED", message: "requesterUserId is required" });
+      }
+      const rejected = rejectFriendRequest(userId, requesterUserId);
+      if (!rejected.ok) {
+        return sendJson(res, 404, { ok: false, code: rejected.code, message: "Request not found" });
+      }
+      return sendJson(res, 200, { ok: true, incoming: listIncomingFriendRequests(userId) });
+    }
+
+    if (req.url === "/api/friends/request/cancel") {
+      const targetUserId = normalizeUserId(body?.targetUserId || body?.friendUserId || "");
+      if (!targetUserId) {
+        return sendJson(res, 400, { ok: false, code: "FRIEND_ID_REQUIRED", message: "targetUserId is required" });
+      }
+      const canceled = cancelFriendRequest(userId, targetUserId);
+      if (!canceled.ok) {
+        return sendJson(res, 404, { ok: false, code: canceled.code, message: "Request not found" });
+      }
+      return sendJson(res, 200, { ok: true, outgoing: listOutgoingFriendRequests(userId) });
+    }
+
+    if (req.url === "/api/friends/search") {
+      const query = String(body?.query || body?.keyword || "");
+      return sendJson(res, 200, { ok: true, users: searchUsers(userId, query) });
     }
 
     if (req.url === "/api/match/record") {

@@ -20,6 +20,28 @@
           <option value="ja">日本語</option>
           <option value="ko">한국어</option>
         </select>
+        <button id="friendsToggleBtn" class="friends-toggle-btn" type="button" aria-expanded="false">フレンド一覧</button>
+        <section id="friendsPanel" class="friends-panel hidden" aria-live="polite">
+          <h3 id="friendsTitle">フレンド</h3>
+          <p id="friendsHint" class="friends-hint">ログインするとフレンド一覧を読み込みます</p>
+          <div class="friends-row">
+            <input
+              id="friendUserIdInput"
+              class="room-input"
+              type="text"
+              maxlength="24"
+              placeholder="フレンドID"
+              aria-label="Friend user id"
+            />
+            <button id="friendAddBtn" class="start-btn" type="button">追加</button>
+            <button id="friendRemoveBtn" class="start-btn ghost" type="button">削除</button>
+            <button id="friendReloadBtn" class="start-btn ghost" type="button">再読込</button>
+          </div>
+          <ul id="friendsList" class="friends-list">
+            <li>-</li>
+          </ul>
+          <p id="friendsMessage" class="room-menu-message"></p>
+        </section>
       </div>
 
       <section id="entryScreen" class="menu-screen">
@@ -50,6 +72,16 @@
             <button id="entryGuestBtn" class="start-btn ghost">PLAY AS GUEST</button>
           </div>
           <p id="entryMessage" class="room-menu-message"></p>
+          <div id="entryLoadingPanel" class="entry-loading-panel hidden" aria-live="polite" aria-atomic="true">
+            <div class="entry-loading-head">
+              <span class="entry-loading-spinner" aria-hidden="true"></span>
+              <span id="entryLoadingText">接続中...</span>
+            </div>
+            <div class="entry-loading-track">
+              <span id="entryLoadingFill" class="entry-loading-fill"></span>
+            </div>
+            <p id="entryLoadingElapsed" class="entry-loading-elapsed">0.0秒</p>
+          </div>
         </div>
       </section>
 
