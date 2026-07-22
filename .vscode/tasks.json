@@ -26,8 +26,10 @@
 				"-NoProfile",
 				"-ExecutionPolicy",
 				"Bypass",
-				"-Command",
-				"Start-Process chrome 'http://localhost:5173/'; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run dev"
+				"-File",
+				"${workspaceFolder}\\scripts\\run-dev-chrome.ps1",
+				"-WorkspaceFolder",
+				"${workspaceFolder}"
 			],
 			"isBackground": true,
 			"group": "build"
@@ -40,8 +42,10 @@
 				"-NoProfile",
 				"-ExecutionPolicy",
 				"Bypass",
-				"-Command",
-				"$nodeDir='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64'; Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',\"$env:Path='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;' + $env:Path; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run room\"; Start-Process chrome 'http://localhost:5173/'; $env:Path=\"$nodeDir;$env:Path\"; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run dev"
+				"-File",
+				"${workspaceFolder}\\scripts\\run-room-dev.ps1",
+				"-WorkspaceFolder",
+				"${workspaceFolder}"
 			],
 			"isBackground": true,
 			"group": "build"
@@ -54,8 +58,10 @@
 				"-NoProfile",
 				"-ExecutionPolicy",
 				"Bypass",
-				"-Command",
-				"$nodeDir='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64'; Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',\"$env:Path='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;' + $env:Path; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run cloud\"; Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command',\"$env:Path='${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;' + $env:Path; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run room\"; Start-Process chrome 'http://localhost:5173/'; $env:Path=\"$nodeDir;$env:Path\"; & '${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd' run dev"
+				"-File",
+				"${workspaceFolder}\\scripts\\run-fullstack.ps1",
+				"-WorkspaceFolder",
+				"${workspaceFolder}"
 			],
 			"isBackground": true,
 			"group": "build"

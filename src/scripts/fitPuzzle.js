@@ -1327,6 +1327,10 @@ export function initFitPuzzle(options = {}) {
     highestUnlockedStage: 0,
     selectedStageIndex: 0,
     stageModalOpen: false,
+    gameMode: "local",
+    roomRole: null,
+    roomLocked: false,
+    roomLockMessage: "",
   };
 
   const DIFFICULTY_PRESETS = {
@@ -1355,6 +1359,109 @@ export function initFitPuzzle(options = {}) {
 
   function currentDifficultyPreset() {
     return DIFFICULTY_PRESETS[state.difficulty] || DIFFICULTY_PRESETS.normal;
+  }
+
+  function isRoomMode() {
+    return state.gameMode === "room";
+  }
+
+  function isRoomHost() {
+    return isRoomMode() && state.roomRole === "host";
+  }
+
+  function canLocalControl() {
+    if (state.roomLocked) return false;
+    if (!isRoomMode()) return true;
+    return state.roomRole === "host";
+  }
+
+  function composeRoomSnapshot() {
+    return {
+      board: state.board.map((row) => [...row]),
+      pieces: state.pieces.map((piece) => ({
+        ...piece,
+        baseCells: piece.baseCells.map((cell) => ({ ...cell })),
+      })),
+      selectedId: state.selectedId,
+      started: state.started,
+      cleared: state.cleared,
+      stageIndex: state.stageIndex,
+      rows: state.rows,
+      cols: state.cols,
+      stageTitle: state.stageTitle,
+      assistRemaining: state.assistRemaining,
+      assistUsedCount: state.assistUsedCount,
+      moveCount: state.moveCount,
+      failCount: state.failCount,
+      elapsedSec: state.elapsedSec,
+      stageStartAt: state.stageStartAt,
+      totalScore: state.totalScore,
+      noRotateMode: state.noRotateMode,
+      difficulty: state.difficulty,
+      highestUnlockedStage: state.highestUnlockedStage,
+      selectedStageIndex: state.selectedStageIndex,
+      roomLocked: state.roomLocked,
+      roomLockMessage: state.roomLockMessage,
+      message: messageEl?.textContent || "",
+    };
+  }
+
+  function applyRoomSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") return;
+    stopTimer();
+    clearClickCarry();
+    clearDragPreview();
+    clearHints();
+    state.pointerDrag = null;
+
+    if (Array.isArray(snapshot.board)) {
+      state.board = snapshot.board.map((row) => (Array.isArray(row) ? [...row] : []));
+    }
+    if (Array.isArray(snapshot.pieces)) {
+      state.pieces = snapshot.pieces.map((piece) => ({
+        ...piece,
+        baseCells: Array.isArray(piece.baseCells)
+          ? piece.baseCells.map((cell) => ({ row: Number(cell.row) || 0, col: Number(cell.col) || 0 }))
+          : [],
+      }));
+    }
+    state.selectedId = typeof snapshot.selectedId === "string" ? snapshot.selectedId : null;
+    state.started = Boolean(snapshot.started);
+    state.cleared = Boolean(snapshot.cleared);
+    state.stageIndex = Number.isFinite(snapshot.stageIndex) ? Math.max(0, Math.floor(snapshot.stageIndex)) : state.stageIndex;
+    state.rows = Number.isFinite(snapshot.rows) ? Math.max(1, Math.floor(snapshot.rows)) : state.rows;
+    state.cols = Number.isFinite(snapshot.cols) ? Math.max(1, Math.floor(snapshot.cols)) : state.cols;
+    state.stageTitle = typeof snapshot.stageTitle === "string" ? snapshot.stageTitle : state.stageTitle;
+    state.assistRemaining = Number.isFinite(snapshot.assistRemaining) ? Math.max(0, Math.floor(snapshot.assistRemaining)) : state.assistRemaining;
+    state.assistUsedCount = Number.isFinite(snapshot.assistUsedCount) ? Math.max(0, Math.floor(snapshot.assistUsedCount)) : state.assistUsedCount;
+    state.moveCount = Number.isFinite(snapshot.moveCount) ? Math.max(0, Math.floor(snapshot.moveCount)) : state.moveCount;
+    state.failCount = Number.isFinite(snapshot.failCount) ? Math.max(0, Math.floor(snapshot.failCount)) : state.failCount;
+    state.elapsedSec = Number.isFinite(snapshot.elapsedSec) ? Math.max(0, Math.floor(snapshot.elapsedSec)) : state.elapsedSec;
+    state.stageStartAt = Number.isFinite(snapshot.stageStartAt) ? snapshot.stageStartAt : state.stageStartAt;
+    state.totalScore = Number.isFinite(snapshot.totalScore) ? Math.max(0, Math.floor(snapshot.totalScore)) : state.totalScore;
+    state.noRotateMode = Boolean(snapshot.noRotateMode);
+    state.difficulty = snapshot.difficulty === "easy" || snapshot.difficulty === "hard" ? snapshot.difficulty : "normal";
+    state.highestUnlockedStage = Number.isFinite(snapshot.highestUnlockedStage)
+      ? Math.max(0, Math.floor(snapshot.highestUnlockedStage))
+      : state.highestUnlockedStage;
+    state.selectedStageIndex = Number.isFinite(snapshot.selectedStageIndex)
+      ? Math.max(0, Math.floor(snapshot.selectedStageIndex))
+      : state.selectedStageIndex;
+    state.roomLocked = Boolean(snapshot.roomLocked);
+    state.roomLockMessage = typeof snapshot.roomLockMessage === "string" ? snapshot.roomLockMessage : "";
+    if (messageEl && typeof snapshot.message === "string") {
+      messageEl.textContent = snapshot.message;
+    }
+
+    if (state.started && !state.cleared && !state.roomLocked) {
+      startTimer();
+    }
+    render();
+  }
+
+  function emitRoomSnapshot() {
+    if (!isRoomHost()) return;
+    options.onRoomSnapshot?.();
   }
 
   function parseInteger(raw, fallback = 0) {
@@ -1595,14 +1702,17 @@ export function initFitPuzzle(options = {}) {
       assistBtn.dataset.baseLabel = baseLabel;
       const remaining = Math.max(0, state.assistRemaining);
       assistBtn.textContent = `${baseLabel} x${remaining}`;
-      assistBtn.disabled = !state.started || state.assistRemaining <= 0;
+      assistBtn.disabled = state.roomLocked || !state.started || state.assistRemaining <= 0;
     }
+    if (startBtn) startBtn.disabled = state.roomLocked;
     if (nextBtn) {
-      nextBtn.disabled = !state.started || !state.cleared;
+      nextBtn.disabled = state.roomLocked || !state.started || !state.cleared;
     }
     if (rotateBtn) {
-      rotateBtn.disabled = !state.started || state.noRotateMode;
+      rotateBtn.disabled = state.roomLocked || !state.started || state.noRotateMode;
     }
+    if (resetBtn) resetBtn.disabled = state.roomLocked || !state.started;
+    if (noRotateBtn) noRotateBtn.disabled = state.roomLocked;
     if (noRotateBtn) {
       const baseLabel = (noRotateBtn.textContent || noRotateBtn.dataset.baseLabel || t("回転なし", "회전 없음")).replace(/\s+(ON|OFF)$/i, "").trim() || t("回転なし", "회전 없음");
       noRotateBtn.dataset.baseLabel = baseLabel;
@@ -1610,7 +1720,7 @@ export function initFitPuzzle(options = {}) {
     }
     if (difficultySelect) {
       difficultySelect.value = state.difficulty;
-      difficultySelect.disabled = state.started && !state.cleared;
+      difficultySelect.disabled = state.roomLocked || (state.started && !state.cleared);
     }
     if (stageSelect) {
       const maxUnlocked = clampStageIndex(state.highestUnlockedStage);
@@ -1625,14 +1735,14 @@ export function initFitPuzzle(options = {}) {
       const selected = Math.min(maxUnlocked, clampStageIndex(state.selectedStageIndex));
       state.selectedStageIndex = selected;
       stageSelect.value = String(selected);
-      stageSelect.disabled = state.started && !state.cleared;
+      stageSelect.disabled = state.roomLocked || (state.started && !state.cleared);
     }
     if (stageCurrentTextEl) {
       const selectedStage = STAGES[state.selectedStageIndex] || STAGES[0];
       stageCurrentTextEl.textContent = `${t("ステージ", "스테이지")} ${state.selectedStageIndex + 1}: ${selectedStage.title}`;
     }
     if (stageScreenBtn) {
-      stageScreenBtn.disabled = state.started && !state.cleared;
+      stageScreenBtn.disabled = state.roomLocked || (state.started && !state.cleared);
     }
     if (state.stageModalOpen) {
       renderStageSelectionModal();
@@ -1640,6 +1750,7 @@ export function initFitPuzzle(options = {}) {
   }
 
   function selectStageIndex(nextIndex, source = "direct") {
+    if (isRoomMode() && !isRoomHost()) return;
     const next = Math.min(clampStageIndex(state.highestUnlockedStage), clampStageIndex(nextIndex));
     state.selectedStageIndex = next;
     const selectedStage = STAGES[next] || STAGES[STAGES.length - 1] || STAGES[0];
@@ -1651,6 +1762,7 @@ export function initFitPuzzle(options = {}) {
     }
     saveProgress();
     render();
+    emitRoomSnapshot();
   }
 
   function closeStageSelectionModal() {
@@ -1690,6 +1802,7 @@ export function initFitPuzzle(options = {}) {
   }
 
   function openStageSelectionModal() {
+    if (!canLocalControl()) return;
     if (state.started && !state.cleared) {
       messageEl.textContent = "進行中はステージ変更できません";
       render();
@@ -1707,6 +1820,7 @@ export function initFitPuzzle(options = {}) {
   }
 
   function addStageFromBuilder() {
+    if (isRoomMode() && !isRoomHost()) return;
     const stage = readStageBuilderInput();
     STAGES.push(stageToSerializable(stage, STAGES.length));
     state.highestUnlockedStage = STAGES.length - 1;
@@ -1729,6 +1843,7 @@ export function initFitPuzzle(options = {}) {
     }
     saveProgress();
     render();
+    emitRoomSnapshot();
   }
 
   function clearHints() {
@@ -2121,6 +2236,7 @@ export function initFitPuzzle(options = {}) {
   }
 
   function useAssist() {
+    if (!canLocalControl()) return;
     if (!state.started || state.cleared) return;
     if (state.assistRemaining <= 0) {
       messageEl.textContent = t("アシストはこのステージで使用済みです", "도움은 이 스테이지에서 이미 사용했습니다");
@@ -2149,9 +2265,11 @@ export function initFitPuzzle(options = {}) {
       `도움: 추천 위치를 표시했습니다 (${pos.row + 1}, ${pos.col + 1})`,
     );
     render();
+    emitRoomSnapshot();
   }
 
   function beginPointerDrag(event, pieceId, options = {}) {
+    if (!canLocalControl()) return;
     if (!state.started || state.cleared) return;
     if (event.button !== 0) return;
     const piece = getPieceById(pieceId);
@@ -2273,6 +2391,7 @@ export function initFitPuzzle(options = {}) {
   }
 
   function handlePieceDropOnBoard(pieceId, row, col) {
+    if (!canLocalControl()) return;
     if (!state.started) return;
     const piece = getPieceById(pieceId);
     if (!piece) return;
@@ -2293,6 +2412,7 @@ export function initFitPuzzle(options = {}) {
       }
       render();
       clearDragPreview();
+      emitRoomSnapshot();
       return;
     }
 
@@ -2305,6 +2425,7 @@ export function initFitPuzzle(options = {}) {
     }
     render();
     clearDragPreview();
+    emitRoomSnapshot();
   }
 
   function clearBoardOf(pieceId) {
@@ -2386,6 +2507,7 @@ export function initFitPuzzle(options = {}) {
           cell.draggable = false;
           cell.addEventListener("pointerdown", (event) => beginPointerDrag(event, pieceId, { boardRow: r, boardCol: c }));
           cell.addEventListener("dblclick", () => {
+            if (!canLocalControl()) return;
             if (!state.started) return;
             if (shouldIgnoreClick()) return;
             const existingPiece = getPieceById(pieceId);
@@ -2395,10 +2517,12 @@ export function initFitPuzzle(options = {}) {
             state.selectedId = existingPiece.id;
             messageEl.textContent = "ダブルクリックで配置済みブロックを戻しました";
             render();
+            emitRoomSnapshot();
           });
         }
 
         cell.addEventListener("click", (event) => {
+          if (!canLocalControl()) return;
           if (!state.started) return;
           if (shouldIgnoreClick()) return;
           const point = resolveClientPoint(event, cell);
@@ -2429,6 +2553,7 @@ export function initFitPuzzle(options = {}) {
             messageEl.textContent = "ここには置けません";
           }
           render();
+          emitRoomSnapshot();
         });
 
         boardEl.appendChild(cell);
@@ -2508,6 +2633,7 @@ export function initFitPuzzle(options = {}) {
       });
 
       item.addEventListener("click", (event) => {
+        if (!canLocalControl()) return;
         if (!state.started) return;
         if (shouldIgnoreClick()) return;
         const point = resolveClientPoint(event, item);
@@ -2591,9 +2717,11 @@ export function initFitPuzzle(options = {}) {
     startTimer();
     saveProgress();
     render();
+    emitRoomSnapshot();
   }
 
   function startButtonAction() {
+    if (!canLocalControl()) return;
     if (!state.started) {
       state.totalScore = 0;
       newPuzzle(state.selectedStageIndex);
@@ -2604,6 +2732,7 @@ export function initFitPuzzle(options = {}) {
   }
 
   function changeDifficulty(nextDifficulty) {
+    if (!canLocalControl()) return;
     const allowed = nextDifficulty === "easy" || nextDifficulty === "normal" || nextDifficulty === "hard";
     if (!allowed) return;
     if (state.difficulty === nextDifficulty) return;
@@ -2615,9 +2744,11 @@ export function initFitPuzzle(options = {}) {
       return;
     }
     render();
+    emitRoomSnapshot();
   }
 
   function nextStageAction() {
+    if (!canLocalControl()) return;
     if (!state.started) {
       messageEl.textContent = t("まずゲーム開始で開始してください", "먼저 게임 시작 버튼을 눌러 시작하세요");
       render();
@@ -2639,6 +2770,7 @@ export function initFitPuzzle(options = {}) {
   }
 
   function toggleNoRotateMode() {
+    if (!canLocalControl()) return;
     state.noRotateMode = !state.noRotateMode;
     saveProgress();
     if (state.started) {
@@ -2648,9 +2780,11 @@ export function initFitPuzzle(options = {}) {
     }
     messageEl.textContent = state.noRotateMode ? "回転なしモード: ON" : "回転なしモード: OFF";
     render();
+    emitRoomSnapshot();
   }
 
   function resetCurrent() {
+    if (!canLocalControl()) return;
     if (!state.started) return;
     stopTimer();
     state.board = createEmptyBoard(state.rows, state.cols);
@@ -2675,9 +2809,11 @@ export function initFitPuzzle(options = {}) {
     messageEl.textContent = "配置をリセットしました";
     startTimer();
     render();
+    emitRoomSnapshot();
   }
 
   function rotateSelected() {
+    if (!canLocalControl()) return;
     if (!state.started) return;
     if (state.noRotateMode) {
       messageEl.textContent = "回転なしモードではROTATEを使用できません";
@@ -2690,6 +2826,7 @@ export function initFitPuzzle(options = {}) {
     clearHints();
     messageEl.textContent = "回転しました";
     render();
+    emitRoomSnapshot();
   }
 
   function enterStandby() {
@@ -2735,6 +2872,7 @@ export function initFitPuzzle(options = {}) {
   });
   document.addEventListener("keydown", handleStageModalKeydown);
   stageBuilderUseCurrentBtn?.addEventListener("click", () => {
+    if (isRoomMode() && !isRoomHost()) return;
     const base = STAGES[state.selectedStageIndex] || STAGES[STAGES.length - 1] || STAGES[0];
     const template = {
       ...stageToSerializable(base, STAGES.length),
@@ -2763,7 +2901,14 @@ export function initFitPuzzle(options = {}) {
   enterStandby();
 
   return {
-    startNewGame: () => newPuzzle(state.selectedStageIndex),
+    startNewGame: ({ fromRemote = false } = {}) => {
+      if (isRoomMode() && !fromRemote && !isRoomHost()) return;
+      if (fromRemote && isRoomMode()) {
+        state.roomLocked = false;
+        state.roomLockMessage = "";
+      }
+      newPuzzle(state.selectedStageIndex);
+    },
     applyProgress,
     getProgress: () => currentProgressSnapshot(),
     enterStandby,
@@ -2772,18 +2917,45 @@ export function initFitPuzzle(options = {}) {
       destroyDragGhost();
       clearDragPreview();
       document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("touchmove", handleTouchMove);
       document.removeEventListener("pointerup", handlePointerUp);
       document.removeEventListener("pointercancel", handlePointerCancel);
       document.removeEventListener("keydown", handleStageModalKeydown);
     },
-    configureRoomMode: () => {
+    configureRoomMode: ({ roomCode, roomRole }) => {
+      state.gameMode = "room";
+      state.roomRole = roomRole || "guest";
+      state.roomLocked = state.roomRole !== "host";
+      state.roomLockMessage = state.roomLocked ? t("ホストの開始を待っています...", "호스트의 시작을 기다리는 중...") : "";
+      options.onRoomStatusChange?.({ roomCode, roomRole: state.roomRole });
       enterStandby();
-      messageEl.textContent = "このパズルは現在ROOM未対応です";
+      if (state.roomLocked) {
+        messageEl.textContent = state.roomLockMessage;
+        render();
+      }
     },
-    configureStandardMode: () => {},
-    setRoomLock: () => {},
+    configureStandardMode: () => {
+      state.gameMode = "local";
+      state.roomRole = null;
+      state.roomLocked = false;
+      state.roomLockMessage = "";
+      options.onRoomStatusChange?.({ roomCode: null, roomRole: null });
+      enterStandby();
+    },
+    setRoomLock: ({ locked, message } = {}) => {
+      state.roomLocked = Boolean(locked);
+      state.roomLockMessage = String(message || "");
+      if (state.roomLocked) {
+        messageEl.textContent = state.roomLockMessage || t("ホストの開始を待っています...", "호스트의 시작을 기다리는 중...");
+      }
+      render();
+    },
     applyRemoteMove: () => {},
-    getSnapshot: () => ({}),
-    applySnapshot: () => {},
+    getSnapshot: () => composeRoomSnapshot(),
+    applySnapshot: (snapshot) => {
+      if (!isRoomMode()) return;
+      applyRoomSnapshot(snapshot);
+    },
   };
 }
