@@ -86,63 +86,9 @@
         ],
         "selectedSkin": "hammer_violet",
         "playerName": "Player",
-        "gameData": {
-          "othello": {
-            "playCount": 4,
-            "roomPlayCount": 3,
-            "lastPlayedAt": "2026-07-20T14:50:11.621Z"
-          },
-          "shogi": {
-            "playCount": 2,
-            "roomPlayCount": 1,
-            "lastPlayedAt": "2026-07-19T04:26:55.110Z"
-          },
-          "chess": {
-            "playCount": 2,
-            "roomPlayCount": 2,
-            "lastPlayedAt": "2026-07-18T13:43:33.546Z"
-          },
-          "uno": {
-            "playCount": 2,
-            "roomPlayCount": 1,
-            "lastPlayedAt": "2026-07-19T14:40:06.672Z"
-          },
-          "gomoku": {
-            "playCount": 3,
-            "roomPlayCount": 1,
-            "lastPlayedAt": "2026-07-19T02:59:33.704Z"
-          },
-          "survivors": {
-            "playCount": 90,
-            "roomPlayCount": 16,
-            "lastPlayedAt": "2026-07-20T15:09:42.563Z"
-          },
-          "fitPuzzle": {
-            "playCount": 21,
-            "roomPlayCount": 0,
-            "lastPlayedAt": "2026-07-19T13:39:39.313Z"
-          },
-          "solitaire": {
-            "playCount": 45,
-            "roomPlayCount": 1,
-            "lastPlayedAt": "2026-07-20T08:29:58.550Z"
-          },
-          "sevens": {
-            "playCount": 1,
-            "roomPlayCount": 0,
-            "lastPlayedAt": "2026-07-19T14:39:26.330Z"
-          }
-        },
-        "fitPuzzleProgress": {
-          "highestUnlockedStage": 8,
-          "selectedStageIndex": 5,
-          "difficulty": "easy",
-          "noRotateMode": true,
-          "customStages": [],
-          "updatedAt": "2026-07-19T13:39:39.322Z"
-        }
+        "playerAvatar": ""
       },
-      "updatedAt": 1784653818292,
+      "updatedAt": 1784695996618,
       "createdAt": 1784480396510
     },
     "nulltoufu": {
