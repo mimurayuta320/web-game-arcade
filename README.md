@@ -12,7 +12,7 @@
 npm run share
 ```
 
-- 画面に表示される `http://<このPCのIP>:4173/#ToufuGameshow` をそのまま共有します。
+- 画面に表示される `http://<このPCのIP>:4173/#NeonBoardArcade` をそのまま共有します。
 - このモードはフロント配信・ルームWebSocket・クラウド保存APIを1つのサーバーで提供します。
 
 別々に起動する場合は、以下をこのPCで同時に起動してください。
@@ -23,7 +23,7 @@ npm run room
 npm run dev
 ```
 
-- 別端末からは `http://<このPCのIP>:5173/#ToufuGameshow` にアクセスします。
+- 別端末からは `http://<このPCのIP>:5173/#NeonBoardArcade` にアクセスします。
 - 必要に応じて Windows ファイアウォールで `5173` `8787` `8788` を許可してください。
 
 ## 本番を止めずにテスト環境で確認する
@@ -39,7 +39,7 @@ npm run dev:test
 テストアクセスURL（同一PC）:
 
 ```text
-http://localhost:5174/?cloudApi=http://localhost:18787&roomServer=ws://localhost:18788#ToufuGameshow
+http://localhost:5174/?cloudApi=http://localhost:18787&roomServer=ws://localhost:18788#NeonBoardArcade
 ```
 
 - `cloudApi` はクラウドAPI接続先を指定します（初回アクセス時に保存）。
@@ -82,8 +82,8 @@ npm run room
 
 4. ブラウザで開く
 
-- `http://localhost:5173/#ToufuGameshow`
-- 別端末からは `http://<このPCのIP>:5173/#ToufuGameshow`
+- `http://localhost:5173/#NeonBoardArcade`
+- 別端末からは `http://<このPCのIP>:5173/#NeonBoardArcade`
 
 クラウド保存を使わない場合は `npm run dev` だけでOKです。
 
@@ -103,7 +103,7 @@ npm run dev:tofu
 
 アクセスURL:
 
-- `http://toufugameshow.local:5173/#ToufuGameshow`
+- `http://toufugameshow.local:5173/#NeonBoardArcade`
 
 ## 起動確認チェック
 
@@ -175,7 +175,7 @@ npm run share
 
 2. 表示されたURLを相手にそのまま共有
 
-- 例: `http://<your-host>:4173/#ToufuGameshow`
+- 例: `http://<your-host>:4173/#NeonBoardArcade`
 
 このモードではフロント配信とルームWebSocketが同じオリジンで動作するため、
 `roomServer` クエリは不要です。
@@ -246,13 +246,13 @@ npm run dev
 2. クライアントURLに `roomServer` クエリを付ける
 
 ```text
-http://<your-host>:5173/?roomServer=ws://<public-host>:8788#ToufuGameshow
+http://<your-host>:5173/?roomServer=ws://<public-host>:8788#NeonBoardArcade
 ```
 
 3. HTTPS配信時は `wss://` を使う
 
 ```text
-https://<your-host>/?roomServer=wss://<public-host>:8788#ToufuGameshow
+https://<your-host>/?roomServer=wss://<public-host>:8788#NeonBoardArcade
 ```
 
 `roomServer` を一度指定すると、その値はブラウザのlocalStorageに保存されます。

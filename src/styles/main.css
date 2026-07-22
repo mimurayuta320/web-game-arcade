@@ -52,41 +52,87 @@ body {
   animation: rise 520ms ease-out;
 }
 
-.lang-switch {
+.menu-more {
   margin-left: auto;
-  width: fit-content;
-  display: grid;
-  gap: 0.25rem;
   position: relative;
+  display: grid;
+  gap: 0.35rem;
   justify-items: end;
 }
 
-.lang-switch label {
+.menu-more-btn {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(10, 24, 34, 0.9), rgba(7, 15, 24, 0.82));
+  color: var(--ink);
+  padding: 0.46rem 0.82rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  font-family: "Space Grotesk", sans-serif;
+  cursor: pointer;
+}
+
+.menu-more-btn:hover {
+  background: linear-gradient(180deg, rgba(14, 30, 42, 0.94), rgba(9, 18, 29, 0.88));
+  border-color: rgba(255, 209, 102, 0.88);
+}
+
+.menu-more-btn:focus-visible {
+  outline: 2px solid rgba(255, 209, 102, 0.88);
+  outline-offset: 2px;
+}
+
+.menu-more-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: min(340px, 88vw);
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.72rem;
+  border: 1px solid rgba(166, 228, 255, 0.26);
+  border-radius: 12px;
+  background: linear-gradient(165deg, rgba(7, 20, 31, 0.9), rgba(8, 27, 44, 0.82));
+  z-index: 110;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.menu-more-panel label {
   font-size: 0.72rem;
   letter-spacing: 0.06em;
   color: rgba(239, 247, 255, 0.78);
 }
 
-.lang-switch .difficulty-select {
+.menu-more-panel .difficulty-select {
   margin-top: 0;
-  min-width: 130px;
+  min-width: 100%;
 }
 
 .friends-toggle-btn {
   margin-top: 0.1rem;
   border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
+  border-radius: 10px;
   background: rgba(6, 14, 20, 0.72);
   color: var(--ink);
-  padding: 0.42rem 0.78rem;
-  font-size: 0.78rem;
+  padding: 0.5rem 0.78rem;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   cursor: pointer;
+  text-align: left;
+  width: 100%;
 }
 
 .friends-toggle-btn:hover {
   border-color: rgba(255, 209, 102, 0.88);
+}
+
+.menu-more .friends-toggle-btn {
+  width: auto;
+  min-width: 7.2rem;
+  text-align: center;
 }
 
 .top-bar h1 {
@@ -101,6 +147,24 @@ body {
   color: var(--ink-soft);
   line-height: 1.62;
   max-width: 68ch;
+}
+
+.menu-top-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  position: relative;
+}
+
+.menu-top-bar-main {
+  min-width: 0;
+}
+
+.menu-top-bar-back {
+  margin-top: 0.1rem;
+  width: 100%;
+  white-space: nowrap;
 }
 
 .menu-screen,
@@ -214,6 +278,19 @@ body {
   font-size: 1.8rem;
 }
 
+.lobby-game-count {
+  display: inline-block;
+  margin-left: 0.42rem;
+  padding: 0.08rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  color: rgba(239, 247, 255, 0.9);
+  background: rgba(8, 16, 24, 0.72);
+  vertical-align: middle;
+}
+
 .card-list-footer {
   margin-top: 1rem;
   display: grid;
@@ -224,6 +301,16 @@ body {
 .room-actions {
   display: grid;
   gap: 0.62rem;
+}
+
+.room-main-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.62rem;
+}
+
+.room-main-actions .start-btn {
+  width: 100%;
 }
 
 .friends-panel {
@@ -240,6 +327,24 @@ body {
   max-height: 68vh;
   overflow-y: auto;
   z-index: 90;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.menu-more-panel .friends-panel {
+  position: static;
+  width: 100%;
+  max-height: 44vh;
+  box-shadow: none;
+}
+
+.menu-friends-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: min(360px, 90vw);
+  max-height: 68vh;
+  margin-top: 0;
+  z-index: 105;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
@@ -264,6 +369,29 @@ body {
   gap: 0.45rem;
 }
 
+.friends-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.friends-tab-btn {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(6, 14, 20, 0.72);
+  color: rgba(239, 247, 255, 0.9);
+  padding: 0.34rem 0.52rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.friends-tab-btn.active,
+.friends-tab-btn[aria-selected="true"] {
+  border-color: rgba(255, 209, 102, 0.88);
+  background: rgba(35, 24, 8, 0.84);
+}
+
 .friends-list {
   margin: 0;
   padding-left: 1rem;
@@ -279,7 +407,33 @@ body {
   word-break: break-all;
 }
 
-.room-visibility-toggle {
+.friends-list li button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.room-visibility-group {
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.room-visibility-legend {
+  padding: 0 0.2rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.05em;
+  color: rgba(239, 247, 255, 0.72);
+}
+
+.room-visibility-option {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -287,14 +441,21 @@ body {
   color: rgba(239, 247, 255, 0.9);
 }
 
-.room-visibility-toggle input {
-  width: 1.1rem;
-  height: 1.1rem;
+.room-visibility-option input {
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .join-row {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
   gap: 0.62rem;
+}
+
+.join-row .start-btn {
+  width: 100%;
+  min-width: 9rem;
 }
 
 .room-input {
@@ -458,6 +619,41 @@ body {
   color: rgba(239, 247, 255, 0.92);
 }
 
+.lobby-head-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.lobby-members-panel {
+  border: 1px solid rgba(148, 236, 255, 0.34);
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: linear-gradient(165deg, rgba(7, 22, 36, 0.82), rgba(10, 30, 40, 0.74));
+}
+
+.lobby-members-panel h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+}
+
+.lobby-players-list {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.28rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.lobby-players-list li {
+  font-size: 0.86rem;
+  color: rgba(239, 247, 255, 0.92);
+  word-break: break-word;
+}
+
 #lobbyConnectionText {
   font-weight: 700;
   color: rgba(255, 220, 140, 0.98);
@@ -500,6 +696,101 @@ body {
   border-radius: 12px;
   padding: 0.75rem;
   background: linear-gradient(165deg, rgba(7, 22, 36, 0.82), rgba(10, 30, 40, 0.74));
+}
+
+.minesweeper-play-layout {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  align-items: start;
+}
+
+.minesweeper-main-area {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.minesweeper-row-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  font-size: 0.88rem;
+}
+
+.minesweeper-board-viewport {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  padding: 0.45rem;
+  min-height: 320px;
+  max-height: 72vh;
+  overflow: auto;
+  background: rgba(5, 12, 18, 0.66);
+}
+
+.minesweeper-start-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  pointer-events: none;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(239, 247, 255, 0.92);
+}
+
+.minesweeper-board {
+  display: grid;
+  gap: 2px;
+  width: max-content;
+}
+
+.minesweeper-cell {
+  width: var(--ms-cell-size, 30px);
+  height: var(--ms-cell-size, 30px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--ms-radius, 6px);
+  background: linear-gradient(180deg, rgba(18, 41, 58, 0.92), rgba(9, 22, 34, 0.92));
+  color: var(--ink);
+  font-size: var(--ms-font-size, 14px);
+  font-weight: 700;
+}
+
+.minesweeper-cell.revealed {
+  background: rgba(232, 243, 255, 0.18);
+}
+
+.minesweeper-cell.flagged {
+  color: #ffd166;
+}
+
+.minesweeper-cell.mine,
+.minesweeper-cell.miss {
+  color: #ff8e8e;
+}
+
+.minesweeper-side-panel {
+  border: 1px solid rgba(148, 236, 255, 0.32);
+  border-radius: 10px;
+  padding: 0.6rem;
+  background: rgba(8, 20, 32, 0.72);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.minesweeper-enemy-board {
+  display: grid;
+  gap: 2px;
+}
+
+.minesweeper-enemy-board .minesweeper-cell {
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+  border-radius: 3px;
+  padding: 0;
 }
 
 .room-chat-panel h3,
@@ -1412,6 +1703,47 @@ body {
     center;
 }
 
+.sv-fairy-orbit {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  margin-top: -17px;
+  pointer-events: none;
+  z-index: 3;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+.sv-fairy-orbit-sprite {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.survivors-quick-status {
+  position: absolute;
+  left: 0.7rem;
+  top: 0.7rem;
+  z-index: 12;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.42rem 0.55rem;
+  border: 1px solid rgba(166, 228, 255, 0.36);
+  border-radius: 9px;
+  background: rgba(6, 14, 20, 0.8);
+  backdrop-filter: blur(2px);
+}
+
+.survivors-quick-status p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(239, 247, 255, 0.95);
+}
+
+.survivors-quick-status span {
+  color: rgba(239, 247, 255, 0.74);
+}
+
 .survivors-augment {
   position: absolute;
   inset: 0.9rem;
@@ -2072,6 +2404,82 @@ body {
   gap: 0.3rem;
 }
 
+.othello-play-area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.othello-skill-panel {
+  border: 1px solid rgba(126, 225, 255, 0.35);
+  border-radius: 12px;
+  padding: 0.55rem;
+  background: linear-gradient(180deg, rgba(4, 25, 36, 0.9), rgba(8, 17, 30, 0.86));
+}
+
+.othello-skill-limits {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(126, 225, 255, 0.28);
+  display: grid;
+  gap: 0.4rem;
+}
+
+.othello-side-settings {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.othello-side-card {
+  border: 1px solid rgba(126, 225, 255, 0.22);
+  border-radius: 10px;
+  padding: 0.45rem;
+  background: rgba(4, 23, 35, 0.6);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.othello-side-title {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #d2f7ff;
+  letter-spacing: 0.02em;
+}
+
+.othello-side-card .metric {
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.othello-skill-limit-row {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.othello-skill-limit-row .difficulty-select {
+  width: 100%;
+}
+
+#doubleActionBtn,
+#destroySkillBtn,
+#immutablePlaceBtn {
+  margin-left: 0;
+  width: 100%;
+}
+
+.othello-skill-panel .piece-status-item {
+  margin-top: 0.45rem;
+  width: 100%;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(6, 14, 20, 0.72);
+  padding: 0.42rem 0.5rem;
+}
+
 @keyframes rise {
   from {
     transform: translateY(16px);
@@ -2116,6 +2524,8 @@ body {
   }
 
   .join-row,
+  .room-main-actions,
+  .lobby-head-grid,
   .entry-actions,
   .lobby-toolbar,
   .lobby-actions,
@@ -2125,7 +2535,14 @@ body {
     flex-direction: column;
   }
 
+  .join-row,
+  .room-main-actions,
+  .lobby-head-grid {
+    grid-template-columns: 1fr;
+  }
+
   .join-row .start-btn,
+  .room-main-actions .start-btn,
   .entry-actions .start-btn,
   .lobby-toolbar .start-btn,
   .lobby-actions .start-btn,
@@ -2136,6 +2553,24 @@ body {
 
   .canvas-wrap {
     padding: 0.55rem;
+  }
+
+  .othello-play-area {
+    grid-template-columns: 1fr;
+  }
+
+  .minesweeper-play-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .othello-skill-panel {
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .othello-side-settings {
+    grid-template-columns: 1fr;
   }
 
   .survivors-augment,
@@ -2151,12 +2586,21 @@ body {
 }
 
 @media (max-width: 600px) {
-  .lang-switch {
+  .menu-more {
     width: 100%;
-    margin-left: 0;
   }
 
-  .lang-switch .difficulty-select {
+  .menu-more-btn {
+    margin-left: auto;
+    display: block;
+  }
+
+  .menu-more-panel {
+    width: 100%;
+    right: 0;
+  }
+
+  .menu-more-panel .difficulty-select {
     width: 100%;
   }
 
@@ -2166,6 +2610,14 @@ body {
 
   .top-bar p {
     font-size: 0.95rem;
+  }
+
+  .menu-top-bar {
+    flex-direction: column;
+  }
+
+  .menu-top-bar-back {
+    align-self: auto;
   }
 
   .game-shell {

@@ -4,6 +4,10 @@ const CLOUD_API_LOCALHOST_FALLBACK_BASE = "http://localhost:8787";
 const CLOUD_API_STORAGE_KEY = "neon-cloud-api-base-url";
 const CLOUD_API_QUERY_PARAM_KEY = "cloudApi";
 
+function isMixedContentBlockedUrl(baseUrl) {
+  return window.location.protocol === "https:" && String(baseUrl || "").startsWith("http://");
+}
+
 function normalizeCloudApiBase(raw) {
   const value = String(raw || "").trim();
   if (!value) return "";
@@ -26,26 +30,36 @@ function resolveCloudApiBase() {
   }
 
   const fromStorage = normalizeCloudApiBase(localStorage.getItem(CLOUD_API_STORAGE_KEY));
-  if (fromStorage) return fromStorage;
+  if (fromStorage) {
+    if (isMixedContentBlockedUrl(fromStorage)) {
+      localStorage.removeItem(CLOUD_API_STORAGE_KEY);
+      return "";
+    }
+    return fromStorage;
+  }
   return "";
 }
 
 export function cloudApiCandidates() {
   const list = [];
+  list.push(CLOUD_API_PRIMARY_BASE);
+
   const preferred = resolveCloudApiBase();
-  if (preferred) {
+  if (preferred && preferred !== CLOUD_API_PRIMARY_BASE && !isMixedContentBlockedUrl(preferred)) {
     list.push(preferred);
   }
 
-  list.push(CLOUD_API_PRIMARY_BASE);
-
-  if (CLOUD_API_HOST_FALLBACK_BASE !== CLOUD_API_PRIMARY_BASE) {
+  if (
+    CLOUD_API_HOST_FALLBACK_BASE !== CLOUD_API_PRIMARY_BASE
+    && !isMixedContentBlockedUrl(CLOUD_API_HOST_FALLBACK_BASE)
+  ) {
     list.push(CLOUD_API_HOST_FALLBACK_BASE);
   }
 
   if (
     CLOUD_API_LOCALHOST_FALLBACK_BASE !== CLOUD_API_PRIMARY_BASE
     && CLOUD_API_LOCALHOST_FALLBACK_BASE !== CLOUD_API_HOST_FALLBACK_BASE
+    && !isMixedContentBlockedUrl(CLOUD_API_LOCALHOST_FALLBACK_BASE)
   ) {
     list.push(CLOUD_API_LOCALHOST_FALLBACK_BASE);
   }
