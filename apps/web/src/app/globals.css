@@ -24,3 +24,108 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.minesweeper-play-layout {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  align-items: start;
+}
+
+.minesweeper-main-area {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.minesweeper-row-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  font-size: 0.88rem;
+}
+
+.minesweeper-board-viewport {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  padding: 0.45rem;
+  min-height: 320px;
+  max-height: 72vh;
+  overflow: auto;
+  background: rgba(5, 12, 18, 0.66);
+}
+
+.minesweeper-start-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  pointer-events: none;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(239, 247, 255, 0.92);
+}
+
+.minesweeper-board {
+  display: grid;
+  gap: 2px;
+  width: max-content;
+}
+
+.minesweeper-cell {
+  width: var(--ms-cell-size, 30px);
+  height: var(--ms-cell-size, 30px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--ms-radius, 6px);
+  background: linear-gradient(180deg, rgba(18, 41, 58, 0.92), rgba(9, 22, 34, 0.92));
+  color: #e4eefb;
+  font-size: var(--ms-font-size, 14px);
+  font-weight: 700;
+}
+
+.minesweeper-cell.revealed {
+  background: rgba(232, 243, 255, 0.18);
+}
+
+.minesweeper-cell.flagged {
+  color: #ffd166;
+}
+
+.minesweeper-cell.mine,
+.minesweeper-cell.miss {
+  color: #ff8e8e;
+}
+
+.minesweeper-side-panel {
+  border: 1px solid rgba(148, 236, 255, 0.32);
+  border-radius: 10px;
+  padding: 0.6rem;
+  background: rgba(8, 20, 32, 0.72);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.minesweeper-side-panel.hidden {
+  display: none;
+}
+
+.minesweeper-enemy-board {
+  display: grid;
+  gap: 2px;
+}
+
+.minesweeper-enemy-board .minesweeper-cell {
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+  border-radius: 3px;
+  padding: 0;
+}
+
+@media (max-width: 960px) {
+  .minesweeper-play-layout {
+    grid-template-columns: 1fr;
+  }
+}

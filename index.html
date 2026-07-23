@@ -70,6 +70,7 @@
                 <option value="ja">日本語</option>
                 <option value="ko">한국어</option>
               </select>
+              <a id="openInquiryFormLink" class="start-btn ghost menu-top-bar-back menu-link-btn" href="/inquiry.html">お問い合わせフォーム</a>
               <button id="backToEntryBtn" class="start-btn ghost menu-top-bar-back" type="button">ログイン画面に戻る</button>
             </section>
             <section id="friendsPanel" class="friends-panel menu-friends-panel hidden" aria-live="polite">
@@ -685,6 +686,7 @@
             <select id="shogiModeSelect" class="difficulty-select" aria-label="Shogi mode">
               <option value="local" selected>ローカル2人</option>
               <option value="cpu">1P 対 CPU</option>
+              <option value="chaos">CHAOS</option>
             </select>
           </div>
           <div class="metric metric-select">
@@ -712,7 +714,7 @@
           </div>
         </section>
 
-        <section class="canvas-wrap">
+        <section class="canvas-wrap numeron-status-wrap">
           <div id="shogiBoard" class="shogi-board" aria-label="Shogi board"></div>
           <div id="shogiOverlay" class="overlay">新規対局で開始</div>
         </section>
@@ -821,13 +823,33 @@
             <span class="label">TURN</span>
             <span id="gomokuTurnText">BLACK</span>
           </div>
+          <div class="metric metric-select">
+            <span class="label">MODE</span>
+            <select id="gomokuModeSelect" class="difficulty-select" aria-label="Gomoku mode">
+              <option id="gomokuModeCpuOption" value="cpu" selected>1P 対 CPU</option>
+              <option id="gomokuModeLocalOption" value="local">ローカル2人</option>
+            </select>
+          </div>
           <button id="gomokuStartBtn" class="start-btn hud-primary">GAME START</button>
           <button id="gomokuMenuBtn" class="start-btn ghost">MENU</button>
         </section>
 
-        <section class="canvas-wrap gomoku-wrap">
-          <div id="gomokuBoard" class="gomoku-board" aria-label="Gomoku board"></div>
-          <div id="gomokuOverlay" class="overlay">GAME STARTで開始</div>
+        <div class="othello-status-row">
+          <div id="gomokuRoomStatus" class="room-status hidden">
+            <span id="gomokuRoomCodeText">ROOM: -</span>
+            <span id="gomokuRoomRoleText">ROLE: -</span>
+          </div>
+          <div class="piece-status" aria-label="gomoku stone counts">
+            <span class="piece-status-item">BLACK: <span id="gomokuBlackCount">0</span></span>
+            <span class="piece-status-item">WHITE: <span id="gomokuWhiteCount">0</span></span>
+          </div>
+        </div>
+
+        <section class="othello-play-area">
+          <div class="canvas-wrap gomoku-wrap">
+            <div id="gomokuBoard" class="gomoku-board" aria-label="Gomoku board"></div>
+            <div id="gomokuOverlay" class="overlay">GAME STARTで開始</div>
+          </div>
         </section>
 
         <p id="gomokuMessage" class="message">黒の手番です</p>
@@ -1278,12 +1300,12 @@
           <button id="sevensMenuBtn" class="start-btn ghost">MENU</button>
         </section>
 
-        <section class="canvas-wrap">
+        <section class="canvas-wrap numeron-secret-wrap">
           <div id="sevensBoard" aria-label="Sevens board"></div>
           <div id="sevensOverlay" class="overlay">GAME STARTで開始</div>
         </section>
 
-        <section class="canvas-wrap">
+        <section class="canvas-wrap numeron-guess-wrap">
           <div>
             <p class="label">OPPONENT</p>
             <div id="sevensOpponentHand"></div>
@@ -1343,7 +1365,7 @@
           <button id="numeronMenuBtn" class="start-btn ghost">MENU</button>
         </section>
 
-        <section class="canvas-wrap">
+        <section class="canvas-wrap numeron-history-wrap">
           <div class="metric">
             <span class="label">STATUS</span>
             <span id="numeronStatusText">-</span>
@@ -1369,6 +1391,7 @@
             <div id="numeronSecretDeck"></div>
             <div class="entry-actions">
               <button id="numeronSecretSetBtn" class="start-btn" type="button">SET</button>
+              <button id="numeronSecretBackBtn" class="start-btn ghost" type="button">BACK</button>
               <button id="numeronSecretClearBtn" class="start-btn ghost" type="button">CLEAR</button>
             </div>
           </div>
@@ -1385,6 +1408,7 @@
             <div id="numeronGuessDeck"></div>
             <div class="entry-actions">
               <button id="numeronGuessBtn" class="start-btn" type="button">GUESS</button>
+              <button id="numeronGuessBackBtn" class="start-btn ghost" type="button">BACK</button>
               <button id="numeronGuessClearBtn" class="start-btn ghost" type="button">CLEAR</button>
             </div>
           </div>

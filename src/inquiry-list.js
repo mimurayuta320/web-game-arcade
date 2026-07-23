@@ -1,4 +1,5 @@
 import "./styles/main.css";
+import { cloudApiRequestData } from "./scripts/cloudApiClient.js";
 
 const userIdInput = document.getElementById("viewerUserId");
 const passwordInput = document.getElementById("viewerPassword");
@@ -80,23 +81,16 @@ async function loadInquiryList() {
   setStatus("問い合わせ一覧を取得中です...");
 
   try {
-    const res = await fetch("/api/inquiry/list", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, password, limit }),
+    const data = await cloudApiRequestData("/api/inquiry/list", {
+      userId,
+      password,
+      limit,
     });
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok || data?.ok === false) {
-      setStatus("取得に失敗しました。ID/パスワードを確認してください。");
-      renderItems([]);
-      return;
-    }
-
     const items = Array.isArray(data?.items) ? data.items : [];
     renderItems(items);
     setStatus(`問い合わせ ${items.length} 件を表示しています。`);
   } catch {
+    renderItems([]);
     setStatus("ネットワークエラーが発生しました。");
   } finally {
     if (loadBtn) loadBtn.disabled = false;
@@ -122,16 +116,7 @@ async function deleteInquiry(inquiryId) {
 
   setStatus("削除中です...");
   try {
-    const res = await fetch("/api/inquiry/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, password, id: targetId }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data?.ok === false) {
-      setStatus("削除に失敗しました。再度お試しください。");
-      return;
-    }
+    await cloudApiRequestData("/api/inquiry/delete", { userId, password, id: targetId });
 
     setStatus("削除しました。最新の一覧を再取得します...");
     void loadInquiryList();

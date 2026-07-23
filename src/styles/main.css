@@ -39,7 +39,7 @@ body {
 }
 
 .game-shell {
-  width: min(1280px, 98vw);
+  width: min(1540px, 99vw);
   margin: 1.2vh auto;
   padding: 1.15rem;
   min-height: 96vh;
@@ -165,6 +165,13 @@ body {
   margin-top: 0.1rem;
   width: 100%;
   white-space: nowrap;
+}
+
+.menu-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .menu-screen,
@@ -533,6 +540,163 @@ body {
 .entry-actions .start-btn:disabled {
   cursor: wait;
   opacity: 0.72;
+}
+
+#numeronScreen .entry-actions {
+  margin-top: 0.55rem;
+}
+
+#numeronScreen {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.95fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+#numeronScreen > .top-bar,
+#numeronScreen > .hud,
+#numeronScreen > #numeronMessage {
+  grid-column: 1 / -1;
+}
+
+#numeronScreen .numeron-status-wrap,
+#numeronScreen .numeron-secret-wrap,
+#numeronScreen .numeron-guess-wrap {
+  grid-column: 1;
+}
+
+#numeronScreen .numeron-history-wrap {
+  grid-column: 2;
+  grid-row: 3 / span 3;
+  min-height: 100%;
+}
+
+#numeronScreen .numeron-history-wrap {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+#numeronSelfHistory,
+#numeronOpponentHistory {
+  margin: 0.25rem 0 0;
+  padding-left: 1.05rem;
+  max-height: 11.8rem;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.24rem;
+}
+
+#numeronMemoPad {
+  min-height: 15.5rem;
+  resize: vertical;
+}
+
+#numeronScreen .label {
+  font-size: 0.82rem;
+}
+
+#numeronScreen .start-btn {
+  min-height: 2.9rem;
+  font-size: 1rem;
+  padding: 0.78rem 1.18rem;
+}
+
+#numeronSecretSlots,
+#numeronOpponentSecretSlots,
+#numeronGuessSlots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+#numeronSecretDeck,
+#numeronGuessDeck {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.numeron-slot-card {
+  width: clamp(2.65rem, 1.3vw + 2.3rem, 3.25rem);
+  height: clamp(2.65rem, 1.3vw + 2.3rem, 3.25rem);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 10px;
+  background: rgba(11, 22, 30, 0.86);
+  color: var(--ink);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(1.08rem, 0.8vw + 0.85rem, 1.34rem);
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.numeron-slot-card.is-clickable {
+  cursor: pointer;
+  transition: transform 130ms ease, border-color 130ms ease;
+}
+
+.numeron-slot-card.is-clickable:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 209, 102, 0.95);
+}
+
+.numeron-slot-card:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.numeron-digit-card {
+  width: clamp(2.65rem, 1.3vw + 2.3rem, 3.25rem);
+  height: clamp(2.65rem, 1.3vw + 2.3rem, 3.25rem);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(18, 46, 61, 0.94), rgba(10, 24, 36, 0.94));
+  color: var(--ink);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(1.06rem, 0.72vw + 0.9rem, 1.28rem);
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 130ms ease, border-color 130ms ease;
+}
+
+.numeron-digit-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(125, 232, 255, 0.95);
+}
+
+.numeron-digit-card.is-picked {
+  opacity: 0.5;
+  filter: saturate(0.65);
+}
+
+@media (max-width: 1120px) {
+  #numeronScreen {
+    grid-template-columns: 1fr;
+  }
+
+  #numeronScreen > .top-bar,
+  #numeronScreen > .hud,
+  #numeronScreen > #numeronMessage,
+  #numeronScreen .numeron-status-wrap,
+  #numeronScreen .numeron-secret-wrap,
+  #numeronScreen .numeron-guess-wrap,
+  #numeronScreen .numeron-history-wrap {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  #numeronSelfHistory,
+  #numeronOpponentHistory {
+    max-height: 8.8rem;
+  }
+
+  #numeronMemoPad {
+    min-height: 11rem;
+  }
 }
 
 .entry-loading-panel {
@@ -986,7 +1150,7 @@ body {
 }
 
 .board {
-  width: min(100%, 760px, 74vh);
+  width: min(100%, 900px, 82vh);
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(8, 1fr);
@@ -999,7 +1163,7 @@ body {
 }
 
 .shogi-board {
-  --shogi-cell-size: 48px;
+  --shogi-cell-size: 54px;
   --shogi-gap: 2px;
   width: fit-content;
   height: fit-content;
@@ -1121,7 +1285,7 @@ body {
 }
 
 .chess-board {
-  --chess-cell-size: 64px;
+  --chess-cell-size: 72px;
   --chess-gap: 0px;
   width: fit-content;
   height: fit-content;
@@ -1181,34 +1345,35 @@ body {
 }
 
 .gomoku-wrap {
-  background: linear-gradient(180deg, rgba(45, 30, 18, 0.9), rgba(24, 16, 10, 0.86));
+  background: linear-gradient(180deg, rgba(8, 30, 20, 0.9), rgba(5, 15, 12, 0.8));
 }
 
 .gomoku-board {
-  --gomoku-cell-size: 32px;
+  --gomoku-cell-size: 40px;
   width: fit-content;
   height: fit-content;
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(15, var(--gomoku-cell-size));
   grid-template-rows: repeat(15, var(--gomoku-cell-size));
-  gap: 1px;
+  gap: 2px;
   padding: 2px;
-  border: 2px solid rgba(84, 56, 26, 0.88);
-  border-radius: 6px;
-  background: #3f2a18;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .gomoku-cell {
   border: none;
+  position: relative;
   display: grid;
   place-items: center;
   cursor: pointer;
-  background: linear-gradient(150deg, #ddb170, #bf8a45);
+  background: linear-gradient(145deg, #0f6b4f, #0a4f39);
 }
 
 .gomoku-cell:hover {
-  filter: brightness(1.04);
+  filter: brightness(1.07);
 }
 
 .gomoku-cell:disabled {
@@ -1216,9 +1381,10 @@ body {
 }
 
 .gomoku-stone {
-  width: 70%;
+  width: 74%;
   aspect-ratio: 1 / 1;
   border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
 .gomoku-stone.black {
@@ -1235,7 +1401,7 @@ body {
 
 .mahjong-board {
   --mahjong-cols: 14;
-  width: min(100%, 1020px);
+  width: min(100%, 1200px);
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(var(--mahjong-cols), minmax(0, 1fr));
@@ -2330,13 +2496,16 @@ body {
   display: grid;
   gap: 1rem;
   align-content: center;
+  perspective: 900px;
 }
 
 .uno-zone {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 14px;
   padding: 0.8rem;
-  background: rgba(255, 255, 255, 0.04);
+  background:
+    radial-gradient(circle at 16% 14%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(165deg, rgba(12, 20, 31, 0.82), rgba(6, 12, 20, 0.9));
 }
 
 .uno-center {
@@ -2355,19 +2524,78 @@ body {
   width: 92px;
   height: 128px;
   border-radius: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.58);
   display: grid;
   place-items: center;
   font-weight: 800;
+  font-size: 1.28rem;
   letter-spacing: 0.03em;
   background: #15161c;
+  color: #fff;
+  box-shadow:
+    0 10px 20px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  position: relative;
+  overflow: hidden;
+}
+
+.uno-card-display::before {
+  content: "";
+  position: absolute;
+  inset: 16% 14%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.58);
+  transform: rotate(-17deg);
+  pointer-events: none;
 }
 
 .uno-hand {
   min-height: 64px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem 0.4rem 0.8rem;
+  scrollbar-width: thin;
+}
+
+#unoPlayerHand {
+  min-height: 158px;
+  justify-content: center;
+  align-items: end;
+  overflow: visible;
+  padding: 1.25rem 1.4rem 1.5rem;
+  position: relative;
+}
+
+#unoPlayerHand::before,
+#unoPlayerHand::after {
+  content: "";
+  position: absolute;
+  bottom: 0.2rem;
+  width: clamp(92px, 22vw, 146px);
+  height: clamp(44px, 8vw, 62px);
+  border-radius: 999px 999px 24px 24px;
+  background:
+    linear-gradient(180deg, rgba(236, 213, 180, 0.26), rgba(158, 122, 82, 0.35)),
+    radial-gradient(circle at 30% 30%, rgba(255, 239, 212, 0.36), rgba(130, 90, 56, 0.2));
+  box-shadow:
+    0 8px 14px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 245, 230, 0.5);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.9;
+}
+
+#unoPlayerHand::before {
+  left: clamp(2px, 12%, 32px);
+  transform: rotate(-8deg);
+}
+
+#unoPlayerHand::after {
+  right: clamp(2px, 12%, 32px);
+  transform: rotate(8deg);
 }
 
 .uno-card,
@@ -2375,15 +2603,28 @@ body {
   width: 64px;
   height: 90px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.58);
   display: grid;
   place-items: center;
   font-weight: 800;
+  font-size: 1.06rem;
+  letter-spacing: 0.02em;
   color: #fff;
+  box-shadow:
+    0 7px 14px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.36);
+  position: relative;
+  overflow: hidden;
+  margin-left: -18px;
+  transform-origin: bottom center;
+  transition: transform 140ms ease, filter 140ms ease, box-shadow 160ms ease;
 }
 
 .uno-card {
   cursor: pointer;
+  transform: translateY(var(--fan-lift, 0px)) rotate(var(--fan-angle, 0deg));
+  z-index: calc(100 + var(--card-index, 0));
 }
 
 .uno-card:disabled {
@@ -2391,14 +2632,103 @@ body {
   cursor: not-allowed;
 }
 
+.uno-card:first-child {
+  margin-left: 0;
+}
+
+.uno-card.playable {
+  filter: saturate(1.08);
+}
+
+.uno-card.chain-selectable {
+  filter: brightness(1.08);
+}
+
+.uno-card.playable:hover,
+.uno-card.playable:focus-visible,
+.uno-card.chain-selectable:hover,
+.uno-card.chain-selectable:focus-visible {
+  transform: translateY(calc(var(--fan-lift, 0px) - 10px)) rotate(var(--fan-angle, 0deg)) scale(1.03);
+  z-index: 3;
+  box-shadow:
+    0 14px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 0 0 2px rgba(255, 255, 255, 0.4);
+}
+
+.uno-card.selected {
+  transform: translateY(calc(var(--fan-lift, 0px) - 13px)) rotate(var(--fan-angle, 0deg)) scale(1.04);
+  z-index: 4;
+  box-shadow:
+    0 16px 26px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 0 0 2px rgba(255, 255, 255, 0.48);
+}
+
+.uno-card::before,
+.uno-card-mini::before {
+  content: "";
+  position: absolute;
+  inset: 16% 11%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.58);
+  transform: rotate(-17deg);
+  pointer-events: none;
+}
+
+.uno-card::after {
+  content: attr(data-rank);
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  opacity: 0.96;
+  pointer-events: none;
+}
+
+.uno-opponent-stack {
+  display: grid;
+  gap: 0.36rem;
+  margin-bottom: 0.28rem;
+}
+
+.uno-opponent-label {
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  color: rgba(239, 247, 255, 0.8);
+}
+
+.uno-opponent-label.active {
+  color: #fff;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.45);
+}
+
+.uno-opponent-cards {
+  display: flex;
+  align-items: center;
+  min-height: 92px;
+}
+
+.uno-opponent-cards .uno-card-mini {
+  margin-left: -22px;
+  transform: rotate(var(--tilt, 0deg)) translateX(var(--fan-x, 0px));
+}
+
+.uno-opponent-cards .uno-card-mini:first-child {
+  margin-left: 0;
+}
+
 .uno-card-mini.back {
-  background: repeating-linear-gradient(
-    -45deg,
-    #1936d8,
-    #1936d8 6px,
-    #0f1f7e 6px,
-    #0f1f7e 12px
-  );
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3), transparent 45%),
+    repeating-linear-gradient(
+      -45deg,
+      #1936d8,
+      #1936d8 6px,
+      #0f1f7e 6px,
+      #0f1f7e 12px
+    );
   font-size: 0.7rem;
 }
 
@@ -2742,12 +3072,33 @@ body {
     width: 52px;
     height: 74px;
     border-radius: 10px;
+    margin-left: -14px;
+  }
+
+  #unoPlayerHand {
+    min-height: 128px;
+    padding: 0.9rem 0.3rem 1.1rem;
+  }
+
+  #unoPlayerHand::before,
+  #unoPlayerHand::after {
+    width: clamp(72px, 26vw, 108px);
+    height: clamp(34px, 8vw, 50px);
+    bottom: 0.05rem;
   }
 
   .uno-card-display {
     width: 74px;
     height: 104px;
     border-radius: 12px;
+  }
+
+  .uno-opponent-cards .uno-card-mini {
+    margin-left: -16px;
+  }
+
+  .uno-hand {
+    padding-inline: 0.15rem;
   }
 
   .fit-piece {

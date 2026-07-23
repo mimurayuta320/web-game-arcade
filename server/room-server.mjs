@@ -66,6 +66,7 @@ function roomMetaOf(code) {
       reports: new Map(),
       messageStates: new Map(),
       rematchVotes: new Set(),
+      drawVotes: new Set(),
       inviteTokens: new Map(),
       privateAccessPeerIds: new Set(),
     });
@@ -242,6 +243,7 @@ function unlockMatchForLobby(code) {
   meta.inGame = false;
   meta.allowedPeerIds = new Set();
   meta.rematchVotes = new Set();
+  meta.drawVotes = new Set();
 }
 
 function purgeExpiredInviteTokens(meta) {
@@ -293,12 +295,29 @@ function canVoteRematch(meta, ws) {
   return true;
 }
 
+function canVoteDraw(meta, ws, code) {
+  if (!ws?.peerId || ws.spectator) return false;
+  if (activePlayerCount(code) < 2) return false;
+  if (meta.allowedPeerIds.size > 0) return meta.allowedPeerIds.has(ws.peerId);
+  return true;
+}
+
 function broadcastRematchVoteState(code) {
   const meta = roomMetaOf(code);
   broadcastToRoom(code, {
     type: "rematch-vote-state",
     room: code,
     votes: [...meta.rematchVotes],
+    required: 2,
+  });
+}
+
+function broadcastDrawVoteState(code) {
+  const meta = roomMetaOf(code);
+  broadcastToRoom(code, {
+    type: "draw-vote-state",
+    room: code,
+    votes: [...meta.drawVotes],
     required: 2,
   });
 }
@@ -314,6 +333,7 @@ function broadcastRoomState(code) {
     isPublic: Boolean(meta.isPublic),
     inGame: Boolean(meta.inGame),
     rematchVotes: [...meta.rematchVotes],
+    drawVotes: [...meta.drawVotes],
   });
 }
 
@@ -327,6 +347,7 @@ function removeFromRoom(ws) {
   const meta = roomMeta.get(code);
   if (meta && ws.peerId) {
     meta.rematchVotes.delete(ws.peerId);
+    meta.drawVotes.delete(ws.peerId);
   }
   if (meta && ws.peerId && meta.hostPeerId === ws.peerId) {
     meta.hostPeerId = pickNextHostPeerId(code);
@@ -734,6 +755,39 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    if (type === "draw-vote") {
+      const meta = roomMetaOf(code);
+      if (!canVoteDraw(meta, ws, code)) {
+        sendError(ws, "DRAW_VOTE_FORBIDDEN");
+        return;
+      }
+      meta.drawVotes.add(ws.peerId);
+      broadcastDrawVoteState(code);
+
+      const requiredVotes = 2;
+      if (activePlayerCount(code) >= requiredVotes && meta.drawVotes.size >= requiredVotes) {
+        meta.drawVotes = new Set();
+        broadcastToRoom(code, {
+          type: "draw-confirmed",
+          room: code,
+          by: "agreement",
+        });
+        broadcastDrawVoteState(code);
+      }
+      return;
+    }
+
+    if (type === "draw-unvote") {
+      const meta = roomMetaOf(code);
+      if (!canVoteDraw(meta, ws, code)) {
+        sendError(ws, "DRAW_VOTE_FORBIDDEN");
+        return;
+      }
+      meta.drawVotes.delete(ws.peerId);
+      broadcastDrawVoteState(code);
+      return;
+    }
+
     let mutationResult = { ok: true };
     if (isChatMutatingType(type)) {
       mutationResult = validateAndTrackChatMutation(code, ws, payload);
@@ -743,6 +797,7 @@ wss.on("connection", (ws) => {
     if (type === "select-game" || type === "new-game") {
       const meta = roomMetaOf(code);
       meta.rematchVotes = new Set();
+      meta.drawVotes = new Set();
       lockCurrentParticipantsForMatch(code);
     }
 

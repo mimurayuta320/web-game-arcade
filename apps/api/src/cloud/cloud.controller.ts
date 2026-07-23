@@ -137,6 +137,15 @@ export class CloudController {
     return result.payload;
   }
 
+  @Post('inquiry/submit')
+  submitInquiry(@Body() body: Record<string, unknown>) {
+    const result = this.cloudService.submitInquiry(body);
+    if (!result.ok) {
+      this.throwFailure(result.code, result.message);
+    }
+    return result.payload;
+  }
+
   @Post('inquiry/list')
   listInquiries(@Body() body: Record<string, unknown>) {
     const result = this.cloudService.listInquiries(body);

@@ -94,15 +94,26 @@ function createDigitCards(container, onPick, className) {
   }
 }
 
-function setSlots(container, draft, slotCount, mode = "plain") {
+function setSlots(container, draft, slotCount, mode = "plain", onSlotClick = null) {
   if (!container) return;
   container.textContent = "";
 
   const length = Number.isFinite(slotCount) ? Math.max(3, Math.min(4, Math.floor(slotCount))) : 3;
   for (let i = 0; i < length; i += 1) {
-    const card = document.createElement("div");
-    card.className = "numeron-slot-card";
     const value = draft[i] || "";
+    const isClickable = typeof onSlotClick === "function" && mode === "plain";
+    const card = document.createElement(isClickable ? "button" : "div");
+    card.className = "numeron-slot-card";
+
+    if (isClickable) {
+      card.type = "button";
+      card.classList.add("is-clickable");
+      card.disabled = !value;
+      if (value) {
+        card.title = "クリックでここまで取り消し";
+        card.addEventListener("click", () => onSlotClick(i));
+      }
+    }
 
     if (mode === "hidden") {
       card.textContent = value ? "?" : "-";
@@ -151,6 +162,7 @@ function toHalfWidthText(value) {
 }
 
 export function initNumeron(options = {}) {
+  const numeronScreenEl = document.getElementById("numeronScreen");
   const turnTextEl = document.getElementById("numeronTurnText");
   const p1TryCountEl = document.getElementById("numeronP1TryCount");
   const p2TryCountEl = document.getElementById("numeronP2TryCount");
@@ -176,11 +188,13 @@ export function initNumeron(options = {}) {
   const secretSlotsEl = document.getElementById("numeronSecretSlots");
   const secretDeckEl = document.getElementById("numeronSecretDeck");
   const secretSetBtn = document.getElementById("numeronSecretSetBtn");
+  const secretBackBtn = document.getElementById("numeronSecretBackBtn");
   const secretClearBtn = document.getElementById("numeronSecretClearBtn");
 
   const guessSlotsEl = document.getElementById("numeronGuessSlots");
   const guessDeckEl = document.getElementById("numeronGuessDeck");
   const guessBtn = document.getElementById("numeronGuessBtn");
+  const guessBackBtn = document.getElementById("numeronGuessBackBtn");
   const guessClearBtn = document.getElementById("numeronGuessClearBtn");
 
   const itemDoubleBtn = document.getElementById("numeronItemDoubleBtn");
@@ -228,25 +242,47 @@ export function initNumeron(options = {}) {
     return Math.random() < 0.5 ? 0 : 1;
   }
 
-  createDigitCards(
-    secretDeckEl,
-    (digit) => {
-      if (!canEditSecret()) return;
-      state.secretDraft = addDigitToDraft(state.secretDraft, digit, state.codeLength);
-      render();
-    },
-    "numeron-digit-card secret"
-  );
+  function cutDraftAt(draft, index) {
+    const safeIndex = Number.isFinite(index) ? Math.max(0, Math.floor(index)) : 0;
+    return draft.slice(0, safeIndex);
+  }
 
-  createDigitCards(
-    guessDeckEl,
-    (digit) => {
-      if (!canEditGuess()) return;
-      state.guessDraft = addDigitToDraft(state.guessDraft, digit, state.codeLength);
-      render();
-    },
-    "numeron-digit-card guess"
-  );
+  function popDraftDigit(draft) {
+    if (!Array.isArray(draft) || draft.length === 0) return draft;
+    return draft.slice(0, -1);
+  }
+
+  function onSecretSlotClick(index) {
+    if (!canEditSecret()) return;
+    state.secretDraft = cutDraftAt(state.secretDraft, index);
+    render();
+  }
+
+  function onGuessSlotClick(index) {
+    if (!canEditGuess()) return;
+    state.guessDraft = cutDraftAt(state.guessDraft, index);
+    render();
+  }
+
+  function addSecretDigit(digit) {
+    if (!canEditSecret()) return;
+    const next = addDigitToDraft(state.secretDraft, digit, state.codeLength);
+    if (next === state.secretDraft) return;
+    state.secretDraft = next;
+    render();
+  }
+
+  function addGuessDigit(digit) {
+    if (!canEditGuess()) return;
+    const next = addDigitToDraft(state.guessDraft, digit, state.codeLength);
+    if (next === state.guessDraft) return;
+    state.guessDraft = next;
+    render();
+  }
+
+  createDigitCards(secretDeckEl, addSecretDigit, "numeron-digit-card secret");
+
+  createDigitCards(guessDeckEl, addGuessDigit, "numeron-digit-card guess");
 
   function clearCpuTimer() {
     if (!state.cpuTimerId) return;
@@ -311,6 +347,67 @@ export function initNumeron(options = {}) {
     return true;
   }
 
+  function isTypingTarget(target) {
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    return target.isContentEditable;
+  }
+
+  function handleGlobalKeyDown(event) {
+    if (event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (!numeronScreenEl || numeronScreenEl.classList.contains("hidden")) return;
+    if (isTypingTarget(event.target)) return;
+
+    if (/^\d$/.test(event.key)) {
+      if (canEditSecret()) {
+        addSecretDigit(event.key);
+        event.preventDefault();
+      } else if (canEditGuess()) {
+        addGuessDigit(event.key);
+        event.preventDefault();
+      }
+      return;
+    }
+
+    if (event.key === "Backspace") {
+      if (canEditSecret()) {
+        state.secretDraft = popDraftDigit(state.secretDraft);
+        render();
+        event.preventDefault();
+      } else if (canEditGuess()) {
+        state.guessDraft = popDraftDigit(state.guessDraft);
+        render();
+        event.preventDefault();
+      }
+      return;
+    }
+
+    if (event.key === "Delete" || event.key === "Escape") {
+      if (canEditSecret()) {
+        state.secretDraft = [];
+        render();
+        event.preventDefault();
+      } else if (canEditGuess()) {
+        state.guessDraft = [];
+        render();
+        event.preventDefault();
+      }
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (canEditSecret()) {
+        confirmSecret();
+        event.preventDefault();
+      } else if (canEditGuess()) {
+        submitGuess();
+        event.preventDefault();
+      }
+    }
+  }
+
   function playerLabel(index) {
     if (index === 0) return "PLAYER 1";
     if (isRoomMode()) return "PLAYER 2";
@@ -345,11 +442,15 @@ export function initNumeron(options = {}) {
     });
   }
 
-  function setDigitCardsEnabled(container, enabled) {
+  function syncDigitDeckState(container, draft, enabled) {
     if (!container) return;
     const buttons = container.querySelectorAll("button[data-digit]");
     buttons.forEach((button) => {
-      button.disabled = !enabled;
+      const digit = button.dataset.digit || "";
+      const isPicked = Array.isArray(draft) && draft.includes(digit);
+      button.disabled = !enabled || isPicked;
+      button.classList.toggle("is-picked", isPicked);
+      button.setAttribute("aria-pressed", isPicked ? "true" : "false");
     });
   }
 
@@ -406,8 +507,8 @@ export function initNumeron(options = {}) {
       const ownSecret = state.secrets[localIndex];
       secretCards = isValidCode(ownSecret, state.codeLength) ? ownSecret.split("") : [];
     }
-    setSlots(secretSlotsEl, secretCards, state.codeLength, "plain");
-    setSlots(guessSlotsEl, state.guessDraft, state.codeLength);
+    setSlots(secretSlotsEl, secretCards, state.codeLength, "plain", canEditSecret() ? onSecretSlotClick : null);
+    setSlots(guessSlotsEl, state.guessDraft, state.codeLength, "plain", canEditGuess() ? onGuessSlotClick : null);
 
     if (modeSelectEl) {
       const roomGuestLocked = isRoomMode() && state.roomPlayerIndex !== 0;
@@ -435,13 +536,15 @@ export function initNumeron(options = {}) {
     const guessEnabled = canEditGuess();
     const itemEnabled = canUseItems();
 
-    setDigitCardsEnabled(secretDeckEl, secretEnabled);
-    setDigitCardsEnabled(guessDeckEl, guessEnabled);
+    syncDigitDeckState(secretDeckEl, state.secretDraft, secretEnabled);
+    syncDigitDeckState(guessDeckEl, state.guessDraft, guessEnabled);
 
     if (secretSetBtn) secretSetBtn.disabled = !secretEnabled || state.secretDraft.length !== state.codeLength;
+    if (secretBackBtn) secretBackBtn.disabled = !secretEnabled || state.secretDraft.length === 0;
     if (secretClearBtn) secretClearBtn.disabled = !secretEnabled || state.secretDraft.length === 0;
 
     if (guessBtn) guessBtn.disabled = !guessEnabled || state.guessDraft.length !== state.codeLength;
+    if (guessBackBtn) guessBackBtn.disabled = !guessEnabled || state.guessDraft.length === 0;
     if (guessClearBtn) guessClearBtn.disabled = !guessEnabled || state.guessDraft.length === 0;
 
     if (itemDoubleBtn) itemDoubleBtn.disabled = !itemEnabled || state.items[state.currentPlayer].double <= 0 || state.turnActionsLeft !== 1;
@@ -479,14 +582,14 @@ export function initNumeron(options = {}) {
             statusTextEl.textContent = "選択完了 2/2。ゲームを開始します...";
           }
         } else {
-          statusTextEl.textContent = `秘密数字を${digitsLabel()}選んで確定してください`;
+          statusTextEl.textContent = `秘密数字を${digitsLabel()}選んで確定してください（数字キー/Backspace/Enter対応）`;
         }
       } else if (state.gameOver) {
         statusTextEl.textContent = state.winnerIndex == null ? "待機中" : `${playerLabel(state.winnerIndex)} が勝利しました`;
       } else if (state.roomLocked) {
         statusTextEl.textContent = state.roomLockMessage || "対戦相手を待っています...";
       } else if (canLocalInput()) {
-        statusTextEl.textContent = `推理カードを${digitsLabel()}選んで確定（またはアイテム使用）`;
+        statusTextEl.textContent = `推理カードを${digitsLabel()}選んで確定（数字キー/Backspace/Enter対応）`;
       } else {
         statusTextEl.textContent = `${playerLabel(state.currentPlayer)} が行動中`;
       }
@@ -838,6 +941,12 @@ export function initNumeron(options = {}) {
 
   secretSetBtn?.addEventListener("click", confirmSecret);
 
+  secretBackBtn?.addEventListener("click", () => {
+    if (!canEditSecret()) return;
+    state.secretDraft = popDraftDigit(state.secretDraft);
+    render();
+  });
+
   secretClearBtn?.addEventListener("click", () => {
     if (!canEditSecret()) return;
     state.secretDraft = [];
@@ -845,6 +954,12 @@ export function initNumeron(options = {}) {
   });
 
   guessBtn?.addEventListener("click", submitGuess);
+
+  guessBackBtn?.addEventListener("click", () => {
+    if (!canEditGuess()) return;
+    state.guessDraft = popDraftDigit(state.guessDraft);
+    render();
+  });
 
   guessClearBtn?.addEventListener("click", () => {
     if (!canEditGuess()) return;
@@ -887,6 +1002,8 @@ export function initNumeron(options = {}) {
     options.onBackToMenu?.();
   });
 
+  window.addEventListener("keydown", handleGlobalKeyDown);
+
   enterStandby();
 
   return {
@@ -899,6 +1016,7 @@ export function initNumeron(options = {}) {
     enterStandby,
     stop: () => {
       clearCpuTimer();
+      window.removeEventListener("keydown", handleGlobalKeyDown);
     },
     configureRoomMode: ({ roomCode, roomRole }) => {
       state.gameMode = "room";

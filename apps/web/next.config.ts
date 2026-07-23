@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   async rewrites() {
-    const nestApiOrigin = process.env.NEST_API_ORIGIN || "http://127.0.0.1:4002";
+    const nestApiOrigin = process.env.NEST_API_ORIGIN || "http://127.0.0.1:8787";
 
     return [
       {

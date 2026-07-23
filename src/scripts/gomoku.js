@@ -114,6 +114,8 @@ export function initGomoku(options = {}) {
   const roomStatusEl = document.getElementById("gomokuRoomStatus");
   const roomCodeTextEl = document.getElementById("gomokuRoomCodeText");
   const roomRoleTextEl = document.getElementById("gomokuRoomRoleText");
+  const blackCountEl = document.getElementById("gomokuBlackCount");
+  const whiteCountEl = document.getElementById("gomokuWhiteCount");
   const startBtn = document.getElementById("gomokuStartBtn");
   const menuBtn = document.getElementById("gomokuMenuBtn");
 
@@ -148,15 +150,16 @@ export function initGomoku(options = {}) {
     const wrap = boardEl?.parentElement;
     if (!wrap) return;
 
-    const BORDER = 2;
-    const GAP = 1;
-    const CHROME = BORDER * 2 + GAP * (SIZE - 1);
-    const maxByWrap = Math.max(260, wrap.clientWidth - 6);
-    const maxByViewport = Math.max(260, Math.floor(window.innerHeight * 0.72));
-    const maxBoard = Math.min(maxByWrap, maxByViewport, 760);
+    const BORDER = 1;
+    const PADDING = 2;
+    const GAP = 2;
+    const CHROME = BORDER * 2 + PADDING * 2 + GAP * (SIZE - 1);
+    const maxByWrap = Math.max(320, wrap.clientWidth - 4);
+    const maxByViewport = Math.max(320, Math.floor(window.innerHeight * 0.84));
+    const maxBoard = Math.min(maxByWrap, maxByViewport, 860);
 
     const cellByBoard = Math.floor((maxBoard - CHROME) / SIZE);
-    const cellPx = Math.max(14, Math.min(42, cellByBoard));
+    const cellPx = Math.max(16, Math.min(54, cellByBoard));
     const boardPx = cellPx * SIZE + CHROME;
 
     boardEl.style.setProperty("--gomoku-cell-size", `${cellPx}px`);
@@ -189,6 +192,22 @@ export function initGomoku(options = {}) {
 
   function updateHeader() {
     turnTextEl.textContent = turnText(state.currentPlayer);
+  }
+
+  function updateStoneCounts() {
+    if (!blackCountEl || !whiteCountEl) return;
+
+    let blackCount = 0;
+    let whiteCount = 0;
+    for (let row = 0; row < SIZE; row += 1) {
+      for (let col = 0; col < SIZE; col += 1) {
+        if (state.board[row][col] === BLACK) blackCount += 1;
+        if (state.board[row][col] === WHITE) whiteCount += 1;
+      }
+    }
+
+    blackCountEl.textContent = String(blackCount);
+    whiteCountEl.textContent = String(whiteCount);
   }
 
   function playerNameFor(player) {
@@ -262,7 +281,9 @@ export function initGomoku(options = {}) {
   }
 
   function render() {
+    fitBoardToGrid();
     updateHeader();
+    updateStoneCounts();
     updateRoomStatusPanel();
     syncStartButtonDisabled();
     syncModeSelectDisabled();

@@ -200,6 +200,8 @@ const messages = {
     chessSubtitle: "白黒で交互に指します。キングを詰ませた側の勝ち。",
     unoSubtitle: "CPU対戦またはローカル2人対戦。手札を先に出し切ったら勝ち。",
     gomokuSubtitle: "黒白で交互に置き、先に5連を作った側の勝ち。",
+    gomokuModeCpu: "1P 対 CPU",
+    gomokuModeLocal: "ローカル2人",
     survivorsSubtitle: "WASD / 矢印キーで移動。自動攻撃で生き残れ。",
     fitPuzzleSubtitle: "ピースを選んで枠内に配置し、すべて埋めるとクリア。",
     minesweeperSubtitle: "VSプレイヤーや級力モードを選び、マインスイーパーで対戦できます。",
@@ -416,6 +418,8 @@ const messages = {
     chessSubtitle: "백/흑이 번갈아 둡니다. 킹을 체크메이트하면 승리합니다.",
     unoSubtitle: "CPU 대전 또는 로컬 2인 대전. 손패를 먼저 비우면 승리합니다.",
     gomokuSubtitle: "흑/백이 번갈아 두고, 먼저 5목을 만들면 승리합니다.",
+    gomokuModeCpu: "1P vs CPU",
+    gomokuModeLocal: "2P LOCAL",
     survivorsSubtitle: "WASD / 방향키로 이동. 자동 공격으로 생존하세요.",
     fitPuzzleSubtitle: "조각을 선택해 프레임 안에 배치하고, 전부 채우면 클리어.",
     minesweeperSubtitle: "VS 플레이어와 난이도 모드를 골라 마인스위퍼를 플레이하세요.",
@@ -646,6 +650,8 @@ function applyStaticTranslations() {
   setTextById("solitaireSubtitle", tr("solitaireSubtitle"));
   setTextById("unoModeCpuOption", tr("unoModeCpu"));
   setTextById("unoModeLocalOption", tr("unoModeLocal"));
+  setTextById("gomokuModeCpuOption", tr("gomokuModeCpu"));
+  setTextById("gomokuModeLocalOption", tr("gomokuModeLocal"));
 
   if (entryCloudUserIdInput) entryCloudUserIdInput.placeholder = tr("cloudUserPlaceholder");
   if (entryCloudPasswordInput) entryCloudPasswordInput.placeholder = tr("cloudPassPlaceholder");
@@ -2040,8 +2046,10 @@ function activeController() {
 }
 
 function configureAllStandardModes() {
+  if (!games) return;
   Object.values(games).forEach((entry) => {
     entry.controller.configureStandardMode("cpu");
+    entry.controller.enterStandby?.();
   });
 }
 

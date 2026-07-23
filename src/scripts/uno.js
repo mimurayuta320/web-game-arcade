@@ -572,13 +572,27 @@ export function initUno(options = {}) {
         firstSelectedCard.value === card.value;
       btn.className = `uno-card ${baseClass}${playable ? " playable" : ""}${chainSelectable ? " chain-selectable" : ""}${selected ? " selected" : ""}`;
       btn.textContent = cardLabel(card);
+      btn.dataset.rank = cardLabel(card);
       btn.title = `${card.kind === "wild" ? "WILD" : colorText(card.color)} ${cardLabel(card)}`;
       btn.setAttribute("aria-label", btn.title);
       btn.style.setProperty("--card-index", String(index));
       btn.style.setProperty("--card-total", String(viewerHandCount));
+      const centerOffset = index - (viewerHandCount - 1) / 2;
+      const fanAngle = centerOffset * 3.2;
+      const fanLift = Math.abs(centerOffset) * 2.2 + 2;
+      btn.style.setProperty("--fan-angle", `${fanAngle}deg`);
+      btn.style.setProperty("--fan-lift", `${fanLift}px`);
       btn.disabled = !(playable || chainSelectable);
       btn.addEventListener("click", () => {
         if (!(playable || chainSelectable)) return;
+
+        // Current HTML has no explicit play button, so playable cards are committed on click.
+        if (!playBtn && playable) {
+          clearSelectedCard();
+          playCard(index);
+          return;
+        }
+
         const exists = state.selectedHandIndices.includes(index);
         const allowMultiSelect = state.multiPlayValue !== null && state.currentPlayer === state.multiPlayPlayer;
         if (allowMultiSelect) {

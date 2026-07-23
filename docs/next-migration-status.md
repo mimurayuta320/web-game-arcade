@@ -6,7 +6,7 @@
 - chess (lite)
 - shogi (lite)
 - uno (lite)
-- minesweeper (lite)
+- minesweeper
 - numeron (lite)
 - blackjack (lite)
 - chinchiro (lite)

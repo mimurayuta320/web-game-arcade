@@ -1,21 +1,43 @@
-"use client";
+﻿"use client";
 
-import { FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type Score = {
-  id: number;
-  playerName: string;
-  score: number;
-  game?: string | null;
-  createdAt: string;
+type Panel = "menu" | "scores" | "othello" | "gomoku" | "chess" | "shogi" | "uno" | "minesweeper" | "numeron" | "blackjack" | "chinchiro" | "sevens" | "daifugo" | "fourPanel" | "drawingRelay" | "fitPuzzle" | "mahjong" | "poker" | "solitaire" | "survivors";
+type PlayablePanel = Exclude<Panel, "menu" | "scores">;
+
+const INITIAL_GAME_START_STATE: Record<PlayablePanel, boolean> = {
+  othello: false,
+  gomoku: false,
+  chess: false,
+  shogi: false,
+  uno: false,
+  minesweeper: false,
+  numeron: false,
+  blackjack: false,
+  chinchiro: false,
+  sevens: false,
+  daifugo: false,
+  fourPanel: false,
+  drawingRelay: false,
+  fitPuzzle: false,
+  mahjong: false,
+  poker: false,
+  solitaire: false,
+  survivors: false,
 };
-
-type Panel = "menu" | "othello" | "gomoku" | "chess" | "shogi" | "uno" | "minesweeper" | "numeron" | "blackjack" | "chinchiro" | "sevens" | "daifugo" | "fourPanel" | "drawingRelay" | "fitPuzzle" | "mahjong" | "poker" | "solitaire" | "survivors" | "scores" | "status";
 
 type RoomParticipant = {
   id: string;
   name: string;
   role: "host" | "guest" | "spectator";
+};
+
+type ScoreEntry = {
+  id: number;
+  playerName: string;
+  score: number;
+  game?: string | null;
+  createdAt?: string;
 };
 
 type CloudAuthResult = {
@@ -27,7 +49,35 @@ type CloudAuthResult = {
   };
 };
 
-type Language = "ja" | "ko";
+type CloudApiResult = {
+  ok?: boolean;
+  code?: string;
+  message?: string;
+  [key: string]: unknown;
+};
+
+type FriendTab = "friends" | "incoming" | "outgoing";
+
+type Language = "ja" | "ko" | "en";
+type OthelloMode = "cpu" | "cpuvscpu" | "local" | "chaos";
+type OthelloCpuLevel = "easy" | "normal" | "hard";
+type OthelloTurnOrder = "black" | "white" | "random";
+type ShogiMode = "local" | "chaos";
+type OthelloChaosTarget = "none" | "black" | "white" | "both" | "player" | "opponent";
+type OthelloChaosHandicap = "none" | "immutable1";
+type OthelloChaosToggle = "off" | "on";
+type OthelloChaosSettings = {
+  target: OthelloChaosTarget;
+  handicap: OthelloChaosHandicap;
+  randomLineIgnore: OthelloChaosToggle;
+  overwriteLimit: number;
+  bothBlackHandicap: OthelloChaosHandicap;
+  bothWhiteHandicap: OthelloChaosHandicap;
+  bothBlackOverwriteLimit: number;
+  bothWhiteOverwriteLimit: number;
+  destroyLimitBlack: number;
+  destroyLimitWhite: number;
+};
 
 const LOGIN_I18N = {
   ja: {
@@ -36,9 +86,14 @@ const LOGIN_I18N = {
     languageLabel: "Language",
     langJa: "日本語",
     langKo: "한국어",
+    langEn: "English",
     userId: "ユーザーID",
     password: "パスワード",
     displayName: "表示名（ゲーム内）",
+    displayNameAfterLogin: "ログイン後の表示名",
+    displayNameSave: "表示名を保存",
+    displayNameRequired: "表示名を入力してください。",
+    displayNameUpdated: "表示名を更新しました。",
     loginButton: "ログインして遊ぶ",
     registerButton: "新規登録",
     guestButton: "ゲストで遊ぶ",
@@ -51,11 +106,12 @@ const LOGIN_I18N = {
     registerSuccess: "新規登録が完了しました。",
     guestStarted: "ゲストモードで開始しました。",
     appTitle: "Neon Board Arcade",
-    appLead: "このページから /scores を同一URL経由で利用",
+    appLead: "旧HTMLの主要導線をNextへ移行中",
     backToLogin: "ログインへ戻る",
     modeCloud: "Cloud",
     modeGuest: "Guest",
     tabMenu: "メニュー",
+    backToMenu: "メニューに戻る",
     tabOthello: "オセロ",
     tabGomoku: "五目並べ",
     tabShogi: "将棋",
@@ -75,7 +131,6 @@ const LOGIN_I18N = {
     tabSolitaire: "ソリティア",
     tabSurvivors: "Survivors",
     tabScores: "スコア",
-    tabStatus: "移行状況",
     menuTitle: "ゲーム選択（Next移行メニュー）",
     menuLead: "旧HTMLメニューを段階的に移植しています。まずはオセロ、五目並べ、チェス、UNOへ遷移できます。",
     playableLead: "Next移行版でプレイ可能",
@@ -87,11 +142,18 @@ const LOGIN_I18N = {
     roomServerUrl: "RoomサーバーURL",
     roomCode: "ルーム番号",
     roomCodePlaceholder: "6桁",
+    roomCodeInvalid: "6桁のルーム番号を入力してください。",
     roomPublic: "公開",
     roomPrivate: "非公開",
+    spectateJoin: "観戦参加",
+    quickMatchMulti: "クイックマッチ（マルチ）",
     roomCreate: "ルーム作成",
     roomJoin: "ルーム参加",
     roomDisconnect: "切断",
+    copyInviteLink: "招待リンクをコピー",
+    inviteLinkCopied: "招待リンクをコピーしました",
+    inviteLinkCopyFailed: "招待リンクのコピーに失敗しました",
+    inviteTokenIssueFailed: "招待トークンの発行に失敗しました",
     roomState: "状態",
     roomConnected: "接続ルーム",
     roomRole: "ロール",
@@ -100,6 +162,39 @@ const LOGIN_I18N = {
     roomRoleSpectator: "観戦",
     roomMembers: "参加者",
     roomMembersEmpty: "未取得",
+    friendsTitle: "フレンド",
+    friendsTabFriends: "フレンド",
+    friendsTabIncoming: "承認待ち",
+    friendsTabOutgoing: "申請中",
+    friendsHintNoAuth: "ログインするとフレンド一覧を読み込みます",
+    friendsHintReady: "フレンドIDで追加/削除できます",
+    friendsHintIncoming: "承認待ちタブでは申請者IDを承認/拒否できます",
+    friendsHintOutgoing: "申請中タブでは送信済みIDを取り消せます",
+    friendIdPlaceholder: "フレンドID",
+    friendRequestSend: "申請",
+    friendApprove: "承認",
+    friendReject: "拒否",
+    friendCancel: "取消",
+    friendRemove: "削除",
+    friendReload: "再読込",
+    friendsLoading: "フレンド一覧を読み込み中...",
+    friendsListEmpty: "フレンドはまだいません",
+    friendsIncomingEmpty: "承認待ちの申請はありません",
+    friendsOutgoingEmpty: "申請中のユーザーはいません",
+    friendsLoadFailed: "フレンド取得に失敗しました",
+    friendIdRequired: "フレンドIDを入力してください",
+    friendRequestSent: "フレンド申請を送信しました",
+    friendApproveSuccess: "フレンド申請を承認しました",
+    friendRejectSuccess: "フレンド申請を拒否しました",
+    friendCancelSuccess: "フレンド申請を取り消しました",
+    friendRemoveSuccess: "フレンドを削除しました",
+    friendNotFound: "指定したIDのユーザーが見つかりません",
+    friendSelfForbidden: "自分自身は追加できません",
+    friendRequestAlreadySent: "すでに申請済みです",
+    friendRequestAlreadyReceived: "相手からの申請が届いています。承認待ちタブで承認してください",
+    friendRequestNotFound: "対象の申請が見つかりません",
+    friendAlreadyExists: "すでにフレンドです",
+    friendActionFailed: "フレンド操作に失敗しました",
     multiSyncTitle: "マルチ同期",
     multiSyncEnabled: "同期ON",
     multiSyncDisabled: "同期OFF",
@@ -128,8 +223,14 @@ const LOGIN_I18N = {
     roomUrlInvalid: "RoomサーバーURLが不正です。",
     roomConnectFailed: "Roomサーバーへ接続できませんでした。",
     roomFull: "このルームは満員です。",
+    roomFullRejected: "ルーム {code} は満員です（8人まで）",
     roomInGame: "このルームはゲーム中です。観戦モードは次対応予定です。",
-    roomInviteRequired: "このルームは非公開です。招待トークン機能は次対応予定です。",
+    roomInGameSuggestSpectate: "対戦中のため参加できません。観戦を使ってください。",
+    roomInviteRequired: "この非公開ルームへの参加には招待リンクが必要です。",
+    quickMatchSearching: "マルチプレイの相手を検索中...",
+    quickMatchConnected: "クイックマッチに接続しました（ルーム {code}）",
+    quickMatchPrivateSkipped: "非公開ルームに当たったため、別のマッチを検索します...",
+    spectatorReadOnly: "観戦モードで接続しました。操作は読み取り専用です。",
     roomErrorPrefix: "ルームエラー",
     roomErrRoomRequired: "ルーム番号が必要です。",
     roomErrHostOnly: "ホストのみ実行できます。",
@@ -145,11 +246,71 @@ const LOGIN_I18N = {
     roomErrInvitePrivateOnly: "招待トークンは非公開ルームのみ発行できます。",
     roomErrSpectatorOnly: "観戦者のみ利用できる機能です。",
     roomErrRematchVoteForbidden: "現在は再戦投票できません。",
+    roomErrDrawVoteForbidden: "現在はドロー申請できません。",
     roomErrUnknown: "不明なエラー ({code})",
+    spectatorChatTitle: "観戦チャット",
+    spectatorChatPlaceholder: "観戦コメントを入力",
+    spectatorChatSend: "送信",
+    spectatorChatEmpty: "まだコメントはありません",
+    roomChatTitle: "ルームチャット",
+    roomChatPlaceholder: "メッセージを入力",
+    roomChatSend: "送信",
+    roomChatEmpty: "まだメッセージはありません",
+    roomChatMuted: "チャット送信が制限されています",
+    roomChatRateLimited: "送信が早すぎます。少し待ってください",
     visibilityPublic: "公開",
     visibilityPrivate: "非公開",
-    othelloTitle: "オセロ（Next移行版）",
+    gameStart: "ゲーム開始",
+    gameStartPrompt: "「ゲーム開始」を押すと操作できます。",
+    othelloTitle: "オセロ",
     othelloReset: "リセット",
+    othelloModeLabel: "MODE",
+    othelloModeCpu: "1P vs CPU",
+    othelloModeCpuVsCpu: "CPU vs CPU",
+    othelloModeLocal: "2P LOCAL",
+    othelloModeChaos: "CHAOS",
+    othelloChaosTargetLabel: "カオス対象",
+    othelloChaosTargetNone: "なし",
+    othelloChaosTargetBlack: "黒",
+    othelloChaosTargetWhite: "白",
+    othelloChaosTargetBoth: "両方",
+    othelloChaosTargetPlayer: "プレイヤー",
+    othelloChaosTargetOpponent: "相手",
+    othelloChaosHandicapLabel: "固定石",
+    othelloChaosHandicapNone: "なし",
+    othelloChaosHandicapImmutable1: "1個固定",
+    othelloChaosRandomLineIgnoreLabel: "直線無視",
+    othelloChaosToggleOff: "OFF",
+    othelloChaosToggleOn: "ON",
+    othelloChaosOverwriteLimitLabel: "上書き回数",
+    othelloChaosBlackSideTitle: "黒サイド",
+    othelloChaosWhiteSideTitle: "白サイド",
+    othelloChaosBlackHandicapLabel: "黒の固定石",
+    othelloChaosWhiteHandicapLabel: "白の固定石",
+    othelloChaosBlackOverwriteLimitLabel: "黒上書き回数",
+    othelloChaosWhiteOverwriteLimitLabel: "白上書き回数",
+    othelloChaosBlackDestroyLimitLabel: "黒破壊回数",
+    othelloChaosWhiteDestroyLimitLabel: "白破壊回数",
+    othelloCpuLevelLabel: "CPU LEVEL",
+    othelloCpuLevelEasy: "やさしい",
+    othelloCpuLevelNormal: "ふつう",
+    othelloCpuLevelHard: "つよい",
+    othelloTurnOrderLabel: "TURN",
+    othelloTurnOrderBlack: "1P先手(黒)",
+    othelloTurnOrderWhite: "1P後手(白)",
+    othelloTurnOrderRandom: "ランダム",
+    othelloChaosImmutableButton: "駒固定",
+    othelloChaosDestroyButton: "駒破壊",
+    othelloChaosDoubleButton: "二回行動",
+    othelloChaosImmutableGuide: "駒固定の対象を選択中: 内側の自分の駒を1つ選んでください",
+    othelloChaosDestroyGuideCorner: "駒破壊の対象を選択中: 角の自分の駒を1つ選んでください",
+    othelloChaosDestroyGuideSelf: "駒破壊の対象を選択中: 自分の駒を{need}個選んでください（{count}/{need}）",
+    othelloChaosDestroyGuideEnemy: "駒破壊の対象を選択中: 破壊する相手の駒を1つ選んでください",
+    othelloDrawRequestSent: "ドロー申請を送信しました。相手の同意を待っています。",
+    othelloDrawRequestCanceled: "ドロー申請を取り消しました。",
+    othelloDrawRequestPending: "相手からドロー申請が来ています。リセットを押すと同意します。",
+    othelloDrawAgreed: "両者同意でドロー成立。",
+    othelloCpuThinking: "CPUが考えています...",
     othelloTurnBlack: "黒の番です",
     othelloPlayed: "{current}が置きました。{next}の番です",
     othelloPass: "{next}は置ける場所がないためパス。{current}の番です",
@@ -177,7 +338,7 @@ const LOGIN_I18N = {
     othelloChaosFixed: "固定",
     othelloChaosDestroy: "破壊",
     othelloChaosDouble: "二回行動",
-    gomokuTitle: "五目並べ（Next移行版）",
+    gomokuTitle: "五目並べ",
     gomokuReset: "リセット",
     gomokuTurnBlack: "黒の番です",
     gomokuTurnWhite: "白の番です",
@@ -185,7 +346,7 @@ const LOGIN_I18N = {
     gomokuDraw: "引き分けです",
     applyGomokuToScore: "黒石数をスコアに反映",
     appliedGomokuToScore: "五目の黒石数をスコア欄へ反映しました。",
-    chessTitle: "チェス（Next移行版）",
+    chessTitle: "チェス",
     chessReset: "リセット",
     chessTurnWhite: "白の番です",
     chessTurnBlack: "黒の番です",
@@ -194,8 +355,11 @@ const LOGIN_I18N = {
     chessWin: "{winner}の勝ちです（キングを取りました）",
     chessApplyScore: "残り駒差をスコアに反映",
     chessAppliedScore: "チェスの残り駒差をスコア欄へ反映しました。",
-    shogiTitle: "将棋（Next移行版）",
+    shogiTitle: "将棋",
     shogiReset: "リセット",
+    shogiModeLabel: "MODE",
+    shogiModeLocal: "ローカル2人",
+    shogiModeChaos: "CHAOS",
     shogiTurnBlack: "先手の番です",
     shogiTurnWhite: "後手の番です",
     shogiSelectOwn: "自分の駒を選択してください。",
@@ -203,14 +367,14 @@ const LOGIN_I18N = {
     shogiWin: "{winner}の勝ちです（王を取りました）",
     shogiApplyScore: "残り駒差をスコアに反映",
     shogiAppliedScore: "将棋の残り駒差をスコア欄へ反映しました。",
-    minesTitle: "マインスイーパー（Next移行版）",
+    minesTitle: "マインスイーパー",
     minesReset: "リセット",
     minesHint: "マスを開いて地雷を避けてください。",
     minesGameOver: "地雷を踏みました。",
     minesCleared: "クリアです。",
     minesApplyScore: "開放マス数をスコアに反映",
     minesAppliedScore: "開放マス数をスコア欄へ反映しました。",
-    numeronTitle: "ヌメロン（Next移行版）",
+    numeronTitle: "ヌメロン",
     numeronReset: "リセット",
     numeronHint: "0-9の数字を重複なしで3桁選んで予想してください。",
     numeronGuess: "予想",
@@ -223,7 +387,7 @@ const LOGIN_I18N = {
     numeronAppliedScore: "ヌメロンの挑戦回数からスコア欄へ反映しました。",
     numeronHistory: "履歴",
     numeronSecretLabel: "シークレット",
-    blackjackTitle: "ブラックジャック（Next移行版）",
+    blackjackTitle: "ブラックジャック",
     blackjackReset: "配り直し",
     blackjackYourTurn: "あなたのターンです。HIT か STAND を選択してください。",
     blackjackDealerTurn: "ディーラーのターンです...",
@@ -237,7 +401,7 @@ const LOGIN_I18N = {
     blackjackPlayer: "あなた",
     blackjackApplyScore: "手札合計をスコアに反映",
     blackjackAppliedScore: "ブラックジャックの手札合計をスコア欄へ反映しました。",
-    chinchiroTitle: "チンチロ（Next移行版）",
+    chinchiroTitle: "チンチロ",
     chinchiroReset: "リセット",
     chinchiroRoll: "ROLL",
     chinchiroHint: "ROLLでサイコロを振って勝負します。",
@@ -255,7 +419,7 @@ const LOGIN_I18N = {
     chinchiroPoint: "{eye}の目",
     chinchiroApplyScore: "勝負結果をスコアに反映",
     chinchiroAppliedScore: "チンチロの結果をスコア欄へ反映しました。",
-    sevensTitle: "セブンズ（Next移行版）",
+    sevensTitle: "セブンズ",
     sevensReset: "リセット",
     sevensPass: "パス",
     sevensYourTurn: "あなたの番です。置けるカードを選んでください。",
@@ -269,7 +433,7 @@ const LOGIN_I18N = {
     sevensPassCount: "パス回数",
     sevensApplyScore: "残り手札差をスコアに反映",
     sevensAppliedScore: "セブンズの残り手札差をスコア欄へ反映しました。",
-    daifugoTitle: "大富豪（Next移行版）",
+    daifugoTitle: "大富豪",
     daifugoReset: "配り直し",
     daifugoYourTurn: "あなたの番です。場札より強いカードを出してください。",
     daifugoCpuTurn: "CPUの番です...",
@@ -284,7 +448,7 @@ const LOGIN_I18N = {
     daifugoNeedHigher: "場札より強いカードを選んでください。",
     daifugoApplyScore: "残り手札差をスコアに反映",
     daifugoAppliedScore: "大富豪の残り手札差をスコア欄へ反映しました。",
-    fourPanelTitle: "4コマリレー（Next移行版）",
+    fourPanelTitle: "4コマリレー",
     fourPanelReset: "リセット",
     fourPanelSubmit: "このコマを確定",
     fourPanelClear: "描画クリア",
@@ -295,7 +459,7 @@ const LOGIN_I18N = {
     fourPanelStoryTitle: "お題",
     fourPanelApplyScore: "完成度をスコアに反映",
     fourPanelAppliedScore: "4コマの進捗をスコア欄へ反映しました。",
-    drawingRelayTitle: "お絵かきリレー（Next移行版）",
+    drawingRelayTitle: "お絵かきリレー",
     drawingRelayReset: "リセット",
     drawingRelayHintDraw: "お題を見て絵を描いてください。",
     drawingRelayHintGuess: "完成絵を見て答えを入力してください。",
@@ -309,7 +473,7 @@ const LOGIN_I18N = {
     drawingRelayDone: "リレー完了: お題 {prompt} / 回答 {guess}",
     drawingRelayApplyScore: "一致度をスコアに反映",
     drawingRelayAppliedScore: "お絵かきリレーの結果をスコア欄へ反映しました。",
-    fitPuzzleTitle: "フィットパズル（Next移行版）",
+    fitPuzzleTitle: "フィットパズル",
     fitPuzzleReset: "シャッフル",
     fitPuzzleHint: "隣接タイルをクリックして 1-8 を順番に並べてください。",
     fitPuzzleOnlyAdjacent: "空白に隣接するタイルのみ動かせます。",
@@ -318,7 +482,7 @@ const LOGIN_I18N = {
     fitPuzzleMoves: "手数",
     fitPuzzleApplyScore: "手数からスコア反映",
     fitPuzzleAppliedScore: "フィットパズルの結果をスコア欄へ反映しました。",
-    mahjongTitle: "麻雀ペア（Next移行版）",
+    mahjongTitle: "麻雀ペア",
     mahjongReset: "配牌し直し",
     mahjongShuffle: "シャッフル",
     mahjongHintButton: "ヒント",
@@ -333,7 +497,7 @@ const LOGIN_I18N = {
     mahjongRemaining: "残り牌: {count}",
     mahjongApplyScore: "進行度をスコアに反映",
     mahjongAppliedScore: "麻雀ペアの結果をスコア欄へ反映しました。",
-    pokerTitle: "ポーカー（Next移行版）",
+    pokerTitle: "ポーカー",
     pokerDeal: "配り直し",
     pokerDraw: "カード交換",
     pokerHint: "残したいカードを選択して交換してください。",
@@ -355,7 +519,7 @@ const LOGIN_I18N = {
     pokerHandFullHouse: "フルハウス",
     pokerHandFourKind: "フォーカード",
     pokerHandStraightFlush: "ストレートフラッシュ",
-    solitaireTitle: "ソリティア（Next移行版）",
+    solitaireTitle: "ソリティア",
     solitaireReset: "配り直し",
     solitaireStock: "山札",
     solitaireWaste: "捨て札",
@@ -366,7 +530,7 @@ const LOGIN_I18N = {
     solitaireFoundations: "土台枚数: {count}",
     solitaireApplyScore: "進行度をスコアに反映",
     solitaireAppliedScore: "ソリティアの結果をスコア欄へ反映しました。",
-    survivorsTitle: "Survivors（Next移行版）",
+    survivorsTitle: "Survivors",
     survivorsReset: "リスタート",
     survivorsHint: "敵をクリックして倒し、できるだけ長く生き残ってください。",
     survivorsWave: "WAVE {wave}",
@@ -379,7 +543,7 @@ const LOGIN_I18N = {
     survivorsGameOver: "ゲームオーバー... リスタートで再挑戦できます。",
     survivorsApplyScore: "生存結果をスコアに反映",
     survivorsAppliedScore: "Survivors の結果をスコア欄へ反映しました。",
-    unoTitle: "UNO（Next移行版）",
+    unoTitle: "UNO",
     unoReset: "リセット",
     unoYourTurn: "あなたの番です。出せるカードを選ぶか山札から引いてください。",
     unoCpuTurn: "CPUの番です...",
@@ -406,30 +570,7 @@ const LOGIN_I18N = {
     scoreSave: "スコア保存",
     scoreSaved: "スコアを保存しました。",
     scoreSaveFailed: "スコア保存に失敗しました。",
-    statusTitle: "移行ステータス",
-    reload: "再取得",
-    statusLine1: "API単一URL化: 完了（Next rewrite経由）",
-    statusLine2: "スコア保存/読込: 完了",
-    statusLine3: "オセロ（クリックプレイ）: 移行完了",
-    statusLine4: "他ゲーム: これからNextへ順次移植",
-    statusLineGomoku: "五目並べ（クリックプレイ）: 移行完了",
-    statusLineUno: "UNO（ターン制プレイ）: 移行完了",
-    statusLineChess: "チェス（クリックプレイ）: 移行完了",
-    statusLineShogi: "将棋（クリックプレイ）: 移行完了",
-    statusLineMines: "マインスイーパー（クリックプレイ）: 移行完了",
-    statusLineNumeron: "ヌメロン（クリックプレイ）: 移行完了",
-    statusLineBlackjack: "ブラックジャック（クリックプレイ）: 移行完了",
-    statusLineChinchiro: "チンチロ（クリックプレイ）: 移行完了",
-    statusLineSevens: "セブンズ（クリックプレイ）: 移行完了",
-    statusLineDaifugo: "大富豪（クリックプレイ）: 移行完了",
-    statusLineFourPanel: "4コマリレー（クリックプレイ）: 移行完了",
-    statusLineDrawingRelay: "お絵かきリレー（クリックプレイ）: 移行完了",
-    statusLineFitPuzzle: "フィットパズル（クリックプレイ）: 移行完了",
-    statusLineMahjong: "麻雀ペア（クリックプレイ）: 移行完了",
-    statusLinePoker: "ポーカー（クリックプレイ）: 移行完了",
-    statusLineSolitaire: "ソリティア（クリックプレイ）: 移行完了",
-    statusLineSurvivors: "Survivors（クリックプレイ）: 移行完了",
-    statusLineMenu: "メニュー（ゲーム選択 + ルームUI）: 移行完了",
+    scoreLoading: "読み込み中...",
     latestScores: "最新スコア",
     loading: "読み込み中...",
     noScores: "スコアはまだありません。",
@@ -464,9 +605,14 @@ const LOGIN_I18N = {
     languageLabel: "Language",
     langJa: "日本語",
     langKo: "한국어",
+    langEn: "English",
     userId: "사용자 ID",
     password: "비밀번호",
     displayName: "표시 이름 (게임 내)",
+    displayNameAfterLogin: "로그인 후 표시 이름",
+    displayNameSave: "표시 이름 저장",
+    displayNameRequired: "표시 이름을 입력하세요.",
+    displayNameUpdated: "표시 이름을 업데이트했습니다.",
     loginButton: "로그인하고 플레이",
     registerButton: "회원가입",
     guestButton: "게스트로 플레이",
@@ -479,11 +625,12 @@ const LOGIN_I18N = {
     registerSuccess: "회원가입이 완료되었습니다.",
     guestStarted: "게스트 모드로 시작했습니다.",
     appTitle: "Neon Board Arcade",
-    appLead: "이 페이지에서 /scores 를 동일 URL 경유로 사용",
+    appLead: "기존 HTML 주요 동선을 Next로 이전 중",
     backToLogin: "로그인으로 돌아가기",
     modeCloud: "Cloud",
     modeGuest: "Guest",
     tabMenu: "메뉴",
+    backToMenu: "메뉴로 돌아가기",
     tabOthello: "오셀로",
     tabGomoku: "오목",
     tabShogi: "장기",
@@ -503,7 +650,6 @@ const LOGIN_I18N = {
     tabSolitaire: "솔리테어",
     tabSurvivors: "Survivors",
     tabScores: "점수",
-    tabStatus: "마이그레이션 상태",
     menuTitle: "게임 선택 (Next 마이그레이션 메뉴)",
     menuLead: "기존 HTML 메뉴를 단계적으로 이전 중입니다. 먼저 오셀로, 오목, 체스, UNO로 이동할 수 있습니다.",
     playableLead: "Next 이전판에서 플레이 가능",
@@ -515,11 +661,18 @@ const LOGIN_I18N = {
     roomServerUrl: "룸 서버 URL",
     roomCode: "룸 번호",
     roomCodePlaceholder: "6자리",
+    roomCodeInvalid: "6자리 룸 번호를 입력하세요.",
     roomPublic: "공개",
     roomPrivate: "비공개",
+    spectateJoin: "관전 참가",
+    quickMatchMulti: "빠른 매치 (멀티)",
     roomCreate: "룸 생성",
     roomJoin: "룸 참가",
     roomDisconnect: "연결 해제",
+    copyInviteLink: "초대 링크 복사",
+    inviteLinkCopied: "초대 링크를 복사했습니다",
+    inviteLinkCopyFailed: "초대 링크 복사에 실패했습니다",
+    inviteTokenIssueFailed: "초대 토큰 발급에 실패했습니다",
     roomState: "상태",
     roomConnected: "연결된 룸",
     roomRole: "역할",
@@ -528,6 +681,39 @@ const LOGIN_I18N = {
     roomRoleSpectator: "관전자",
     roomMembers: "참가자",
     roomMembersEmpty: "없음",
+    friendsTitle: "친구",
+    friendsTabFriends: "친구",
+    friendsTabIncoming: "승인 대기",
+    friendsTabOutgoing: "요청 중",
+    friendsHintNoAuth: "로그인하면 친구 목록을 불러옵니다",
+    friendsHintReady: "친구 ID로 추가/삭제할 수 있습니다",
+    friendsHintIncoming: "대기 탭에서 신청자 ID를 승인/거절할 수 있습니다",
+    friendsHintOutgoing: "요청 중 탭에서 보낸 요청을 취소할 수 있습니다",
+    friendIdPlaceholder: "친구 ID",
+    friendRequestSend: "요청",
+    friendApprove: "승인",
+    friendReject: "거절",
+    friendCancel: "취소",
+    friendRemove: "삭제",
+    friendReload: "새로고침",
+    friendsLoading: "친구 목록을 불러오는 중...",
+    friendsListEmpty: "친구가 아직 없습니다",
+    friendsIncomingEmpty: "승인 대기 요청이 없습니다",
+    friendsOutgoingEmpty: "요청 중인 사용자가 없습니다",
+    friendsLoadFailed: "친구 목록을 불러오지 못했습니다",
+    friendIdRequired: "친구 ID를 입력하세요",
+    friendRequestSent: "친구 요청을 보냈습니다",
+    friendApproveSuccess: "친구 요청을 승인했습니다",
+    friendRejectSuccess: "친구 요청을 거절했습니다",
+    friendCancelSuccess: "친구 요청을 취소했습니다",
+    friendRemoveSuccess: "친구를 삭제했습니다",
+    friendNotFound: "해당 ID의 사용자를 찾을 수 없습니다",
+    friendSelfForbidden: "자기 자신은 추가할 수 없습니다",
+    friendRequestAlreadySent: "이미 요청을 보냈습니다",
+    friendRequestAlreadyReceived: "상대 요청이 도착했습니다. 승인 대기 탭에서 승인해 주세요",
+    friendRequestNotFound: "대상 요청을 찾을 수 없습니다",
+    friendAlreadyExists: "이미 친구입니다",
+    friendActionFailed: "친구 작업에 실패했습니다",
     multiSyncTitle: "멀티 동기화",
     multiSyncEnabled: "동기화 ON",
     multiSyncDisabled: "동기화 OFF",
@@ -556,8 +742,14 @@ const LOGIN_I18N = {
     roomUrlInvalid: "룸 서버 URL이 올바르지 않습니다.",
     roomConnectFailed: "룸 서버에 연결할 수 없습니다.",
     roomFull: "이 룸은 인원이 가득 찼습니다.",
+    roomFullRejected: "룸 {code} 은(는) 가득 찼습니다 (최대 8명)",
     roomInGame: "이 룸은 게임 중입니다. 관전 모드는 다음에 지원 예정입니다.",
-    roomInviteRequired: "이 룸은 비공개입니다. 초대 토큰 기능은 다음에 지원 예정입니다.",
+    roomInGameSuggestSpectate: "경기 중이라 참가할 수 없습니다. 관전을 이용하세요.",
+    roomInviteRequired: "이 비공개 룸은 초대 링크가 필요합니다.",
+    quickMatchSearching: "멀티 플레이 상대를 찾는 중...",
+    quickMatchConnected: "빠른 매치에 연결했습니다 (룸 {code})",
+    quickMatchPrivateSkipped: "비공개 룸이어서 다른 매치를 찾는 중...",
+    spectatorReadOnly: "관전 모드로 접속했습니다. 조작은 읽기 전용입니다.",
     roomErrorPrefix: "룸 오류",
     roomErrRoomRequired: "룸 번호가 필요합니다.",
     roomErrHostOnly: "호스트만 실행할 수 있습니다.",
@@ -573,11 +765,71 @@ const LOGIN_I18N = {
     roomErrInvitePrivateOnly: "초대 토큰은 비공개 룸에서만 발급할 수 있습니다.",
     roomErrSpectatorOnly: "관전자 전용 기능입니다.",
     roomErrRematchVoteForbidden: "지금은 재대결 투표를 할 수 없습니다.",
+    roomErrDrawVoteForbidden: "지금은 무승부 신청을 할 수 없습니다.",
     roomErrUnknown: "알 수 없는 오류 ({code})",
+    spectatorChatTitle: "관전 채팅",
+    spectatorChatPlaceholder: "관전 코멘트를 입력",
+    spectatorChatSend: "전송",
+    spectatorChatEmpty: "아직 코멘트가 없습니다",
+    roomChatTitle: "룸 채팅",
+    roomChatPlaceholder: "메시지를 입력",
+    roomChatSend: "전송",
+    roomChatEmpty: "아직 메시지가 없습니다",
+    roomChatMuted: "채팅 전송이 제한되었습니다",
+    roomChatRateLimited: "전송이 너무 빠릅니다. 잠시 후 다시 시도하세요",
     visibilityPublic: "공개",
     visibilityPrivate: "비공개",
+    gameStart: "게임 시작",
+    gameStartPrompt: "\"게임 시작\"을 누르면 조작할 수 있습니다.",
     othelloTitle: "오셀로 (Next 이전판)",
     othelloReset: "리셋",
+    othelloModeLabel: "MODE",
+    othelloModeCpu: "1P vs CPU",
+    othelloModeCpuVsCpu: "CPU vs CPU",
+    othelloModeLocal: "2P LOCAL",
+    othelloModeChaos: "CHAOS",
+    othelloChaosTargetLabel: "카오스 대상",
+    othelloChaosTargetNone: "없음",
+    othelloChaosTargetBlack: "흑",
+    othelloChaosTargetWhite: "백",
+    othelloChaosTargetBoth: "양쪽",
+    othelloChaosTargetPlayer: "플레이어",
+    othelloChaosTargetOpponent: "상대",
+    othelloChaosHandicapLabel: "고정석",
+    othelloChaosHandicapNone: "없음",
+    othelloChaosHandicapImmutable1: "1개 고정",
+    othelloChaosRandomLineIgnoreLabel: "직선 무시",
+    othelloChaosToggleOff: "OFF",
+    othelloChaosToggleOn: "ON",
+    othelloChaosOverwriteLimitLabel: "덮어쓰기 횟수",
+    othelloChaosBlackSideTitle: "흑 사이드",
+    othelloChaosWhiteSideTitle: "백 사이드",
+    othelloChaosBlackHandicapLabel: "흑 고정석",
+    othelloChaosWhiteHandicapLabel: "백 고정석",
+    othelloChaosBlackOverwriteLimitLabel: "흑 덮어쓰기 횟수",
+    othelloChaosWhiteOverwriteLimitLabel: "백 덮어쓰기 횟수",
+    othelloChaosBlackDestroyLimitLabel: "흑 파괴 횟수",
+    othelloChaosWhiteDestroyLimitLabel: "백 파괴 횟수",
+    othelloCpuLevelLabel: "CPU LEVEL",
+    othelloCpuLevelEasy: "쉬움",
+    othelloCpuLevelNormal: "보통",
+    othelloCpuLevelHard: "어려움",
+    othelloTurnOrderLabel: "TURN",
+    othelloTurnOrderBlack: "1P 선공(흑)",
+    othelloTurnOrderWhite: "1P 후공(백)",
+    othelloTurnOrderRandom: "랜덤",
+    othelloChaosImmutableButton: "돌 고정",
+    othelloChaosDestroyButton: "돌 파괴",
+    othelloChaosDoubleButton: "2회 행동",
+    othelloChaosImmutableGuide: "돌 고정 대상 선택 중: 안쪽에 있는 자신의 돌 1개를 선택하세요",
+    othelloChaosDestroyGuideCorner: "돌 파괴 대상 선택 중: 모서리의 자신의 돌 1개를 선택하세요",
+    othelloChaosDestroyGuideSelf: "돌 파괴 대상 선택 중: 자신의 돌 {need}개를 선택하세요 ({count}/{need})",
+    othelloChaosDestroyGuideEnemy: "돌 파괴 대상 선택 중: 파괴할 상대 돌 1개를 선택하세요",
+    othelloDrawRequestSent: "무승부 신청을 보냈습니다. 상대 동의를 기다리는 중입니다.",
+    othelloDrawRequestCanceled: "무승부 신청을 취소했습니다.",
+    othelloDrawRequestPending: "상대가 무승부를 신청했습니다. 리셋을 누르면 동의합니다.",
+    othelloDrawAgreed: "양측 동의로 무승부가 성립했습니다.",
+    othelloCpuThinking: "CPU가 생각 중입니다...",
     othelloTurnBlack: "흑 차례입니다",
     othelloPlayed: "{current}이(가) 두었습니다. {next} 차례입니다",
     othelloPass: "{next}은(는) 둘 수 없어 패스. {current} 차례입니다",
@@ -624,6 +876,9 @@ const LOGIN_I18N = {
     chessAppliedScore: "체스 남은 말 수 차이를 점수 입력란에 반영했습니다.",
     shogiTitle: "장기 (Next 이전판)",
     shogiReset: "리셋",
+    shogiModeLabel: "MODE",
+    shogiModeLocal: "로컬 2인",
+    shogiModeChaos: "CHAOS",
     shogiTurnBlack: "선수 차례입니다",
     shogiTurnWhite: "후수 차례입니다",
     shogiSelectOwn: "자신의 말을 선택하세요.",
@@ -631,7 +886,7 @@ const LOGIN_I18N = {
     shogiWin: "{winner} 승리 (왕을 잡았습니다)",
     shogiApplyScore: "남은 말 수 차이를 점수에 반영",
     shogiAppliedScore: "장기 남은 말 수 차이를 점수 입력란에 반영했습니다.",
-    minesTitle: "지뢰찾기 (Next 이전판)",
+    minesTitle: "지뢰찾기",
     minesReset: "리셋",
     minesHint: "칸을 열어 지뢰를 피하세요.",
     minesGameOver: "지뢰를 밟았습니다.",
@@ -834,30 +1089,7 @@ const LOGIN_I18N = {
     scoreSave: "점수 저장",
     scoreSaved: "점수를 저장했습니다.",
     scoreSaveFailed: "점수 저장에 실패했습니다.",
-    statusTitle: "마이그레이션 상태",
-    reload: "다시 불러오기",
-    statusLine1: "API 단일 URL화: 완료 (Next rewrite 경유)",
-    statusLine2: "점수 저장/조회: 완료",
-    statusLine3: "오셀로 (클릭 플레이): 이전 완료",
-    statusLine4: "기타 게임: Next로 순차 이전 예정",
-    statusLineGomoku: "오목 (클릭 플레이): 이전 완료",
-    statusLineUno: "UNO (턴제 플레이): 이전 완료",
-    statusLineChess: "체스 (클릭 플레이): 이전 완료",
-    statusLineShogi: "장기 (클릭 플레이): 이전 완료",
-    statusLineMines: "지뢰찾기 (클릭 플레이): 이전 완료",
-    statusLineNumeron: "뉴메론 (클릭 플레이): 이전 완료",
-    statusLineBlackjack: "블랙잭 (클릭 플레이): 이전 완료",
-    statusLineChinchiro: "친치로 (클릭 플레이): 이전 완료",
-    statusLineSevens: "세븐즈 (클릭 플레이): 이전 완료",
-    statusLineDaifugo: "대부호 (클릭 플레이): 이전 완료",
-    statusLineFourPanel: "4컷 릴레이 (클릭 플레이): 이전 완료",
-    statusLineDrawingRelay: "그림 릴레이 (클릭 플레이): 이전 완료",
-    statusLineFitPuzzle: "핏 퍼즐 (클릭 플레이): 이전 완료",
-    statusLineMahjong: "마작 페어 (클릭 플레이): 이전 완료",
-    statusLinePoker: "포커 (클릭 플레이): 이전 완료",
-    statusLineSolitaire: "솔리테어 (클릭 플레이): 이전 완료",
-    statusLineSurvivors: "Survivors (클릭 플레이): 이전 완료",
-    statusLineMenu: "메뉴 (게임 선택 + 룸 UI): 이전 완료",
+    scoreLoading: "불러오는 중...",
     latestScores: "최신 점수",
     loading: "불러오는 중...",
     noScores: "아직 점수가 없습니다.",
@@ -887,6 +1119,95 @@ const LOGIN_I18N = {
     scoreLoadFailed: "점수 목록을 불러오지 못했습니다. Nest API 실행 여부를 확인하세요.",
   },
 } as const;
+
+type I18nMap = { [K in keyof typeof LOGIN_I18N.ja]: string };
+
+const EN_I18N: Partial<I18nMap> = {
+  loginTitle: "Login",
+  loginLead: "The legacy HTML entry flow has been migrated to Next.",
+  languageLabel: "Language",
+  langJa: "Japanese",
+  langKo: "Korean",
+  langEn: "English",
+  userId: "User ID",
+  password: "Password",
+  displayName: "Display Name (in game)",
+  displayNameAfterLogin: "Display Name After Login",
+  displayNameSave: "Save Display Name",
+  displayNameRequired: "Please enter a display name.",
+  displayNameUpdated: "Display name updated.",
+  loginButton: "Login and Play",
+  registerButton: "Register",
+  guestButton: "Play as Guest",
+  processing: "Processing...",
+  requireAuthFields: "Please enter both user ID and password.",
+  loginLoading: "Logging in...",
+  loginFailed: "Login failed. Please check your ID/password.",
+  registerLoading: "Registering...",
+  registerFailed: "Registration failed. The ID may already exist.",
+  registerSuccess: "Registration completed.",
+  guestStarted: "Started in guest mode.",
+  appTitle: "Neon Board Arcade",
+  appLead: "Main legacy HTML flows are being migrated to Next.",
+  backToLogin: "Back to Login",
+  modeCloud: "Cloud",
+  modeGuest: "Guest",
+  tabMenu: "Menu",
+  tabOthello: "Othello",
+  tabGomoku: "Gomoku",
+  tabShogi: "Shogi",
+  tabChess: "Chess",
+  tabUno: "UNO",
+  tabMinesweeper: "Minesweeper",
+  tabNumeron: "Numeron",
+  tabBlackjack: "Blackjack",
+  tabChinchiro: "Chinchiro",
+  tabSevens: "Sevens",
+  tabDaifugo: "Daifugo",
+  tabFourPanel: "4-Panel Relay",
+  tabDrawingRelay: "Drawing Relay",
+  tabFitPuzzle: "Fit Puzzle",
+  tabMahjong: "Mahjong Pair",
+  tabPoker: "Poker",
+  tabSolitaire: "Solitaire",
+  tabSurvivors: "Survivors",
+  menuTitle: "Game Select (Next Migration Menu)",
+  menuLead: "The legacy HTML menu is being migrated in phases. You can move to Othello, Gomoku, Chess, and UNO first.",
+  playableLead: "Playable in Next migration",
+  roomTitle: "Room Controls (Migrating)",
+  roomServerUrl: "Room Server URL",
+  roomCode: "Room Code",
+  roomCodePlaceholder: "6 digits",
+  roomPublic: "Public",
+  roomPrivate: "Private",
+  roomCreate: "Create Room",
+  roomJoin: "Join Room",
+  roomDisconnect: "Disconnect",
+  copyInviteLink: "Copy Invite Link",
+  roomState: "State",
+  roomConnected: "Connected Room",
+  roomRole: "Role",
+  roomMembers: "Participants",
+  loading: "Loading...",
+  gameOthello: "Othello",
+  gameShogi: "Shogi",
+  gameChess: "Chess",
+  gameUno: "UNO",
+  gameGomoku: "Gomoku",
+  gameMinesweeper: "Minesweeper",
+  gameNumeron: "Numeron",
+  gameBlackjack: "Blackjack",
+  gameChinchiro: "Chinchiro",
+  gameSevens: "Sevens",
+  gameDaifugo: "Daifugo",
+  gameFourPanel: "4-Panel Relay",
+  gameDrawingRelay: "Drawing Relay",
+  gameFitPuzzle: "Fit Puzzle",
+  gameMahjong: "Mahjong Pair",
+  gamePoker: "Poker",
+  gameSolitaire: "Solitaire",
+  gameSurvivors: "Survivors",
+};
 
 const GAME_OPTIONS = [
   { id: "othello" },
@@ -1263,9 +1584,119 @@ const OTHELLO_DEFAULT_DESTROY = 1;
 const OTHELLO_CORNER_SACRIFICE_DESTROY_COUNT = 3;
 const OTHELLO_NO_CORNER_SACRIFICE_COUNT = 2;
 const OTHELLO_NO_CORNER_DESTROY_COUNT = 1;
+const OTHELLO_CHAOS_LIMIT_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
+const OTHELLO_CPU_THINK_DELAY_MAX_MS = 360;
+const OTHELLO_CPU_SETTINGS: Record<
+  OthelloCpuLevel,
+  {
+    thinkMs: number;
+    randomRate: number;
+    flipWeight: number;
+    edgeWeight: number;
+    cornerWeight: number;
+    xPenalty: number;
+    cPenalty: number;
+    mobilityWeight: number;
+    positionalWeight: number;
+    searchDepth: number;
+    maxBranches: number;
+  }
+> = {
+  easy: {
+    thinkMs: 220,
+    randomRate: 0.62,
+    flipWeight: 1,
+    edgeWeight: 1,
+    cornerWeight: 10,
+    xPenalty: -4,
+    cPenalty: -2,
+    mobilityWeight: 0,
+    positionalWeight: 0,
+    searchDepth: 1,
+    maxBranches: 8,
+  },
+  normal: {
+    thinkMs: 420,
+    randomRate: 0.22,
+    flipWeight: 1.15,
+    edgeWeight: 2,
+    cornerWeight: 22,
+    xPenalty: -10,
+    cPenalty: -4,
+    mobilityWeight: 1.4,
+    positionalWeight: 0.45,
+    searchDepth: 1,
+    maxBranches: 10,
+  },
+  hard: {
+    thinkMs: 1080,
+    randomRate: 0.003,
+    flipWeight: 1.4,
+    edgeWeight: 4.6,
+    cornerWeight: 56,
+    xPenalty: -24,
+    cPenalty: -12,
+    mobilityWeight: 5.8,
+    positionalWeight: 1.35,
+    searchDepth: 4,
+    maxBranches: 10,
+  },
+};
+const OTHELLO_CPU_POSITION_WEIGHTS = [
+  [40, -12, 10, 6, 6, 10, -12, 40],
+  [-12, -18, -3, -3, -3, -3, -18, -12],
+  [10, -3, 4, 2, 2, 4, -3, 10],
+  [6, -3, 2, 1, 1, 2, -3, 6],
+  [6, -3, 2, 1, 1, 2, -3, 6],
+  [10, -3, 4, 2, 2, 4, -3, 10],
+  [-12, -18, -3, -3, -3, -3, -18, -12],
+  [40, -12, 10, 6, 6, 10, -12, 40],
+] as const;
+const OTHELLO_OPENING_BOOK_PRIORITY = [
+  [
+    [2, 3],
+    [3, 2],
+    [4, 5],
+    [5, 4],
+  ],
+  [
+    [2, 4],
+    [3, 5],
+    [4, 2],
+    [5, 3],
+  ],
+  [
+    [2, 2],
+    [2, 5],
+    [5, 2],
+    [5, 5],
+  ],
+  [
+    [1, 2],
+    [1, 5],
+    [2, 1],
+    [2, 6],
+    [5, 1],
+    [5, 6],
+    [6, 2],
+    [6, 5],
+  ],
+  [
+    [2, 6],
+    [6, 2],
+    [1, 4],
+    [4, 1],
+    [3, 6],
+    [6, 3],
+  ],
+] as const;
 const STORAGE_CLOUD_USER_ID_KEY = "neon-cloud-user-id";
 const STORAGE_CLOUD_PASSWORD_KEY = "neon-cloud-password";
 const STORAGE_LANGUAGE_KEY = "neon-ui-language";
+const ROOM_SERVER_QUERY_PARAM_KEY = "roomServer";
+const ROOM_CODE_QUERY_PARAM_KEY = "roomCode";
+const ROOM_INVITE_TOKEN_QUERY_PARAM_KEY = "inviteToken";
+const APP_URL_TAG = "NeonBoardArcade";
 const DIRECTIONS = [
   [-1, -1],
   [-1, 0],
@@ -1296,6 +1727,24 @@ function inBounds(row: number, col: number): boolean {
 
 function isOthelloCorner(row: number, col: number): boolean {
   return (row === 0 || row === BOARD_SIZE - 1) && (col === 0 || col === BOARD_SIZE - 1);
+}
+
+function isOthelloEdge(row: number, col: number): boolean {
+  return row === 0 || row === BOARD_SIZE - 1 || col === 0 || col === BOARD_SIZE - 1;
+}
+
+function isOthelloXSquare(row: number, col: number): boolean {
+  return (row === 1 || row === BOARD_SIZE - 2) && (col === 1 || col === BOARD_SIZE - 2);
+}
+
+function isOthelloCSquare(row: number, col: number): boolean {
+  const max = BOARD_SIZE - 1;
+  return (
+    (row === 0 && (col === 1 || col === max - 1))
+    || (row === max && (col === 1 || col === max - 1))
+    || (col === 0 && (row === 1 || row === max - 1))
+    || (col === max && (row === 1 || row === max - 1))
+  );
 }
 
 function othelloPlayerIndex(player: 1 | 2): 0 | 1 {
@@ -1347,6 +1796,343 @@ function countStones(board: Cell[][]): { black: number; white: number } {
     }
   }
   return { black, white };
+}
+
+function getOthelloLegalMoves(
+  board: Cell[][],
+  player: 1 | 2,
+  options: {
+    isChaosMode: boolean;
+    brokenMask: boolean[][];
+    fixedMask: boolean[][];
+    overwriteRemaining: [number, number];
+  },
+): Array<{ row: number; col: number }> {
+  const moves: Array<{ row: number; col: number }> = [];
+  const enemy: 1 | 2 = player === 1 ? 2 : 1;
+  const playerIndex = othelloPlayerIndex(player);
+  const canOverwrite = (options.overwriteRemaining[playerIndex] ?? 0) > 0;
+  for (let row = 0; row < BOARD_SIZE; row += 1) {
+    for (let col = 0; col < BOARD_SIZE; col += 1) {
+      if (options.brokenMask[row][col]) continue;
+      const cell = board[row][col];
+      const flips = getFlips(board, row, col, player);
+      if (flips.length > 0) {
+        moves.push({ row, col });
+        continue;
+      }
+      if (options.isChaosMode && canOverwrite && cell === enemy && !options.fixedMask[row][col]) {
+        const temp = board.map((line) => [...line]);
+        temp[row][col] = 0;
+        const chaosFlips = getFlips(temp, row, col, player);
+        if (chaosFlips.length > 0) {
+          moves.push({ row, col });
+        }
+      }
+    }
+  }
+  return moves;
+}
+
+function applyOthelloMoveForSearch(
+  board: Cell[][],
+  player: 1 | 2,
+  move: { row: number; col: number },
+  options: {
+    isChaosMode: boolean;
+    fixedMask: boolean[][];
+    overwriteRemaining: [number, number];
+  },
+): Cell[][] | null {
+  const { row, col } = move;
+  const enemy: 1 | 2 = player === 1 ? 2 : 1;
+  const playerIndex = othelloPlayerIndex(player);
+  const cell = board[row][col];
+  const canOverwrite =
+    options.isChaosMode
+    && (options.overwriteRemaining[playerIndex] ?? 0) > 0
+    && cell === enemy
+    && !options.fixedMask[row][col];
+
+  let flips = getFlips(board, row, col, player);
+  if (cell !== 0 && canOverwrite) {
+    const temp = board.map((line) => [...line]);
+    temp[row][col] = 0;
+    flips = getFlips(temp, row, col, player);
+  }
+  if (flips.length === 0 && !canOverwrite) return null;
+
+  const nextBoard = board.map((line) => [...line]);
+  nextBoard[row][col] = player;
+  for (const [r, c] of flips) {
+    nextBoard[r][c] = player;
+  }
+  return nextBoard;
+}
+
+function evaluateOthelloMoveScore(
+  board: Cell[][],
+  player: 1 | 2,
+  move: { row: number; col: number },
+  level: OthelloCpuLevel,
+  options: {
+    isChaosMode: boolean;
+    fixedMask: boolean[][];
+    overwriteRemaining: [number, number];
+    brokenMask: boolean[][];
+  },
+): { score: number; nextBoard: Cell[][] } | null {
+  const setting = OTHELLO_CPU_SETTINGS[level];
+  const enemy: 1 | 2 = player === 1 ? 2 : 1;
+  const { row, col } = move;
+  const nextBoard = applyOthelloMoveForSearch(board, player, move, options);
+  if (!nextBoard) return null;
+
+  const ownCount = countStones(nextBoard)[player === 1 ? "black" : "white"];
+  const enemyCount = countStones(nextBoard)[enemy === 1 ? "black" : "white"];
+  const enemyMobility = getOthelloLegalMoves(nextBoard, enemy, {
+    isChaosMode: options.isChaosMode,
+    brokenMask: options.brokenMask,
+    fixedMask: options.fixedMask,
+    overwriteRemaining: options.overwriteRemaining,
+  }).length;
+  const posWeight = OTHELLO_CPU_POSITION_WEIGHTS[row][col] ?? 0;
+  const flips = getFlips(board, row, col, player).length;
+
+  let score = flips * setting.flipWeight;
+  if (isOthelloEdge(row, col)) score += setting.edgeWeight;
+  if (isOthelloCorner(row, col)) score += setting.cornerWeight;
+  if (isOthelloXSquare(row, col)) score += setting.xPenalty;
+  if (isOthelloCSquare(row, col)) score += setting.cPenalty;
+  score += posWeight * setting.positionalWeight;
+  score -= enemyMobility * setting.mobilityWeight;
+  score += (ownCount - enemyCount) * 0.25;
+
+  return { score, nextBoard };
+}
+
+function evaluateOthelloBoardScore(
+  board: Cell[][],
+  aiPlayer: 1 | 2,
+  level: OthelloCpuLevel,
+  options: {
+    isChaosMode: boolean;
+    brokenMask: boolean[][];
+    fixedMask: boolean[][];
+    overwriteRemaining: [number, number];
+  },
+): number {
+  const setting = OTHELLO_CPU_SETTINGS[level];
+  const enemy: 1 | 2 = aiPlayer === 1 ? 2 : 1;
+  const counts = countStones(board);
+  const aiCount = aiPlayer === 1 ? counts.black : counts.white;
+  const enemyCount = enemy === 1 ? counts.black : counts.white;
+
+  let positional = 0;
+  let cornerDiff = 0;
+  let edgeDiff = 0;
+  for (let row = 0; row < BOARD_SIZE; row += 1) {
+    for (let col = 0; col < BOARD_SIZE; col += 1) {
+      const cell = board[row][col];
+      if (cell === 0) continue;
+      const sign = cell === aiPlayer ? 1 : -1;
+      positional += (OTHELLO_CPU_POSITION_WEIGHTS[row][col] ?? 0) * sign;
+      if (isOthelloCorner(row, col)) cornerDiff += sign;
+      if (isOthelloEdge(row, col)) edgeDiff += sign;
+    }
+  }
+
+  const aiMobility = getOthelloLegalMoves(board, aiPlayer, options).length;
+  const enemyMobility = getOthelloLegalMoves(board, enemy, options).length;
+  const mobilityDiff = aiMobility - enemyMobility;
+
+  return (
+    (aiCount - enemyCount) * 0.8
+    + cornerDiff * setting.cornerWeight * 0.7
+    + edgeDiff * setting.edgeWeight * 0.45
+    + positional * setting.positionalWeight
+    + mobilityDiff * setting.mobilityWeight
+  );
+}
+
+function minimaxOthello(
+  board: Cell[][],
+  playerToMove: 1 | 2,
+  aiPlayer: 1 | 2,
+  depth: number,
+  alpha: number,
+  beta: number,
+  level: OthelloCpuLevel,
+  options: {
+    isChaosMode: boolean;
+    brokenMask: boolean[][];
+    fixedMask: boolean[][];
+    overwriteRemaining: [number, number];
+  },
+): number {
+  const enemy: 1 | 2 = playerToMove === 1 ? 2 : 1;
+  const moves = getOthelloLegalMoves(board, playerToMove, options);
+  const enemyMoves = getOthelloLegalMoves(board, enemy, options);
+
+  if (depth <= 0 || (moves.length === 0 && enemyMoves.length === 0)) {
+    if (moves.length === 0 && enemyMoves.length === 0) {
+      const counts = countStones(board);
+      const aiCount = aiPlayer === 1 ? counts.black : counts.white;
+      const oppCount = aiPlayer === 1 ? counts.white : counts.black;
+      return (aiCount - oppCount) * 1000;
+    }
+    return evaluateOthelloBoardScore(board, aiPlayer, level, options);
+  }
+
+  if (moves.length === 0) {
+    return minimaxOthello(board, enemy, aiPlayer, depth - 1, alpha, beta, level, options);
+  }
+
+  const setting = OTHELLO_CPU_SETTINGS[level];
+  const ordered = moves
+    .map((move) => {
+      const evalMove = evaluateOthelloMoveScore(board, playerToMove, move, level, options);
+      return evalMove ? { move, score: evalMove.score, nextBoard: evalMove.nextBoard } : null;
+    })
+    .filter((item): item is { move: { row: number; col: number }; score: number; nextBoard: Cell[][] } => Boolean(item))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, setting.maxBranches);
+
+  if (playerToMove === aiPlayer) {
+    let best = -Infinity;
+    for (const item of ordered) {
+      const value = minimaxOthello(item.nextBoard, enemy, aiPlayer, depth - 1, alpha, beta, level, options);
+      if (value > best) best = value;
+      if (best > alpha) alpha = best;
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+
+  let best = Infinity;
+  for (const item of ordered) {
+    const value = minimaxOthello(item.nextBoard, enemy, aiPlayer, depth - 1, alpha, beta, level, options);
+    if (value < best) best = value;
+    if (best < beta) beta = best;
+    if (beta <= alpha) break;
+  }
+  return best;
+}
+
+function pickImmediateWipeMove(
+  board: Cell[][],
+  player: 1 | 2,
+  legalMoves: Array<{ row: number; col: number }>,
+  options: {
+    isChaosMode: boolean;
+    fixedMask: boolean[][];
+    overwriteRemaining: [number, number];
+  },
+): { row: number; col: number } | null {
+  const enemy: 1 | 2 = player === 1 ? 2 : 1;
+  let best: { row: number; col: number; flips: number } | null = null;
+
+  for (const move of legalMoves) {
+    const next = applyOthelloMoveForSearch(board, player, move, options);
+    if (!next) continue;
+    const counts = countStones(next);
+    const enemyCount = enemy === 1 ? counts.black : counts.white;
+    if (enemyCount !== 0) continue;
+    const flips = getFlips(board, move.row, move.col, player).length;
+    if (!best || flips > best.flips || (flips === best.flips && isOthelloCorner(move.row, move.col))) {
+      best = { row: move.row, col: move.col, flips };
+    }
+  }
+
+  return best ? { row: best.row, col: best.col } : null;
+}
+
+function pickOpeningBookMove(
+  board: Cell[][],
+  legalMoves: Array<{ row: number; col: number }>,
+): { row: number; col: number } | null {
+  if (legalMoves.length === 0) return null;
+  const counts = countStones(board);
+  const ply = Math.max(0, counts.black + counts.white - 4);
+  const maxPly = 14;
+  if (ply > maxPly) return null;
+
+  const cornerMove = legalMoves.find((move) => isOthelloCorner(move.row, move.col));
+  if (cornerMove) return cornerMove;
+
+  const band = OTHELLO_OPENING_BOOK_PRIORITY[Math.min(OTHELLO_OPENING_BOOK_PRIORITY.length - 1, Math.floor(ply / 3))];
+  if (!band) return null;
+  const moveMap = new Map(legalMoves.map((move) => [`${move.row}-${move.col}`, move]));
+  for (const [row, col] of band) {
+    const found = moveMap.get(`${row}-${col}`);
+    if (found) return found;
+  }
+  return null;
+}
+
+function pickOthelloCpuMove(
+  board: Cell[][],
+  player: 1 | 2,
+  legalMoves: Array<{ row: number; col: number }>,
+  level: OthelloCpuLevel,
+  options: {
+    isChaosMode: boolean;
+    brokenMask: boolean[][];
+    fixedMask: boolean[][];
+    overwriteRemaining: [number, number];
+  },
+): { row: number; col: number } | null {
+  if (legalMoves.length === 0) return null;
+  const setting = OTHELLO_CPU_SETTINGS[level];
+
+  const immediateWipe = pickImmediateWipeMove(board, player, legalMoves, {
+    isChaosMode: options.isChaosMode,
+    fixedMask: options.fixedMask,
+    overwriteRemaining: options.overwriteRemaining,
+  });
+  if (immediateWipe) return immediateWipe;
+
+  if (level === "hard") {
+    const openingBook = pickOpeningBookMove(board, legalMoves);
+    if (openingBook) return openingBook;
+  }
+
+  if (Math.random() < setting.randomRate) {
+    return legalMoves[Math.floor(Math.random() * legalMoves.length)] ?? null;
+  }
+
+  const scored = legalMoves
+    .map((move) => {
+      const evalMove = evaluateOthelloMoveScore(board, player, move, level, options);
+      return evalMove ? { move, score: evalMove.score, nextBoard: evalMove.nextBoard } : null;
+    })
+    .filter((item): item is { move: { row: number; col: number }; score: number; nextBoard: Cell[][] } => Boolean(item))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, setting.maxBranches);
+  if (scored.length === 0) {
+    return legalMoves[Math.floor(Math.random() * legalMoves.length)] ?? null;
+  }
+
+  if (setting.searchDepth <= 1) {
+    const bestScore = scored[0]?.score ?? 0;
+    const candidates = scored.filter((item) => item.score >= bestScore - 2).map((item) => item.move);
+    return candidates[Math.floor(Math.random() * candidates.length)] ?? scored[0]?.move ?? null;
+  }
+
+  const enemy: 1 | 2 = player === 1 ? 2 : 1;
+  let bestValue = -Infinity;
+  const bestMoves: Array<{ row: number; col: number }> = [];
+  for (const item of scored) {
+    const value = minimaxOthello(item.nextBoard, enemy, player, setting.searchDepth - 1, -Infinity, Infinity, level, options);
+    if (value > bestValue) {
+      bestValue = value;
+      bestMoves.length = 0;
+      bestMoves.push(item.move);
+    } else if (value === bestValue) {
+      bestMoves.push(item.move);
+    }
+  }
+  return bestMoves[Math.floor(Math.random() * bestMoves.length)] ?? scored[0].move;
 }
 
 function createGomokuBoard(): Cell[][] {
@@ -2059,15 +2845,29 @@ function solitaireCardLabel(card: SolitaireCard): string {
 }
 
 export default function Home() {
-  const [scores, setScores] = useState<Score[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isPosting, setIsPosting] = useState(false);
   const [message, setMessage] = useState("");
   const [playerName, setPlayerName] = useState("player-1");
   const [game, setGame] = useState("othello");
   const [score, setScore] = useState(100);
+  const [scores, setScores] = useState<ScoreEntry[]>([]);
+  const [isScoreSaving, setIsScoreSaving] = useState(false);
+  const [isScoreLoading, setIsScoreLoading] = useState(false);
   const [board, setBoard] = useState<Cell[][]>(() => createInitialBoard());
   const [currentPlayer, setCurrentPlayer] = useState<1 | 2>(1);
+  const [othelloMode, setOthelloMode] = useState<OthelloMode>("cpu");
+  const [othelloCpuLevel, setOthelloCpuLevel] = useState<OthelloCpuLevel>("normal");
+  const [othelloTurnOrder, setOthelloTurnOrder] = useState<OthelloTurnOrder>("black");
+  const [othelloPlayerSide, setOthelloPlayerSide] = useState<1 | 2>(1);
+  const [othelloChaosTarget, setOthelloChaosTarget] = useState<OthelloChaosTarget>("none");
+  const [othelloChaosHandicap, setOthelloChaosHandicap] = useState<OthelloChaosHandicap>("none");
+  const [othelloChaosRandomLineIgnore, setOthelloChaosRandomLineIgnore] = useState<OthelloChaosToggle>("off");
+  const [othelloChaosOverwriteLimit, setOthelloChaosOverwriteLimit] = useState(3);
+  const [othelloChaosBothBlackHandicap, setOthelloChaosBothBlackHandicap] = useState<OthelloChaosHandicap>("none");
+  const [othelloChaosBothWhiteHandicap, setOthelloChaosBothWhiteHandicap] = useState<OthelloChaosHandicap>("none");
+  const [othelloChaosBothBlackOverwriteLimit, setOthelloChaosBothBlackOverwriteLimit] = useState(3);
+  const [othelloChaosBothWhiteOverwriteLimit, setOthelloChaosBothWhiteOverwriteLimit] = useState(3);
+  const [othelloChaosDestroyLimitBlack, setOthelloChaosDestroyLimitBlack] = useState(1);
+  const [othelloChaosDestroyLimitWhite, setOthelloChaosDestroyLimitWhite] = useState(1);
   const [othelloFixedMask, setOthelloFixedMask] = useState<boolean[][]>(() => createOthelloChaosMask());
   const [othelloBrokenMask, setOthelloBrokenMask] = useState<boolean[][]>(() => createOthelloChaosMask());
   const [othelloOverwriteRemaining, setOthelloOverwriteRemaining] = useState<[number, number]>([
@@ -2103,6 +2903,7 @@ export default function Home() {
   const [chessMessage, setChessMessage] = useState<string>(LOGIN_I18N.ja.chessTurnWhite);
   const [isChessOver, setIsChessOver] = useState(false);
   const [shogiBoard, setShogiBoard] = useState<Array<Array<ShogiPiece | null>>>(() => createShogiBoard());
+  const [shogiMode, setShogiMode] = useState<ShogiMode>("local");
   const [shogiTurn, setShogiTurn] = useState<ShogiColor>("b");
   const [selectedShogi, setSelectedShogi] = useState<{ row: number; col: number } | null>(null);
   const [shogiMessage, setShogiMessage] = useState<string>(LOGIN_I18N.ja.shogiTurnBlack);
@@ -2187,6 +2988,7 @@ export default function Home() {
   const [unoMessage, setUnoMessage] = useState<string>(LOGIN_I18N.ja.unoYourTurn);
   const [isUnoOver, setIsUnoOver] = useState(false);
   const [activePanel, setActivePanel] = useState<Panel>("menu");
+  const [gameStarted, setGameStarted] = useState<Record<PlayablePanel, boolean>>(INITIAL_GAME_START_STATE);
   const [roomCode, setRoomCode] = useState("");
   const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
   const [roomServerUrl, setRoomServerUrl] = useState("ws://127.0.0.1:8788");
@@ -2194,6 +2996,7 @@ export default function Home() {
   const [connectedRoomCode, setConnectedRoomCode] = useState("");
   const [roomRole, setRoomRole] = useState("");
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
+  const [othelloDrawVotes, setOthelloDrawVotes] = useState<string[]>([]);
   const [pendingRemoteOthelloMove, setPendingRemoteOthelloMove] = useState<{ row: number; col: number } | null>(null);
   const [pendingRemoteGomokuMove, setPendingRemoteGomokuMove] = useState<{ row: number; col: number } | null>(null);
   const [pendingRemoteChessClick, setPendingRemoteChessClick] = useState<{ row: number; col: number } | null>(null);
@@ -2206,13 +3009,30 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authUserId, setAuthUserId] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [profileNameDraft, setProfileNameDraft] = useState("player-1");
   const [entryMessage, setEntryMessage] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authMode, setAuthMode] = useState<"guest" | "cloud">("guest");
   const [language, setLanguage] = useState<Language>("ja");
+  const [friendTab, setFriendTab] = useState<FriendTab>("friends");
+  const [friendUserIdDraft, setFriendUserIdDraft] = useState("");
+  const [friendIds, setFriendIds] = useState<string[]>([]);
+  const [incomingFriendIds, setIncomingFriendIds] = useState<string[]>([]);
+  const [outgoingFriendIds, setOutgoingFriendIds] = useState<string[]>([]);
+  const [friendsMessage, setFriendsMessage] = useState("");
+  const [isFriendsLoading, setIsFriendsLoading] = useState(false);
+  const [isFriendsActionLoading, setIsFriendsActionLoading] = useState(false);
+  const [quickMatchMode, setQuickMatchMode] = useState(false);
+  const [pendingInviteToken, setPendingInviteToken] = useState("");
+  const [roomChatMessages, setRoomChatMessages] = useState<Array<{ name: string; text: string }>>([]);
+  const [spectatorChatMessages, setSpectatorChatMessages] = useState<Array<{ name: string; text: string }>>([]);
+  const [roomChatInput, setRoomChatInput] = useState("");
+  const [spectatorChatInput, setSpectatorChatInput] = useState("");
   const roomSocketRef = useRef<WebSocket | null>(null);
+  const inviteTokenResolveRef = useRef<((token: string) => void) | null>(null);
   const peerIdRef = useRef(`next-${Math.random().toString(36).slice(2, 10)}`);
   const snapshotRef = useRef<Record<string, unknown>>({});
+  const minesweeperLegacyControllerRef = useRef<{ stop: () => void } | null>(null);
   const fourPanelCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fourPanelDrawingRef = useRef(false);
   const fourPanelHasStrokeRef = useRef(false);
@@ -2220,27 +3040,7 @@ export default function Home() {
   const drawingRelayDrawingRef = useRef(false);
   const drawingRelayHasStrokeRef = useRef(false);
 
-  const loadScores = useCallback(async () => {
-    setIsLoading(true);
-    setMessage("");
-    try {
-      const res = await fetch("/scores?limit=20", { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = (await res.json()) as Score[];
-      setScores(data);
-    } catch (error) {
-      console.error(error);
-      setMessage(LOGIN_I18N[language].scoreLoadFailed);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [language]);
 
-  useEffect(() => {
-    void loadScores();
-  }, [loadScores]);
 
   useEffect(() => {
     const savedUserId = localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "";
@@ -2248,13 +3048,34 @@ export default function Home() {
     const savedLanguage = localStorage.getItem(STORAGE_LANGUAGE_KEY);
     setAuthUserId(savedUserId);
     setAuthPassword(savedPassword);
-    if (savedLanguage === "ja" || savedLanguage === "ko") {
+    if (savedLanguage === "ja" || savedLanguage === "ko" || savedLanguage === "en") {
       setLanguage(savedLanguage);
+    }
+
+    try {
+      const url = new URL(window.location.href);
+      const roomCodeParam = String(url.searchParams.get(ROOM_CODE_QUERY_PARAM_KEY) || "").replace(/\D/g, "").slice(0, 6);
+      const roomServerParam = String(url.searchParams.get(ROOM_SERVER_QUERY_PARAM_KEY) || "").trim();
+      const inviteTokenParam = String(url.searchParams.get(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY) || "").trim();
+      if (roomCodeParam) {
+        setRoomCode(roomCodeParam);
+      }
+      if (roomServerParam) {
+        setRoomServerUrl(roomServerParam);
+      }
+      if (inviteTokenParam) {
+        setPendingInviteToken(inviteTokenParam);
+      }
+    } catch {
+      // ignore query parse error
     }
   }, []);
 
   const t = useCallback(
     (key: keyof typeof LOGIN_I18N.ja) => {
+      if (language === "en") {
+        return EN_I18N[key] ?? LOGIN_I18N.ja[key];
+      }
       return LOGIN_I18N[language][key];
     },
     [language],
@@ -2264,6 +3085,30 @@ export default function Home() {
     setLanguage(nextLanguage);
     localStorage.setItem(STORAGE_LANGUAGE_KEY, nextLanguage);
   }, []);
+
+  useEffect(() => {
+    if (activePanel !== "minesweeper") {
+      minesweeperLegacyControllerRef.current?.stop();
+      minesweeperLegacyControllerRef.current = null;
+      return;
+    }
+
+    let disposed = false;
+
+    void import("./minesweeperLegacy.js").then(({ initMinesweeper }) => {
+      if (disposed) return;
+      minesweeperLegacyControllerRef.current?.stop();
+      minesweeperLegacyControllerRef.current = initMinesweeper({
+        onBackToMenu: () => setActivePanel("menu"),
+      });
+    });
+
+    return () => {
+      disposed = true;
+      minesweeperLegacyControllerRef.current?.stop();
+      minesweeperLegacyControllerRef.current = null;
+    };
+  }, [activePanel, language]);
 
   const tf = useCallback(
     (key: keyof typeof LOGIN_I18N.ja, values: Record<string, string | number>) => {
@@ -2276,30 +3121,16 @@ export default function Home() {
     [t],
   );
 
-  const gameLabelById = useCallback(
-    (id: string) => {
-      if (id === "othello") return t("gameOthello");
-      if (id === "shogi") return t("gameShogi");
-      if (id === "chess") return t("gameChess");
-      if (id === "uno") return t("gameUno");
-      if (id === "gomoku") return t("gameGomoku");
-      if (id === "minesweeper") return t("gameMinesweeper");
-      if (id === "numeron") return t("gameNumeron");
-      if (id === "blackjack") return t("gameBlackjack");
-      if (id === "chinchiro") return t("gameChinchiro");
-      if (id === "sevens") return t("gameSevens");
-      if (id === "daifugo") return t("gameDaifugo");
-      if (id === "fourPanel") return t("gameFourPanel");
-      if (id === "drawingRelay") return t("gameDrawingRelay");
-      if (id === "fitPuzzle") return t("gameFitPuzzle");
-      if (id === "mahjong") return t("gameMahjong");
-      if (id === "poker") return t("gamePoker");
-      if (id === "solitaire") return t("gameSolitaire");
-      if (id === "survivors") return t("gameSurvivors");
-      return id;
-    },
-    [t],
-  );
+  const stripInviteTokenFromAddressBar = useCallback(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY)) return;
+      url.searchParams.delete(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY);
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      // ignore URL update error
+    }
+  }, []);
 
   const pokerHandName = useCallback((name: PokerEval["name"]) => {
     if (name === "highCard") return t("pokerHandHighCard");
@@ -2357,12 +3188,37 @@ export default function Home() {
       if (code === "INVITE_TOKEN_PRIVATE_ONLY") return t("roomErrInvitePrivateOnly");
       if (code === "SPECTATOR_ONLY") return t("roomErrSpectatorOnly");
       if (code === "REMATCH_VOTE_FORBIDDEN") return t("roomErrRematchVoteForbidden");
+      if (code === "DRAW_VOTE_FORBIDDEN") return t("roomErrDrawVoteForbidden");
       return tf("roomErrUnknown", { code });
     },
     [t, tf],
   );
 
-  const dateLocale = language === "ko" ? "ko-KR" : "ja-JP";
+  const pushRoomChatMessage = useCallback((name: string, text: string) => {
+    const normalizedText = String(text || "").trim().slice(0, 200);
+    if (!normalizedText) return;
+    const normalizedName = String(name || "Player").trim().slice(0, 24) || "Player";
+    setRoomChatMessages((prev) => {
+      const next = [...prev, { name: normalizedName, text: normalizedText }];
+      if (next.length > 160) {
+        return next.slice(next.length - 160);
+      }
+      return next;
+    });
+  }, []);
+
+  const pushSpectatorChatMessage = useCallback((name: string, text: string) => {
+    const normalizedText = String(text || "").trim().slice(0, 200);
+    if (!normalizedText) return;
+    const normalizedName = String(name || "Spectator").trim().slice(0, 24) || "Spectator";
+    setSpectatorChatMessages((prev) => {
+      const next = [...prev, { name: normalizedName, text: normalizedText }];
+      if (next.length > 80) {
+        return next.slice(next.length - 80);
+      }
+      return next;
+    });
+  }, []);
 
   const unoColorLabel = useCallback(
     (color: UnoColor) => {
@@ -2409,6 +3265,16 @@ export default function Home() {
   }, [board, currentPlayer, isChaosMode, othelloBrokenMask, othelloFixedMask, othelloOverwriteRemaining]);
 
   const stoneCount = useMemo(() => countStones(board), [board]);
+  const isOthelloGameStarted = useMemo(() => {
+    let occupied = 0;
+    for (let row = 0; row < BOARD_SIZE; row += 1) {
+      for (let col = 0; col < BOARD_SIZE; col += 1) {
+        if (board[row][col] !== 0) occupied += 1;
+      }
+    }
+    if (occupied !== 4) return true;
+    return !(board[3][3] === 2 && board[3][4] === 1 && board[4][3] === 1 && board[4][4] === 2);
+  }, [board]);
   const gomokuStoneCount = useMemo(() => countStones(gomokuBoard), [gomokuBoard]);
   const othelloRoomPlayer = useMemo<1 | 2 | null>(() => {
     if (!connectedRoomCode) return null;
@@ -2418,10 +3284,15 @@ export default function Home() {
   }, [connectedRoomCode, roomRole]);
 
   const canOperateOthelloNow = useMemo(() => {
-    if (!connectedRoomCode) return true;
+    if (!connectedRoomCode) {
+      if (othelloMode === "local") return true;
+      if (othelloMode === "chaos") return true;
+      if (othelloMode === "cpu") return currentPlayer === othelloPlayerSide;
+      return false;
+    }
     if (!othelloRoomPlayer) return false;
     return currentPlayer === othelloRoomPlayer;
-  }, [connectedRoomCode, currentPlayer, othelloRoomPlayer]);
+  }, [connectedRoomCode, currentPlayer, othelloMode, othelloPlayerSide, othelloRoomPlayer]);
 
   const gomokuRoomPlayer = useMemo<1 | 2 | null>(() => {
     if (!connectedRoomCode) return null;
@@ -2506,14 +3377,102 @@ export default function Home() {
     return tf("roomTurnCurrent", { owner: isYourTurn ? t("roomTurnYou") : t("roomTurnOpponent") });
   }, [connectedRoomCode, roomRole, t, tf]);
 
-  const resetOthello = () => {
+  const resolveOthelloChaosOwners = (target: OthelloChaosTarget, playerSide: 1 | 2): Array<1 | 2> => {
+    if (target === "black") return [1];
+    if (target === "white") return [2];
+    if (target === "both") return [1, 2];
+    if (target === "player") return [playerSide];
+    if (target === "opponent") return [playerSide === 1 ? 2 : 1];
+    return [];
+  };
+
+  const clampOthelloChaosLimit = (value: number) => {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(8, Math.floor(value)));
+  };
+
+  const buildOthelloChaosStocks = (
+    settings: OthelloChaosSettings,
+    chaosEnabled: boolean,
+    playerSide: 1 | 2,
+  ): {
+    overwrite: [number, number];
+    immutable: [number, number];
+    destroy: [number, number];
+  } => {
+    if (!chaosEnabled) {
+      return {
+        overwrite: [OTHELLO_DEFAULT_OVERWRITE, OTHELLO_DEFAULT_OVERWRITE],
+        immutable: [OTHELLO_DEFAULT_IMMUTABLE, OTHELLO_DEFAULT_IMMUTABLE],
+        destroy: [OTHELLO_DEFAULT_DESTROY, OTHELLO_DEFAULT_DESTROY],
+      };
+    }
+
+    const overwrite: [number, number] = [0, 0];
+    const immutable: [number, number] = [0, 0];
+    const destroy: [number, number] = [0, 0];
+
+    if (settings.target === "both") {
+      overwrite[0] = clampOthelloChaosLimit(settings.bothBlackOverwriteLimit);
+      overwrite[1] = clampOthelloChaosLimit(settings.bothWhiteOverwriteLimit);
+      immutable[0] = settings.bothBlackHandicap === "immutable1" ? 1 : 0;
+      immutable[1] = settings.bothWhiteHandicap === "immutable1" ? 1 : 0;
+      destroy[0] = clampOthelloChaosLimit(settings.destroyLimitBlack);
+      destroy[1] = clampOthelloChaosLimit(settings.destroyLimitWhite);
+      return { overwrite, immutable, destroy };
+    }
+
+    const targetOwners = resolveOthelloChaosOwners(settings.target, playerSide);
+    targetOwners.forEach((owner) => {
+      const index = othelloPlayerIndex(owner);
+      overwrite[index] = clampOthelloChaosLimit(settings.overwriteLimit);
+      immutable[index] = settings.handicap === "immutable1" ? 1 : 0;
+      destroy[index] = owner === 1
+        ? clampOthelloChaosLimit(settings.destroyLimitBlack)
+        : clampOthelloChaosLimit(settings.destroyLimitWhite);
+    });
+
+    return { overwrite, immutable, destroy };
+  };
+
+  const resetOthello = (
+    override: Partial<OthelloChaosSettings> = {},
+    forceChaosMode = isChaosMode,
+    options: { rerollRandomSide?: boolean; playerSideOverride?: 1 | 2; turnOrderOverride?: OthelloTurnOrder } = {},
+  ) => {
+    const nextChaosSettings: OthelloChaosSettings = {
+      target: othelloChaosTarget,
+      handicap: othelloChaosHandicap,
+      randomLineIgnore: othelloChaosRandomLineIgnore,
+      overwriteLimit: othelloChaosOverwriteLimit,
+      bothBlackHandicap: othelloChaosBothBlackHandicap,
+      bothWhiteHandicap: othelloChaosBothWhiteHandicap,
+      bothBlackOverwriteLimit: othelloChaosBothBlackOverwriteLimit,
+      bothWhiteOverwriteLimit: othelloChaosBothWhiteOverwriteLimit,
+      destroyLimitBlack: othelloChaosDestroyLimitBlack,
+      destroyLimitWhite: othelloChaosDestroyLimitWhite,
+      ...override,
+    };
+    const shouldRerollRandomSide = Boolean(options.rerollRandomSide);
+    const effectiveTurnOrder = options.turnOrderOverride ?? othelloTurnOrder;
+    const currentOrOverrideSide = options.playerSideOverride ?? othelloPlayerSide;
+    const nextPlayerSide: 1 | 2 = effectiveTurnOrder === "random"
+      ? shouldRerollRandomSide
+        ? (Math.random() < 0.5 ? 1 : 2)
+        : currentOrOverrideSide
+      : effectiveTurnOrder === "white"
+        ? 2
+        : 1;
+    const stocks = buildOthelloChaosStocks(nextChaosSettings, forceChaosMode, nextPlayerSide);
+
     setBoard(createInitialBoard());
+    setOthelloPlayerSide(nextPlayerSide);
     setCurrentPlayer(1);
     setOthelloFixedMask(createOthelloChaosMask());
     setOthelloBrokenMask(createOthelloChaosMask());
-    setOthelloOverwriteRemaining([OTHELLO_DEFAULT_OVERWRITE, OTHELLO_DEFAULT_OVERWRITE]);
-    setOthelloImmutableCharges([OTHELLO_DEFAULT_IMMUTABLE, OTHELLO_DEFAULT_IMMUTABLE]);
-    setOthelloDestroyRemaining([OTHELLO_DEFAULT_DESTROY, OTHELLO_DEFAULT_DESTROY]);
+    setOthelloOverwriteRemaining(stocks.overwrite);
+    setOthelloImmutableCharges(stocks.immutable);
+    setOthelloDestroyRemaining(stocks.destroy);
     setOthelloDoubleActionCharges([0, 0]);
     setOthelloImmutableArmed([false, false]);
     setOthelloDestroyArmed([false, false]);
@@ -2521,108 +3480,102 @@ export default function Home() {
     setOthelloDestroySelectedSacrifices([[], []]);
     setOthelloFirstCornerBonusUsed(false);
     setOthelloCornerLossStreak([0, 0]);
+    setOthelloDrawVotes([]);
     setIsGameOver(false);
     setOthelloMessage(t("othelloTurnBlack"));
   };
 
-  const openOthello = () => {
-    setActivePanel("othello");
+  const finalizeOthelloDrawAgreement = useCallback(() => {
+    setOthelloDrawVotes([]);
+    setIsGameOver(true);
+    setOthelloMessage(t("othelloDrawAgreed"));
+    setMenuMessage(t("othelloDrawAgreed"));
+  }, [t]);
+
+  const openPanel = (panel: Panel) => {
+    setActivePanel(panel);
     setMenuMessage("");
+    if (panel !== "menu" && panel !== "scores") {
+      setGameStarted((prev) => ({ ...prev, [panel]: false }));
+    }
   };
 
-  const openScores = () => {
-    setActivePanel("scores");
-    setMenuMessage("");
+  const startPanelGame = (panel: PlayablePanel, reset: () => void) => {
+    setGameStarted((prev) => ({ ...prev, [panel]: true }));
+    reset();
   };
+
+  const openOthello = () => {
+    openPanel("othello");
+  };
+
 
   const openGomoku = () => {
-    setActivePanel("gomoku");
-    setMenuMessage("");
+    openPanel("gomoku");
   };
 
   const openChess = () => {
-    setActivePanel("chess");
-    setMenuMessage("");
+    openPanel("chess");
   };
 
   const openShogi = () => {
-    setActivePanel("shogi");
-    setMenuMessage("");
+    openPanel("shogi");
   };
 
   const openMinesweeper = () => {
-    setActivePanel("minesweeper");
-    setMenuMessage("");
+    openPanel("minesweeper");
   };
 
   const openUno = () => {
-    setActivePanel("uno");
-    setMenuMessage("");
+    openPanel("uno");
   };
 
   const openNumeron = () => {
-    setActivePanel("numeron");
-    setMenuMessage("");
+    openPanel("numeron");
   };
 
   const openBlackjack = () => {
-    setActivePanel("blackjack");
-    setMenuMessage("");
+    openPanel("blackjack");
   };
 
   const openChinchiro = () => {
-    setActivePanel("chinchiro");
-    setMenuMessage("");
+    openPanel("chinchiro");
   };
 
   const openSevens = () => {
-    setActivePanel("sevens");
-    setMenuMessage("");
+    openPanel("sevens");
   };
 
   const openDaifugo = () => {
-    setActivePanel("daifugo");
-    setMenuMessage("");
+    openPanel("daifugo");
   };
 
   const openFourPanel = () => {
-    setActivePanel("fourPanel");
-    setMenuMessage("");
+    openPanel("fourPanel");
   };
 
   const openDrawingRelay = () => {
-    setActivePanel("drawingRelay");
-    setMenuMessage("");
+    openPanel("drawingRelay");
   };
 
   const openFitPuzzle = () => {
-    setActivePanel("fitPuzzle");
-    setMenuMessage("");
+    openPanel("fitPuzzle");
   };
 
   const openMahjong = () => {
-    setActivePanel("mahjong");
-    setMenuMessage("");
+    openPanel("mahjong");
   };
 
   const openPoker = () => {
-    setActivePanel("poker");
-    setMenuMessage("");
+    openPanel("poker");
   };
 
   const openSolitaire = () => {
-    setActivePanel("solitaire");
-    setMenuMessage("");
+    openPanel("solitaire");
   };
 
   const openSurvivors = () => {
-    setActivePanel("survivors");
-    setMenuMessage("");
-  };
-
-  const openStatus = () => {
-    setActivePanel("status");
-    setMenuMessage("");
+    openPanel("survivors");
   };
 
   const onJoinRoom = () => {
@@ -2634,6 +3587,10 @@ export default function Home() {
   };
 
   const closeRoomSocket = useCallback(() => {
+    if (inviteTokenResolveRef.current) {
+      inviteTokenResolveRef.current("");
+      inviteTokenResolveRef.current = null;
+    }
     const ws = roomSocketRef.current;
     roomSocketRef.current = null;
     if (!ws) return;
@@ -2704,6 +3661,57 @@ export default function Home() {
       setOthelloCornerLossStreak(state.othelloCornerLossStreak as [number, number]);
     }
     if (state.currentPlayer === 1 || state.currentPlayer === 2) setCurrentPlayer(state.currentPlayer as 1 | 2);
+    if (state.othelloMode === "cpu" || state.othelloMode === "cpuvscpu" || state.othelloMode === "local" || state.othelloMode === "chaos") {
+      setOthelloMode(state.othelloMode as OthelloMode);
+    }
+    if (state.othelloCpuLevel === "easy" || state.othelloCpuLevel === "normal" || state.othelloCpuLevel === "hard") {
+      setOthelloCpuLevel(state.othelloCpuLevel as OthelloCpuLevel);
+    }
+    if (state.othelloTurnOrder === "black" || state.othelloTurnOrder === "white" || state.othelloTurnOrder === "random") {
+      setOthelloTurnOrder(state.othelloTurnOrder as OthelloTurnOrder);
+    } else if (state.othelloPlayerSide === 1 || state.othelloPlayerSide === 2) {
+      setOthelloTurnOrder((state.othelloPlayerSide as 1 | 2) === 1 ? "black" : "white");
+    }
+    if (state.othelloPlayerSide === 1 || state.othelloPlayerSide === 2) {
+      setOthelloPlayerSide(state.othelloPlayerSide as 1 | 2);
+    }
+    if (
+      state.othelloChaosTarget === "none"
+      || state.othelloChaosTarget === "black"
+      || state.othelloChaosTarget === "white"
+      || state.othelloChaosTarget === "both"
+      || state.othelloChaosTarget === "player"
+      || state.othelloChaosTarget === "opponent"
+    ) {
+      setOthelloChaosTarget(state.othelloChaosTarget as OthelloChaosTarget);
+    }
+    if (state.othelloChaosHandicap === "none" || state.othelloChaosHandicap === "immutable1") {
+      setOthelloChaosHandicap(state.othelloChaosHandicap as OthelloChaosHandicap);
+    }
+    if (state.othelloChaosRandomLineIgnore === "off" || state.othelloChaosRandomLineIgnore === "on") {
+      setOthelloChaosRandomLineIgnore(state.othelloChaosRandomLineIgnore as OthelloChaosToggle);
+    }
+    if (Number.isFinite(state.othelloChaosOverwriteLimit)) {
+      setOthelloChaosOverwriteLimit(Number(state.othelloChaosOverwriteLimit));
+    }
+    if (state.othelloChaosBothBlackHandicap === "none" || state.othelloChaosBothBlackHandicap === "immutable1") {
+      setOthelloChaosBothBlackHandicap(state.othelloChaosBothBlackHandicap as OthelloChaosHandicap);
+    }
+    if (state.othelloChaosBothWhiteHandicap === "none" || state.othelloChaosBothWhiteHandicap === "immutable1") {
+      setOthelloChaosBothWhiteHandicap(state.othelloChaosBothWhiteHandicap as OthelloChaosHandicap);
+    }
+    if (Number.isFinite(state.othelloChaosBothBlackOverwriteLimit)) {
+      setOthelloChaosBothBlackOverwriteLimit(Number(state.othelloChaosBothBlackOverwriteLimit));
+    }
+    if (Number.isFinite(state.othelloChaosBothWhiteOverwriteLimit)) {
+      setOthelloChaosBothWhiteOverwriteLimit(Number(state.othelloChaosBothWhiteOverwriteLimit));
+    }
+    if (Number.isFinite(state.othelloChaosDestroyLimitBlack)) {
+      setOthelloChaosDestroyLimitBlack(Number(state.othelloChaosDestroyLimitBlack));
+    }
+    if (Number.isFinite(state.othelloChaosDestroyLimitWhite)) {
+      setOthelloChaosDestroyLimitWhite(Number(state.othelloChaosDestroyLimitWhite));
+    }
     if (typeof state.othelloMessage === "string") setOthelloMessage(state.othelloMessage);
     if (typeof state.isGameOver === "boolean") setIsGameOver(state.isGameOver);
 
@@ -2721,6 +3729,7 @@ export default function Home() {
     if (typeof state.isChessOver === "boolean") setIsChessOver(state.isChessOver);
 
     if (Array.isArray(state.shogiBoard)) setShogiBoard(state.shogiBoard as Array<Array<ShogiPiece | null>>);
+    if (state.shogiMode === "local" || state.shogiMode === "chaos") setShogiMode(state.shogiMode as ShogiMode);
     if (state.shogiTurn === "b" || state.shogiTurn === "w") setShogiTurn(state.shogiTurn as ShogiColor);
     if (state.selectedShogi === null || typeof state.selectedShogi === "object") {
       setSelectedShogi(state.selectedShogi as { row: number; col: number } | null);
@@ -2850,21 +3859,38 @@ export default function Home() {
   }, []);
 
   const connectRoom = useCallback(
-    (requestedCode: string, createIfEmpty: boolean) => {
+    (
+      requestedCode: string,
+      createIfEmpty: boolean,
+      options?: {
+        quickJoin?: boolean;
+        spectate?: boolean;
+        roomPublic?: boolean;
+        inviteToken?: string;
+      },
+    ) => {
+      const quickJoin = Boolean(options?.quickJoin);
       const normalizedCode = requestedCode.replace(/[^0-9]/g, "").slice(0, 6);
-      const code = normalizedCode || (createIfEmpty ? String(Math.floor(100000 + Math.random() * 900000)) : "");
-      if (!code) {
+      const code = quickJoin ? normalizedCode : (normalizedCode || (createIfEmpty ? String(Math.floor(100000 + Math.random() * 900000)) : ""));
+      if (!quickJoin && !code) {
         setMenuMessage(t("roomCodeRequired"));
         return;
       }
 
       closeRoomSocket();
+      setConnectedRoomCode("");
+      setRoomParticipants([]);
+      setRoomRole("");
+      setOthelloDrawVotes([]);
+      setRoomChatMessages([]);
+      setSpectatorChatMessages([]);
       setRoomStatus(t("roomStateConnecting"));
       setMenuMessage("");
 
+      const wsUrl = roomServerUrl.trim();
       let ws: WebSocket;
       try {
-        ws = new WebSocket(roomServerUrl.trim());
+        ws = new WebSocket(wsUrl);
       } catch {
         setRoomStatus(t("roomStateConnectFailed"));
         setMenuMessage(t("roomUrlInvalid"));
@@ -2875,14 +3901,20 @@ export default function Home() {
 
       ws.onopen = () => {
         setRoomStatus(t("roomStateConnected"));
-        setRoomCode(code);
-        const payload = {
-          type: "hello",
-          room: code,
+        if (code) {
+          setRoomCode(code);
+        }
+        const payload: Record<string, unknown> = {
+          type: quickJoin ? "quick-join" : "hello",
           from: peerIdRef.current,
           name: playerName,
-          roomPublic: roomVisibility === "public",
+          roomPublic: Boolean(options?.roomPublic ?? (roomVisibility === "public")),
+          spectate: Boolean(options?.spectate),
+          inviteToken: String(options?.inviteToken || "").trim(),
         };
+        if (code) {
+          payload.room = code;
+        }
         ws.send(JSON.stringify(payload));
       };
 
@@ -2957,6 +3989,21 @@ export default function Home() {
             return;
           }
 
+          if (type === "draw-vote") {
+            const from = String(payload?.from || "");
+            if (!from || from === peerIdRef.current) return;
+            setOthelloDrawVotes((prev) => (prev.includes(from) ? prev : [...prev, from]));
+            setMenuMessage(t("othelloDrawRequestPending"));
+            return;
+          }
+
+          if (type === "draw-unvote") {
+            const from = String(payload?.from || "");
+            if (!from || from === peerIdRef.current) return;
+            setOthelloDrawVotes((prev) => prev.filter((vote) => vote !== from));
+            return;
+          }
+
           if (type === "uno-request-action") {
             if (String(payload?.from || "") === peerIdRef.current) {
               return;
@@ -2980,12 +4027,33 @@ export default function Home() {
           }
 
           if (type === "room-assigned") {
-            if (payload.code) {
-              setConnectedRoomCode(String(payload.code));
-              setRoomCode(String(payload.code));
+            const assignedCode = String(payload.code || "").replace(/\D/g, "").slice(0, 6);
+            if (assignedCode) {
+              setConnectedRoomCode(assignedCode);
+              setRoomCode(assignedCode);
             }
+            stripInviteTokenFromAddressBar();
             if (payload.role) {
-              setRoomRole(String(payload.role));
+              const nextRole = String(payload.role);
+              setRoomRole(nextRole);
+              if (nextRole === "spectator") {
+                setMenuMessage(t("spectatorReadOnly"));
+              }
+            }
+
+            if (quickMatchMode) {
+              if (payload.roomPublic === false) {
+                setMenuMessage(t("quickMatchPrivateSkipped"));
+                closeRoomSocket();
+                window.setTimeout(() => {
+                  connectRoom("", false, { quickJoin: true, roomPublic: true });
+                }, 100);
+                return;
+              }
+              setQuickMatchMode(false);
+              if (assignedCode) {
+                setMenuMessage(tf("quickMatchConnected", { code: assignedCode }));
+              }
             }
             return;
           }
@@ -2993,32 +4061,127 @@ export default function Home() {
           if (type === "room-state") {
             setConnectedRoomCode(String(payload.room || ""));
             setRoomParticipants(Array.isArray(payload.participants) ? payload.participants : []);
+            if (Array.isArray(payload.drawVotes)) {
+              setOthelloDrawVotes(payload.drawVotes.map((vote: unknown) => String(vote)).filter((vote: string) => vote.length > 0));
+            } else {
+              setOthelloDrawVotes([]);
+            }
             const myself = Array.isArray(payload.participants)
               ? payload.participants.find((p: RoomParticipant) => p.id === peerIdRef.current)
               : null;
             if (myself?.role) {
               setRoomRole(myself.role);
             }
+            if (String(payload.room || "")) {
+              stripInviteTokenFromAddressBar();
+            }
+            return;
+          }
+
+          if (type === "draw-vote-state") {
+            const votes = Array.isArray(payload.votes)
+              ? payload.votes.map((vote: unknown) => String(vote)).filter((vote: string) => vote.length > 0)
+              : [];
+            setOthelloDrawVotes(votes);
+            if (votes.includes(peerIdRef.current)) {
+              setMenuMessage(t("othelloDrawRequestSent"));
+            } else if (votes.length > 0) {
+              setMenuMessage(t("othelloDrawRequestPending"));
+            }
+            return;
+          }
+
+          if (type === "draw-confirmed") {
+            finalizeOthelloDrawAgreement();
+            return;
+          }
+
+          if (type === "invite-token") {
+            const token = String(payload.token || "").trim();
+            setPendingInviteToken(token);
+            if (inviteTokenResolveRef.current) {
+              inviteTokenResolveRef.current(token);
+              inviteTokenResolveRef.current = null;
+            }
+            return;
+          }
+
+          if (type === "spectator-chat") {
+            pushSpectatorChatMessage(String(payload.name || "Spectator"), String(payload.text || ""));
+            return;
+          }
+
+          if (type === "chat") {
+            pushRoomChatMessage(String(payload.name || payload.from || "Player"), String(payload.text || ""));
             return;
           }
 
           if (type === "room-full") {
-            setMenuMessage(t("roomFull"));
+            if (quickMatchMode) {
+              setMenuMessage(t("quickMatchSearching"));
+              closeRoomSocket();
+              window.setTimeout(() => {
+                connectRoom("", false, { quickJoin: true, roomPublic: true });
+              }, 100);
+              return;
+            }
+            closeRoomSocket();
+            setConnectedRoomCode("");
+            setRoomParticipants([]);
+            setRoomRole("");
+            setOthelloDrawVotes([]);
+            setRoomChatMessages([]);
+            setSpectatorChatMessages([]);
+            setRoomStatus(t("roomStateClosed"));
+            setMenuMessage(tf("roomFullRejected", { code: String(payload.code || roomCode || "------") }));
             return;
           }
 
           if (type === "room-in-game") {
-            setMenuMessage(t("roomInGame"));
+            if (quickMatchMode) {
+              setMenuMessage(t("quickMatchSearching"));
+              closeRoomSocket();
+              window.setTimeout(() => {
+                connectRoom("", false, { quickJoin: true, roomPublic: true });
+              }, 100);
+              return;
+            }
+            closeRoomSocket();
+            setConnectedRoomCode("");
+            setRoomParticipants([]);
+            setRoomRole("");
+            setOthelloDrawVotes([]);
+            setRoomChatMessages([]);
+            setSpectatorChatMessages([]);
+            setRoomStatus(t("roomStateClosed"));
+            setMenuMessage(t("roomInGameSuggestSpectate"));
             return;
           }
 
           if (type === "invite-token-required") {
+            closeRoomSocket();
+            setConnectedRoomCode("");
+            setRoomParticipants([]);
+            setRoomRole("");
+            setOthelloDrawVotes([]);
+            setPendingInviteToken("");
+            setRoomChatMessages([]);
+            setSpectatorChatMessages([]);
+            setRoomStatus(t("roomStateClosed"));
             setMenuMessage(t("roomInviteRequired"));
             return;
           }
 
           if (type === "error") {
             const code = String(payload.code || "UNKNOWN");
+            if (code === "MUTED") {
+              setMenuMessage(t("roomChatMuted"));
+              return;
+            }
+            if (code.startsWith("RATE_LIMIT_")) {
+              setMenuMessage(t("roomChatRateLimited"));
+              return;
+            }
             setMenuMessage(`${t("roomErrorPrefix")}: ${roomErrorLabel(code)}`);
           }
         } catch {
@@ -3032,11 +4195,134 @@ export default function Home() {
       };
 
       ws.onclose = () => {
+        setOthelloDrawVotes([]);
         setRoomStatus(t("roomStateClosed"));
       };
     },
-    [applyArcadeSnapshot, closeRoomSocket, playerName, roomErrorLabel, roomServerUrl, roomVisibility, t],
+    [
+      applyArcadeSnapshot,
+      closeRoomSocket,
+      playerName,
+      pushRoomChatMessage,
+      pushSpectatorChatMessage,
+      quickMatchMode,
+      roomCode,
+      roomErrorLabel,
+      roomServerUrl,
+      roomVisibility,
+      stripInviteTokenFromAddressBar,
+      finalizeOthelloDrawAgreement,
+      t,
+      tf,
+    ],
   );
+
+  const requestInviteToken = useCallback(() => {
+    return new Promise<string>((resolve) => {
+      inviteTokenResolveRef.current = resolve;
+      sendRoomEvent({ type: "issue-invite-token" });
+      window.setTimeout(() => {
+        if (!inviteTokenResolveRef.current) return;
+        inviteTokenResolveRef.current("");
+        inviteTokenResolveRef.current = null;
+      }, 1800);
+    });
+  }, [sendRoomEvent]);
+
+  const buildInviteUrl = useCallback((room: string, inviteToken: string) => {
+    const url = new URL(window.location.href);
+    url.hash = `#${APP_URL_TAG}`;
+    url.searchParams.set(ROOM_CODE_QUERY_PARAM_KEY, room);
+    const endpoint = roomServerUrl.trim();
+    if (endpoint) {
+      url.searchParams.set(ROOM_SERVER_QUERY_PARAM_KEY, endpoint);
+    }
+    if (inviteToken) {
+      url.searchParams.set(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY, inviteToken);
+    } else {
+      url.searchParams.delete(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY);
+    }
+    return url.toString();
+  }, [roomServerUrl]);
+
+  const copyInviteLink = useCallback(async () => {
+    const code = connectedRoomCode || roomCode;
+    if (!code) return;
+
+    let token = "";
+    if (roomRole === "host" && roomVisibility === "private") {
+      token = await requestInviteToken();
+      if (!token) {
+        setMenuMessage(t("inviteTokenIssueFailed"));
+        return;
+      }
+      setPendingInviteToken(token);
+    }
+
+    const link = buildInviteUrl(code, token || pendingInviteToken);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+        setMenuMessage(t("inviteLinkCopied"));
+        return;
+      }
+    } catch {
+      // fallthrough to prompt
+    }
+
+    const copied = Boolean(window.prompt("Copy URL", link));
+    setMenuMessage(copied ? t("inviteLinkCopied") : t("inviteLinkCopyFailed"));
+  }, [buildInviteUrl, connectedRoomCode, pendingInviteToken, requestInviteToken, roomCode, roomRole, roomVisibility, t]);
+
+  const startQuickMatch = useCallback(() => {
+    setQuickMatchMode(true);
+    setMenuMessage(t("quickMatchSearching"));
+    connectRoom("", false, { quickJoin: true, roomPublic: true });
+  }, [connectRoom, t]);
+
+  const joinRoomAsPlayer = useCallback(() => {
+    const code = roomCode.replace(/[^0-9]/g, "").slice(0, 6);
+    if (code.length !== 6) {
+      setMenuMessage(t("roomCodeInvalid"));
+      return;
+    }
+    setQuickMatchMode(false);
+    onJoinRoom();
+    connectRoom(code, false, { inviteToken: pendingInviteToken });
+  }, [connectRoom, onJoinRoom, pendingInviteToken, roomCode, t]);
+
+  const joinRoomAsSpectator = useCallback(() => {
+    const code = roomCode.replace(/[^0-9]/g, "").slice(0, 6);
+    if (code.length !== 6) {
+      setMenuMessage(t("roomCodeInvalid"));
+      return;
+    }
+    setQuickMatchMode(false);
+    connectRoom(code, false, { spectate: true, inviteToken: pendingInviteToken });
+  }, [connectRoom, pendingInviteToken, roomCode, t]);
+
+  const sendRoomChat = useCallback(() => {
+    if (roomRole === "spectator") return;
+    const text = roomChatInput.trim().slice(0, 200);
+    if (!text) return;
+    sendRoomEvent({ type: "chat", text });
+    pushRoomChatMessage(playerName, text);
+    setRoomChatInput("");
+  }, [playerName, pushRoomChatMessage, roomChatInput, roomRole, sendRoomEvent]);
+
+  const sendSpectatorChat = useCallback(() => {
+    if (roomRole !== "spectator") return;
+    const text = spectatorChatInput.trim().slice(0, 200);
+    if (!text) return;
+    sendRoomEvent({ type: "spectator-chat", text });
+    setSpectatorChatInput("");
+  }, [roomRole, sendRoomEvent, spectatorChatInput]);
+
+  useEffect(() => {
+    if (!connectedRoomCode) return;
+    if (roomRole !== "host") return;
+    sendRoomEvent({ type: "presence", roomPublic: roomVisibility === "public" });
+  }, [connectedRoomCode, roomRole, roomVisibility, sendRoomEvent]);
 
   useEffect(() => {
     return () => {
@@ -3062,6 +4348,20 @@ export default function Home() {
         othelloFirstCornerBonusUsed,
         othelloCornerLossStreak,
         currentPlayer,
+        othelloMode,
+        othelloCpuLevel,
+        othelloTurnOrder,
+        othelloPlayerSide,
+        othelloChaosTarget,
+        othelloChaosHandicap,
+        othelloChaosRandomLineIgnore,
+        othelloChaosOverwriteLimit,
+        othelloChaosBothBlackHandicap,
+        othelloChaosBothWhiteHandicap,
+        othelloChaosBothBlackOverwriteLimit,
+        othelloChaosBothWhiteOverwriteLimit,
+        othelloChaosDestroyLimitBlack,
+        othelloChaosDestroyLimitWhite,
         othelloMessage,
         isGameOver,
         gomokuBoard,
@@ -3074,6 +4374,7 @@ export default function Home() {
         chessMessage,
         isChessOver,
         shogiBoard,
+        shogiMode,
         shogiTurn,
         selectedShogi,
         shogiMessage,
@@ -3179,144 +4480,18 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [connectedRoomCode, isChaosMode, isMultiSyncEnabled, roomRole, sendRoomEvent]);
 
-  useEffect(() => {
-    if (!isChaosMode) return;
-    if (activePanel === "menu" || activePanel === "scores" || activePanel === "status") return;
-
-    const timer = setInterval(() => {
-      if (activePanel === "gomoku" && !isGomokuOver) {
-        setGomokuPlayer((prev) => (prev === 1 ? 2 : 1));
-        setGomokuMessage(tf("chaosEvent", { event: "Gomoku turn swap" }));
-      }
-
-      if (activePanel === "chess" && !isChessOver) {
-        setChessTurn((prev) => (prev === "w" ? "b" : "w"));
-        setChessMessage(tf("chaosEvent", { event: "Chess turn swap" }));
-      }
-
-      if (activePanel === "shogi" && !isShogiOver) {
-        setShogiTurn((prev) => (prev === "b" ? "w" : "b"));
-        setShogiMessage(tf("chaosEvent", { event: "Shogi turn swap" }));
-      }
-
-      if (activePanel === "minesweeper" && !isMineOver) {
-        setMineMessage(tf("chaosEvent", { event: "Mines pressure" }));
-      }
-
-      if (activePanel === "numeron" && !isNumeronOver) {
-        setNumeronDraft((prev) => [...prev].reverse());
-        setNumeronMessage(tf("chaosEvent", { event: "Numeron draft reverse" }));
-      }
-
-      if (activePanel === "uno" && !isUnoOver && unoDeck.length > 0) {
-        const card = unoDeck[0];
-        setUnoDeck((prev) => prev.slice(1));
-        setUnoPlayerHand((prev) => [...prev, card]);
-        setUnoMessage(tf("chaosEvent", { event: "UNO forced draw" }));
-      }
-
-      if (activePanel === "blackjack" && !isBlackjackOver && blackjackDeck.length > 0) {
-        const card = blackjackDeck[0];
-        setBlackjackDeck((prev) => prev.slice(1));
-        setBlackjackPlayerHand((prev) => [...prev, card]);
-        setBlackjackMessage(tf("chaosEvent", { event: "Blackjack forced hit" }));
-      }
-
-      if (activePanel === "chinchiro" && !isChinchiroOver) {
-        setChinchiroMessage(tf("chaosEvent", { event: "Chinchiro shake" }));
-      }
-
-      if (activePanel === "sevens" && !isSevensOver) {
-        setSevensPassCount((prev) => [prev[0] + 1, prev[1] + 1]);
-        setSevensMessage(tf("chaosEvent", { event: "Sevens pass storm" }));
-      }
-
-      if (activePanel === "daifugo" && !isDaifugoOver) {
-        setDaifugoPassStreak((prev) => prev + 1);
-        setDaifugoMessage(tf("chaosEvent", { event: "Daifugo pressure" }));
-      }
-
-      if (activePanel === "fourPanel") {
-        setFourPanelMessage(tf("chaosEvent", { event: "4-panel caption twist" }));
-      }
-
-      if (activePanel === "drawingRelay") {
-        setDrawingRelayMessage(tf("chaosEvent", { event: "Drawing relay remix" }));
-      }
-
-      if (activePanel === "fitPuzzle" && !isFitPuzzleOver) {
-        const blankIndex = fitPuzzleTiles.indexOf(0);
-        const candidates: number[] = [];
-        for (let index = 0; index < fitPuzzleTiles.length; index += 1) {
-          if (fitPuzzleCanMove(index, blankIndex)) candidates.push(index);
-        }
-        if (candidates.length > 0) {
-          const pick = candidates[Math.floor(Math.random() * candidates.length)];
-          const next = [...fitPuzzleTiles];
-          [next[pick], next[blankIndex]] = [next[blankIndex], next[pick]];
-          setFitPuzzleTiles(next);
-          setFitPuzzleMoves((prev) => prev + 1);
-          setFitPuzzleMessage(tf("chaosEvent", { event: "Puzzle random shift" }));
-        }
-      }
-
-      if (activePanel === "mahjong" && !isMahjongOver) {
-        setMahjongBoard((prev) => ensureMahjongPlayable(reshuffleMahjongBoard(prev)));
-        setMahjongMessage(tf("chaosEvent", { event: "Mahjong reshuffle" }));
-      }
-
-      if (activePanel === "survivors" && !isSurvivorsOver) {
-        setSurvivorsHp((prev) => Math.max(0, prev - 3));
-        setSurvivorsEnemies((prev) => prev.map((enemy) => ({ ...enemy, hp: Math.max(0, enemy.hp - 2) })).filter((enemy) => enemy.hp > 0));
-        setSurvivorsMessage(tf("chaosEvent", { event: "Survivors storm damage" }));
-      }
-
-      if (activePanel === "poker" && pokerPhase === "draw") {
-        const index = Math.floor(Math.random() * 5);
-        setPokerHold((prev) => prev.map((flag, i) => (i === index ? !flag : flag)));
-        setPokerMessage(tf("chaosEvent", { event: "Poker random hold" }));
-      }
-
-      if (activePanel === "solitaire" && !isSolitaireOver && solitaireStock.length > 0) {
-        const card = solitaireStock[solitaireStock.length - 1];
-        setSolitaireStock((prev) => prev.slice(0, -1));
-        setSolitaireWaste((prev) => [...prev, { ...card, faceUp: true }]);
-        setSolitaireMessage(tf("chaosEvent", { event: "Solitaire auto draw" }));
-      }
-
-      setMenuMessage(tf("chaosEvent", { event: activePanel }));
-    }, 2800);
-
-    return () => clearInterval(timer);
-  }, [
-    activePanel,
-    blackjackDeck,
-    fitPuzzleTiles,
-    isBlackjackOver,
-    isChessOver,
-    isChaosMode,
-    isChinchiroOver,
-    isDaifugoOver,
-    isFitPuzzleOver,
-    isGomokuOver,
-    isMahjongOver,
-    isMineOver,
-    isNumeronOver,
-    isSevensOver,
-    isShogiOver,
-    isSolitaireOver,
-    isSurvivorsOver,
-    isUnoOver,
-    pokerPhase,
-    solitaireStock,
-    tf,
-    unoDeck,
-  ]);
-
-  const onBoardClick = (row: number, col: number, options?: { isRemote?: boolean }) => {
+  const onBoardClick = (row: number, col: number, options?: { isRemote?: boolean; byCpu?: boolean }) => {
     if (isGameOver) return;
 
     const isRemote = Boolean(options?.isRemote);
+    const byCpu = Boolean(options?.byCpu);
+
+    if (!connectedRoomCode && !byCpu) {
+      if (othelloMode === "cpuvscpu" || (othelloMode === "cpu" && currentPlayer !== othelloPlayerSide)) {
+        setOthelloMessage(t("othelloCpuThinking"));
+        return;
+      }
+    }
 
     if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
@@ -3593,6 +4768,62 @@ export default function Home() {
 
     commitAndAdvance(preferSamePlayer, chaosLine);
   };
+
+  useEffect(() => {
+    if (activePanel !== "othello") return;
+    if (!gameStarted.othello) return;
+    if (connectedRoomCode) return;
+    if (isGameOver) return;
+
+    const cpuPlayer: 1 | 2 | null =
+      othelloMode === "cpu"
+        ? (othelloPlayerSide === 1 ? 2 : 1)
+        : othelloMode === "cpuvscpu"
+          ? currentPlayer
+          : null;
+    if (!cpuPlayer || currentPlayer !== cpuPlayer) return;
+
+    const legalMoves = getOthelloLegalMoves(board, currentPlayer, {
+      isChaosMode,
+      brokenMask: othelloBrokenMask,
+      fixedMask: othelloFixedMask,
+      overwriteRemaining: othelloOverwriteRemaining,
+    });
+    if (legalMoves.length === 0) return;
+
+    setOthelloMessage(t("othelloCpuThinking"));
+    const delayBase = OTHELLO_CPU_SETTINGS[othelloCpuLevel].thinkMs;
+    const delay = othelloMode === "cpuvscpu"
+      ? Math.min(220, OTHELLO_CPU_THINK_DELAY_MAX_MS)
+      : Math.min(delayBase, OTHELLO_CPU_THINK_DELAY_MAX_MS);
+    const timer = setTimeout(() => {
+      const move = pickOthelloCpuMove(board, currentPlayer, legalMoves, othelloCpuLevel, {
+        isChaosMode,
+        brokenMask: othelloBrokenMask,
+        fixedMask: othelloFixedMask,
+        overwriteRemaining: othelloOverwriteRemaining,
+      });
+      if (!move) return;
+      onBoardClick(move.row, move.col, { byCpu: true });
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [
+    activePanel,
+    board,
+    connectedRoomCode,
+    currentPlayer,
+    isChaosMode,
+    isGameOver,
+    othelloBrokenMask,
+    othelloCpuLevel,
+    othelloFixedMask,
+    othelloMode,
+    othelloOverwriteRemaining,
+    othelloPlayerSide,
+    gameStarted.othello,
+    t,
+  ]);
 
   useEffect(() => {
     if (!pendingRemoteOthelloMove) return;
@@ -4788,6 +6019,7 @@ export default function Home() {
 
   useEffect(() => {
     if (activePanel !== "survivors" || isSurvivorsOver) return;
+    if (!gameStarted.survivors) return;
 
     const timer = setInterval(() => {
       setSurvivorsTimeSec((prev) => prev + 1);
@@ -4804,7 +6036,7 @@ export default function Home() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [activePanel, isSurvivorsOver, survivorsEnemies.length, survivorsWave, t]);
+  }, [activePanel, gameStarted.survivors, isSurvivorsOver, survivorsEnemies.length, survivorsWave, t]);
 
   useEffect(() => {
     if (activePanel !== "chinchiro") return;
@@ -4815,20 +6047,23 @@ export default function Home() {
 
   useEffect(() => {
     if (activePanel !== "blackjack") return;
+    if (!gameStarted.blackjack) return;
     if (blackjackPlayerHand.length === 0 || blackjackDealerHand.length === 0) {
       resetBlackjack();
     }
-  }, [activePanel, blackjackDealerHand.length, blackjackPlayerHand.length, resetBlackjack]);
+  }, [activePanel, blackjackDealerHand.length, blackjackPlayerHand.length, gameStarted.blackjack, resetBlackjack]);
 
   useEffect(() => {
     if (activePanel !== "sevens") return;
+    if (!gameStarted.sevens) return;
     if (sevensHands[0].length === 0 && sevensHands[1].length === 0) {
       resetSevens();
     }
-  }, [activePanel, resetSevens, sevensHands]);
+  }, [activePanel, gameStarted.sevens, resetSevens, sevensHands]);
 
   useEffect(() => {
     if (activePanel !== "sevens" || sevensTurn !== "cpu" || isSevensOver) return;
+    if (!gameStarted.sevens) return;
 
     const timer = setTimeout(() => {
       const cpuHand = sevensHands[1];
@@ -4863,18 +6098,20 @@ export default function Home() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [activePanel, isSevensOver, sevensHands, sevensTable, sevensTurn, t]);
+  }, [activePanel, gameStarted.sevens, isSevensOver, sevensHands, sevensTable, sevensTurn, t]);
 
   useEffect(() => {
     if (activePanel !== "daifugo") return;
+    if (!gameStarted.daifugo) return;
     if (daifugoHands[0].length === 0 && daifugoHands[1].length === 0) {
       resetDaifugo();
     }
-  }, [activePanel, daifugoHands, resetDaifugo]);
+  }, [activePanel, daifugoHands, gameStarted.daifugo, resetDaifugo]);
 
   useEffect(() => {
     if (connectedRoomCode) return;
     if (activePanel !== "daifugo" || daifugoTurn !== "cpu" || isDaifugoOver) return;
+    if (!gameStarted.daifugo) return;
 
     const timer = setTimeout(() => {
       const cpuHand = daifugoHands[1];
@@ -4913,7 +6150,7 @@ export default function Home() {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [activePanel, connectedRoomCode, daifugoHands, daifugoPassStreak, daifugoTableCard, daifugoTurn, isDaifugoOver, t, tf]);
+  }, [activePanel, connectedRoomCode, daifugoHands, daifugoPassStreak, daifugoTableCard, daifugoTurn, gameStarted.daifugo, isDaifugoOver, t, tf]);
 
   useEffect(() => {
     if (activePanel !== "fourPanel") return;
@@ -4945,24 +6182,27 @@ export default function Home() {
 
   useEffect(() => {
     if (activePanel !== "poker") return;
+    if (!gameStarted.poker) return;
     if (pokerPlayerHand.length === 0 || pokerCpuHand.length === 0) {
       resetPoker();
     }
-  }, [activePanel, pokerCpuHand.length, pokerPlayerHand.length, resetPoker]);
+  }, [activePanel, gameStarted.poker, pokerCpuHand.length, pokerPlayerHand.length, resetPoker]);
 
   useEffect(() => {
     if (activePanel !== "solitaire") return;
+    if (!gameStarted.solitaire) return;
     if (solitaireStock.length === 0 && solitaireWaste.length === 0 && foundationCount(solitaireFoundations) === 0) {
       resetSolitaire();
     }
-  }, [activePanel, foundationCount, resetSolitaire, solitaireFoundations, solitaireStock.length, solitaireWaste.length]);
+  }, [activePanel, foundationCount, gameStarted.solitaire, resetSolitaire, solitaireFoundations, solitaireStock.length, solitaireWaste.length]);
 
   useEffect(() => {
     if (activePanel !== "survivors") return;
+    if (!gameStarted.survivors) return;
     if (survivorsEnemies.length === 0 && survivorsWave === 1 && survivorsTimeSec === 0) {
       resetSurvivors();
     }
-  }, [activePanel, resetSurvivors, survivorsEnemies.length, survivorsTimeSec, survivorsWave]);
+  }, [activePanel, gameStarted.survivors, resetSurvivors, survivorsEnemies.length, survivorsTimeSec, survivorsWave]);
 
   const resetUno = useCallback(() => {
     const deck = shuffleCards(createUnoDeck());
@@ -5089,13 +6329,15 @@ export default function Home() {
 
   useEffect(() => {
     if (activePanel !== "uno") return;
+    if (!gameStarted.uno) return;
     if (!unoTopCard && !isUnoOver) {
       resetUno();
     }
-  }, [activePanel, isUnoOver, resetUno, unoTopCard]);
+  }, [activePanel, gameStarted.uno, isUnoOver, resetUno, unoTopCard]);
 
   useEffect(() => {
     if (connectedRoomCode) return;
+    if (!gameStarted.uno) return;
     if (unoTurn !== "cpu" || isUnoOver || !unoTopCard) return;
 
     setUnoMessage(t("unoCpuTurn"));
@@ -5126,63 +6368,309 @@ export default function Home() {
     }, 550);
 
     return () => clearTimeout(timer);
-  }, [connectedRoomCode, isUnoOver, t, tf, unoCpuHand, unoDeck, unoTopCard, unoTurn, unoCardLabel]);
+  }, [connectedRoomCode, gameStarted.uno, isUnoOver, t, tf, unoCpuHand, unoDeck, unoTopCard, unoTurn, unoCardLabel]);
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsPosting(true);
-    setMessage("");
+  const cloudAuthPayload = useMemo(() => {
+    if (authMode !== "cloud") return null;
+    const userId = authUserId.trim();
+    const password = authPassword;
+    if (!userId || !password) return null;
+    return { userId, password };
+  }, [authMode, authPassword, authUserId]);
 
+  const callCloudApi = useCallback(async <T extends CloudApiResult>(path: string, payload: Record<string, unknown>) => {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json().catch(() => ({}))) as T;
+    if (!res.ok) {
+      throw new Error(String(data?.code || data?.message || `HTTP ${res.status}`));
+    }
+    if (data?.ok !== true) {
+      throw new Error(String(data?.code || data?.message || "API_FAILED"));
+    }
+    return data;
+  }, []);
+
+  const callCloudAuthApi = useCallback(async (path: string, payload: Record<string, unknown>) => {
+    const data = await callCloudApi<CloudAuthResult & CloudApiResult>(path, payload);
+    return data as CloudAuthResult;
+  }, [callCloudApi]);
+
+  const normalizeFriendIdList = useCallback((value: unknown): string[] => {
+    if (!Array.isArray(value)) return [];
+    const unique = new Set<string>();
+    value.forEach((item) => {
+      const normalized = String(item || "").trim();
+      if (normalized) {
+        unique.add(normalized);
+      }
+    });
+    return Array.from(unique);
+  }, []);
+
+  const applyFriendPayload = useCallback((payload: Record<string, unknown>) => {
+    if ("friends" in payload) {
+      setFriendIds(normalizeFriendIdList(payload.friends));
+    }
+    if ("incoming" in payload) {
+      setIncomingFriendIds(normalizeFriendIdList(payload.incoming));
+    }
+    if ("outgoing" in payload) {
+      setOutgoingFriendIds(normalizeFriendIdList(payload.outgoing));
+    }
+  }, [normalizeFriendIdList]);
+
+  const mapFriendErrorMessage = useCallback((code: string) => {
+    if (code === "FRIEND_ID_REQUIRED" || code === "REQUESTER_ID_REQUIRED") return t("friendIdRequired");
+    if (code === "FRIEND_NOT_FOUND") return t("friendNotFound");
+    if (code === "FRIEND_SELF_FORBIDDEN") return t("friendSelfForbidden");
+    if (code === "REQUEST_ALREADY_SENT") return t("friendRequestAlreadySent");
+    if (code === "REQUEST_ALREADY_RECEIVED") return t("friendRequestAlreadyReceived");
+    if (code === "REQUEST_NOT_FOUND") return t("friendRequestNotFound");
+    if (code === "ALREADY_FRIENDS") return t("friendAlreadyExists");
+    if (code === "AUTH_REQUIRED") return t("friendsHintNoAuth");
+    return t("friendActionFailed");
+  }, [t]);
+
+  const refreshFriends = useCallback(async (showLoading = true) => {
+    if (!cloudAuthPayload) {
+      setFriendIds([]);
+      setIncomingFriendIds([]);
+      setOutgoingFriendIds([]);
+      return;
+    }
+
+    if (showLoading) {
+      setIsFriendsLoading(true);
+    }
+
+    try {
+      const [friendsData, incomingData, outgoingData] = await Promise.all([
+        callCloudApi<CloudApiResult>("/api/friends/list", cloudAuthPayload),
+        callCloudApi<CloudApiResult>("/api/friends/request/incoming", cloudAuthPayload),
+        callCloudApi<CloudApiResult>("/api/friends/request/outgoing", cloudAuthPayload),
+      ]);
+      applyFriendPayload(friendsData as Record<string, unknown>);
+      applyFriendPayload(incomingData as Record<string, unknown>);
+      applyFriendPayload(outgoingData as Record<string, unknown>);
+    } catch (error) {
+      console.error(error);
+      setFriendsMessage(t("friendsLoadFailed"));
+    } finally {
+      if (showLoading) {
+        setIsFriendsLoading(false);
+      }
+    }
+  }, [applyFriendPayload, callCloudApi, cloudAuthPayload, t]);
+
+  const runFriendAction = useCallback(async (
+    path: string,
+    body: Record<string, unknown>,
+    successMessageKey: keyof typeof LOGIN_I18N.ja,
+  ) => {
+    if (!cloudAuthPayload) {
+      setFriendsMessage(t("friendsHintNoAuth"));
+      return;
+    }
+
+    setIsFriendsActionLoading(true);
+    try {
+      const payload = await callCloudApi<CloudApiResult>(path, {
+        ...cloudAuthPayload,
+        ...body,
+      });
+      applyFriendPayload(payload as Record<string, unknown>);
+      await refreshFriends(false);
+      setFriendsMessage(t(successMessageKey));
+    } catch (error) {
+      console.error(error);
+      const code = error instanceof Error ? error.message : "UNKNOWN";
+      setFriendsMessage(mapFriendErrorMessage(code));
+    } finally {
+      setIsFriendsActionLoading(false);
+    }
+  }, [applyFriendPayload, callCloudApi, cloudAuthPayload, mapFriendErrorMessage, refreshFriends, t]);
+
+  const activeFriendRows = useMemo(() => {
+    if (friendTab === "incoming") return incomingFriendIds;
+    if (friendTab === "outgoing") return outgoingFriendIds;
+    return friendIds;
+  }, [friendIds, friendTab, incomingFriendIds, outgoingFriendIds]);
+
+  const friendsHintText = useMemo(() => {
+    if (authMode !== "cloud") return t("friendsHintNoAuth");
+    if (friendTab === "incoming") return t("friendsHintIncoming");
+    if (friendTab === "outgoing") return t("friendsHintOutgoing");
+    return t("friendsHintReady");
+  }, [authMode, friendTab, t]);
+
+  const activeFriendsEmptyText = useMemo(() => {
+    if (friendTab === "incoming") return t("friendsIncomingEmpty");
+    if (friendTab === "outgoing") return t("friendsOutgoingEmpty");
+    return t("friendsListEmpty");
+  }, [friendTab, t]);
+
+  const canUseFriends = isAuthenticated && authMode === "cloud" && Boolean(cloudAuthPayload);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (authMode !== "cloud") {
+      setFriendIds([]);
+      setIncomingFriendIds([]);
+      setOutgoingFriendIds([]);
+      return;
+    }
+    void refreshFriends(true);
+  }, [authMode, isAuthenticated, refreshFriends]);
+
+  const handleFriendRequestSend = useCallback(() => {
+    const targetUserId = friendUserIdDraft.trim();
+    if (!targetUserId) {
+      setFriendsMessage(t("friendIdRequired"));
+      return;
+    }
+    void runFriendAction("/api/friends/request/send", { targetUserId }, "friendRequestSent");
+  }, [friendUserIdDraft, runFriendAction, t]);
+
+  const handleFriendRemove = useCallback(() => {
+    const friendUserId = friendUserIdDraft.trim();
+    if (!friendUserId) {
+      setFriendsMessage(t("friendIdRequired"));
+      return;
+    }
+    void runFriendAction("/api/friends/remove", { friendUserId }, "friendRemoveSuccess");
+  }, [friendUserIdDraft, runFriendAction, t]);
+
+  const handleFriendApprove = useCallback(() => {
+    const requesterUserId = friendUserIdDraft.trim();
+    if (!requesterUserId) {
+      setFriendsMessage(t("friendIdRequired"));
+      return;
+    }
+    void runFriendAction("/api/friends/request/approve", { requesterUserId }, "friendApproveSuccess");
+  }, [friendUserIdDraft, runFriendAction, t]);
+
+  const handleFriendReject = useCallback(() => {
+    const requesterUserId = friendUserIdDraft.trim();
+    if (!requesterUserId) {
+      setFriendsMessage(t("friendIdRequired"));
+      return;
+    }
+    void runFriendAction("/api/friends/request/reject", { requesterUserId }, "friendRejectSuccess");
+  }, [friendUserIdDraft, runFriendAction, t]);
+
+  const handleFriendCancel = useCallback(() => {
+    const targetUserId = friendUserIdDraft.trim();
+    if (!targetUserId) {
+      setFriendsMessage(t("friendIdRequired"));
+      return;
+    }
+    void runFriendAction("/api/friends/request/cancel", { targetUserId }, "friendCancelSuccess");
+  }, [friendUserIdDraft, runFriendAction, t]);
+
+  const applyPlayerName = useCallback(() => {
+    const nextName = profileNameDraft.trim().slice(0, 24);
+    if (!nextName) {
+      setMenuMessage(t("displayNameRequired"));
+      return;
+    }
+    setPlayerName(nextName);
+    setProfileNameDraft(nextName);
+    setMenuMessage(t("displayNameUpdated"));
+  }, [profileNameDraft, t]);
+
+  const loadScores = useCallback(async () => {
+    setIsScoreLoading(true);
+    try {
+      const res = await fetch("/scores?limit=20", { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data: unknown = await res.json();
+      if (!Array.isArray(data)) {
+        setScores([]);
+        return;
+      }
+      const nextScores = data
+        .map((row) => {
+          if (!row || typeof row !== "object") return null;
+          const item = row as Record<string, unknown>;
+          const id = Number(item.id);
+          const name = String(item.playerName || "").trim();
+          const point = Number(item.score);
+          const gameName = item.game == null ? null : String(item.game);
+          const createdAt = item.createdAt == null ? undefined : String(item.createdAt);
+          if (!Number.isFinite(id) || !name || !Number.isFinite(point)) return null;
+          return {
+            id,
+            playerName: name,
+            score: Math.floor(point),
+            game: gameName,
+            createdAt,
+          };
+        })
+        .filter((row) => row !== null) as ScoreEntry[];
+      setScores(nextScores);
+    } catch (error) {
+      console.error(error);
+      setMessage(t("scoreLoadFailed"));
+    } finally {
+      setIsScoreLoading(false);
+    }
+  }, [t]);
+
+  const saveScore = useCallback(async () => {
+    const normalizedName = (profileNameDraft.trim() || playerName.trim() || "player-1").slice(0, 24);
+    const normalizedScore = Number.isFinite(score) ? Math.max(0, Math.floor(score)) : 0;
+
+    setIsScoreSaving(true);
     try {
       const res = await fetch("/scores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          playerName: playerName.trim() || "player",
-          score: Number(score),
+          playerName: normalizedName,
+          score: normalizedScore,
           game,
         }),
       });
-
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
-
       setMessage(t("scoreSaved"));
       await loadScores();
     } catch (error) {
       console.error(error);
       setMessage(t("scoreSaveFailed"));
     } finally {
-      setIsPosting(false);
+      setIsScoreSaving(false);
     }
-  };
+  }, [game, loadScores, playerName, profileNameDraft, score, t]);
 
-  const callCloudAuthApi = useCallback(async (path: string, payload: Record<string, unknown>) => {
-    const res = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = (await res.json().catch(() => ({}))) as CloudAuthResult;
-    if (!res.ok) {
-      throw new Error(String(data?.code || data?.message || `HTTP ${res.status}`));
-    }
-    if (data?.ok !== true) {
-      throw new Error(String(data?.code || data?.message || "AUTH_FAILED"));
-    }
-    return data;
-  }, []);
+  const scoreDateLabel = useCallback((createdAt?: string) => {
+    if (!createdAt) return "-";
+    const parsed = new Date(createdAt);
+    if (Number.isNaN(parsed.getTime())) return createdAt;
+    return parsed.toLocaleString(language === "ja" ? "ja-JP" : "ko-KR", { hour12: false });
+  }, [language]);
 
   const applyCloudLoginSuccess = useCallback((userId: string, password: string, data: CloudAuthResult) => {
     const cloudName = String(data?.profile?.playerName || "").trim();
-    if (cloudName) {
-      setPlayerName(cloudName.slice(0, 24));
-    }
+    const nextName = (cloudName || userId || "player").slice(0, 24);
+    setPlayerName(nextName);
+    setProfileNameDraft(nextName);
     localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
     localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
     setAuthMode("cloud");
     setEntryMessage("");
+    setFriendsMessage("");
+    setQuickMatchMode(false);
+    setPendingInviteToken("");
+    setRoomChatMessages([]);
+    setSpectatorChatMessages([]);
     setIsAuthenticated(true);
   }, []);
 
@@ -5230,13 +6718,28 @@ export default function Home() {
   }, [applyCloudLoginSuccess, authPassword, authUserId, callCloudAuthApi, t]);
 
   const handleGuestStart = useCallback(() => {
+    const nextName = playerName.trim().slice(0, 24) || "guest";
+    setPlayerName(nextName);
+    setProfileNameDraft(nextName);
     localStorage.removeItem(STORAGE_CLOUD_USER_ID_KEY);
     localStorage.removeItem(STORAGE_CLOUD_PASSWORD_KEY);
     setAuthMode("guest");
     setEntryMessage("");
+    setFriendsMessage("");
+    setFriendUserIdDraft("");
+    setQuickMatchMode(false);
+    setPendingInviteToken("");
+    setRoomChatMessages([]);
+    setSpectatorChatMessages([]);
     setMenuMessage(t("guestStarted"));
     setIsAuthenticated(true);
-  }, [t]);
+  }, [playerName, t]);
+
+  useEffect(() => {
+    if (activePanel === "scores") {
+      setActivePanel("menu");
+    }
+  }, [activePanel]);
 
   const handleBackToLogin = useCallback(() => {
     closeRoomSocket();
@@ -5244,8 +6747,240 @@ export default function Home() {
     setRoomParticipants([]);
     setRoomRole("");
     setRoomStatus(t("roomStateIdle"));
+    setFriendsMessage("");
+    setFriendUserIdDraft("");
+    setQuickMatchMode(false);
+    setPendingInviteToken("");
+    setRoomChatMessages([]);
+    setSpectatorChatMessages([]);
     setIsAuthenticated(false);
   }, [closeRoomSocket, t]);
+
+  const othelloChaosShowsBlackSide =
+    othelloChaosTarget === "black"
+    || othelloChaosTarget === "both"
+    || (othelloChaosTarget === "player" && othelloPlayerSide === 1)
+    || (othelloChaosTarget === "opponent" && othelloPlayerSide === 2);
+  const othelloChaosShowsWhiteSide =
+    othelloChaosTarget === "white"
+    || othelloChaosTarget === "both"
+    || (othelloChaosTarget === "player" && othelloPlayerSide === 2)
+    || (othelloChaosTarget === "opponent" && othelloPlayerSide === 1);
+  const othelloChaosUsesBothSideSettings = othelloChaosTarget === "both";
+  const othelloShowChaosSidePanel = isChaosMode && !gameStarted.othello;
+  const othelloCurrentPlayerIndex = othelloPlayerIndex(currentPlayer);
+  const othelloSelfDrawVoted = othelloDrawVotes.includes(peerIdRef.current);
+  const othelloCanUseChaosSkills =
+    isChaosMode && gameStarted.othello && canOperateOthelloNow && !isGameOver;
+  const othelloImmutableButtonArmed = Boolean(othelloImmutableArmed[othelloCurrentPlayerIndex]);
+  const othelloDestroyButtonArmed = Boolean(othelloDestroyArmed[othelloCurrentPlayerIndex]);
+  const othelloDoubleButtonArmed = Boolean(othelloDoubleArmed[othelloCurrentPlayerIndex]);
+  const othelloImmutableButtonEnabled =
+    othelloCanUseChaosSkills
+    && (othelloImmutableButtonArmed || (othelloImmutableCharges[othelloCurrentPlayerIndex] ?? 0) > 0);
+  const othelloDestroyButtonEnabled =
+    othelloCanUseChaosSkills
+    && (othelloDestroyButtonArmed || (othelloDestroyRemaining[othelloCurrentPlayerIndex] ?? 0) > 0);
+  const othelloDoubleButtonEnabled =
+    othelloCanUseChaosSkills
+    && (othelloDoubleButtonArmed || (othelloDoubleActionCharges[othelloCurrentPlayerIndex] ?? 0) > 0);
+  const othelloShowImmutableGuide = isChaosMode && othelloImmutableButtonArmed;
+  const othelloShowDestroyGuide = isChaosMode && othelloDestroyButtonArmed;
+  const othelloDestroySelectedCurrent = othelloDestroySelectedSacrifices[othelloCurrentPlayerIndex] ?? [];
+  const othelloDestroySelectedCount = othelloDestroySelectedCurrent.length;
+  const othelloDestroySelectedKeySet = new Set(
+    othelloDestroySelectedCurrent.map((cell) => `${cell.row}-${cell.col}`),
+  );
+  let othelloDestroyCornerCandidateCount = 0;
+  const othelloDestroySelfCandidateKeySet = new Set<string>();
+  const othelloDestroyEnemyCandidateKeySet = new Set<string>();
+  if (othelloShowDestroyGuide) {
+    const enemy: 1 | 2 = currentPlayer === 1 ? 2 : 1;
+    for (let row = 0; row < BOARD_SIZE; row += 1) {
+      for (let col = 0; col < BOARD_SIZE; col += 1) {
+        if (othelloBrokenMask[row][col] || othelloFixedMask[row][col]) continue;
+        if (board[row][col] === currentPlayer) {
+          const key = `${row}-${col}`;
+          othelloDestroySelfCandidateKeySet.add(key);
+          if (isOthelloCorner(row, col)) othelloDestroyCornerCandidateCount += 1;
+        }
+        if (board[row][col] === enemy) {
+          const key = `${row}-${col}`;
+          othelloDestroyEnemyCandidateKeySet.add(key);
+        }
+      }
+    }
+  }
+  const othelloDestroyMode: "corner" | "self" | "enemy" | null = !othelloShowDestroyGuide
+    ? null
+    : othelloDestroyCornerCandidateCount > 0
+      ? "corner"
+      : othelloDestroySelectedCount >= OTHELLO_NO_CORNER_SACRIFICE_COUNT
+        ? "enemy"
+        : "self";
+  const othelloDestroyGuideText =
+    othelloDestroyMode === "corner"
+      ? t("othelloChaosDestroyGuideCorner")
+      : othelloDestroyMode === "enemy"
+        ? t("othelloChaosDestroyGuideEnemy")
+        : othelloShowDestroyGuide
+          ? tf("othelloChaosDestroyGuideSelf", {
+            count: String(othelloDestroySelectedCount),
+            need: String(OTHELLO_NO_CORNER_SACRIFICE_COUNT),
+          })
+          : "";
+  const othelloHideLegalMarker = othelloShowImmutableGuide || othelloShowDestroyGuide;
+
+  const onToggleOthelloImmutableSkill = () => {
+    if (!othelloCanUseChaosSkills) return;
+    const playerIndex = othelloCurrentPlayerIndex;
+    const nextImmutableArmed: [boolean, boolean] = [...othelloImmutableArmed];
+    const nextDestroyArmed: [boolean, boolean] = [...othelloDestroyArmed];
+    const nextDestroySelected: [{ row: number; col: number }[], { row: number; col: number }[]] = [
+      [...othelloDestroySelectedSacrifices[0]],
+      [...othelloDestroySelectedSacrifices[1]],
+    ];
+
+    if (nextImmutableArmed[playerIndex]) {
+      nextImmutableArmed[playerIndex] = false;
+      setOthelloImmutableArmed(nextImmutableArmed);
+      return;
+    }
+
+    if ((othelloImmutableCharges[playerIndex] ?? 0) <= 0) {
+      setOthelloMessage(t("othelloChaosNeedMutableDisc"));
+      return;
+    }
+
+    nextImmutableArmed[playerIndex] = true;
+    nextDestroyArmed[playerIndex] = false;
+    nextDestroySelected[playerIndex] = [];
+    setOthelloImmutableArmed(nextImmutableArmed);
+    setOthelloDestroyArmed(nextDestroyArmed);
+    setOthelloDestroySelectedSacrifices(nextDestroySelected);
+    setOthelloMessage(t("othelloChaosNeedOwnDisc"));
+  };
+
+  const onToggleOthelloDestroySkill = () => {
+    if (!othelloCanUseChaosSkills) return;
+    const player = currentPlayer;
+    const enemy: 1 | 2 = player === 1 ? 2 : 1;
+    const playerIndex = othelloCurrentPlayerIndex;
+    const nextDestroyArmed: [boolean, boolean] = [...othelloDestroyArmed];
+    const nextImmutableArmed: [boolean, boolean] = [...othelloImmutableArmed];
+    const nextDestroySelected: [{ row: number; col: number }[], { row: number; col: number }[]] = [
+      [...othelloDestroySelectedSacrifices[0]],
+      [...othelloDestroySelectedSacrifices[1]],
+    ];
+
+    if (nextDestroyArmed[playerIndex]) {
+      nextDestroyArmed[playerIndex] = false;
+      nextDestroySelected[playerIndex] = [];
+      setOthelloDestroyArmed(nextDestroyArmed);
+      setOthelloDestroySelectedSacrifices(nextDestroySelected);
+      return;
+    }
+
+    if ((othelloDestroyRemaining[playerIndex] ?? 0) <= 0) {
+      setOthelloMessage(t("othelloChaosNeedMutableDisc"));
+      return;
+    }
+
+    nextDestroyArmed[playerIndex] = true;
+    nextImmutableArmed[playerIndex] = false;
+    nextDestroySelected[playerIndex] = [];
+    setOthelloDestroyArmed(nextDestroyArmed);
+    setOthelloImmutableArmed(nextImmutableArmed);
+    setOthelloDestroySelectedSacrifices(nextDestroySelected);
+
+    let cornerSacrifices = 0;
+    let selfSacrifices = 0;
+    let targets = 0;
+    for (let row = 0; row < BOARD_SIZE; row += 1) {
+      for (let col = 0; col < BOARD_SIZE; col += 1) {
+        if (othelloBrokenMask[row][col] || othelloFixedMask[row][col]) continue;
+        if (board[row][col] === player) {
+          selfSacrifices += 1;
+          if (isOthelloCorner(row, col)) cornerSacrifices += 1;
+        }
+        if (board[row][col] === enemy) targets += 1;
+      }
+    }
+
+    if (cornerSacrifices > 0) {
+      setOthelloMessage(targets >= OTHELLO_CORNER_SACRIFICE_DESTROY_COUNT
+        ? t("othelloChaosDestroySelectSacrifice")
+        : t("othelloChaosDestroySelectTarget"));
+      return;
+    }
+
+    if (selfSacrifices >= OTHELLO_NO_CORNER_SACRIFICE_COUNT && targets >= OTHELLO_NO_CORNER_DESTROY_COUNT) {
+      setOthelloMessage(t("othelloChaosDestroySelectSacrifice"));
+      return;
+    }
+
+    setOthelloMessage(selfSacrifices < OTHELLO_NO_CORNER_SACRIFICE_COUNT
+      ? t("othelloChaosDestroySelectSacrifice")
+      : t("othelloChaosDestroySelectTarget"));
+  };
+
+  const onToggleOthelloDoubleSkill = () => {
+    if (!othelloCanUseChaosSkills) return;
+    const playerIndex = othelloCurrentPlayerIndex;
+    const nextDoubleArmed: [boolean, boolean] = [...othelloDoubleArmed];
+
+    if (nextDoubleArmed[playerIndex]) {
+      nextDoubleArmed[playerIndex] = false;
+      setOthelloDoubleArmed(nextDoubleArmed);
+      return;
+    }
+
+    if ((othelloDoubleActionCharges[playerIndex] ?? 0) <= 0) {
+      setOthelloMessage(t("othelloChaosNeedMutableDisc"));
+      return;
+    }
+
+    nextDoubleArmed[playerIndex] = true;
+    setOthelloDoubleArmed(nextDoubleArmed);
+    setOthelloMessage(t("othelloChaosSkillArmed"));
+  };
+
+  const onOthelloResetClick = () => {
+    const isRoomPvp = Boolean(connectedRoomCode) && roomRole !== "spectator";
+    if (isRoomPvp && gameStarted.othello && !isGameOver) {
+      if (othelloSelfDrawVoted) {
+        setOthelloDrawVotes((prev) => prev.filter((vote) => vote !== peerIdRef.current));
+        sendRoomEvent({ type: "draw-unvote" });
+        setMenuMessage(t("othelloDrawRequestCanceled"));
+      } else {
+        setOthelloDrawVotes((prev) => (prev.includes(peerIdRef.current) ? prev : [...prev, peerIdRef.current]));
+        sendRoomEvent({ type: "draw-vote" });
+        setMenuMessage(t("othelloDrawRequestSent"));
+      }
+      return;
+    }
+
+    if (connectedRoomCode && roomRole === "spectator") {
+      setMenuMessage(t("spectatorReadOnly"));
+      return;
+    }
+
+    resetOthello({}, isChaosMode, { rerollRandomSide: true });
+  };
+
+  useEffect(() => {
+    if (!connectedRoomCode) return;
+    if (!gameStarted.othello) return;
+    if (isGameOver) return;
+    if (othelloDrawVotes.length < 2) return;
+    finalizeOthelloDrawAgreement();
+  }, [
+    connectedRoomCode,
+    finalizeOthelloDrawAgreement,
+    gameStarted.othello,
+    isGameOver,
+    othelloDrawVotes,
+  ]);
 
   if (!isAuthenticated) {
     return (
@@ -5269,6 +7004,13 @@ export default function Home() {
                   className={`rounded px-2 py-1 ${language === "ko" ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
                 >
                   {t("langKo")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchLanguage("en")}
+                  className={`rounded px-2 py-1 ${language === "en" ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
+                >
+                  {t("langEn")}
                 </button>
               </div>
             </div>
@@ -5296,17 +7038,6 @@ export default function Home() {
                   value={authPassword}
                   onChange={(event) => setAuthPassword(event.target.value)}
                   placeholder="password"
-                  className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  disabled={isAuthLoading}
-                />
-              </label>
-
-              <label className="grid gap-1 text-sm">
-                {t("displayName")}
-                <input
-                  value={playerName}
-                  onChange={(event) => setPlayerName(event.target.value.slice(0, 24))}
-                  placeholder="Player"
                   className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
                   disabled={isAuthLoading}
                 />
@@ -5370,6 +7101,13 @@ export default function Home() {
                 >
                   {t("langKo")}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => switchLanguage("en")}
+                  className={`rounded px-2 py-1 ${language === "en" ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
+                >
+                  {t("langEn")}
+                </button>
               </div>
               <button
                 type="button"
@@ -5384,6 +7122,28 @@ export default function Home() {
           <p className="mt-2 text-sm text-slate-300">{t("appLead")}</p>
         </header>
 
+        <section className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="grid min-w-[220px] flex-1 gap-1 text-sm">
+              {t("displayNameAfterLogin")}
+              <input
+                value={profileNameDraft}
+                onChange={(event) => setProfileNameDraft(event.target.value.slice(0, 24))}
+                placeholder="Player"
+                className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={applyPlayerName}
+              className="rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950"
+            >
+              {t("displayNameSave")}
+            </button>
+          </div>
+        </section>
+
+        {activePanel === "menu" ? (
         <section className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -5519,22 +7279,15 @@ export default function Home() {
             >
               {t("tabUno")}
             </button>
-            <button
-              type="button"
-              onClick={openScores}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabScores")}
-            </button>
-            <button
-              type="button"
-              onClick={openStatus}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabStatus")}
-            </button>
           </div>
         </section>
+        ) : null}
+
+        {message ? (
+          <section className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 px-4 py-3">
+            <p className="text-sm text-cyan-100">{message}</p>
+          </section>
+        ) : null}
 
         {activePanel === "menu" ? (
           <section className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
@@ -5687,14 +7440,6 @@ export default function Home() {
                   <p className="text-lg font-semibold">{t("gameShogi")}</p>
                   <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
                 </button>
-                <button
-                  type="button"
-                  onClick={openScores}
-                  className="rounded-xl border border-slate-200/20 bg-slate-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabScores")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("checkScoresLead")}</p>
-                </button>
               </div>
             </article>
 
@@ -5743,7 +7488,16 @@ export default function Home() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
+                    onClick={startQuickMatch}
+                    className="rounded-md border border-emerald-200/40 px-3 py-2 text-sm"
+                  >
+                    {t("quickMatchMulti")}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
+                      setQuickMatchMode(false);
+                      setPendingInviteToken("");
                       const nextCode = String(Math.floor(100000 + Math.random() * 900000));
                       setRoomCode(nextCode);
                       setMenuMessage(
@@ -5752,7 +7506,7 @@ export default function Home() {
                           visibility: roomVisibility === "public" ? t("visibilityPublic") : t("visibilityPrivate"),
                         }),
                       );
-                      connectRoom(nextCode, true);
+                      connectRoom(nextCode, true, { roomPublic: roomVisibility === "public" });
                     }}
                     className="rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950"
                   >
@@ -5760,21 +7514,39 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      onJoinRoom();
-                      connectRoom(roomCode, false);
-                    }}
+                    onClick={joinRoomAsPlayer}
                     className="rounded-md border border-cyan-200/40 px-3 py-2 text-sm"
                   >
                     {t("roomJoin")}
                   </button>
                   <button
                     type="button"
+                    onClick={joinRoomAsSpectator}
+                    className="rounded-md border border-violet-200/40 px-3 py-2 text-sm"
+                  >
+                    {t("spectateJoin")}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
+                      void copyInviteLink();
+                    }}
+                    disabled={!connectedRoomCode}
+                    className="rounded-md border border-amber-200/40 px-3 py-2 text-sm disabled:opacity-60"
+                  >
+                    {t("copyInviteLink")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickMatchMode(false);
+                      setPendingInviteToken("");
                       closeRoomSocket();
                       setConnectedRoomCode("");
                       setRoomParticipants([]);
                       setRoomRole("");
+                      setRoomChatMessages([]);
+                      setSpectatorChatMessages([]);
                     }}
                     className="rounded-md border border-red-200/40 px-3 py-2 text-sm"
                   >
@@ -5799,17 +7571,6 @@ export default function Home() {
                     >
                       {isMultiSyncEnabled ? t("multiSyncEnabled") : t("multiSyncDisabled")}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = !isChaosMode;
-                        setIsChaosMode(next);
-                        sendRoomEvent({ type: "arcade-chaos", enabled: next });
-                      }}
-                      className="rounded-md border border-rose-200/40 px-3 py-1"
-                    >
-                      {t("chaosModeLabel")}: {isChaosMode ? t("chaosModeOn") : t("chaosModeOff")}
-                    </button>
                   </div>
                 </div>
 
@@ -5827,6 +7588,214 @@ export default function Home() {
                     </ul>
                   )}
                 </div>
+
+                {connectedRoomCode && roomRole !== "spectator" ? (
+                  <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
+                    <p className="text-sm font-semibold">{t("roomChatTitle")}</p>
+                    <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-500/40 bg-slate-950/60 p-2 text-xs text-slate-200">
+                      {roomChatMessages.length === 0 ? (
+                        <p className="text-slate-300">{t("roomChatEmpty")}</p>
+                      ) : (
+                        roomChatMessages.map((row, index) => (
+                          <p key={`room-chat-${index}-${row.name}`}>
+                            <span className="text-cyan-200">{row.name}</span>: {row.text}
+                          </p>
+                        ))
+                      )}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        value={roomChatInput}
+                        onChange={(event) => setRoomChatInput(event.target.value.slice(0, 200))}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          sendRoomChat();
+                        }}
+                        placeholder={t("roomChatPlaceholder")}
+                        className="flex-1 rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-sm"
+                        disabled={!connectedRoomCode}
+                      />
+                      <button
+                        type="button"
+                        onClick={sendRoomChat}
+                        disabled={!connectedRoomCode}
+                        className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs disabled:opacity-60"
+                      >
+                        {t("roomChatSend")}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {connectedRoomCode && roomRole === "spectator" ? (
+                  <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
+                    <p className="text-sm font-semibold">{t("spectatorChatTitle")}</p>
+                    <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-500/40 bg-slate-950/60 p-2 text-xs text-slate-200">
+                      {spectatorChatMessages.length === 0 ? (
+                        <p className="text-slate-300">{t("spectatorChatEmpty")}</p>
+                      ) : (
+                        spectatorChatMessages.map((row, index) => (
+                          <p key={`spectator-chat-${index}-${row.name}`}>
+                            <span className="text-cyan-200">{row.name}</span>: {row.text}
+                          </p>
+                        ))
+                      )}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        value={spectatorChatInput}
+                        onChange={(event) => setSpectatorChatInput(event.target.value.slice(0, 200))}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          sendSpectatorChat();
+                        }}
+                        placeholder={t("spectatorChatPlaceholder")}
+                        className="flex-1 rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-sm"
+                        disabled={!connectedRoomCode}
+                      />
+                      <button
+                        type="button"
+                        onClick={sendSpectatorChat}
+                        disabled={!connectedRoomCode}
+                        className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs disabled:opacity-60"
+                      >
+                        {t("spectatorChatSend")}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">{t("friendsTitle")}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void refreshFriends(true);
+                      }}
+                      disabled={!canUseFriends || isFriendsLoading || isFriendsActionLoading}
+                      className="rounded-md border border-cyan-200/40 px-2 py-1 text-xs disabled:opacity-60"
+                    >
+                      {t("friendReload")}
+                    </button>
+                  </div>
+
+                  <p className="mt-1 text-xs text-slate-300">{friendsHintText}</p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFriendTab("friends")}
+                      className={`rounded-full border px-3 py-1 text-xs ${friendTab === "friends" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
+                    >
+                      {t("friendsTabFriends")} ({friendIds.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFriendTab("incoming")}
+                      className={`rounded-full border px-3 py-1 text-xs ${friendTab === "incoming" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
+                    >
+                      {t("friendsTabIncoming")} ({incomingFriendIds.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFriendTab("outgoing")}
+                      className={`rounded-full border px-3 py-1 text-xs ${friendTab === "outgoing" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
+                    >
+                      {t("friendsTabOutgoing")} ({outgoingFriendIds.length})
+                    </button>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                    <input
+                      value={friendUserIdDraft}
+                      onChange={(event) => setFriendUserIdDraft(event.target.value.slice(0, 24))}
+                      placeholder={t("friendIdPlaceholder")}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-3 py-2 text-sm"
+                      disabled={!canUseFriends || isFriendsActionLoading}
+                    />
+
+                    {friendTab === "friends" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleFriendRequestSend}
+                          disabled={!canUseFriends || isFriendsActionLoading}
+                          className="rounded-md border border-cyan-200/40 px-3 py-2 text-xs disabled:opacity-60"
+                        >
+                          {t("friendRequestSend")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleFriendRemove}
+                          disabled={!canUseFriends || isFriendsActionLoading}
+                          className="rounded-md border border-rose-200/40 px-3 py-2 text-xs disabled:opacity-60"
+                        >
+                          {t("friendRemove")}
+                        </button>
+                      </>
+                    ) : null}
+
+                    {friendTab === "incoming" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleFriendApprove}
+                          disabled={!canUseFriends || isFriendsActionLoading}
+                          className="rounded-md border border-emerald-200/40 px-3 py-2 text-xs disabled:opacity-60"
+                        >
+                          {t("friendApprove")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleFriendReject}
+                          disabled={!canUseFriends || isFriendsActionLoading}
+                          className="rounded-md border border-rose-200/40 px-3 py-2 text-xs disabled:opacity-60"
+                        >
+                          {t("friendReject")}
+                        </button>
+                      </>
+                    ) : null}
+
+                    {friendTab === "outgoing" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleFriendCancel}
+                          disabled={!canUseFriends || isFriendsActionLoading}
+                          className="rounded-md border border-rose-200/40 px-3 py-2 text-xs disabled:opacity-60"
+                        >
+                          {t("friendCancel")}
+                        </button>
+                        <span className="hidden sm:block" />
+                      </>
+                    ) : null}
+                  </div>
+
+                  {isFriendsLoading ? (
+                    <p className="mt-3 text-xs text-slate-300">{t("friendsLoading")}</p>
+                  ) : (
+                    <ul className="mt-3 max-h-44 space-y-1 overflow-y-auto text-sm text-slate-200">
+                      {activeFriendRows.length === 0 ? (
+                        <li className="text-slate-300">{activeFriendsEmptyText}</li>
+                      ) : (
+                        activeFriendRows.map((id) => (
+                          <li key={`friend-row-${friendTab}-${id}`}>
+                            <button
+                              type="button"
+                              onClick={() => setFriendUserIdDraft(id)}
+                              className="w-full rounded-md border border-slate-500/40 px-2 py-1 text-left text-xs hover:border-cyan-300/60"
+                            >
+                              {id}
+                            </button>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  )}
+
+                  {friendsMessage ? <p className="mt-2 text-xs text-cyan-200">{friendsMessage}</p> : null}
+                </div>
               </div>
 
               {menuMessage ? <p className="mt-3 text-sm text-cyan-200">{menuMessage}</p> : null}
@@ -5835,229 +7804,422 @@ export default function Home() {
         ) : null}
 
         {activePanel === "othello" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xl font-semibold">{t("othelloTitle")}</h2>
-              <button
-                type="button"
-                onClick={resetOthello}
-                className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-              >
-                {t("othelloReset")}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => startPanelGame("othello", () => resetOthello({}, isChaosMode, { rerollRandomSide: true }))}
+                  className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                >
+                  {t("gameStart")}
+                </button>
+                <button
+                  type="button"
+                  onClick={onOthelloResetClick}
+                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                >
+                  {t("othelloReset")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePanel("menu")}
+                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                >
+                  {t("backToMenu")}
+                </button>
+              </div>
             </div>
 
-            <p className="mt-2 text-sm text-slate-300">{othelloMessage}</p>
+            {!gameStarted.othello ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+
+            <p className="text-sm text-slate-300">{othelloMessage}</p>
             {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateOthelloNow)}</p> : null}
 
-            {isChaosMode ? (
-              <div className="mt-3 rounded-lg border border-cyan-200/25 bg-slate-950/35 p-3 text-xs text-slate-200">
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <p>{t("othelloChaosOverwriteStock")}: {othelloOverwriteRemaining[othelloPlayerIndex(currentPlayer)]}</p>
-                  <p>{t("othelloChaosImmutableStock")}: {othelloImmutableCharges[othelloPlayerIndex(currentPlayer)]}</p>
-                  <p>{t("othelloChaosDestroyStock")}: {othelloDestroyRemaining[othelloPlayerIndex(currentPlayer)]}</p>
-                  <p>{t("othelloChaosDoubleStock")}: {othelloDoubleActionCharges[othelloPlayerIndex(currentPlayer)]}</p>
+            {!connectedRoomCode ? (
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <label className="grid gap-1 text-xs text-slate-300">
+                  <span>{t("othelloModeLabel")}</span>
+                  <select
+                    value={othelloMode}
+                    onChange={(event) => {
+                      const nextMode = event.target.value as OthelloMode;
+                      setOthelloMode(nextMode);
+                      setIsChaosMode(nextMode === "chaos");
+                      resetOthello({}, nextMode === "chaos");
+                    }}
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
+                  >
+                    <option value="cpu">{t("othelloModeCpu")}</option>
+                    <option value="cpuvscpu">{t("othelloModeCpuVsCpu")}</option>
+                    <option value="local">{t("othelloModeLocal")}</option>
+                    <option value="chaos">{t("othelloModeChaos")}</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-1 text-xs text-slate-300">
+                  <span>{t("othelloCpuLevelLabel")}</span>
+                  <select
+                    value={othelloCpuLevel}
+                    onChange={(event) => setOthelloCpuLevel(event.target.value as OthelloCpuLevel)}
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
+                  >
+                    <option value="easy">{t("othelloCpuLevelEasy")}</option>
+                    <option value="normal">{t("othelloCpuLevelNormal")}</option>
+                    <option value="hard">{t("othelloCpuLevelHard")}</option>
+                  </select>
+                </label>
+
+                <label className={`grid gap-1 text-xs text-slate-300 ${othelloMode === "cpu" || othelloMode === "chaos" ? "" : "opacity-60"}`}>
+                  <span>{t("othelloTurnOrderLabel")}</span>
+                  <select
+                    value={othelloTurnOrder}
+                    onChange={(event) => {
+                      const nextOrder = event.target.value as OthelloTurnOrder;
+                      setOthelloTurnOrder(nextOrder);
+                      const nextSide: 1 | 2 = nextOrder === "random"
+                        ? (Math.random() < 0.5 ? 1 : 2)
+                        : nextOrder === "white"
+                          ? 2
+                          : 1;
+                      setOthelloPlayerSide(nextSide);
+                      resetOthello({}, isChaosMode, { playerSideOverride: nextSide, turnOrderOverride: nextOrder });
+                    }}
+                    disabled={othelloMode !== "cpu" && othelloMode !== "chaos"}
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                  >
+                    <option value="black">{t("othelloTurnOrderBlack")}</option>
+                    <option value="white">{t("othelloTurnOrderWhite")}</option>
+                    <option value="random">{t("othelloTurnOrderRandom")}</option>
+                  </select>
+                </label>
+              </div>
+            ) : null}
+
+            <div className={`mt-4 grid gap-3 ${othelloShowChaosSidePanel ? "md:grid-cols-2 md:items-start" : ""}`}>
+            {othelloShowChaosSidePanel ? (
+              <div className="rounded-lg border border-cyan-200/25 bg-slate-950/35 p-3 text-xs text-slate-200 md:order-2">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="grid gap-1">
+                    <span>{t("othelloChaosTargetLabel")}</span>
+                    <select
+                      value={othelloChaosTarget}
+                      onChange={(event) => {
+                        const nextValue = event.target.value as OthelloChaosTarget;
+                        setOthelloChaosTarget(nextValue);
+                        resetOthello({ target: nextValue }, true);
+                      }}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                    >
+                      <option value="none">{t("othelloChaosTargetNone")}</option>
+                      <option value="black">{t("othelloChaosTargetBlack")}</option>
+                      <option value="white">{t("othelloChaosTargetWhite")}</option>
+                      <option value="both">{t("othelloChaosTargetBoth")}</option>
+                      <option value="player">{t("othelloChaosTargetPlayer")}</option>
+                      <option value="opponent">{t("othelloChaosTargetOpponent")}</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1">
+                    <span>{t("othelloChaosRandomLineIgnoreLabel")}</span>
+                    <select
+                      value={othelloChaosRandomLineIgnore}
+                      onChange={(event) => {
+                        const nextValue = event.target.value as OthelloChaosToggle;
+                        setOthelloChaosRandomLineIgnore(nextValue);
+                        resetOthello({ randomLineIgnore: nextValue }, true);
+                      }}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                    >
+                      <option value="off">{t("othelloChaosToggleOff")}</option>
+                      <option value="on">{t("othelloChaosToggleOn")}</option>
+                    </select>
+                  </label>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const idx = othelloPlayerIndex(currentPlayer);
-                      if ((othelloImmutableCharges[idx] ?? 0) <= 0) return;
-                      setOthelloImmutableArmed((prev) => {
-                        const next: [boolean, boolean] = [...prev];
-                        const armed = !next[idx];
-                        next[idx] = armed;
-                        return next;
-                      });
-                      setOthelloDestroyArmed((prev) => {
-                        const next: [boolean, boolean] = [...prev];
-                        next[idx] = false;
-                        return next;
-                      });
-                    }}
-                    className={`rounded-md border px-2 py-1 ${othelloImmutableArmed[othelloPlayerIndex(currentPlayer)] ? "border-amber-300 bg-amber-300/20" : "border-cyan-200/40"}`}
-                  >
-                    {t("othelloChaosImmutableArm")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const idx = othelloPlayerIndex(currentPlayer);
-                      if ((othelloDestroyRemaining[idx] ?? 0) <= 0) return;
-                      setOthelloDestroyArmed((prev) => {
-                        const next: [boolean, boolean] = [...prev];
-                        const armed = !next[idx];
-                        next[idx] = armed;
-                        return next;
-                      });
-                      setOthelloImmutableArmed((prev) => {
-                        const next: [boolean, boolean] = [...prev];
-                        next[idx] = false;
-                        return next;
-                      });
-                    }}
-                    className={`rounded-md border px-2 py-1 ${othelloDestroyArmed[othelloPlayerIndex(currentPlayer)] ? "border-rose-300 bg-rose-300/20" : "border-cyan-200/40"}`}
-                  >
-                    {t("othelloChaosDestroyArm")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const idx = othelloPlayerIndex(currentPlayer);
-                      if ((othelloDoubleActionCharges[idx] ?? 0) <= 0) return;
-                      setOthelloDoubleArmed((prev) => {
-                        const next: [boolean, boolean] = [...prev];
-                        next[idx] = !next[idx];
-                        return next;
-                      });
-                    }}
-                    className={`rounded-md border px-2 py-1 ${othelloDoubleArmed[othelloPlayerIndex(currentPlayer)] ? "border-violet-300 bg-violet-300/20" : "border-cyan-200/40"}`}
-                  >
-                    {t("othelloChaosDoubleArm")}
-                  </button>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {othelloChaosShowsBlackSide ? (
+                    <section className="rounded-md border border-slate-500/40 bg-slate-900/45 p-2">
+                      <h3 className="mb-2 font-semibold">{t("othelloChaosBlackSideTitle")}</h3>
+                      <div className="grid gap-2">
+                        <label className="grid gap-1">
+                          <span>{t("othelloChaosBlackHandicapLabel")}</span>
+                          <select
+                            value={othelloChaosUsesBothSideSettings ? othelloChaosBothBlackHandicap : othelloChaosHandicap}
+                            onChange={(event) => {
+                              const nextValue = event.target.value as OthelloChaosHandicap;
+                              if (othelloChaosUsesBothSideSettings) {
+                                setOthelloChaosBothBlackHandicap(nextValue);
+                                resetOthello({ bothBlackHandicap: nextValue }, true);
+                                return;
+                              }
+                              setOthelloChaosHandicap(nextValue);
+                              resetOthello({ handicap: nextValue }, true);
+                            }}
+                            className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                          >
+                            <option value="none">{t("othelloChaosHandicapNone")}</option>
+                            <option value="immutable1">{t("othelloChaosHandicapImmutable1")}</option>
+                          </select>
+                        </label>
+                        <label className="grid gap-1">
+                          <span>{t("othelloChaosBlackOverwriteLimitLabel")}</span>
+                          <select
+                            value={String(othelloChaosUsesBothSideSettings ? othelloChaosBothBlackOverwriteLimit : othelloChaosOverwriteLimit)}
+                            onChange={(event) => {
+                              const nextValue = Number(event.target.value);
+                              if (othelloChaosUsesBothSideSettings) {
+                                setOthelloChaosBothBlackOverwriteLimit(nextValue);
+                                resetOthello({ bothBlackOverwriteLimit: nextValue }, true);
+                                return;
+                              }
+                              setOthelloChaosOverwriteLimit(nextValue);
+                              resetOthello({ overwriteLimit: nextValue }, true);
+                            }}
+                            className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                          >
+                            {OTHELLO_CHAOS_LIMIT_OPTIONS.map((limit) => (
+                              <option key={`othello-chaos-overwrite-black-${limit}`} value={String(limit)}>{limit}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <label className="mt-2 grid gap-1">
+                        <span>{t("othelloChaosBlackDestroyLimitLabel")}</span>
+                        <select
+                          value={String(othelloChaosDestroyLimitBlack)}
+                          onChange={(event) => {
+                            const nextValue = Number(event.target.value);
+                            setOthelloChaosDestroyLimitBlack(nextValue);
+                            resetOthello({ destroyLimitBlack: nextValue }, true);
+                          }}
+                          className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                        >
+                          {OTHELLO_CHAOS_LIMIT_OPTIONS.map((limit) => (
+                            <option key={`othello-chaos-destroy-black-${limit}`} value={String(limit)}>{limit}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </section>
+                  ) : null}
+
+                  {othelloChaosShowsWhiteSide ? (
+                    <section className="rounded-md border border-slate-500/40 bg-slate-900/45 p-2">
+                      <h3 className="mb-2 font-semibold">{t("othelloChaosWhiteSideTitle")}</h3>
+                      <div className="grid gap-2">
+                        <label className="grid gap-1">
+                          <span>{t("othelloChaosWhiteHandicapLabel")}</span>
+                          <select
+                            value={othelloChaosUsesBothSideSettings ? othelloChaosBothWhiteHandicap : othelloChaosHandicap}
+                            onChange={(event) => {
+                              const nextValue = event.target.value as OthelloChaosHandicap;
+                              if (othelloChaosUsesBothSideSettings) {
+                                setOthelloChaosBothWhiteHandicap(nextValue);
+                                resetOthello({ bothWhiteHandicap: nextValue }, true);
+                                return;
+                              }
+                              setOthelloChaosHandicap(nextValue);
+                              resetOthello({ handicap: nextValue }, true);
+                            }}
+                            className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                          >
+                            <option value="none">{t("othelloChaosHandicapNone")}</option>
+                            <option value="immutable1">{t("othelloChaosHandicapImmutable1")}</option>
+                          </select>
+                        </label>
+                        <label className="grid gap-1">
+                          <span>{t("othelloChaosWhiteOverwriteLimitLabel")}</span>
+                          <select
+                            value={String(othelloChaosUsesBothSideSettings ? othelloChaosBothWhiteOverwriteLimit : othelloChaosOverwriteLimit)}
+                            onChange={(event) => {
+                              const nextValue = Number(event.target.value);
+                              if (othelloChaosUsesBothSideSettings) {
+                                setOthelloChaosBothWhiteOverwriteLimit(nextValue);
+                                resetOthello({ bothWhiteOverwriteLimit: nextValue }, true);
+                                return;
+                              }
+                              setOthelloChaosOverwriteLimit(nextValue);
+                              resetOthello({ overwriteLimit: nextValue }, true);
+                            }}
+                            className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                          >
+                            {OTHELLO_CHAOS_LIMIT_OPTIONS.map((limit) => (
+                              <option key={`othello-chaos-overwrite-white-${limit}`} value={String(limit)}>{limit}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <label className="mt-2 grid gap-1">
+                        <span>{t("othelloChaosWhiteDestroyLimitLabel")}</span>
+                        <select
+                          value={String(othelloChaosDestroyLimitWhite)}
+                          onChange={(event) => {
+                            const nextValue = Number(event.target.value);
+                            setOthelloChaosDestroyLimitWhite(nextValue);
+                            resetOthello({ destroyLimitWhite: nextValue }, true);
+                          }}
+                          className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                        >
+                          {OTHELLO_CHAOS_LIMIT_OPTIONS.map((limit) => (
+                            <option key={`othello-chaos-destroy-white-${limit}`} value={String(limit)}>{limit}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </section>
+                  ) : null}
                 </div>
-                {othelloDestroyArmed[othelloPlayerIndex(currentPlayer)] ? (
-                  <p className="mt-2 text-cyan-200">
-                    {t("othelloChaosSkillArmed")} ({othelloDestroySelectedSacrifices[othelloPlayerIndex(currentPlayer)].length}/{OTHELLO_NO_CORNER_SACRIFICE_COUNT})
-                  </p>
+
+                {isOthelloGameStarted ? (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <p>{t("othelloChaosOverwriteStock")}: {othelloOverwriteRemaining[othelloPlayerIndex(currentPlayer)]}</p>
+                    <p>{t("othelloChaosImmutableStock")}: {othelloImmutableCharges[othelloPlayerIndex(currentPlayer)]}</p>
+                    <p>{t("othelloChaosDestroyStock")}: {othelloDestroyRemaining[othelloPlayerIndex(currentPlayer)]}</p>
+                    <p>{t("othelloChaosDoubleStock")}: {othelloDoubleActionCharges[othelloPlayerIndex(currentPlayer)]}</p>
+                  </div>
                 ) : null}
               </div>
             ) : null}
 
-            <div className="mt-4 grid w-full max-w-[420px] grid-cols-8 gap-1 rounded-xl bg-emerald-900/70 p-2">
-              {board.map((line, row) =>
-                line.map((cell, col) => {
-                  const key = `${row}-${col}`;
-                  const isLegal = legalMoveSet.has(key);
-                  const isFixed = othelloFixedMask[row][col];
-                  const isBroken = othelloBrokenMask[row][col];
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => onBoardClick(row, col)}
-                      disabled={!canOperateOthelloNow || isGameOver}
-                      className={`relative aspect-square rounded-sm ${isBroken ? "bg-slate-800/95" : "bg-emerald-700/95 hover:bg-emerald-600/95"} disabled:cursor-not-allowed disabled:opacity-70`}
-                      aria-label={`cell-${row + 1}-${col + 1}`}
-                    >
-                      {cell === 1 ? (
-                        <span className="absolute inset-[14%] block rounded-full bg-slate-900 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.08)]" />
-                      ) : null}
-                      {cell === 2 ? (
-                        <span className="absolute inset-[14%] block rounded-full bg-slate-100 shadow-[inset_0_0_0_2px_rgba(0,0,0,0.15)]" />
-                      ) : null}
-                      {isLegal ? (
-                        <span className={`absolute ${cell === 0 ? "inset-[40%] rounded-full" : "inset-[20%] rounded-md border-2"} block bg-cyan-200/90`} />
-                      ) : null}
-                      {isFixed ? (
-                        <span className="absolute right-1 top-1 rounded bg-amber-300 px-1 text-[10px] font-bold text-slate-900">F</span>
-                      ) : null}
-                      {isBroken ? (
-                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-lg font-black text-rose-300/90">×</span>
-                      ) : null}
-                    </button>
-                  );
-                }),
-              )}
+            <div className={othelloShowChaosSidePanel ? "md:order-1" : ""}>
+              {isChaosMode ? (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onToggleOthelloImmutableSkill}
+                    disabled={!othelloImmutableButtonEnabled}
+                    className={`rounded-md border px-3 py-1 text-xs font-semibold ${othelloImmutableButtonArmed ? "border-cyan-300/70 bg-cyan-300/20 text-cyan-100" : "border-slate-400/40 bg-slate-950/60 text-slate-100"} disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    {t("othelloChaosImmutableButton")} ({othelloImmutableCharges[othelloCurrentPlayerIndex] ?? 0})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onToggleOthelloDestroySkill}
+                    disabled={!othelloDestroyButtonEnabled}
+                    className={`rounded-md border px-3 py-1 text-xs font-semibold ${othelloDestroyButtonArmed ? "border-cyan-300/70 bg-cyan-300/20 text-cyan-100" : "border-slate-400/40 bg-slate-950/60 text-slate-100"} disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    {t("othelloChaosDestroyButton")} ({othelloDestroyRemaining[othelloCurrentPlayerIndex] ?? 0})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onToggleOthelloDoubleSkill}
+                    disabled={!othelloDoubleButtonEnabled}
+                    className={`rounded-md border px-3 py-1 text-xs font-semibold ${othelloDoubleButtonArmed ? "border-cyan-300/70 bg-cyan-300/20 text-cyan-100" : "border-slate-400/40 bg-slate-950/60 text-slate-100"} disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    {t("othelloChaosDoubleButton")} ({othelloDoubleActionCharges[othelloCurrentPlayerIndex] ?? 0})
+                  </button>
+                </div>
+              ) : null}
+
+              {othelloShowImmutableGuide ? (
+                <p className="mb-2 text-xs text-amber-200">{t("othelloChaosImmutableGuide")}</p>
+              ) : null}
+              {othelloShowDestroyGuide ? (
+                <p className="mb-2 text-xs text-rose-200">{othelloDestroyGuideText}</p>
+              ) : null}
+
+              <div className={`grid w-full max-w-[520px] grid-cols-8 gap-1 rounded-xl bg-emerald-900/70 p-2 ${othelloShowChaosSidePanel ? "mx-auto md:mx-0" : "mx-auto"} ${!gameStarted.othello ? "pointer-events-none opacity-60" : ""}`}>
+                {board.map((line, row) =>
+                  line.map((cell, col) => {
+                    const key = `${row}-${col}`;
+                    const isLegal = legalMoveSet.has(key);
+                    const isFixed = othelloFixedMask[row][col];
+                    const isBroken = othelloBrokenMask[row][col];
+                    const isImmutableTargetCandidate =
+                      othelloShowImmutableGuide
+                      && cell === currentPlayer
+                      && !isFixed
+                      && !isBroken
+                      && row > 0
+                      && row < BOARD_SIZE - 1
+                      && col > 0
+                      && col < BOARD_SIZE - 1;
+                    const isDestroySelectedSelf = othelloDestroySelectedKeySet.has(key);
+                    const isDestroySelfCandidate =
+                      othelloShowDestroyGuide
+                      && othelloDestroyMode !== "enemy"
+                      && othelloDestroySelfCandidateKeySet.has(key)
+                      && (othelloDestroyMode !== "corner" || isOthelloCorner(row, col));
+                    const isDestroyEnemyCandidate =
+                      othelloShowDestroyGuide
+                      && othelloDestroyMode === "enemy"
+                      && othelloDestroyEnemyCandidateKeySet.has(key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => onBoardClick(row, col)}
+                        disabled={!canOperateOthelloNow || isGameOver || !gameStarted.othello}
+                        className={`relative aspect-square rounded-sm ${isBroken ? "bg-slate-800/95" : "bg-emerald-700/95 hover:bg-emerald-600/95"} disabled:cursor-not-allowed disabled:opacity-70`}
+                        aria-label={`cell-${row + 1}-${col + 1}`}
+                      >
+                        {cell === 1 ? (
+                          <span className="absolute inset-[14%] block rounded-full bg-slate-900 shadow-[inset_0_0_0_2px_rgba(255,255,255,0.08)]" />
+                        ) : null}
+                        {cell === 2 ? (
+                          <span className="absolute inset-[14%] block rounded-full bg-slate-100 shadow-[inset_0_0_0_2px_rgba(0,0,0,0.15)]" />
+                        ) : null}
+                        {isImmutableTargetCandidate ? (
+                          <span className="immutable-target-hint pointer-events-none absolute inset-[8%] block rounded-full border-2 border-amber-200/95 shadow-[0_0_0_1px_rgba(255,190,90,0.45),0_0_10px_rgba(251,191,36,0.45)] animate-pulse" />
+                        ) : null}
+                        {isDestroySelfCandidate ? (
+                          <span className="destroy-self-hint pointer-events-none absolute inset-[12%] block rounded-full border border-rose-200/80 shadow-[0_0_8px_rgba(251,113,133,0.45)]" />
+                        ) : null}
+                        {isDestroySelectedSelf ? (
+                          <span className="destroy-self-selected-hint pointer-events-none absolute inset-[22%] block rounded-full bg-rose-300/80 shadow-[0_0_8px_rgba(251,113,133,0.6)]" />
+                        ) : null}
+                        {isDestroyEnemyCandidate ? (
+                          <span className="destroy-enemy-target-hint pointer-events-none absolute inset-[12%] block rounded-full border-2 border-rose-200/95 shadow-[0_0_10px_rgba(244,63,94,0.5)] animate-pulse" />
+                        ) : null}
+                        {gameStarted.othello && isLegal && !othelloHideLegalMarker ? (
+                          <span className="absolute inset-[40%] block rounded-full bg-cyan-200/90 shadow-[0_0_8px_rgba(103,232,249,0.55)]" />
+                        ) : null}
+                        {isFixed ? (
+                          <>
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute inset-[18%] rounded-full border border-amber-200/80 shadow-[0_0_10px_rgba(251,191,36,0.35)] animate-pulse"
+                            />
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute left-[18%] right-[18%] top-1/2 h-[2px] -translate-y-1/2 rounded bg-amber-300/85 shadow-[0_0_6px_rgba(251,191,36,0.55)]"
+                            />
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute bottom-[18%] left-[18%] right-[18%] h-[2px] rounded bg-amber-300/75 shadow-[0_0_6px_rgba(251,191,36,0.45)]"
+                            />
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute bottom-[18%] top-[18%] left-1/2 w-[2px] -translate-x-1/2 rounded bg-amber-300/85 shadow-[0_0_6px_rgba(251,191,36,0.55)]"
+                            />
+                            <span
+                              aria-label={t("othelloChaosFixed")}
+                              className="fixed-lock-icon absolute right-1 top-1 inline-flex h-4 w-4 items-center justify-center rounded border border-amber-200/80 bg-slate-950/90 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_0_10px_rgba(251,191,36,0.35)] animate-pulse"
+                            >
+                              <span className="pointer-events-none relative block h-[6px] w-[7px] rounded-[1px] border border-amber-200/90 bg-amber-200/20" aria-hidden="true">
+                                <span className="pointer-events-none absolute -top-[4px] left-1/2 block h-[4px] w-[7px] -translate-x-1/2 rounded-t-full border-x border-t border-amber-200/90" />
+                              </span>
+                            </span>
+                          </>
+                        ) : null}
+                        {isBroken ? (
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-lg font-black text-rose-300/90">×</span>
+                        ) : null}
+                      </button>
+                    );
+                  }),
+                )}
+              </div>
+            </div>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
               <span className="rounded-md bg-slate-800 px-3 py-1">{t("blackStone")}: {stoneCount.black}</span>
               <span className="rounded-md bg-slate-800 px-3 py-1">{t("whiteStone")}: {stoneCount.white}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setGame("othello");
-                  setScore(stoneCount.black);
-                  setMessage(t("appliedBlackToScore"));
-                }}
-                className="rounded-md border border-cyan-200/40 px-3 py-1"
-              >
-                {t("applyBlackToScore")}
-              </button>
             </div>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-            <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-            <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-              <label className="grid gap-1 text-sm">
-                {t("playerNameLabel")}
-                <input
-                  value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
-                  maxLength={24}
-                  className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                />
-              </label>
-
-              <label className="grid gap-1 text-sm">
-                {t("gameLabel")}
-                <select
-                  value={game}
-                  onChange={(e) => setGame(e.target.value)}
-                  className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                >
-                  {GAME_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {gameLabelById(option.id)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="grid gap-1 text-sm">
-                {t("scoreLabel")}
-                <input
-                  type="number"
-                  value={score}
-                  onChange={(e) => setScore(Number(e.target.value))}
-                  className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                />
-              </label>
-
-              <button
-                type="submit"
-                disabled={isPosting}
-                className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-              >
-                {isPosting ? t("scoreSaving") : t("scoreSave")}
-              </button>
-            </form>
-            {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLine3")}</li>
-                <li>{t("statusLineGomoku")}</li>
-                <li>{t("statusLineChess")}</li>
-                <li>{t("statusLineShogi")}</li>
-                <li>{t("statusLineMines")}</li>
-                <li>{t("statusLineNumeron")}</li>
-                <li>{t("statusLineBlackjack")}</li>
-                <li>{t("statusLineChinchiro")}</li>
-                <li>{t("statusLineSevens")}</li>
-                <li>{t("statusLineDaifugo")}</li>
-                <li>{t("statusLineUno")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -6066,19 +8228,37 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("gomokuTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetGomoku}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("gomokuReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("gomoku", resetGomoku)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetGomoku}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("gomokuReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{gomokuMessage}</p>
+              {!gameStarted.gomoku ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+
+              <p className="text-sm text-slate-300">{gomokuMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateGomokuNow)}</p> : null}
 
-              <div className="mt-4 grid w-full max-w-[560px] grid-cols-15 gap-1 rounded-xl bg-amber-900/70 p-2" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
+              <div className={`mt-4 grid w-full max-w-[560px] grid-cols-15 gap-1 rounded-xl bg-amber-900/70 p-2 ${!gameStarted.gomoku ? "pointer-events-none opacity-60" : ""}`} style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
                 {gomokuBoard.map((line, row) =>
                   line.map((cell, col) => {
                     const key = `g-${row}-${col}`;
@@ -6087,7 +8267,7 @@ export default function Home() {
                         key={key}
                         type="button"
                         onClick={() => onGomokuClick(row, col)}
-                        disabled={!canOperateGomokuNow || isGomokuOver}
+                        disabled={!canOperateGomokuNow || isGomokuOver || !gameStarted.gomoku}
                         className="relative aspect-square rounded-sm bg-amber-700/95 hover:bg-amber-600/95 disabled:cursor-not-allowed disabled:opacity-70"
                         aria-label={`gomoku-${row + 1}-${col + 1}`}
                       >
@@ -6106,88 +8286,10 @@ export default function Home() {
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                 <span className="rounded-md bg-slate-800 px-3 py-1">{t("blackStone")}: {gomokuStoneCount.black}</span>
                 <span className="rounded-md bg-slate-800 px-3 py-1">{t("whiteStone")}: {gomokuStoneCount.white}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("gomoku");
-                    setScore(gomokuStoneCount.black);
-                    setMessage(t("appliedGomokuToScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("applyGomokuToScore")}
-                </button>
               </div>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineGomoku")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -6196,19 +8298,37 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("chessTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetChess}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("chessReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("chess", resetChess)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetChess}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("chessReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{chessMessage}</p>
+              {!gameStarted.chess ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+
+              <p className="text-sm text-slate-300">{chessMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateChessNow)}</p> : null}
 
-              <div className="mt-4 grid w-full max-w-[520px] grid-cols-8 gap-1 rounded-xl bg-sky-900/50 p-2">
+              <div className={`mt-4 grid w-full max-w-[520px] grid-cols-8 gap-1 rounded-xl bg-sky-900/50 p-2 ${!gameStarted.chess ? "pointer-events-none opacity-60" : ""}`}>
                 {chessBoard.map((line, row) =>
                   line.map((piece, col) => {
                     const isSelected = selectedChess?.row === row && selectedChess?.col === col;
@@ -6219,7 +8339,7 @@ export default function Home() {
                         key={key}
                         type="button"
                         onClick={() => onChessClick(row, col)}
-                        disabled={!canOperateChessNow || isChessOver}
+                        disabled={!canOperateChessNow || isChessOver || !gameStarted.chess}
                         className={`aspect-square rounded-sm px-1 text-[11px] font-semibold ${dark ? "bg-slate-700/95" : "bg-slate-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} disabled:cursor-not-allowed disabled:opacity-70`}
                         aria-label={`chess-${row + 1}-${col + 1}`}
                       >
@@ -6230,94 +8350,9 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("chess");
-                    const whiteCount = chessBoard.flat().filter((p) => p?.color === "w").length;
-                    const blackCount = chessBoard.flat().filter((p) => p?.color === "b").length;
-                    setScore(Math.max(0, whiteCount - blackCount + 20));
-                    setMessage(t("chessAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("chessApplyScore")}
-                </button>
-              </div>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineChess")}</li>
-                <li>{t("statusLineShogi")}</li>
-                <li>{t("statusLineMines")}</li>
-                <li>{t("statusLineNumeron")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -6326,19 +8361,55 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("shogiTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetShogi}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("shogiReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("shogi", resetShogi)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetShogi}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("shogiReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{shogiMessage}</p>
+              {!gameStarted.shogi ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+
+              <p className="text-sm text-slate-300">{shogiMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateShogiNow)}</p> : null}
 
-              <div className="mt-4 grid w-full max-w-[560px] grid-cols-9 gap-1 rounded-xl bg-amber-900/60 p-2" style={{ gridTemplateColumns: "repeat(9, minmax(0, 1fr))" }}>
+              {!connectedRoomCode ? (
+                <div className="mt-3 grid max-w-[220px] gap-1 text-xs text-slate-300">
+                  <span>{t("shogiModeLabel")}</span>
+                  <select
+                    value={shogiMode}
+                    onChange={(event) => {
+                      const nextMode = (event.target.value === "chaos" ? "chaos" : "local") as ShogiMode;
+                      setShogiMode(nextMode);
+                      resetShogi();
+                    }}
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
+                  >
+                    <option value="local">{t("shogiModeLocal")}</option>
+                    <option value="chaos">{t("shogiModeChaos")}</option>
+                  </select>
+                </div>
+              ) : null}
+
+              <div className={`mt-4 grid w-full max-w-[560px] grid-cols-9 gap-1 rounded-xl bg-amber-900/60 p-2 ${!gameStarted.shogi ? "pointer-events-none opacity-60" : ""}`} style={{ gridTemplateColumns: "repeat(9, minmax(0, 1fr))" }}>
                 {shogiBoard.map((line, row) =>
                   line.map((piece, col) => {
                     const isSelected = selectedShogi?.row === row && selectedShogi?.col === col;
@@ -6348,7 +8419,7 @@ export default function Home() {
                         key={`s-${row}-${col}`}
                         type="button"
                         onClick={() => onShogiClick(row, col)}
-                        disabled={!canOperateShogiNow || isShogiOver}
+                        disabled={!canOperateShogiNow || isShogiOver || !gameStarted.shogi}
                         className={`aspect-square rounded-sm px-1 text-[11px] font-semibold ${dark ? "bg-amber-700/95" : "bg-amber-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} disabled:cursor-not-allowed disabled:opacity-70`}
                         aria-label={`shogi-${row + 1}-${col + 1}`}
                       >
@@ -6359,213 +8430,124 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("shogi");
-                    const blackCount = shogiBoard.flat().filter((p) => p?.color === "b").length;
-                    const whiteCount = shogiBoard.flat().filter((p) => p?.color === "w").length;
-                    setScore(Math.max(0, blackCount - whiteCount + 20));
-                    setMessage(t("shogiAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("shogiApplyScore")}
-                </button>
-              </div>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineShogi")}</li>
-                <li>{t("statusLineMines")}</li>
-                <li>{t("statusLineNumeron")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
         {activePanel === "minesweeper" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
+          <section className="grid gap-5">
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("minesTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetMinesweeper}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("minesReset")}
-                </button>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{mineMessage}</p>
+              <select id="langSelect" key={`ms-lang-${language}`} defaultValue={language === "ko" ? "ko" : "ja"} className="hidden" aria-hidden="true" tabIndex={-1}>
+                <option value="ja">ja</option>
+                <option value="ko">ko</option>
+              </select>
 
-              <div className="mt-4 grid w-full max-w-[420px] grid-cols-9 gap-1 rounded-xl bg-teal-900/60 p-2" style={{ gridTemplateColumns: "repeat(9, minmax(0, 1fr))" }}>
-                {mineBoard.map((line, row) =>
-                  line.map((cell, col) => (
-                    <button
-                      key={`m-${row}-${col}`}
-                      type="button"
-                      onClick={() => onMinesClick(row, col)}
-                      className={`aspect-square rounded-sm text-xs font-semibold ${cell.open ? "bg-slate-700" : "bg-teal-700 hover:bg-teal-600"}`}
-                      aria-label={`mine-${row + 1}-${col + 1}`}
-                    >
-                      {cell.open ? (cell.mine ? "*" : (cell.around > 0 ? String(cell.around) : "")) : ""}
-                    </button>
-                  )),
-                )}
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("minesweeper");
-                    const openedSafe = mineBoard.flat().filter((cell) => cell.open && !cell.mine).length;
-                    setScore(openedSafe);
-                    setMessage(t("minesAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("minesApplyScore")}
-                </button>
-              </div>
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
+              <section className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <label className="grid gap-1 text-xs text-slate-200">
+                  <span id="minesweeperModeLabel">MODE</span>
+                  <select id="minesweeperModeSelect" className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm">
+                    <option value="solo">SINGLE</option>
+                    <option value="duel">DUEL</option>
+                    <option value="battle">BATTLE</option>
+                    <option value="coop">COOP</option>
                   </select>
                 </label>
 
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
+                <label className="grid gap-1 text-xs text-slate-200">
+                  <span id="minesweeperPlayerCountLabel">PLAYERS</span>
+                  <select id="minesweeperPlayerCountSelect" className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm">
+                    <option value="2">2P</option>
+                    <option value="3">3P</option>
+                    <option value="4">4P</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-1 text-xs text-slate-200">
+                  <span id="minesweeperCoopLivesLabel">LIVES</span>
                   <input
+                    id="minesweeperCoopLivesSelect"
                     type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
+                    min={1}
+                    placeholder="∞"
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
                   />
                 </label>
 
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
+                <label className="grid gap-1 text-xs text-slate-200">
+                  <span id="minesweeperDifficultyLabel">DIFFICULTY</span>
+                  <select id="minesweeperDifficultySelect" className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm">
+                    <option value="easy">Easy</option>
+                    <option value="normal">Normal</option>
+                    <option value="hard">Hard</option>
+                    <option value="expert">Expert</option>
+                  </select>
+                </label>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
+                <label className="grid gap-1 text-xs text-slate-200">
+                  <span id="minesweeperBoardSizeLabel">BOARD SIZE</span>
+                  <select id="minesweeperBoardSizeSelect" className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm">
+                    <option value="9">9x9</option>
+                    <option value="12">12x12</option>
+                    <option value="16">16x16</option>
+                    <option value="20">20x20</option>
+                  </select>
+                </label>
+              </section>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button id="minesweeperStartBtn" type="button" className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950">
+                  {t("gameStart")}
+                </button>
+                <button id="minesweeperRemakeBtn" type="button" className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm">
+                  {t("minesReset")}
+                </button>
+                <button id="minesweeperMenuBtn" type="button" className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm">
+                  {t("backToMenu")}
                 </button>
               </div>
 
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineMines")}</li>
-                <li>{t("statusLineNumeron")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
+              <p id="minesweeperMessage" className="mt-3 text-sm text-slate-300">{t("minesHint")}</p>
+
+              <section id="minesweeperPlayLayout" className="minesweeper-play-layout" aria-label="Minesweeper board and status">
+                <div className="minesweeper-main-area">
+                  <div className="minesweeper-row-metrics" aria-label="Minesweeper quick status">
+                    <span><strong>MINE:</strong> <span id="minesweeperMineCount">0</span></span>
+                    <span><strong>FLAG:</strong> <span id="minesweeperFlagCount">0</span></span>
+                    <span><strong>TIME:</strong> <span id="minesweeperTimer">00:00</span></span>
+                    <span><strong id="minesweeperTurnLabel">TURN</strong>: <span id="minesweeperTurnText">-</span></span>
+                    <span><strong id="minesweeperScoreLabel">SCORE</strong>: <span id="minesweeperScoreText">0</span></span>
+                  </div>
+
+                  <div id="minesweeperBoardViewport" className="minesweeper-board-viewport">
+                    <div id="minesweeperStartOverlay" className="minesweeper-start-overlay">READY</div>
+                    <div id="minesweeperBoard" className="minesweeper-board" role="grid" />
+                  </div>
+                </div>
+
+                <aside id="minesweeperEnemyPanel" className="minesweeper-side-panel hidden" aria-live="polite">
+                  <h3 id="minesweeperEnemyLabel">ENEMY BOARD</h3>
+                  <p id="minesweeperEnemyCountdown" className="text-xs text-slate-300">-</p>
+                  <div id="minesweeperEnemyBoard" className="minesweeper-enemy-board" />
+                </aside>
+
+                <aside id="minesweeperOverviewPanel" className="minesweeper-side-panel hidden" aria-live="polite">
+                  <h3 id="minesweeperOverviewLabel">BOARD OVERVIEW</h3>
+                  <canvas id="minesweeperOverviewCanvas" width={180} height={180} />
+                  <p className="text-xs text-slate-300"><span id="minesweeperCoopLifeLeftLabel">LIFE LEFT</span>: <span id="minesweeperCoopLifeLeftText">-</span></p>
+                  <p className="text-xs text-slate-300"><span>TIME</span>: <span id="minesweeperSideTime">00:00</span></p>
+                  <p className="text-xs text-slate-300"><span>LIFE</span>: <span id="minesweeperSideLife">-</span></p>
+                </aside>
+              </section>
+
             </article>
+
+            
           </section>
         ) : null}
 
@@ -6574,16 +8556,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("numeronTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetNumeron}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("numeronReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("numeron", resetNumeron)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetNumeron}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("numeronReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{numeronMessage}</p>
+              {!gameStarted.numeron ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.numeron} className={!gameStarted.numeron ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{numeronMessage}</p>
               <p className="mt-2 text-xs text-slate-400">
                 {t("numeronSecretLabel")}: {isNumeronOver ? numeronSecret : "***"}
               </p>
@@ -6642,91 +8643,10 @@ export default function Home() {
                 </ul>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("numeron");
-                    const tries = numeronHistory.length || 1;
-                    setScore(Math.max(10, 130 - tries * 10));
-                    setMessage(t("numeronAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("numeronApplyScore")}
-                </button>
-              </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineNumeron")}</li>
-                <li>{t("statusLineMines")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -6735,16 +8655,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("blackjackTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetBlackjack}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("blackjackReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("blackjack", resetBlackjack)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetBlackjack}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("blackjackReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{blackjackMessage}</p>
+              {!gameStarted.blackjack ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.blackjack} className={!gameStarted.blackjack ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{blackjackMessage}</p>
 
               <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
                 <p className="text-sm">
@@ -6772,89 +8711,11 @@ export default function Home() {
                 >
                   {t("blackjackStand")}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("blackjack");
-                    setScore(blackjackHandValue(blackjackPlayerHand));
-                    setMessage(t("blackjackAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("blackjackApplyScore")}
-                </button>
               </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineBlackjack")}</li>
-                <li>{t("statusLineNumeron")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -6863,16 +8724,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("chinchiroTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetChinchiro}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("chinchiroReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("chinchiro", resetChinchiro)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetChinchiro}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("chinchiroReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{chinchiroMessage}</p>
+              {!gameStarted.chinchiro ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.chinchiro} className={!gameStarted.chinchiro ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{chinchiroMessage}</p>
 
               <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
                 <p className="text-sm">
@@ -6892,91 +8772,11 @@ export default function Home() {
                 >
                   {t("chinchiroRoll")}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("chinchiro");
-                    const p = chinchiroPlayerDice ? evaluateChinchiroHand(chinchiroPlayerDice).rank : 20;
-                    const d = chinchiroDealerDice ? evaluateChinchiroHand(chinchiroDealerDice).rank : 20;
-                    setScore(Math.max(0, 100 + p - d));
-                    setMessage(t("chinchiroAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("chinchiroApplyScore")}
-                </button>
               </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineChinchiro")}</li>
-                <li>{t("statusLineBlackjack")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -6985,16 +8785,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("sevensTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetSevens}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("sevensReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("sevens", resetSevens)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetSevens}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("sevensReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{sevensMessage}</p>
+              {!gameStarted.sevens ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.sevens} className={!gameStarted.sevens ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{sevensMessage}</p>
 
               <div className="mt-4 grid gap-2 rounded-lg border border-slate-500/30 bg-slate-950/40 p-3 text-sm">
                 {(["S", "H", "D", "C"] as const).map((suit) => (
@@ -7050,89 +8869,11 @@ export default function Home() {
                 >
                   {t("sevensPass")}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("sevens");
-                    setScore(Math.max(0, sevensHands[1].length - sevensHands[0].length + 26));
-                    setMessage(t("sevensAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("sevensApplyScore")}
-                </button>
               </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineSevens")}</li>
-                <li>{t("statusLineChinchiro")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -7141,16 +8882,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("daifugoTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetDaifugo}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("daifugoReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("daifugo", resetDaifugo)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetDaifugo}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("daifugoReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{daifugoMessage}</p>
+              {!gameStarted.daifugo ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.daifugo} className={!gameStarted.daifugo ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{daifugoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateDaifugoNow)}</p> : null}
 
               <div className="mt-4 grid gap-2 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4 text-sm">
@@ -7187,91 +8947,11 @@ export default function Home() {
                 >
                   {t("daifugoPass")}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("daifugo");
-                    const my = daifugoLocalSide === "player" ? daifugoHands[0].length : daifugoHands[1].length;
-                    const enemy = daifugoLocalSide === "player" ? daifugoHands[1].length : daifugoHands[0].length;
-                    setScore(Math.max(0, enemy - my + 26));
-                    setMessage(t("daifugoAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("daifugoApplyScore")}
-                </button>
               </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineDaifugo")}</li>
-                <li>{t("statusLineSevens")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -7280,16 +8960,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("fourPanelTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetFourPanel}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("fourPanelReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("fourPanel", resetFourPanel)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetFourPanel}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("fourPanelReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{t("fourPanelStoryTitle")}: {fourPanelTitle}</p>
+              {!gameStarted.fourPanel ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.fourPanel} className={!gameStarted.fourPanel ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{t("fourPanelStoryTitle")}: {fourPanelTitle}</p>
               <p className="mt-1 text-sm text-slate-300">{fourPanelMessage}</p>
 
               <div className="mt-4 rounded-xl border border-slate-500/40 bg-white p-2">
@@ -7322,17 +9021,6 @@ export default function Home() {
                 >
                   {t("fourPanelSubmit")}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("fourPanel");
-                    setScore(Math.max(0, fourPanelImages.length * 25));
-                    setMessage(t("fourPanelAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("fourPanelApplyScore")}
-                </button>
                 <span className="rounded-md bg-slate-800 px-3 py-1 text-xs">
                   {tf("fourPanelProgress", { current: Math.min(4, fourPanelIndex + 1) })}
                 </span>
@@ -7353,77 +9041,10 @@ export default function Home() {
                   );
                 })}
               </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineFourPanel")}</li>
-                <li>{t("statusLineDaifugo")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -7432,16 +9053,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("drawingRelayTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetDrawingRelay}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("drawingRelayReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("drawingRelay", resetDrawingRelay)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetDrawingRelay}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("drawingRelayReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{t("drawingRelayPrompt")}: {drawingRelayPrompt}</p>
+              {!gameStarted.drawingRelay ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.drawingRelay} className={!gameStarted.drawingRelay ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{t("drawingRelayPrompt")}: {drawingRelayPrompt}</p>
               <p className="mt-1 text-sm text-slate-300">{drawingRelayMessage}</p>
 
               {drawingRelayPhase === "draw" ? (
@@ -7508,97 +9148,11 @@ export default function Home() {
                   </button>
                 ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("drawingRelay");
-                    const normalizedPrompt = drawingRelayPrompt.trim();
-                    const normalizedGuess = drawingRelayGuess.trim();
-                    const match = normalizedPrompt && normalizedGuess && (normalizedPrompt === normalizedGuess);
-                    setScore(match ? 120 : drawingRelayPhase === "done" ? 80 : 40);
-                    setMessage(t("drawingRelayAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("drawingRelayApplyScore")}
-                </button>
               </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineDrawingRelay")}</li>
-                <li>{t("statusLineFitPuzzle")}</li>
-                <li>{t("statusLineMahjong")}</li>
-                <li>{t("statusLinePoker")}</li>
-                <li>{t("statusLineSolitaire")}</li>
-                <li>{t("statusLineSurvivors")}</li>
-                <li>{t("statusLineFourPanel")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -7607,16 +9161,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("fitPuzzleTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetFitPuzzle}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("fitPuzzleReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("fitPuzzle", resetFitPuzzle)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetFitPuzzle}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("fitPuzzleReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{fitPuzzleMessage}</p>
+              {!gameStarted.fitPuzzle ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.fitPuzzle} className={!gameStarted.fitPuzzle ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{fitPuzzleMessage}</p>
               <p className="mt-1 text-sm text-slate-300">{t("fitPuzzleMoves")}: {fitPuzzleMoves}</p>
 
               <div className="mt-4 grid max-w-[360px] grid-cols-3 gap-2">
@@ -7637,96 +9210,10 @@ export default function Home() {
                 })}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("fitPuzzle");
-                    const base = isFitPuzzleOver ? 220 : 90;
-                    const applied = Math.max(20, base - fitPuzzleMoves * 6);
-                    setScore(applied);
-                    setMessage(t("fitPuzzleAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("fitPuzzleApplyScore")}
-                </button>
-              </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineFitPuzzle")}</li>
-                <li>{t("statusLineDrawingRelay")}</li>
-                <li>{t("statusLineMahjong")}</li>
-                <li>{t("statusLinePoker")}</li>
-                <li>{t("statusLineSolitaire")}</li>
-                <li>{t("statusLineSurvivors")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -7738,10 +9225,24 @@ export default function Home() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
+                    onClick={() => startPanelGame("mahjong", resetMahjong)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
                     onClick={resetMahjong}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("mahjongReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
                   </button>
                   <button
                     type="button"
@@ -7760,7 +9261,10 @@ export default function Home() {
                 </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{mahjongMessage}</p>
+              {!gameStarted.mahjong ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.mahjong} className={!gameStarted.mahjong ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{mahjongMessage}</p>
               <p className="mt-1 text-sm text-slate-300">{tf("mahjongRemaining", { count: mahjongRemainingCount(mahjongBoard) })}</p>
 
               <div
@@ -7795,96 +9299,10 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("mahjong");
-                    const remain = mahjongRemainingCount(mahjongBoard);
-                    const removed = MAHJONG_ROWS * MAHJONG_COLS - remain;
-                    const applied = Math.max(20, (isMahjongOver ? 260 : 120) - remain * 2 + removed);
-                    setScore(applied);
-                    setMessage(t("mahjongAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("mahjongApplyScore")}
-                </button>
-              </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineMahjong")}</li>
-                <li>{t("statusLineFitPuzzle")}</li>
-                <li>{t("statusLinePoker")}</li>
-                <li>{t("statusLineSolitaire")}</li>
-                <li>{t("statusLineSurvivors")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -7893,16 +9311,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("pokerTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetPoker}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("pokerDeal")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("poker", resetPoker)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetPoker}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("pokerDeal")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{pokerMessage}</p>
+              {!gameStarted.poker ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.poker} className={!gameStarted.poker ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{pokerMessage}</p>
 
               <div className="mt-4 grid gap-4 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
                 <div>
@@ -7950,18 +9387,6 @@ export default function Home() {
                   {t("pokerDraw")}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("poker");
-                    const applied = pokerOutcome === "win" ? 220 : pokerOutcome === "draw" ? 120 : pokerOutcome === "lose" ? 70 : 40;
-                    setScore(applied);
-                    setMessage(t("pokerAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("pokerApplyScore")}
-                </button>
               </div>
 
               {pokerPhase === "result" && pokerPlayerEval && pokerCpuEval ? (
@@ -7970,78 +9395,10 @@ export default function Home() {
                   <p>{t("pokerCpuHand")}: {pokerHandName(pokerCpuEval.name)}</p>
                 </div>
               ) : null}
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLinePoker")}</li>
-                <li>{t("statusLineMahjong")}</li>
-                <li>{t("statusLineSurvivors")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -8050,16 +9407,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("solitaireTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetSolitaire}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("solitaireReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("solitaire", resetSolitaire)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetSolitaire}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("solitaireReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{solitaireMessage}</p>
+              {!gameStarted.solitaire ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.solitaire} className={!gameStarted.solitaire ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{solitaireMessage}</p>
               <p className="mt-1 text-sm text-slate-300">{tf("solitaireFoundations", { count: foundationCount(solitaireFoundations) })}</p>
 
               <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
@@ -8125,92 +9501,10 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("solitaire");
-                    const done = foundationCount(solitaireFoundations);
-                    const applied = Math.max(20, done * 5 + (isSolitaireOver ? 120 : 0));
-                    setScore(applied);
-                    setMessage(t("solitaireAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("solitaireApplyScore")}
-                </button>
-              </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineSolitaire")}</li>
-                <li>{t("statusLinePoker")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -8219,16 +9513,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("survivorsTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetSurvivors}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("survivorsReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("survivors", resetSurvivors)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetSurvivors}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("survivorsReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{survivorsMessage}</p>
+              {!gameStarted.survivors ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.survivors} className={!gameStarted.survivors ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{survivorsMessage}</p>
               <div className="mt-3 flex flex-wrap gap-2 text-sm">
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsWave", { wave: survivorsWave })}</span>
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsHp", { hp: survivorsHp, max: survivorsMaxHp })}</span>
@@ -8253,91 +9566,10 @@ export default function Home() {
                 ))}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("survivors");
-                    const applied = Math.max(20, survivorsWave * 18 + survivorsKills * 4 + survivorsLevel * 12 + Math.floor(survivorsTimeSec / 2));
-                    setScore(applied);
-                    setMessage(t("survivorsAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("survivorsApplyScore")}
-                </button>
-              </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineSurvivors")}</li>
-                <li>{t("statusLineSolitaire")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
 
@@ -8346,16 +9578,35 @@ export default function Home() {
             <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("unoTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={resetUno}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("unoReset")}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startPanelGame("uno", resetUno)}
+                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                  >
+                    {t("gameStart")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetUno}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("unoReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel("menu")}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("backToMenu")}
+                  </button>
+                </div>
               </div>
 
-              <p className="mt-2 text-sm text-slate-300">{unoMessage}</p>
+              {!gameStarted.uno ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.uno} className={!gameStarted.uno ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+
+              <p className="text-sm text-slate-300">{unoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateUnoNow)}</p> : null}
 
               <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
@@ -8392,236 +9643,19 @@ export default function Home() {
                 >
                   {t("unoDrawCard")}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGame("uno");
-                    const my = unoLocalSide === "player" ? unoPlayerHand.length : unoCpuHand.length;
-                    const enemy = unoLocalSide === "player" ? unoCpuHand.length : unoPlayerHand.length;
-                    setScore(Math.max(0, enemy - my + 20));
-                    setMessage(t("unoAppliedScore"));
-                  }}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("unoApplyScore")}
-                </button>
               </div>
+              </fieldset>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-                <button
-                  type="button"
-                  onClick={() => void loadScores()}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("reload")}
-                </button>
-              </div>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-200">
-                <li>{t("statusLine1")}</li>
-                <li>{t("statusLine2")}</li>
-                <li>{t("statusLineUno")}</li>
-                <li>{t("statusLineShogi")}</li>
-                <li>{t("statusLineMines")}</li>
-                <li>{t("statusLineNumeron")}</li>
-                <li>{t("statusLineBlackjack")}</li>
-                <li>{t("statusLineChinchiro")}</li>
-                <li>{t("statusLineSevens")}</li>
-                <li>{t("statusLineDaifugo")}</li>
-                <li>{t("statusLineFourPanel")}</li>
-                <li>{t("statusLineDrawingRelay")}</li>
-                <li>{t("statusLineFitPuzzle")}</li>
-                <li>{t("statusLineMahjong")}</li>
-                <li>{t("statusLinePoker")}</li>
-                <li>{t("statusLineSolitaire")}</li>
-                <li>{t("statusLineSurvivors")}</li>
-                <li>{t("statusLine4")}</li>
-              </ul>
-            </article>
+            
           </section>
         ) : null}
-
-        {activePanel === "scores" ? (
-          <section className="grid gap-5 md:grid-cols-[1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("scoreFormTitle")}</h2>
-              <form onSubmit={onSubmit} className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("playerNameLabel")}
-                  <input
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    maxLength={24}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("gameLabel")}
-                  <select
-                    value={game}
-                    onChange={(e) => setGame(e.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  >
-                    {GAME_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {gameLabelById(option.id)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-1 text-sm">
-                  {t("scoreLabel")}
-                  <input
-                    type="number"
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isPosting}
-                  className="mt-2 rounded-lg bg-cyan-400 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-                >
-                  {isPosting ? t("scoreSaving") : t("scoreSave")}
-                </button>
-              </form>
-              {message ? <p className="mt-3 text-sm text-cyan-200">{message}</p> : null}
-            </article>
-          </section>
-        ) : null}
-
-        {activePanel === "status" ? (
-          <section className="grid gap-5 md:grid-cols-[1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">{t("statusTitle")}</h2>
-              <button
-                type="button"
-                onClick={() => void loadScores()}
-                className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-              >
-                {t("reload")}
-              </button>
-            </div>
-
-            <ul className="mt-4 space-y-2 text-sm text-slate-200">
-              <li>{t("statusLine1")}</li>
-              <li>{t("statusLine2")}</li>
-              <li>{t("statusLineMenu")}</li>
-              <li>{t("statusLine3")}</li>
-              <li>{t("statusLineGomoku")}</li>
-              <li>{t("statusLineChess")}</li>
-              <li>{t("statusLineShogi")}</li>
-              <li>{t("statusLineMines")}</li>
-              <li>{t("statusLineNumeron")}</li>
-              <li>{t("statusLineBlackjack")}</li>
-              <li>{t("statusLineChinchiro")}</li>
-              <li>{t("statusLineSevens")}</li>
-              <li>{t("statusLineDaifugo")}</li>
-              <li>{t("statusLineFourPanel")}</li>
-              <li>{t("statusLineDrawingRelay")}</li>
-              <li>{t("statusLineFitPuzzle")}</li>
-              <li>{t("statusLineMahjong")}</li>
-              <li>{t("statusLinePoker")}</li>
-              <li>{t("statusLineSolitaire")}</li>
-              <li>{t("statusLineSurvivors")}</li>
-              <li>{t("statusLineUno")}</li>
-              <li>{t("statusLine4")}</li>
-            </ul>
-            </article>
-          </section>
-        ) : null}
-
-        <section className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-          <h2 className="text-xl font-semibold">{t("latestScores")}</h2>
-          {isLoading ? <p className="mt-3 text-sm text-slate-300">{t("loading")}</p> : null}
-          {!isLoading && scores.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-300">{t("noScores")}</p>
-          ) : null}
-          {!isLoading && scores.length > 0 ? (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[560px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-slate-400/30 text-left text-slate-300">
-                    <th className="px-2 py-2">{t("tableId")}</th>
-                    <th className="px-2 py-2">{t("tablePlayer")}</th>
-                    <th className="px-2 py-2">{t("tableGame")}</th>
-                    <th className="px-2 py-2">{t("tableScore")}</th>
-                    <th className="px-2 py-2">{t("tableTime")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scores.map((row) => (
-                    <tr key={row.id} className="border-b border-slate-500/20">
-                      <td className="px-2 py-2">{row.id}</td>
-                      <td className="px-2 py-2">{row.playerName}</td>
-                      <td className="px-2 py-2">{row.game ? gameLabelById(row.game) : "-"}</td>
-                      <td className="px-2 py-2">{row.score}</td>
-                      <td className="px-2 py-2">{new Date(row.createdAt).toLocaleString(dateLocale)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </section>
       </div>
     </main>
   );
 }
+
+
+
+
+

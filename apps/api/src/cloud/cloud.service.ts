@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
-import { scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -502,6 +502,42 @@ export class CloudService {
     };
   }
 
+  submitInquiry(body: Record<string, unknown>): ApiResult {
+    const message = this.normalizeInquiryMessage(body.message);
+    if (!message) {
+      return {
+        ok: false,
+        code: 'INQUIRY_MESSAGE_REQUIRED',
+        message: 'message is required',
+      };
+    }
+
+    const userId = this.normalizeUserId(body.userId);
+    const rows = this.readInquiries();
+    const nextRow: Record<string, unknown> = {
+      id: randomUUID(),
+      name: this.normalizeInquiryName(body.name),
+      message,
+      url: this.normalizeInquiryUrl(body.url),
+      lang: this.normalizeInquiryLang(body.lang),
+      submittedAt: new Date().toISOString(),
+      ...(userId ? { userId } : {}),
+    };
+
+    const next = [...rows, nextRow].slice(-1000);
+    this.writeInquiries(next);
+
+    return {
+      ok: true,
+      code: 'OK',
+      message: 'inquiry submitted',
+      payload: {
+        ok: true,
+        id: nextRow.id,
+      },
+    };
+  }
+
   listInquiries(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
@@ -783,6 +819,41 @@ export class CloudService {
 
   private normalizeUserId(raw: unknown) {
     return String(raw || '').trim().slice(0, 24);
+  }
+
+  private normalizeInquiryName(raw: unknown) {
+    const trimmed = String(raw || '')
+      .trim()
+      .replace(/\s+/g, ' ');
+    if (!trimmed) return 'anonymous';
+    return trimmed.slice(0, 36);
+  }
+
+  private normalizeInquiryMessage(raw: unknown) {
+    const text = String(raw || '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .trim();
+    if (!text) return '';
+    return text.slice(0, 2000);
+  }
+
+  private normalizeInquiryUrl(raw: unknown) {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+      return parsed.toString().slice(0, 240);
+    } catch {
+      return '';
+    }
+  }
+
+  private normalizeInquiryLang(raw: unknown) {
+    const value = String(raw || '').trim().toLowerCase();
+    if (value === 'ja' || value === 'ko' || value === 'en') return value;
+    return 'ja';
   }
 
   private normalizeGameKey(raw: unknown) {
