@@ -398,6 +398,7 @@ export function initGame(options = {}) {
   const destroyLimitWhiteSelect = document.getElementById("destroyLimitWhiteSelect");
   const sideBlackCard = document.getElementById("sideBlackCard");
   const sideWhiteCard = document.getElementById("sideWhiteCard");
+  const othelloPlayArea = document.getElementById("othelloPlayArea");
   const othelloSkillPanel = document.getElementById("othelloSkillPanel");
   const immutablePlaceBtn = document.getElementById("immutablePlaceBtn");
   const doubleActionBtn = document.getElementById("doubleActionBtn");
@@ -781,6 +782,9 @@ export function initGame(options = {}) {
     }
     if (othelloSkillPanel) {
       othelloSkillPanel.classList.toggle("hidden", !isChaosMode());
+    }
+    if (othelloPlayArea) {
+      othelloPlayArea.classList.toggle("othello-play-area-chaos", isChaosMode());
     }
     if (immutablePlaceBtn) {
       const current = state.currentPlayer;

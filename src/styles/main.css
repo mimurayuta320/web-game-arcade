@@ -2406,9 +2406,20 @@ body {
 
 .othello-play-area {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.8rem;
   align-items: start;
+  transition: grid-template-columns 180ms ease;
+}
+
+.othello-play-area.othello-play-area-chaos {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .othello-play-area {
+    transition: none;
+  }
 }
 
 .othello-skill-panel {
