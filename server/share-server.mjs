@@ -13,6 +13,7 @@ const distDir = path.join(rootDir, "dist");
 const HOST = process.env.SHARE_HOST || "0.0.0.0";
 const PORT = Number(process.env.SHARE_PORT || 4173);
 const ROOM_PATH = process.env.ROOM_PATH || "/room";
+const CLOUD_API_BASE = process.env.SHARE_CLOUD_API_BASE || "http://127.0.0.1:8787";
 const MAX_ROOM_PLAYERS = Number(process.env.ROOM_MAX_PLAYERS || 8);
 const CHAT_RATE_MIN_INTERVAL_MS = Number(process.env.ROOM_CHAT_MIN_INTERVAL_MS || 700);
 const CHAT_RATE_WINDOW_MS = Number(process.env.ROOM_CHAT_WINDOW_MS || 12000);
@@ -223,6 +224,64 @@ function parseBody(req) {
     });
     req.on("error", reject);
   });
+}
+
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > 1024 * 1024) {
+        reject(new Error("Payload too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+async function proxyApiRequest(req, res, requestUrl) {
+  const target = `${CLOUD_API_BASE}${requestUrl.pathname}${requestUrl.search}`;
+
+  if (req.method === "OPTIONS") {
+    sendApiJson(res, 204, { ok: true });
+    return;
+  }
+
+  const rawBody = ["GET", "HEAD"].includes(req.method || "")
+    ? undefined
+    : await readRawBody(req);
+
+  let response;
+  try {
+    response = await fetch(target, {
+      method: req.method,
+      headers: {
+        "content-type": req.headers["content-type"] || "application/json",
+      },
+      body: rawBody,
+    });
+  } catch (error) {
+    sendApiJson(res, 502, {
+      ok: false,
+      code: "CLOUD_API_UNAVAILABLE",
+      message: error?.message || "Failed to reach cloud API",
+    });
+    return;
+  }
+
+  const bodyText = await response.text();
+  const contentType = response.headers.get("content-type") || "application/json; charset=utf-8";
+  res.writeHead(response.status, {
+    "Content-Type": contentType,
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  });
+  res.end(bodyText);
 }
 
 function hashPassword(password, saltHex) {
@@ -700,104 +759,16 @@ function resolveFilePath(urlPath) {
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
-  if (
-    requestUrl.pathname === "/api/auth/login"
-    || requestUrl.pathname === "/api/auth/register"
-    || requestUrl.pathname === "/api/profile/load"
-    || requestUrl.pathname === "/api/profile/save"
-  ) {
-    if (req.method === "OPTIONS") {
-      sendApiJson(res, 204, { ok: true });
-      return;
-    }
-
-    if (req.method !== "POST") {
-      sendApiJson(res, 405, { ok: false, code: "METHOD_NOT_ALLOWED", message: "POST only" });
-      return;
-    }
-
+  if (requestUrl.pathname.startsWith("/api/")) {
     try {
-      const body = await parseBody(req);
-      const userId = String(body?.userId || "").trim();
-      const password = String(body?.password || "");
-
-      if (!userId || !password) {
-        sendApiJson(res, 400, { ok: false, code: "AUTH_REQUIRED", message: "userId and password are required" });
-        return;
-      }
-
-      const db = readDb();
-
-      if (requestUrl.pathname === "/api/auth/register") {
-        const registered = registerUser(db, userId, password);
-        if (!registered.ok) {
-          if (registered.code === "USER_ALREADY_EXISTS") {
-            sendApiJson(res, 409, { ok: false, code: "USER_ALREADY_EXISTS", message: "User already exists" });
-            return;
-          }
-          sendApiJson(res, 400, { ok: false, code: "REGISTER_FAILED", message: "Register failed" });
-          return;
-        }
-        writeDb(db);
-        sendApiJson(res, 200, {
-          ok: true,
-          created: true,
-          profile: sanitizeProfile(registered.user.profile || DEFAULT_PROFILE),
-        });
-        return;
-      }
-
-      if (requestUrl.pathname === "/api/auth/login") {
-        const auth = authenticateOnly(db, userId, password);
-        if (!auth.ok) {
-          const status = auth.code === "USER_NOT_FOUND" ? 404 : 401;
-          sendApiJson(res, status, { ok: false, code: auth.code, message: "Login failed" });
-          return;
-        }
-        sendApiJson(res, 200, {
-          ok: true,
-          profile: sanitizeProfile(auth.user.profile || DEFAULT_PROFILE),
-        });
-        return;
-      }
-
-      const auth = authenticateOnly(db, userId, password);
-      if (!auth.ok) {
-        const status = auth.code === "USER_NOT_FOUND" ? 404 : 401;
-        sendApiJson(res, status, { ok: false, code: auth.code, message: "Authentication failed" });
-        return;
-      }
-
-      if (requestUrl.pathname === "/api/profile/load") {
-        sendApiJson(res, 200, {
-          ok: true,
-          profile: sanitizeProfile(auth.user.profile || DEFAULT_PROFILE),
-        });
-        return;
-      }
-
-      const nextProfile = sanitizeProfile(body?.profile || {});
-      auth.user.profile = nextProfile;
-      auth.user.updatedAt = Date.now();
-      writeDb(db);
-      sendApiJson(res, 200, { ok: true, profile: nextProfile });
-      return;
+      await proxyApiRequest(req, res, requestUrl);
     } catch (err) {
       sendApiJson(res, 500, {
         ok: false,
         code: "SERVER_ERROR",
         message: err?.message || "Internal server error",
       });
-      return;
     }
-  }
-
-  if (requestUrl.pathname.startsWith("/api/")) {
-    if (req.method === "OPTIONS") {
-      sendApiJson(res, 204, { ok: true });
-      return;
-    }
-    sendApiJson(res, 404, { ok: false, code: "NOT_FOUND", message: "Unknown API endpoint" });
     return;
   }
 

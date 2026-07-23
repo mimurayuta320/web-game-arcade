@@ -799,6 +799,7 @@ export function initGame(options = {}) {
         (state.immutablePlaceArmed[current] || (state.immutablePlaceCharges[current] ?? 0) > 0);
       immutablePlaceBtn.disabled = !canActivate;
       immutablePlaceBtn.classList.toggle("hidden", !isChaosMode() || !hasImmutableSkill);
+      immutablePlaceBtn.classList.toggle("skill-armed", Boolean(state.immutablePlaceArmed[current]));
     }
     if (destroySkillBtn) {
       const current = state.currentPlayer;
@@ -810,9 +811,20 @@ export function initGame(options = {}) {
         (state.destroySkillArmed[current] || (state.destroySkillRemaining[current] ?? 0) > 0);
       destroySkillBtn.disabled = !canActivate;
       destroySkillBtn.classList.toggle("hidden", !isChaosMode());
+      destroySkillBtn.classList.toggle("skill-armed", Boolean(state.destroySkillArmed[current]));
     }
     if (doubleActionBtn) {
       const current = state.currentPlayer;
+      let buttonOwner = current;
+      if (isRoomMode()) {
+        buttonOwner = state.roomPlayer;
+      } else if (state.gameMode === "cpu") {
+        buttonOwner = state.playerSide;
+      }
+      const stock = state.doubleActionCharges[buttonOwner] ?? 0;
+      const hasDoubleActionSkill =
+        Boolean(state.doubleActionArmed[buttonOwner]) || (state.doubleActionCharges[buttonOwner] ?? 0) > 0;
+      const armedNow = Boolean(state.doubleActionArmed[current]);
       const canActivate =
         isChaosMode() &&
         !state.gameOver &&
@@ -820,7 +832,13 @@ export function initGame(options = {}) {
         isLocalPlayersTurn() &&
         (state.doubleActionArmed[current] || (state.doubleActionCharges[current] ?? 0) > 0);
       doubleActionBtn.disabled = !canActivate;
-      doubleActionBtn.classList.toggle("hidden", !isChaosMode());
+      doubleActionBtn.classList.toggle("hidden", !isChaosMode() || !hasDoubleActionSkill);
+      doubleActionBtn.classList.toggle("skill-armed", armedNow);
+      if (armedNow) {
+        doubleActionBtn.textContent = t(`2回行動 待機中 (${stock})`, `더블 액션 대기 (${stock})`);
+      } else {
+        doubleActionBtn.textContent = t(`2回行動 (${stock})`, `더블 액션 (${stock})`);
+      }
     }
     if (startBtn) {
       startBtn.disabled = isRoomMode() && state.roomRole !== "host";
@@ -1149,7 +1167,23 @@ export function initGame(options = {}) {
     const player = state.currentPlayer;
     const armed = isRemote ? true : Boolean(state.immutablePlaceArmed[player]);
     if (!armed) return;
-    if (!canPlaceImmutableDisc(player, row, col)) return;
+    if (!canPlaceImmutableDisc(player, row, col)) {
+      if (!isRemote) {
+        if ((state.immutablePlaceCharges[player] ?? 0) <= 0) {
+          messageEl.textContent = `${getDisplayName(player)}の固定石回数が不足しています`;
+        } else if (state.board[row][col] !== player) {
+          messageEl.textContent = `${getDisplayName(player)}は自分の駒を選択してください`;
+        } else if (!isInteriorCell(row, col)) {
+          messageEl.textContent = `${getDisplayName(player)}は内側の駒のみ固定できます`;
+        } else if (isImmutableDisc(row, col)) {
+          messageEl.textContent = `${getDisplayName(player)}はすでに固定済みの駒を選択しました`;
+        } else {
+          messageEl.textContent = `${getDisplayName(player)}は固定できる駒を選択してください`;
+        }
+        render();
+      }
+      return;
+    }
 
     state.immutablePlaceArmed[player] = false;
     state.immutablePlaceCharges[player] = Math.max(0, (state.immutablePlaceCharges[player] ?? 0) - 1);
@@ -2325,6 +2359,10 @@ export function initGame(options = {}) {
       !state.gameOver &&
       isLocalPlayersTurn() &&
       Boolean(state.destroySkillArmed[state.currentPlayer]);
+    const canUseDoubleActionNow =
+      !state.gameOver &&
+      isLocalPlayersTurn() &&
+      Boolean(state.doubleActionArmed[state.currentPlayer]);
     const destroyContext = canUseDestroyNow ? countDestroyCandidates(state.currentPlayer) : null;
     const useCornerDestroy = Boolean(destroyContext && destroyContext.cornerSacrifices.length > 0);
     const selectedSacrificeSet = new Set(
@@ -2364,6 +2402,9 @@ export function initGame(options = {}) {
           }
         }
         if (showValid && validSet.has(`${row}-${col}`)) cell.classList.add("valid");
+        if (canUseDoubleActionNow && validSet.has(`${row}-${col}`)) {
+          cell.classList.add("double-action-candidate");
+        }
         if (ignoredLineForDisplay) {
           const isIgnoredRow = ignoredLineForDisplay.axis === "row" && row === ignoredLineForDisplay.index;
           const isIgnoredCol = ignoredLineForDisplay.axis === "col" && col === ignoredLineForDisplay.index;
@@ -2548,7 +2589,7 @@ export function initGame(options = {}) {
       }
       if ((state.doubleActionCharges[player] ?? 0) <= 0) return;
       state.doubleActionArmed[player] = true;
-      messageEl.textContent = `${getDisplayName(player)}が2回行動を予約しました`;
+      messageEl.textContent = `${getDisplayName(player)}が2回行動を予約しました。次の1手で連続行動します`;
       render();
     });
   }
@@ -2563,7 +2604,11 @@ export function initGame(options = {}) {
         render();
         return;
       }
-      if ((state.immutablePlaceCharges[player] ?? 0) <= 0) return;
+      if ((state.immutablePlaceCharges[player] ?? 0) <= 0) {
+        messageEl.textContent = `${getDisplayName(player)}の固定石回数が不足しています`;
+        render();
+        return;
+      }
       state.immutablePlaceArmed[player] = true;
       state.destroySkillArmed[player] = false;
       messageEl.textContent = `${getDisplayName(player)}は固定する石を選択してください`;

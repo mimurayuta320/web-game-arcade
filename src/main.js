@@ -607,6 +607,7 @@ function applyStaticTranslations() {
   setTextById("entrySubtitle", tr("entrySubtitle"));
   setTextById("menuSubtitle", tr("menuSubtitle"));
   setTextById("roomCardTitle", tr("roomCardTitle"));
+  setTextById("roomCardGameSelect", tr("gameSelectTitle"));
   setTextById("roomCardDesc", tr("roomCardDesc"));
   setTextById("othelloCardDesc", tr("othelloCardDesc"));
   setTextById("shogiCardDesc", tr("shogiCardDesc"));

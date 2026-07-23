@@ -265,6 +265,13 @@ body {
   grid-column: 1 / -1;
 }
 
+.room-card-game-select {
+  margin: 0.12rem 0 0.35rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  color: rgba(210, 247, 255, 0.92);
+}
+
 .menu-category-card {
   border-style: dashed;
   background: linear-gradient(165deg, rgba(36, 19, 8, 0.86), rgba(16, 34, 42, 0.74));
@@ -544,9 +551,14 @@ body {
 .entry-loading-head {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   font-size: 0.86rem;
   color: rgba(239, 247, 255, 0.92);
+}
+
+.entry-loading-head #entryLoadingText {
+  display: none;
 }
 
 .entry-loading-spinner {
@@ -564,6 +576,11 @@ body {
   border-radius: 999px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.17);
+}
+
+.entry-loading-track,
+.entry-loading-elapsed {
+  display: none;
 }
 
 .entry-loading-fill {
@@ -2239,6 +2256,48 @@ body {
   inset: 36%;
   border-radius: 50%;
   background: rgba(255, 209, 102, 0.88);
+}
+
+.cell.locked {
+  box-shadow: inset 0 0 0 2px rgba(150, 230, 255, 0.65);
+}
+
+.cell.immutable-candidate {
+  box-shadow: inset 0 0 0 3px rgba(86, 242, 182, 0.88);
+  filter: saturate(1.15);
+}
+
+.cell.destroy-sacrifice-candidate {
+  box-shadow: inset 0 0 0 3px rgba(255, 176, 69, 0.92);
+}
+
+.cell.destroy-target-candidate {
+  box-shadow: inset 0 0 0 3px rgba(255, 92, 92, 0.92);
+}
+
+.cell.destroy-sacrifice-selected {
+  box-shadow: inset 0 0 0 4px rgba(255, 240, 126, 0.98);
+}
+
+.cell.double-action-candidate {
+  box-shadow: inset 0 0 0 3px rgba(110, 222, 255, 0.9);
+}
+
+.cell.double-action-candidate.valid::after {
+  inset: 32%;
+  background: rgba(122, 233, 255, 0.96);
+  box-shadow: 0 0 10px rgba(122, 233, 255, 0.7);
+}
+
+.cell.count-ignore-line {
+  filter: grayscale(0.22) brightness(0.9);
+}
+
+#immutablePlaceBtn.skill-armed,
+#destroySkillBtn.skill-armed,
+#doubleActionBtn.skill-armed {
+  border-color: rgba(255, 224, 130, 0.95);
+  box-shadow: 0 0 0 2px rgba(255, 206, 84, 0.5), 0 0 14px rgba(255, 206, 84, 0.45);
 }
 
 .overlay {
