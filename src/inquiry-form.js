@@ -1,10 +1,11 @@
 import "./styles/main.css";
 import { cloudApiRequestData } from "./scripts/cloudApiClient.js";
 
-const STORAGE_NAME_KEY = "neon-inquiry-name";
 const STORAGE_LANG_KEY = "neon-arcade-lang";
+const STORAGE_UI_LANG_KEY = "neon-ui-language";
 const STORAGE_CLOUD_USER_ID_KEY = "neon-cloud-user-id";
-const MAX_MESSAGE_LENGTH = 2000;
+const MIN_MESSAGE_LENGTH = 10;
+const MAX_MESSAGE_LENGTH = 200;
 
 const formEl = document.getElementById("inquiryForm");
 const nameInput = document.getElementById("inquiryName");
@@ -18,6 +19,12 @@ function normalizeLang(raw) {
   const value = String(raw || "").trim().toLowerCase();
   if (value === "ja" || value === "ko" || value === "en") return value;
   return "ja";
+}
+
+function resolveLang() {
+  const arcade = String(localStorage.getItem(STORAGE_LANG_KEY) || "").trim().toLowerCase();
+  if (arcade === "ja" || arcade === "ko" || arcade === "en") return arcade;
+  return normalizeLang(localStorage.getItem(STORAGE_UI_LANG_KEY));
 }
 
 function isHttpUrl(value) {
@@ -52,17 +59,29 @@ function updateCounter() {
   counterEl.textContent = `${length} / ${MAX_MESSAGE_LENGTH}`;
 }
 
+function resetFormOnOpen() {
+  if (nameInput) nameInput.value = "";
+  if (messageInput) messageInput.value = "";
+  if (sourceInput) sourceInput.value = resolveSourceUrl();
+  setStatus("");
+  updateCounter();
+}
+
 async function submitInquiry(event) {
   event.preventDefault();
 
   const name = String(nameInput?.value || "").trim();
   const message = String(messageInput?.value || "").trim();
   const url = String(sourceInput?.value || "").trim();
-  const lang = normalizeLang(localStorage.getItem(STORAGE_LANG_KEY));
+  const lang = resolveLang();
   const userId = String(localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "").trim();
 
   if (!message) {
     setStatus("内容を入力してください。", true);
+    return;
+  }
+  if (message.length < MIN_MESSAGE_LENGTH) {
+    setStatus(`内容は ${MIN_MESSAGE_LENGTH} 文字以上で入力してください。`, true);
     return;
   }
   if (message.length > MAX_MESSAGE_LENGTH) {
@@ -82,7 +101,7 @@ async function submitInquiry(event) {
       userId,
     });
 
-    localStorage.setItem(STORAGE_NAME_KEY, name);
+    if (nameInput) nameInput.value = "";
     if (messageInput) messageInput.value = "";
     updateCounter();
     setStatus("送信しました。ご協力ありがとうございます。");
@@ -93,16 +112,13 @@ async function submitInquiry(event) {
   }
 }
 
-if (nameInput) {
-  nameInput.value = String(localStorage.getItem(STORAGE_NAME_KEY) || "");
-}
-if (sourceInput) {
-  sourceInput.value = resolveSourceUrl();
-}
-
 messageInput?.addEventListener("input", updateCounter);
 formEl?.addEventListener("submit", (event) => {
   void submitInquiry(event);
 });
 
-updateCounter();
+window.addEventListener("pageshow", () => {
+  resetFormOnOpen();
+});
+
+resetFormOnOpen();

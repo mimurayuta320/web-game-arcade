@@ -47,6 +47,15 @@ export class CloudController {
     return result.payload;
   }
 
+  @Post('profile/public')
+  profilePublic(@Body() body: Record<string, unknown>) {
+    const result = this.cloudService.loadPublicProfile(body);
+    if (!result.ok) {
+      this.throwFailure(result.code, result.message);
+    }
+    return result.payload;
+  }
+
   @Post('match/record')
   recordMatch(@Body() body: Record<string, unknown>) {
     const result = this.cloudService.recordMatch(body);
@@ -170,6 +179,9 @@ export class CloudController {
   }
 
   private statusByCode(code: string): number {
+    if (code === 'FORBIDDEN') return HttpStatus.FORBIDDEN;
+    if (code === 'RATE_LIMITED') return HttpStatus.TOO_MANY_REQUESTS;
+    if (code === 'DUPLICATE_INQUIRY') return HttpStatus.TOO_MANY_REQUESTS;
     if (code === 'AUTH_REQUIRED') return HttpStatus.BAD_REQUEST;
     if (code === 'USER_NOT_FOUND') return HttpStatus.NOT_FOUND;
     if (code === 'INVALID_PASSWORD') return HttpStatus.UNAUTHORIZED;

@@ -33,6 +33,23 @@
         flex-wrap: wrap;
       }
 
+      .inquiry-viewer-lang {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .inquiry-viewer-lang label {
+        font-size: 0.82rem;
+        letter-spacing: 0.03em;
+        color: rgba(239, 247, 255, 0.88);
+      }
+
+      .inquiry-viewer-lang .difficulty-select {
+        min-width: 140px;
+      }
+
       .inquiry-viewer-list {
         margin-top: 0.2rem;
         display: grid;
@@ -69,11 +86,19 @@
     <main class="game-shell">
       <section class="menu-screen inquiry-viewer-layout">
         <header class="top-bar">
-          <h1>Inquiry Viewer</h1>
-          <p>問い合わせ一覧を確認する管理者向けページです。</p>
+          <h1 id="inquiryViewerTitle">Inquiry Viewer</h1>
+          <p id="inquiryViewerLead">問い合わせ一覧を確認する管理者向けページです。</p>
         </header>
 
         <article class="game-card inquiry-viewer-form">
+          <div class="inquiry-viewer-lang">
+            <label id="inquiryViewerLangLabel" for="viewerLangSelect">Language</label>
+            <select id="viewerLangSelect" class="difficulty-select" aria-label="Language select">
+              <option value="ja">日本語</option>
+              <option value="ko">한국어</option>
+              <option value="en">English</option>
+            </select>
+          </div>
           <div class="inquiry-viewer-grid">
             <input id="viewerUserId" class="room-input" type="text" placeholder="クラウドID" aria-label="Cloud user id" />
             <input id="viewerPassword" class="room-input" type="password" placeholder="クラウドパスワード" aria-label="Cloud password" />
@@ -86,7 +111,7 @@
         </article>
 
         <article class="game-card">
-          <h2>Recent Inquiries</h2>
+          <h2 id="inquiryRecentTitle">Recent Inquiries</h2>
           <div id="viewerList" class="inquiry-viewer-list"></div>
         </article>
       </section>

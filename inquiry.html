@@ -74,15 +74,16 @@
         </header>
 
         <article class="game-card">
-          <form id="inquiryForm" class="inquiry-form">
+          <form id="inquiryForm" class="inquiry-form" autocomplete="off">
             <label for="inquiryName">お名前（任意）</label>
-            <input id="inquiryName" class="room-input" type="text" maxlength="36" placeholder="匿名でも送信できます" />
+            <input id="inquiryName" class="room-input" type="text" maxlength="36" placeholder="匿名でも送信できます" autocomplete="off" />
 
             <label for="inquiryMessage">内容</label>
             <textarea
               id="inquiryMessage"
               class="room-input inquiry-message"
-              maxlength="2000"
+              minlength="10"
+              maxlength="200"
               required
               placeholder="不具合の内容、発生手順、要望などを入力してください"
             ></textarea>

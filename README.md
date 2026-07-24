@@ -4,6 +4,23 @@
 
 サーバー起動コマンドだけ確認したい場合は README-server.md を参照してください。
 
+## 重要: 今後はHTMLサーバーを起動しない
+
+- 今後の開発では、`src/` 配下のHTML/Viteフロント起動（`npm run dev`）は使用しません。
+- フロントは `apps/web` のNext.jsサーバーを起動してください。
+
+Next.jsフロント起動（ルートで実行）:
+
+```bash
+npm run dev:web
+```
+
+起動URL（デフォルト）:
+
+```text
+http://localhost:3000
+```
+
 ## このPCをサーバーにして遊ぶ（LAN推奨）
 
 同じWi-Fi/LAN内の別PCやスマホから遊ぶ場合は、まずこのPCで次を実行します。
@@ -20,11 +37,11 @@ npm run share
 ```bash
 npm run cloud
 npm run room
-npm run dev
+npm run dev:web
 ```
 
-- 別端末からは `http://<このPCのIP>:5173/#NeonBoardArcade` にアクセスします。
-- 必要に応じて Windows ファイアウォールで `5173` `8787` `8788` を許可してください。
+- 別端末からは `http://<このPCのIP>:3000` にアクセスします。
+- 必要に応じて Windows ファイアウォールで `3000` `8787` `8788` を許可してください。
 
 ## 本番を止めずにテスト環境で確認する
 
@@ -55,7 +72,7 @@ npm install
 ## 開発サーバー起動
 
 ```bash
-npm run dev
+npm run dev:web
 ```
 
 ## 起動手順（おすすめ）
@@ -71,7 +88,7 @@ npm run cloud
 2. ターミナルBでフロント開発サーバーを起動
 
 ```bash
-npm run dev
+npm run dev:web
 ```
 
 3. ターミナルCでルーム(WebSocket)サーバーを起動
@@ -82,10 +99,9 @@ npm run room
 
 4. ブラウザで開く
 
-- `http://localhost:5173/#NeonBoardArcade`
-- 別端末からは `http://<このPCのIP>:5173/#NeonBoardArcade`
+- `http://localhost:3000`
 
-クラウド保存を使わない場合は `npm run dev` だけでOKです。
+クラウド保存を使わない場合は `npm run dev:web` だけでOKです。
 
 ## ローカル独自URLで起動（toufugameshow.local）
 
@@ -157,7 +173,7 @@ npm run cloud
 - パスワードはサーバー側で `scrypt` ハッシュ化して保存します（平文保存しません）。
 - 保存ファイル: `server/data/profiles.json`
 
-開発時は `npm run dev` と `npm run cloud` の両方を起動してください。
+開発時は `npm run dev:web` と `npm run cloud` の両方を起動してください。
 
 ## ビルド
 
@@ -229,7 +245,7 @@ npm run room
 2. ターミナルBでフロントを起動
 
 ```bash
-npm run dev
+npm run dev:web
 ```
 
 3. 1台で試す場合は通常ウィンドウとシークレットウィンドウで開き、同じルーム番号に参加
@@ -269,7 +285,7 @@ PowerShellで次を実行:
 $nodeDir = (Resolve-Path .\.tools\node-v24.18.0-win-x64).Path
 $env:Path = "$nodeDir;$env:Path"
 & "$nodeDir\npm.cmd" install
-& "$nodeDir\npm.cmd" run dev
+& "$nodeDir\npm.cmd" run dev:web
 ```
 
 ## 別PCへ移すときのメモ
@@ -329,7 +345,7 @@ await stats.recordMatch({
 
 - プロジェクトフォルダ全体をコピーする（src / index.html / package.json / .tools を含む）。
 - 新PCで依存を再インストールする（npm install）。
-- 動作確認は npm run dev で行う。
+- 動作確認は npm run dev:web で行う。
 - 本番用出力が必要なら npm run build を実行する。
 
 ### データ引き継ぎに関する注意

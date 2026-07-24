@@ -655,7 +655,9 @@ wss.on("connection", (ws) => {
         code: joinResult.code,
         role: joinResult.assignedRole,
         roomPublic: joinResult.isPublic,
+        participants: roomParticipants(code),
       });
+      broadcastRoomState(code);
       return;
     }
 
@@ -832,6 +834,10 @@ wss.on("connection", (ws) => {
         }
       }
       return;
+    }
+
+    if (type === "chat") {
+      sendJson(ws, envelope);
     }
 
     broadcastToRoom(code, envelope, ws);

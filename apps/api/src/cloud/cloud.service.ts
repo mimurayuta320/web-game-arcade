@@ -50,6 +50,7 @@ type Profile = {
   unlockedSkins: string[];
   selectedSkin: string;
   playerName: string;
+  profileBio: string;
   playerAvatar: string;
   matchStats: MatchStats;
   recentMatches: MatchRecord[];
@@ -57,12 +58,16 @@ type Profile = {
 
 const MATCH_RECENT_LIMIT = 60;
 const MATCH_RESULT_VALUES = new Set(['win', 'lose', 'draw']);
+const INQUIRY_MIN_MESSAGE_LENGTH = Number(process.env.INQUIRY_MIN_MESSAGE_LENGTH || 10);
+const INQUIRY_MIN_INTERVAL_MS = Number(process.env.INQUIRY_MIN_INTERVAL_MS || 30 * 1000);
+const INQUIRY_DUPLICATE_WINDOW_MS = Number(process.env.INQUIRY_DUPLICATE_WINDOW_MS || 10 * 60 * 1000);
 const DEFAULT_PROFILE: Profile = {
   bankCoins: 0,
   pityCounter: 0,
   unlockedSkins: ['classic'],
   selectedSkin: 'classic',
   playerName: 'Player',
+  profileBio: '',
   playerAvatar: '',
   matchStats: {
     total: 0,
@@ -81,6 +86,7 @@ export class CloudService {
     process.env.A5M2_DB_PATH || resolve(this.dataDir, 'a5m2.sqlite');
   private readonly inquiryPath =
     process.env.INQUIRY_DB_PATH || resolve(this.dataDir, 'inquiries.json');
+  private readonly inquiryAdminUserIds = this.resolveInquiryAdminUserIds();
   private readonly bcryptRounds = Number(process.env.BCRYPT_ROUNDS || 12);
   private readonly db: DatabaseSync;
 
@@ -180,6 +186,48 @@ export class CloudService {
       payload: {
         ok: true,
         profile: next,
+      },
+    };
+  }
+
+  loadPublicProfile(body: Record<string, unknown>): ApiResult {
+    const auth = this.authenticate(body);
+    if (!auth.ok) return auth;
+
+    const targetUserId = this.normalizeUserId(body.targetUserId ?? body.userId);
+    const targetPlayerName = this.normalizePlayerName(body.targetPlayerName ?? body.playerName);
+    if (!targetUserId && !targetPlayerName) {
+      return {
+        ok: false,
+        code: 'TARGET_USER_ID_REQUIRED',
+        message: 'targetUserId or targetPlayerName is required',
+      };
+    }
+
+    let target: UserRow | null = null;
+    if (targetUserId) {
+      target = this.readUser(targetUserId);
+    }
+    if (!target && targetPlayerName) {
+      target = this.findUserByPlayerName(targetPlayerName);
+    }
+    if (!target) {
+      return { ok: false, code: 'USER_NOT_FOUND', message: 'User not found' };
+    }
+
+    const profile = this.sanitizeProfile(this.parseProfile(target.profile_json), DEFAULT_PROFILE);
+    return {
+      ok: true,
+      code: 'OK',
+      message: 'public profile loaded',
+      payload: {
+        ok: true,
+        profile: {
+          userId: target.user_id,
+          playerName: profile.playerName,
+          profileBio: profile.profileBio,
+          playerAvatar: profile.playerAvatar,
+        },
       },
     };
   }
@@ -511,15 +559,58 @@ export class CloudService {
         message: 'message is required',
       };
     }
+    if (message.length < INQUIRY_MIN_MESSAGE_LENGTH) {
+      return {
+        ok: false,
+        code: 'INQUIRY_MESSAGE_TOO_SHORT',
+        message: `message must be at least ${INQUIRY_MIN_MESSAGE_LENGTH} characters`,
+      };
+    }
 
     const userId = this.normalizeUserId(body.userId);
+    const name = this.normalizeInquiryName(body.name);
+    const url = this.normalizeInquiryUrl(body.url);
+    const lang = this.normalizeInquiryLang(body.lang);
     const rows = this.readInquiries();
+    const now = Date.now();
+    const senderKey = userId || `anon:${url || 'unknown'}`;
+    const normalizedMessage = this.normalizeInquiryForDuplicateCheck(message);
+
+    const recentBySameSender = rows.some((row) => {
+      if (!row || typeof row !== 'object') return false;
+      const submittedAt = this.getInquiryTimestamp(row);
+      if (submittedAt <= 0 || now - submittedAt > INQUIRY_MIN_INTERVAL_MS) return false;
+      return this.getInquirySenderKey(row) === senderKey;
+    });
+    if (recentBySameSender) {
+      return {
+        ok: false,
+        code: 'RATE_LIMITED',
+        message: 'Please wait before sending another inquiry',
+      };
+    }
+
+    const hasRecentDuplicateMessage = rows.some((row) => {
+      if (!row || typeof row !== 'object') return false;
+      const submittedAt = this.getInquiryTimestamp(row);
+      if (submittedAt <= 0 || now - submittedAt > INQUIRY_DUPLICATE_WINDOW_MS) return false;
+      const oldMessage = this.normalizeInquiryForDuplicateCheck((row as Record<string, unknown>).message);
+      return Boolean(oldMessage) && oldMessage === normalizedMessage;
+    });
+    if (hasRecentDuplicateMessage) {
+      return {
+        ok: false,
+        code: 'DUPLICATE_INQUIRY',
+        message: 'Duplicate inquiry detected',
+      };
+    }
+
     const nextRow: Record<string, unknown> = {
       id: randomUUID(),
-      name: this.normalizeInquiryName(body.name),
+      name,
       message,
-      url: this.normalizeInquiryUrl(body.url),
-      lang: this.normalizeInquiryLang(body.lang),
+      url,
+      lang,
       submittedAt: new Date().toISOString(),
       ...(userId ? { userId } : {}),
     };
@@ -541,6 +632,9 @@ export class CloudService {
   listInquiries(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
+    if (!this.isInquiryAdmin(auth.user.user_id)) {
+      return { ok: false, code: 'FORBIDDEN', message: 'Admin role is required' };
+    }
 
     const limitRaw = Number(body.limit);
     const limit = Number.isFinite(limitRaw)
@@ -565,6 +659,9 @@ export class CloudService {
   deleteInquiry(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
+    if (!this.isInquiryAdmin(auth.user.user_id)) {
+      return { ok: false, code: 'FORBIDDEN', message: 'Admin role is required' };
+    }
 
     const targetId = String(body.id || '').trim();
     if (!targetId) {
@@ -775,6 +872,27 @@ export class CloudService {
     return row || null;
   }
 
+  private findUserByPlayerName(playerName: string): UserRow | null {
+    const normalized = this.normalizePlayerName(playerName);
+    if (!normalized) return null;
+    const rows = this.db
+      .prepare(
+        `
+        SELECT user_id, pass_salt_hex, pass_hash_hex, pass_hash_bcrypt, profile_json
+        FROM users
+      `,
+      )
+      .all() as UserRow[];
+
+    for (const row of rows) {
+      const profile = this.sanitizeProfile(this.parseProfile(row.profile_json), DEFAULT_PROFILE);
+      if (profile.playerName === normalized) {
+        return row;
+      }
+    }
+    return null;
+  }
+
   private updateUserProfile(userId: string, profile: Profile) {
     this.db
       .prepare(
@@ -817,8 +935,31 @@ export class CloudService {
     return value;
   }
 
+  private normalizeProfileBio(raw: unknown) {
+    const text = String(raw || '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .trim();
+    return text.slice(0, 180);
+  }
+
   private normalizeUserId(raw: unknown) {
     return String(raw || '').trim().slice(0, 24);
+  }
+
+  private resolveInquiryAdminUserIds() {
+    const raw = String(process.env.INQUIRY_ADMIN_USER_IDS || process.env.ADMIN_USER_IDS || 'admin,NullToufu');
+    const rows = raw
+      .split(',')
+      .map((id) => this.normalizeUserId(id))
+      .filter(Boolean);
+    return new Set(rows);
+  }
+
+  private isInquiryAdmin(userId: string) {
+    const normalized = this.normalizeUserId(userId);
+    if (!normalized) return false;
+    return this.inquiryAdminUserIds.has(normalized);
   }
 
   private normalizeInquiryName(raw: unknown) {
@@ -835,7 +976,7 @@ export class CloudService {
       .replace(/\r/g, '\n')
       .trim();
     if (!text) return '';
-    return text.slice(0, 2000);
+    return text.slice(0, 200);
   }
 
   private normalizeInquiryUrl(raw: unknown) {
@@ -854,6 +995,29 @@ export class CloudService {
     const value = String(raw || '').trim().toLowerCase();
     if (value === 'ja' || value === 'ko' || value === 'en') return value;
     return 'ja';
+  }
+
+  private normalizeInquiryForDuplicateCheck(raw: unknown) {
+    return String(raw || '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  private getInquiryTimestamp(row: Record<string, unknown>) {
+    const raw = String(row.submittedAt || '').trim();
+    if (!raw) return 0;
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private getInquirySenderKey(row: Record<string, unknown>) {
+    const userId = this.normalizeUserId(row.userId);
+    if (userId) return userId;
+    const url = this.normalizeInquiryUrl(row.url);
+    return `anon:${url || 'unknown'}`;
   }
 
   private normalizeGameKey(raw: unknown) {
@@ -909,6 +1073,7 @@ export class CloudService {
       unlockedSkins,
       selectedSkin: unlockedSkins.includes(selectedSkin) ? selectedSkin : 'classic',
       playerName: this.normalizePlayerName(source.playerName ?? baseProfile.playerName),
+      profileBio: this.normalizeProfileBio(source.profileBio ?? baseProfile.profileBio),
       playerAvatar: this.normalizeAvatarDataUrl(source.playerAvatar ?? baseProfile.playerAvatar),
       matchStats,
       recentMatches,

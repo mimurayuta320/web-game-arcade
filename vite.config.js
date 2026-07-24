@@ -8,6 +8,7 @@ export default defineConfig({
         main: resolve(__dirname, "index.html"),
         inquiry: resolve(__dirname, "inquiry.html"),
         inquiries: resolve(__dirname, "inquiries.html"),
+        profile: resolve(__dirname, "profile.html"),
       },
     },
   },

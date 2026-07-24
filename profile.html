@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Profile</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      .profile-layout {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .profile-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      }
+
+      .profile-form {
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      .profile-form label {
+        font-size: 0.82rem;
+        letter-spacing: 0.03em;
+        color: rgba(239, 247, 255, 0.88);
+      }
+
+      .profile-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        align-items: center;
+      }
+
+      .profile-avatar {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.28);
+        object-fit: cover;
+        background: rgba(5, 11, 18, 0.7);
+      }
+
+      .profile-avatar.hidden {
+        display: none;
+      }
+
+      .profile-avatar-placeholder {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        border: 2px dashed rgba(255, 255, 255, 0.24);
+        display: grid;
+        place-items: center;
+        color: rgba(239, 247, 255, 0.74);
+        text-align: center;
+        font-size: 0.8rem;
+      }
+
+      .profile-metrics {
+        margin: 0;
+        padding-left: 1rem;
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .profile-recent {
+        margin: 0;
+        padding-left: 1rem;
+        display: grid;
+        gap: 0.28rem;
+        max-height: 300px;
+        overflow: auto;
+      }
+
+      .profile-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+      }
+
+      .profile-actions .start-btn {
+        margin-left: 0;
+      }
+
+      .profile-note {
+        margin: 0;
+        color: rgba(239, 247, 255, 0.8);
+      }
+
+      .profile-link-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+      }
+
+      @media (max-width: 980px) {
+        .profile-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-bg"></div>
+    <main class="game-shell">
+      <section class="menu-screen profile-layout">
+        <header class="top-bar">
+          <h1 id="profileTitle">Profile</h1>
+          <p id="profileLead">プレイヤー名とアバターを設定し、戦績を確認できます。</p>
+        </header>
+
+        <div class="profile-grid">
+          <article class="game-card">
+            <form id="profileForm" class="profile-form">
+              <label id="profileUserIdLabel" for="profileUserId">クラウドID</label>
+              <input id="profileUserId" class="room-input" type="text" readonly />
+
+              <label id="profilePlayerNameLabel" for="profilePlayerName">プレイヤー名</label>
+              <input id="profilePlayerName" class="room-input" type="text" maxlength="18" placeholder="あなたの名前" required />
+
+              <label id="profileAvatarLabel" for="profileAvatarFile">アバター画像</label>
+              <div class="profile-row">
+                <img id="profileAvatarPreview" class="profile-avatar hidden" alt="Avatar preview" />
+                <div id="profileAvatarPlaceholder" class="profile-avatar-placeholder">NO<br />AVATAR</div>
+              </div>
+              <input id="profileAvatarFile" class="room-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+              <div class="profile-actions">
+                <button id="profileAvatarClearBtn" class="start-btn ghost" type="button">アバター削除</button>
+              </div>
+
+              <p id="profileModeText" class="profile-note"></p>
+
+              <div class="profile-actions">
+                <button id="profileSaveBtn" class="start-btn" type="submit">保存</button>
+                <button id="profileReloadBtn" class="start-btn ghost" type="button">再読込</button>
+                <button id="profileLogoutBtn" class="start-btn ghost" type="button">ログアウト</button>
+                <a id="profileBackLink" class="start-btn ghost profile-link-btn" href="/">ゲームに戻る</a>
+              </div>
+
+              <p id="profileStatus" class="room-menu-message"></p>
+            </form>
+          </article>
+
+          <article class="game-card">
+            <h2 id="profileStatsTitle">Stats</h2>
+            <ul id="profileStatsList" class="profile-metrics">
+              <li>総試合数: 0</li>
+              <li>勝利: 0</li>
+              <li>敗北: 0</li>
+              <li>引分: 0</li>
+              <li>勝率: 0.0%</li>
+            </ul>
+            <h2 id="profileRecentTitle">Recent Matches</h2>
+            <ul id="profileRecentList" class="profile-recent">
+              <li>まだ試合履歴はありません</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/profile.js"></script>
+  </body>
+</html>

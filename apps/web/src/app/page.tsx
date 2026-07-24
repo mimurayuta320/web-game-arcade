@@ -46,6 +46,8 @@ type CloudAuthResult = {
   message?: string;
   profile?: {
     playerName?: string;
+    profileBio?: string;
+    playerAvatar?: string;
   };
 };
 
@@ -57,8 +59,26 @@ type CloudApiResult = {
 };
 
 type FriendTab = "friends" | "incoming" | "outgoing";
+type LanguageLabelKey = "langJa" | "langKo" | "langEn" | "langZh";
+type MenuCategory = "board" | "card" | "casino" | "party";
+type MenuTabCategory = "menu" | MenuCategory;
 
-type Language = "ja" | "ko" | "en";
+const INITIAL_MENU_TAB_OPEN_STATE: Record<MenuTabCategory, boolean> = {
+  menu: true,
+  board: true,
+  card: true,
+  casino: true,
+  party: true,
+};
+
+const INITIAL_MENU_CARD_OPEN_STATE: Record<MenuCategory, boolean> = {
+  board: true,
+  card: true,
+  casino: true,
+  party: true,
+};
+
+type Language = "ja" | "ko" | "en" | "zh";
 type OthelloMode = "cpu" | "cpuvscpu" | "local" | "chaos";
 type OthelloCpuLevel = "easy" | "normal" | "hard";
 type OthelloTurnOrder = "black" | "white" | "random";
@@ -87,6 +107,7 @@ const LOGIN_I18N = {
     langJa: "日本語",
     langKo: "한국어",
     langEn: "English",
+    langZh: "中文",
     userId: "ユーザーID",
     password: "パスワード",
     displayName: "表示名（ゲーム内）",
@@ -94,6 +115,11 @@ const LOGIN_I18N = {
     displayNameSave: "表示名を保存",
     displayNameRequired: "表示名を入力してください。",
     displayNameUpdated: "表示名を更新しました。",
+    profileBioLabel: "自己紹介文",
+    profileBioPlaceholder: "自己紹介文を入力（180文字まで）",
+    profileBioSave: "自己紹介文を保存",
+    profileBioUpdated: "自己紹介文を更新しました。",
+    profileSaveFailed: "プロフィールの保存に失敗しました。",
     loginButton: "ログインして遊ぶ",
     registerButton: "新規登録",
     guestButton: "ゲストで遊ぶ",
@@ -107,7 +133,7 @@ const LOGIN_I18N = {
     guestStarted: "ゲストモードで開始しました。",
     appTitle: "Neon Board Arcade",
     appLead: "旧HTMLの主要導線をNextへ移行中",
-    backToLogin: "ログインへ戻る",
+    backToLogin: "ログイン画面に戻る",
     modeCloud: "Cloud",
     modeGuest: "Guest",
     tabMenu: "メニュー",
@@ -161,7 +187,11 @@ const LOGIN_I18N = {
     roomRoleGuest: "ゲスト",
     roomRoleSpectator: "観戦",
     roomMembers: "参加者",
+    roomMatchedPlayers: "マッチ人数",
     roomMembersEmpty: "未取得",
+    profileLink: "プロフィール",
+    inquiryViewerLink: "問い合わせ管理",
+    inquiryFormLink: "問い合わせフォーム",
     friendsTitle: "フレンド",
     friendsTabFriends: "フレンド",
     friendsTabIncoming: "承認待ち",
@@ -195,6 +225,11 @@ const LOGIN_I18N = {
     friendRequestNotFound: "対象の申請が見つかりません",
     friendAlreadyExists: "すでにフレンドです",
     friendActionFailed: "フレンド操作に失敗しました",
+    friendViewProfile: "プロフィールを見る",
+    profileViewerTitle: "プロフィール",
+    profileViewerNoBio: "自己紹介文はまだありません。",
+    profileViewerLoadFailed: "プロフィールの取得に失敗しました。",
+    closeLabel: "閉じる",
     multiSyncTitle: "マルチ同期",
     multiSyncEnabled: "同期ON",
     multiSyncDisabled: "同期OFF",
@@ -606,6 +641,7 @@ const LOGIN_I18N = {
     langJa: "日本語",
     langKo: "한국어",
     langEn: "English",
+    langZh: "中文",
     userId: "사용자 ID",
     password: "비밀번호",
     displayName: "표시 이름 (게임 내)",
@@ -613,6 +649,11 @@ const LOGIN_I18N = {
     displayNameSave: "표시 이름 저장",
     displayNameRequired: "표시 이름을 입력하세요.",
     displayNameUpdated: "표시 이름을 업데이트했습니다.",
+    profileBioLabel: "자기소개",
+    profileBioPlaceholder: "자기소개를 입력하세요 (최대 180자)",
+    profileBioSave: "자기소개 저장",
+    profileBioUpdated: "자기소개를 업데이트했습니다.",
+    profileSaveFailed: "프로필 저장에 실패했습니다.",
     loginButton: "로그인하고 플레이",
     registerButton: "회원가입",
     guestButton: "게스트로 플레이",
@@ -680,7 +721,11 @@ const LOGIN_I18N = {
     roomRoleGuest: "게스트",
     roomRoleSpectator: "관전자",
     roomMembers: "참가자",
+    roomMatchedPlayers: "매치 인원",
     roomMembersEmpty: "없음",
+    profileLink: "프로필",
+    inquiryViewerLink: "문의 관리",
+    inquiryFormLink: "문의 폼",
     friendsTitle: "친구",
     friendsTabFriends: "친구",
     friendsTabIncoming: "승인 대기",
@@ -714,6 +759,11 @@ const LOGIN_I18N = {
     friendRequestNotFound: "대상 요청을 찾을 수 없습니다",
     friendAlreadyExists: "이미 친구입니다",
     friendActionFailed: "친구 작업에 실패했습니다",
+    friendViewProfile: "프로필 보기",
+    profileViewerTitle: "프로필",
+    profileViewerNoBio: "자기소개가 아직 없습니다.",
+    profileViewerLoadFailed: "프로필을 불러오지 못했습니다.",
+    closeLabel: "닫기",
     multiSyncTitle: "멀티 동기화",
     multiSyncEnabled: "동기화 ON",
     multiSyncDisabled: "동기화 OFF",
@@ -1129,6 +1179,7 @@ const EN_I18N: Partial<I18nMap> = {
   langJa: "Japanese",
   langKo: "Korean",
   langEn: "English",
+  langZh: "Chinese",
   userId: "User ID",
   password: "Password",
   displayName: "Display Name (in game)",
@@ -1136,6 +1187,11 @@ const EN_I18N: Partial<I18nMap> = {
   displayNameSave: "Save Display Name",
   displayNameRequired: "Please enter a display name.",
   displayNameUpdated: "Display name updated.",
+  profileBioLabel: "Bio",
+  profileBioPlaceholder: "Write your bio (up to 180 chars)",
+  profileBioSave: "Save Bio",
+  profileBioUpdated: "Bio updated.",
+  profileSaveFailed: "Failed to save profile.",
   loginButton: "Login and Play",
   registerButton: "Register",
   guestButton: "Play as Guest",
@@ -1188,6 +1244,15 @@ const EN_I18N: Partial<I18nMap> = {
   roomConnected: "Connected Room",
   roomRole: "Role",
   roomMembers: "Participants",
+  roomMatchedPlayers: "Matched Players",
+  profileLink: "Profile",
+  friendViewProfile: "View Profile",
+  profileViewerTitle: "Profile",
+  profileViewerNoBio: "No bio yet.",
+  profileViewerLoadFailed: "Failed to load profile.",
+  closeLabel: "Close",
+  inquiryViewerLink: "Inquiry Admin",
+  inquiryFormLink: "Inquiry Form",
   loading: "Loading...",
   gameOthello: "Othello",
   gameShogi: "Shogi",
@@ -1229,6 +1294,57 @@ const GAME_OPTIONS = [
   { id: "solitaire" },
   { id: "survivors" },
 ];
+
+const ZH_I18N: Partial<I18nMap> = {
+  loginTitle: "登录",
+  loginLead: "旧版 HTML 入口流程已迁移到 Next。",
+  languageLabel: "Language",
+  langJa: "日语",
+  langKo: "韩语",
+  langEn: "英语",
+  langZh: "中文",
+  userId: "用户 ID",
+  password: "密码",
+  displayName: "显示名（游戏内）",
+  displayNameAfterLogin: "登录后的显示名",
+  displayNameSave: "保存显示名",
+  profileBioLabel: "个人简介",
+  profileBioPlaceholder: "输入个人简介（最多180字）",
+  profileBioSave: "保存个人简介",
+  profileBioUpdated: "个人简介已更新。",
+  profileSaveFailed: "保存个人资料失败。",
+  loginButton: "登录并开始",
+  registerButton: "注册",
+  guestButton: "游客模式",
+  processing: "处理中...",
+  backToLogin: "返回登录",
+  tabMenu: "菜单",
+  roomTitle: "房间操作",
+  roomCode: "房间号",
+  roomPublic: "公开",
+  roomPrivate: "私密",
+  roomCreate: "创建房间",
+  roomJoin: "加入房间",
+  roomDisconnect: "断开连接",
+  roomState: "状态",
+  roomConnected: "已连接房间",
+  roomRole: "角色",
+  roomMembers: "参与者",
+  roomMatchedPlayers: "匹配人数",
+  profileLink: "个人资料",
+  friendViewProfile: "查看资料",
+  profileViewerTitle: "个人资料",
+  profileViewerNoBio: "暂时没有个人简介。",
+  profileViewerLoadFailed: "获取个人资料失败。",
+  closeLabel: "关闭",
+  roomChatTitle: "房间聊天",
+  roomChatSend: "发送",
+  roomChatPlaceholder: "输入消息",
+  quickMatchSearching: "正在搜索多人对战...",
+  quickMatchConnected: "已连接快速匹配（房间 {code}）",
+  roomChatRateLimited: "发送过快，请稍后再试。",
+  roomChatMuted: "聊天发送已受限。",
+};
 
 type Cell = 0 | 1 | 2;
 type UnoColor = "R" | "G" | "B" | "Y";
@@ -1693,9 +1809,15 @@ const OTHELLO_OPENING_BOOK_PRIORITY = [
 const STORAGE_CLOUD_USER_ID_KEY = "neon-cloud-user-id";
 const STORAGE_CLOUD_PASSWORD_KEY = "neon-cloud-password";
 const STORAGE_LANGUAGE_KEY = "neon-ui-language";
+const STORAGE_MENU_TAB_OPEN_STATE_KEY = "neon-menu-tab-open-state";
+const STORAGE_MENU_CARD_OPEN_STATE_KEY = "neon-menu-card-open-state";
 const ROOM_SERVER_QUERY_PARAM_KEY = "roomServer";
 const ROOM_CODE_QUERY_PARAM_KEY = "roomCode";
 const ROOM_INVITE_TOKEN_QUERY_PARAM_KEY = "inviteToken";
+const INQUIRY_ADMIN_USER_IDS = String(process.env.NEXT_PUBLIC_INQUIRY_ADMIN_USER_IDS || "admin,NullToufu")
+  .split(",")
+  .map((id) => id.trim().slice(0, 24))
+  .filter(Boolean);
 const APP_URL_TAG = "NeonBoardArcade";
 const DIRECTIONS = [
   [-1, -1],
@@ -2988,6 +3110,8 @@ export default function Home() {
   const [unoMessage, setUnoMessage] = useState<string>(LOGIN_I18N.ja.unoYourTurn);
   const [isUnoOver, setIsUnoOver] = useState(false);
   const [activePanel, setActivePanel] = useState<Panel>("menu");
+  const [menuTabOpenState, setMenuTabOpenState] = useState<Record<MenuTabCategory, boolean>>(INITIAL_MENU_TAB_OPEN_STATE);
+  const [menuCardOpenState, setMenuCardOpenState] = useState<Record<MenuCategory, boolean>>(INITIAL_MENU_CARD_OPEN_STATE);
   const [gameStarted, setGameStarted] = useState<Record<PlayablePanel, boolean>>(INITIAL_GAME_START_STATE);
   const [roomCode, setRoomCode] = useState("");
   const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
@@ -3003,33 +3127,49 @@ export default function Home() {
   const [pendingRemoteShogiClick, setPendingRemoteShogiClick] = useState<{ row: number; col: number } | null>(null);
   const [pendingRemoteUnoAction, setPendingRemoteUnoAction] = useState<{ action: "play" | "draw"; index?: number } | null>(null);
   const [pendingRemoteDaifugoAction, setPendingRemoteDaifugoAction] = useState<{ action: "play" | "pass"; index?: number } | null>(null);
-  const [isMultiSyncEnabled, setIsMultiSyncEnabled] = useState(true);
   const [isChaosMode, setIsChaosMode] = useState(false);
   const [menuMessage, setMenuMessage] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authUserId, setAuthUserId] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [profileNameDraft, setProfileNameDraft] = useState("player-1");
+  const [profileBioDraft, setProfileBioDraft] = useState("");
   const [entryMessage, setEntryMessage] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authMode, setAuthMode] = useState<"guest" | "cloud">("guest");
   const [language, setLanguage] = useState<Language>("ja");
+  const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false);
+  const [isProfileNameEditOpen, setIsProfileNameEditOpen] = useState(false);
+  const [isProfileBioEditOpen, setIsProfileBioEditOpen] = useState(false);
+  const [isFriendPanelOpen, setIsFriendPanelOpen] = useState(false);
   const [friendTab, setFriendTab] = useState<FriendTab>("friends");
   const [friendUserIdDraft, setFriendUserIdDraft] = useState("");
   const [friendIds, setFriendIds] = useState<string[]>([]);
   const [incomingFriendIds, setIncomingFriendIds] = useState<string[]>([]);
   const [outgoingFriendIds, setOutgoingFriendIds] = useState<string[]>([]);
+  const [friendActionUserId, setFriendActionUserId] = useState("");
+  const [roomMemberActionId, setRoomMemberActionId] = useState("");
   const [friendsMessage, setFriendsMessage] = useState("");
   const [isFriendsLoading, setIsFriendsLoading] = useState(false);
   const [isFriendsActionLoading, setIsFriendsActionLoading] = useState(false);
+  const [isPublicProfileLoading, setIsPublicProfileLoading] = useState(false);
+  const [publicProfile, setPublicProfile] = useState<{
+    userId: string;
+    playerName: string;
+    profileBio: string;
+    playerAvatar: string;
+  } | null>(null);
   const [quickMatchMode, setQuickMatchMode] = useState(false);
   const [pendingInviteToken, setPendingInviteToken] = useState("");
-  const [roomChatMessages, setRoomChatMessages] = useState<Array<{ name: string; text: string }>>([]);
+  const [inviteCopyFeedback, setInviteCopyFeedback] = useState<"idle" | "copied" | "failed">("idle");
+  const [roomChatMessages, setRoomChatMessages] = useState<Array<{ id?: string; name: string; text: string }>>([]);
   const [spectatorChatMessages, setSpectatorChatMessages] = useState<Array<{ name: string; text: string }>>([]);
   const [roomChatInput, setRoomChatInput] = useState("");
   const [spectatorChatInput, setSpectatorChatInput] = useState("");
   const roomSocketRef = useRef<WebSocket | null>(null);
   const inviteTokenResolveRef = useRef<((token: string) => void) | null>(null);
+  const inviteCopyFeedbackTimerRef = useRef<number | null>(null);
+  const pendingRoomChatIdsRef = useRef<string[]>([]);
   const peerIdRef = useRef(`next-${Math.random().toString(36).slice(2, 10)}`);
   const snapshotRef = useRef<Record<string, unknown>>({});
   const minesweeperLegacyControllerRef = useRef<{ stop: () => void } | null>(null);
@@ -3046,10 +3186,36 @@ export default function Home() {
     const savedUserId = localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "";
     const savedPassword = localStorage.getItem(STORAGE_CLOUD_PASSWORD_KEY) || "";
     const savedLanguage = localStorage.getItem(STORAGE_LANGUAGE_KEY);
+    const savedMenuTabOpenState = localStorage.getItem(STORAGE_MENU_TAB_OPEN_STATE_KEY);
+    const savedMenuCardOpenState = localStorage.getItem(STORAGE_MENU_CARD_OPEN_STATE_KEY);
     setAuthUserId(savedUserId);
     setAuthPassword(savedPassword);
-    if (savedLanguage === "ja" || savedLanguage === "ko" || savedLanguage === "en") {
+    if (savedLanguage === "ja" || savedLanguage === "ko" || savedLanguage === "en" || savedLanguage === "zh") {
       setLanguage(savedLanguage);
+    }
+
+    if (savedMenuTabOpenState) {
+      try {
+        const parsed = JSON.parse(savedMenuTabOpenState) as Partial<Record<MenuTabCategory, boolean>>;
+        setMenuTabOpenState((prev) => ({
+          ...prev,
+          ...parsed,
+        }));
+      } catch {
+        // ignore invalid storage value
+      }
+    }
+
+    if (savedMenuCardOpenState) {
+      try {
+        const parsed = JSON.parse(savedMenuCardOpenState) as Partial<Record<MenuCategory, boolean>>;
+        setMenuCardOpenState((prev) => ({
+          ...prev,
+          ...parsed,
+        }));
+      } catch {
+        // ignore invalid storage value
+      }
     }
 
     try {
@@ -3076,6 +3242,9 @@ export default function Home() {
       if (language === "en") {
         return EN_I18N[key] ?? LOGIN_I18N.ja[key];
       }
+      if (language === "zh") {
+        return ZH_I18N[key] ?? LOGIN_I18N.ja[key];
+      }
       return LOGIN_I18N[language][key];
     },
     [language],
@@ -3084,6 +3253,22 @@ export default function Home() {
   const switchLanguage = useCallback((nextLanguage: Language) => {
     setLanguage(nextLanguage);
     localStorage.setItem(STORAGE_LANGUAGE_KEY, nextLanguage);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_MENU_TAB_OPEN_STATE_KEY, JSON.stringify(menuTabOpenState));
+  }, [menuTabOpenState]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_MENU_CARD_OPEN_STATE_KEY, JSON.stringify(menuCardOpenState));
+  }, [menuCardOpenState]);
+
+  useEffect(() => {
+    return () => {
+      if (inviteCopyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(inviteCopyFeedbackTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -3194,17 +3379,30 @@ export default function Home() {
     [t, tf],
   );
 
-  const pushRoomChatMessage = useCallback((name: string, text: string) => {
+  const pushRoomChatMessage = useCallback((name: string, text: string, id?: string) => {
     const normalizedText = String(text || "").trim().slice(0, 200);
     if (!normalizedText) return;
     const normalizedName = String(name || "Player").trim().slice(0, 24) || "Player";
+    const normalizedId = String(id || "").trim().slice(0, 120);
     setRoomChatMessages((prev) => {
-      const next = [...prev, { name: normalizedName, text: normalizedText }];
+      if (normalizedId && prev.some((row) => row.id === normalizedId)) {
+        return prev;
+      }
+      const next = [...prev, { id: normalizedId || undefined, name: normalizedName, text: normalizedText }];
       if (next.length > 160) {
         return next.slice(next.length - 160);
       }
       return next;
     });
+  }, []);
+
+  const rollbackLatestPendingRoomChat = useCallback(() => {
+    const pending = pendingRoomChatIdsRef.current;
+    if (!pending.length) return;
+    const latestId = pending[pending.length - 1];
+    pendingRoomChatIdsRef.current = pending.slice(0, -1);
+    if (!latestId) return;
+    setRoomChatMessages((prev) => prev.filter((row) => row.id !== latestId));
   }, []);
 
   const pushSpectatorChatMessage = useCallback((name: string, text: string) => {
@@ -3376,6 +3574,10 @@ export default function Home() {
     }
     return tf("roomTurnCurrent", { owner: isYourTurn ? t("roomTurnYou") : t("roomTurnOpponent") });
   }, [connectedRoomCode, roomRole, t, tf]);
+
+  const roomMatchedPlayerCount = useMemo(() => {
+    return roomParticipants.filter((participant) => participant.role === "host" || participant.role === "guest").length;
+  }, [roomParticipants]);
 
   const resolveOthelloChaosOwners = (target: OthelloChaosTarget, playerSide: 1 | 2): Array<1 | 2> => {
     if (target === "black") return [1];
@@ -3576,6 +3778,133 @@ export default function Home() {
 
   const openSurvivors = () => {
     openPanel("survivors");
+  };
+
+  const languageButtons: Array<{ code: Language; labelKey: LanguageLabelKey }> = [
+    { code: "ja", labelKey: "langJa" },
+    { code: "ko", labelKey: "langKo" },
+    { code: "en", labelKey: "langEn" },
+    { code: "zh", labelKey: "langZh" },
+  ];
+
+  const menuTabCategoryLabels: Record<MenuTabCategory, string> = language === "ko"
+    ? {
+      menu: "메뉴",
+      board: "보드게임",
+      card: "카드게임",
+      casino: "카지노",
+      party: "퍼즐/파티",
+    }
+    : language === "en"
+      ? {
+        menu: "Menu",
+        board: "Board Games",
+        card: "Card Games",
+        casino: "Casino",
+        party: "Puzzle / Party",
+      }
+      : {
+        menu: "メニュー",
+        board: "ボードゲーム一覧",
+        card: "カードゲーム一覧",
+        casino: "カジノ",
+        party: "パズル・パーティー",
+      };
+
+  const menuTabButtons: Array<{ panel: Panel; category: MenuTabCategory; label: string; onClick: () => void }> = [
+    { panel: "menu", category: "menu", label: t("tabMenu"), onClick: () => setActivePanel("menu") },
+    { panel: "othello", category: "board", label: t("tabOthello"), onClick: openOthello },
+    { panel: "gomoku", category: "board", label: t("tabGomoku"), onClick: openGomoku },
+    { panel: "chess", category: "board", label: t("tabChess"), onClick: openChess },
+    { panel: "shogi", category: "board", label: t("tabShogi"), onClick: openShogi },
+    { panel: "uno", category: "card", label: t("tabUno"), onClick: openUno },
+    { panel: "sevens", category: "card", label: t("tabSevens"), onClick: openSevens },
+    { panel: "daifugo", category: "card", label: t("tabDaifugo"), onClick: openDaifugo },
+    { panel: "solitaire", category: "card", label: t("tabSolitaire"), onClick: openSolitaire },
+    { panel: "blackjack", category: "casino", label: t("tabBlackjack"), onClick: openBlackjack },
+    { panel: "poker", category: "casino", label: t("tabPoker"), onClick: openPoker },
+    { panel: "chinchiro", category: "casino", label: t("tabChinchiro"), onClick: openChinchiro },
+    { panel: "minesweeper", category: "party", label: t("tabMinesweeper"), onClick: openMinesweeper },
+    { panel: "numeron", category: "party", label: t("tabNumeron"), onClick: openNumeron },
+    { panel: "fitPuzzle", category: "party", label: t("tabFitPuzzle"), onClick: openFitPuzzle },
+    { panel: "mahjong", category: "party", label: t("tabMahjong"), onClick: openMahjong },
+    { panel: "fourPanel", category: "party", label: t("tabFourPanel"), onClick: openFourPanel },
+    { panel: "drawingRelay", category: "party", label: t("tabDrawingRelay"), onClick: openDrawingRelay },
+    { panel: "survivors", category: "party", label: t("tabSurvivors"), onClick: openSurvivors },
+  ];
+
+  const menuTabCategoryOrder: MenuTabCategory[] = ["menu", "board", "card", "casino", "party"];
+  const menuTabGroups = menuTabCategoryOrder
+    .map((category) => ({
+      category,
+      label: menuTabCategoryLabels[category],
+      tabs: menuTabButtons.filter((button) => button.category === category),
+    }))
+    .filter((group) => group.tabs.length > 0);
+
+  const menuCategoryLabels: Record<MenuCategory, string> = language === "ko"
+    ? {
+      board: "보드게임",
+      card: "카드게임",
+      casino: "카지노",
+      party: "퍼즐/파티",
+    }
+    : language === "en"
+      ? {
+        board: "Board Games",
+        card: "Card Games",
+        casino: "Casino",
+        party: "Puzzle / Party",
+      }
+      : {
+        board: "ボードゲーム一覧",
+        card: "カードゲーム一覧",
+        casino: "カジノ",
+        party: "パズル・パーティー",
+      };
+
+  const menuGameCards: Array<{ panel: PlayablePanel; category: MenuCategory; title: string; className: string; onClick: () => void }> = [
+    { panel: "othello", category: "board", title: t("gameOthello"), onClick: openOthello, className: "rounded-xl border border-emerald-200/30 bg-emerald-400/10 p-4 text-left" },
+    { panel: "gomoku", category: "board", title: t("gameGomoku"), onClick: openGomoku, className: "rounded-xl border border-lime-200/30 bg-lime-400/10 p-4 text-left" },
+    { panel: "chess", category: "board", title: t("gameChess"), onClick: openChess, className: "rounded-xl border border-slate-200/20 bg-slate-400/10 p-4 text-left" },
+    { panel: "shogi", category: "board", title: t("gameShogi"), onClick: openShogi, className: "rounded-xl border border-slate-200/20 bg-slate-400/10 p-4 text-left" },
+    { panel: "uno", category: "card", title: t("tabUno"), onClick: openUno, className: "rounded-xl border border-cyan-200/30 bg-cyan-400/10 p-4 text-left" },
+    { panel: "sevens", category: "card", title: t("tabSevens"), onClick: openSevens, className: "rounded-xl border border-violet-200/30 bg-violet-400/10 p-4 text-left" },
+    { panel: "daifugo", category: "card", title: t("tabDaifugo"), onClick: openDaifugo, className: "rounded-xl border border-orange-200/30 bg-orange-400/10 p-4 text-left" },
+    { panel: "solitaire", category: "card", title: t("tabSolitaire"), onClick: openSolitaire, className: "rounded-xl border border-amber-200/30 bg-amber-400/10 p-4 text-left" },
+    { panel: "blackjack", category: "casino", title: t("tabBlackjack"), onClick: openBlackjack, className: "rounded-xl border border-rose-200/30 bg-rose-400/10 p-4 text-left" },
+    { panel: "poker", category: "casino", title: t("tabPoker"), onClick: openPoker, className: "rounded-xl border border-rose-200/30 bg-rose-400/10 p-4 text-left" },
+    { panel: "chinchiro", category: "casino", title: t("tabChinchiro"), onClick: openChinchiro, className: "rounded-xl border border-fuchsia-200/30 bg-fuchsia-400/10 p-4 text-left" },
+    { panel: "minesweeper", category: "party", title: t("tabMinesweeper"), onClick: openMinesweeper, className: "rounded-xl border border-teal-200/30 bg-teal-400/10 p-4 text-left" },
+    { panel: "numeron", category: "party", title: t("tabNumeron"), onClick: openNumeron, className: "rounded-xl border border-amber-200/30 bg-amber-400/10 p-4 text-left" },
+    { panel: "fitPuzzle", category: "party", title: t("tabFitPuzzle"), onClick: openFitPuzzle, className: "rounded-xl border border-pink-200/30 bg-pink-400/10 p-4 text-left" },
+    { panel: "mahjong", category: "party", title: t("tabMahjong"), onClick: openMahjong, className: "rounded-xl border border-red-200/30 bg-red-400/10 p-4 text-left" },
+    { panel: "fourPanel", category: "party", title: t("tabFourPanel"), onClick: openFourPanel, className: "rounded-xl border border-sky-200/30 bg-sky-400/10 p-4 text-left" },
+    { panel: "drawingRelay", category: "party", title: t("tabDrawingRelay"), onClick: openDrawingRelay, className: "rounded-xl border border-indigo-200/30 bg-indigo-400/10 p-4 text-left" },
+    { panel: "survivors", category: "party", title: t("tabSurvivors"), onClick: openSurvivors, className: "rounded-xl border border-emerald-200/30 bg-emerald-400/10 p-4 text-left" },
+  ];
+
+  const menuCategoryOrder: MenuCategory[] = ["board", "card", "casino", "party"];
+  const menuGameCardGroups = menuCategoryOrder
+    .map((category) => ({
+      category,
+      label: menuCategoryLabels[category],
+      cards: menuGameCards.filter((card) => card.category === category),
+    }))
+    .filter((group) => group.cards.length > 0);
+
+  const toggleMenuTabGroup = (category: MenuTabCategory) => {
+    setMenuTabOpenState((prev) => ({
+      ...prev,
+      [category]: !prev[category],
+    }));
+  };
+
+  const toggleMenuCardGroup = (category: MenuCategory) => {
+    setMenuCardOpenState((prev) => ({
+      ...prev,
+      [category]: !prev[category],
+    }));
   };
 
   const onJoinRoom = () => {
@@ -4032,6 +4361,13 @@ export default function Home() {
               setConnectedRoomCode(assignedCode);
               setRoomCode(assignedCode);
             }
+            if (Array.isArray(payload.participants)) {
+              setRoomParticipants(payload.participants as RoomParticipant[]);
+              const myself = (payload.participants as RoomParticipant[]).find((p) => p.id === peerIdRef.current);
+              if (myself?.role) {
+                setRoomRole(myself.role);
+              }
+            }
             stripInviteTokenFromAddressBar();
             if (payload.role) {
               const nextRole = String(payload.role);
@@ -4041,7 +4377,7 @@ export default function Home() {
               }
             }
 
-            if (quickMatchMode) {
+            if (quickJoin) {
               if (payload.roomPublic === false) {
                 setMenuMessage(t("quickMatchPrivateSkipped"));
                 closeRoomSocket();
@@ -4050,30 +4386,50 @@ export default function Home() {
                 }, 100);
                 return;
               }
-              setQuickMatchMode(false);
               if (assignedCode) {
-                setMenuMessage(tf("quickMatchConnected", { code: assignedCode }));
+                setMenuMessage(tf("roomJoinPreparing", { code: assignedCode }));
               }
+            }
+
+            if (assignedCode && ws.readyState === WebSocket.OPEN) {
+              ws.send(
+                JSON.stringify({
+                  type: "presence",
+                  room: assignedCode,
+                  from: peerIdRef.current,
+                  name: playerName,
+                  roomPublic: Boolean(payload.roomPublic ?? (roomVisibility === "public")),
+                }),
+              );
             }
             return;
           }
 
           if (type === "room-state") {
-            setConnectedRoomCode(String(payload.room || ""));
-            setRoomParticipants(Array.isArray(payload.participants) ? payload.participants : []);
+            const nextRoomCode = String(payload.room || "");
+            const participants = Array.isArray(payload.participants) ? payload.participants : [];
+            setConnectedRoomCode(nextRoomCode);
+            setRoomParticipants(participants);
             if (Array.isArray(payload.drawVotes)) {
               setOthelloDrawVotes(payload.drawVotes.map((vote: unknown) => String(vote)).filter((vote: string) => vote.length > 0));
             } else {
               setOthelloDrawVotes([]);
             }
-            const myself = Array.isArray(payload.participants)
-              ? payload.participants.find((p: RoomParticipant) => p.id === peerIdRef.current)
-              : null;
+            const myself = participants.find((p: RoomParticipant) => p.id === peerIdRef.current);
             if (myself?.role) {
               setRoomRole(myself.role);
             }
-            if (String(payload.room || "")) {
+            if (nextRoomCode) {
               stripInviteTokenFromAddressBar();
+            }
+            if (quickJoin) {
+              const activePlayers = participants.filter((p: RoomParticipant) => p.role === "host" || p.role === "guest").length;
+              if (activePlayers >= 2) {
+                setQuickMatchMode(false);
+                setMenuMessage(tf("quickMatchConnected", { code: nextRoomCode || roomCode }));
+              } else {
+                setMenuMessage(t("quickMatchSearching"));
+              }
             }
             return;
           }
@@ -4112,12 +4468,16 @@ export default function Home() {
           }
 
           if (type === "chat") {
-            pushRoomChatMessage(String(payload.name || payload.from || "Player"), String(payload.text || ""));
+            const incomingId = String(payload.messageId || "").trim();
+            pushRoomChatMessage(String(payload.name || payload.from || "Player"), String(payload.text || ""), incomingId);
+            if (incomingId && String(payload.from || "") === peerIdRef.current) {
+              pendingRoomChatIdsRef.current = pendingRoomChatIdsRef.current.filter((id) => id !== incomingId);
+            }
             return;
           }
 
           if (type === "room-full") {
-            if (quickMatchMode) {
+            if (quickJoin) {
               setMenuMessage(t("quickMatchSearching"));
               closeRoomSocket();
               window.setTimeout(() => {
@@ -4138,7 +4498,7 @@ export default function Home() {
           }
 
           if (type === "room-in-game") {
-            if (quickMatchMode) {
+            if (quickJoin) {
               setMenuMessage(t("quickMatchSearching"));
               closeRoomSocket();
               window.setTimeout(() => {
@@ -4175,10 +4535,12 @@ export default function Home() {
           if (type === "error") {
             const code = String(payload.code || "UNKNOWN");
             if (code === "MUTED") {
+              rollbackLatestPendingRoomChat();
               setMenuMessage(t("roomChatMuted"));
               return;
             }
             if (code.startsWith("RATE_LIMIT_")) {
+              rollbackLatestPendingRoomChat();
               setMenuMessage(t("roomChatRateLimited"));
               return;
             }
@@ -4204,8 +4566,8 @@ export default function Home() {
       closeRoomSocket,
       playerName,
       pushRoomChatMessage,
+      rollbackLatestPendingRoomChat,
       pushSpectatorChatMessage,
-      quickMatchMode,
       roomCode,
       roomErrorLabel,
       roomServerUrl,
@@ -4245,6 +4607,17 @@ export default function Home() {
     return url.toString();
   }, [roomServerUrl]);
 
+  const showInviteCopyFeedback = useCallback((status: "copied" | "failed") => {
+    setInviteCopyFeedback(status);
+    if (inviteCopyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(inviteCopyFeedbackTimerRef.current);
+    }
+    inviteCopyFeedbackTimerRef.current = window.setTimeout(() => {
+      setInviteCopyFeedback("idle");
+      inviteCopyFeedbackTimerRef.current = null;
+    }, 2000);
+  }, []);
+
   const copyInviteLink = useCallback(async () => {
     const code = connectedRoomCode || roomCode;
     if (!code) return;
@@ -4263,6 +4636,7 @@ export default function Home() {
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
+        showInviteCopyFeedback("copied");
         setMenuMessage(t("inviteLinkCopied"));
         return;
       }
@@ -4271,8 +4645,9 @@ export default function Home() {
     }
 
     const copied = Boolean(window.prompt("Copy URL", link));
+    showInviteCopyFeedback(copied ? "copied" : "failed");
     setMenuMessage(copied ? t("inviteLinkCopied") : t("inviteLinkCopyFailed"));
-  }, [buildInviteUrl, connectedRoomCode, pendingInviteToken, requestInviteToken, roomCode, roomRole, roomVisibility, t]);
+  }, [buildInviteUrl, connectedRoomCode, pendingInviteToken, requestInviteToken, roomCode, roomRole, roomVisibility, showInviteCopyFeedback, t]);
 
   const startQuickMatch = useCallback(() => {
     setQuickMatchMode(true);
@@ -4305,8 +4680,12 @@ export default function Home() {
     if (roomRole === "spectator") return;
     const text = roomChatInput.trim().slice(0, 200);
     if (!text) return;
-    sendRoomEvent({ type: "chat", text });
-    pushRoomChatMessage(playerName, text);
+    const messageId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${peerIdRef.current}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    pendingRoomChatIdsRef.current = [...pendingRoomChatIdsRef.current, messageId];
+    pushRoomChatMessage(playerName, text, messageId);
+    sendRoomEvent({ type: "chat", text, messageId });
     setRoomChatInput("");
   }, [playerName, pushRoomChatMessage, roomChatInput, roomRole, sendRoomEvent]);
 
@@ -4463,7 +4842,6 @@ export default function Home() {
   });
 
   useEffect(() => {
-    if (!isMultiSyncEnabled) return;
     if (!connectedRoomCode) return;
     if (roomRole !== "host") return;
 
@@ -4478,7 +4856,7 @@ export default function Home() {
     push();
     const timer = setInterval(push, 1000);
     return () => clearInterval(timer);
-  }, [connectedRoomCode, isChaosMode, isMultiSyncEnabled, roomRole, sendRoomEvent]);
+  }, [connectedRoomCode, isChaosMode, roomRole, sendRoomEvent]);
 
   const onBoardClick = (row: number, col: number, options?: { isRemote?: boolean; byCpu?: boolean }) => {
     if (isGameOver) return;
@@ -6378,6 +6756,13 @@ export default function Home() {
     return { userId, password };
   }, [authMode, authPassword, authUserId]);
 
+  const canAccessInquiryViewer = useMemo(() => {
+    if (authMode !== "cloud") return false;
+    const currentUserId = authUserId.trim().slice(0, 24);
+    if (!currentUserId) return false;
+    return INQUIRY_ADMIN_USER_IDS.includes(currentUserId);
+  }, [authMode, authUserId]);
+
   const callCloudApi = useCallback(async <T extends CloudApiResult>(path: string, payload: Record<string, unknown>) => {
     const res = await fetch(path, {
       method: "POST",
@@ -6513,6 +6898,14 @@ export default function Home() {
     return t("friendsListEmpty");
   }, [friendTab, t]);
 
+  const loginStatusText = useMemo(() => {
+    const safeName = (playerName.trim() || authUserId.trim() || "player").slice(0, 24);
+    if (language === "ko") return `${safeName}(사용자명)으로 로그인 중입니다.`;
+    if (language === "en") return `Logged in as ${safeName} (username).`;
+    if (language === "zh") return `正在以${safeName}（用户名）登录。`;
+    return `${safeName}（ユーザー名）でログイン中です。`;
+  }, [authUserId, language, playerName]);
+
   const canUseFriends = isAuthenticated && authMode === "cloud" && Boolean(cloudAuthPayload);
 
   useEffect(() => {
@@ -6525,6 +6918,75 @@ export default function Home() {
     }
     void refreshFriends(true);
   }, [authMode, isAuthenticated, refreshFriends]);
+
+  useEffect(() => {
+    if (authMode === "guest") {
+      setIsProfilePanelOpen(false);
+      setIsProfileNameEditOpen(false);
+      setIsProfileBioEditOpen(false);
+      setIsFriendPanelOpen(false);
+      setFriendActionUserId("");
+      setRoomMemberActionId("");
+      setPublicProfile(null);
+    }
+  }, [authMode]);
+
+  const applyPlayerName = useCallback(async () => {
+    const nextName = profileNameDraft.trim().slice(0, 24);
+    if (!nextName) {
+      setMenuMessage(t("displayNameRequired"));
+      return;
+    }
+    setPlayerName(nextName);
+    setProfileNameDraft(nextName);
+
+    if (authMode === "cloud" && cloudAuthPayload) {
+      try {
+        const payload = await callCloudApi<CloudApiResult>("/api/profile/save", {
+          ...cloudAuthPayload,
+          profile: {
+            playerName: nextName,
+            profileBio: profileBioDraft,
+          },
+        });
+        const loaded = payload.profile as Record<string, unknown> | undefined;
+        setProfileBioDraft(String(loaded?.profileBio || profileBioDraft).slice(0, 180));
+      } catch (error) {
+        console.error(error);
+        setMenuMessage(t("profileSaveFailed"));
+        return;
+      }
+    }
+
+    setMenuMessage(t("displayNameUpdated"));
+    setIsProfileNameEditOpen(false);
+  }, [authMode, callCloudApi, cloudAuthPayload, profileBioDraft, profileNameDraft, t]);
+
+  const applyProfileBio = useCallback(async () => {
+    const nextBio = profileBioDraft
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .slice(0, 180);
+    setProfileBioDraft(nextBio);
+
+    if (authMode === "cloud" && cloudAuthPayload) {
+      try {
+        await callCloudApi<CloudApiResult>("/api/profile/save", {
+          ...cloudAuthPayload,
+          profile: {
+            profileBio: nextBio,
+          },
+        });
+      } catch (error) {
+        console.error(error);
+        setMenuMessage(t("profileSaveFailed"));
+        return;
+      }
+    }
+
+    setMenuMessage(t("profileBioUpdated"));
+    setIsProfileBioEditOpen(false);
+  }, [authMode, callCloudApi, cloudAuthPayload, profileBioDraft, t]);
 
   const handleFriendRequestSend = useCallback(() => {
     const targetUserId = friendUserIdDraft.trim();
@@ -6571,16 +7033,52 @@ export default function Home() {
     void runFriendAction("/api/friends/request/cancel", { targetUserId }, "friendCancelSuccess");
   }, [friendUserIdDraft, runFriendAction, t]);
 
-  const applyPlayerName = useCallback(() => {
-    const nextName = profileNameDraft.trim().slice(0, 24);
-    if (!nextName) {
-      setMenuMessage(t("displayNameRequired"));
+  const openPublicProfile = useCallback(async (targetUserId: string, targetPlayerName = "") => {
+    const normalizedUserId = targetUserId.trim();
+    const normalizedPlayerName = targetPlayerName.trim();
+    if (!normalizedUserId && !normalizedPlayerName) return;
+    if (!cloudAuthPayload) {
+      setFriendsMessage(t("friendsHintNoAuth"));
       return;
     }
-    setPlayerName(nextName);
-    setProfileNameDraft(nextName);
-    setMenuMessage(t("displayNameUpdated"));
-  }, [profileNameDraft, t]);
+
+    setIsPublicProfileLoading(true);
+    try {
+      const payload = await callCloudApi<CloudApiResult>("/api/profile/public", {
+        ...cloudAuthPayload,
+        ...(normalizedUserId ? { targetUserId: normalizedUserId } : {}),
+        ...(normalizedPlayerName ? { targetPlayerName: normalizedPlayerName } : {}),
+      });
+      const loaded = payload.profile as Record<string, unknown> | undefined;
+      setPublicProfile({
+        userId: String(loaded?.userId || normalizedUserId || "-").slice(0, 24),
+        playerName: String(loaded?.playerName || normalizedPlayerName || normalizedUserId).slice(0, 24),
+        profileBio: String(loaded?.profileBio || "").slice(0, 180),
+        playerAvatar: String(loaded?.playerAvatar || ""),
+      });
+      setFriendActionUserId("");
+      setRoomMemberActionId("");
+    } catch (error) {
+      console.error(error);
+      setFriendsMessage(t("profileViewerLoadFailed"));
+    } finally {
+      setIsPublicProfileLoading(false);
+    }
+  }, [callCloudApi, cloudAuthPayload, t]);
+
+  const openProfileEditor = useCallback(() => {
+    setActivePanel("menu");
+    setIsFriendPanelOpen(false);
+    setFriendActionUserId("");
+    setIsProfilePanelOpen((prev) => {
+      const next = !prev;
+      if (!next) {
+        setIsProfileNameEditOpen(false);
+        setIsProfileBioEditOpen(false);
+      }
+      return next;
+    });
+  }, []);
 
   const loadScores = useCallback(async () => {
     setIsScoreLoading(true);
@@ -6659,9 +7157,11 @@ export default function Home() {
 
   const applyCloudLoginSuccess = useCallback((userId: string, password: string, data: CloudAuthResult) => {
     const cloudName = String(data?.profile?.playerName || "").trim();
+    const cloudBio = String(data?.profile?.profileBio || "").slice(0, 180);
     const nextName = (cloudName || userId || "player").slice(0, 24);
     setPlayerName(nextName);
     setProfileNameDraft(nextName);
+    setProfileBioDraft(cloudBio);
     localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
     localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
     setAuthMode("cloud");
@@ -6721,6 +7221,7 @@ export default function Home() {
     const nextName = playerName.trim().slice(0, 24) || "guest";
     setPlayerName(nextName);
     setProfileNameDraft(nextName);
+    setProfileBioDraft("");
     localStorage.removeItem(STORAGE_CLOUD_USER_ID_KEY);
     localStorage.removeItem(STORAGE_CLOUD_PASSWORD_KEY);
     setAuthMode("guest");
@@ -6987,35 +7488,22 @@ export default function Home() {
       <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-5 py-8 text-slate-100">
         <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
           <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs tracking-[0.25em] text-cyan-200">NEXT MIGRATION HUB</p>
+            <div className="flex items-center justify-end gap-3">
               <div className="flex items-center gap-1 rounded-md border border-cyan-200/30 bg-slate-950/40 p-1 text-xs">
                 <span className="px-1 text-cyan-100">{t("languageLabel")}</span>
-                <button
-                  type="button"
-                  onClick={() => switchLanguage("ja")}
-                  className={`rounded px-2 py-1 ${language === "ja" ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
-                >
-                  {t("langJa")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchLanguage("ko")}
-                  className={`rounded px-2 py-1 ${language === "ko" ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
-                >
-                  {t("langKo")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchLanguage("en")}
-                  className={`rounded px-2 py-1 ${language === "en" ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
-                >
-                  {t("langEn")}
-                </button>
+                {languageButtons.map((button) => (
+                  <button
+                    key={`entry-lang-${button.code}`}
+                    type="button"
+                    onClick={() => switchLanguage(button.code)}
+                    className={`rounded px-2 py-1 ${language === button.code ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
+                  >
+                    {t(button.labelKey)}
+                  </button>
+                ))}
               </div>
             </div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight">{t("loginTitle")}</h1>
-            <p className="mt-2 text-sm text-slate-300">{t("loginLead")}</p>
           </header>
 
           <section className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
@@ -7081,207 +7569,329 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-5 py-8 text-slate-100">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs tracking-[0.25em] text-cyan-200">NEXT MIGRATION HUB</p>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 rounded-md border border-cyan-200/30 bg-slate-950/40 p-1 text-xs">
-                <span className="px-1 text-cyan-100">{t("languageLabel")}</span>
-                <button
-                  type="button"
-                  onClick={() => switchLanguage("ja")}
-                  className={`rounded px-2 py-1 ${language === "ja" ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
-                >
-                  {t("langJa")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchLanguage("ko")}
-                  className={`rounded px-2 py-1 ${language === "ko" ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
-                >
-                  {t("langKo")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchLanguage("en")}
-                  className={`rounded px-2 py-1 ${language === "en" ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
-                >
-                  {t("langEn")}
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={handleBackToLogin}
-                className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs"
-              >
-                {t("backToLogin")} ({authMode === "cloud" ? t("modeCloud") : t("modeGuest")})
-              </button>
+        <div className="relative">
+          {authMode === "cloud" ? (
+            <div className="fixed right-3 top-3 z-40 sm:right-6 sm:top-4">
+              <p className="rounded-md border border-cyan-200/25 bg-slate-950/70 px-3 py-1 text-xs text-cyan-100/95 backdrop-blur">
+                {loginStatusText}
+              </p>
             </div>
-          </div>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">{t("appTitle")}</h1>
-          <p className="mt-2 text-sm text-slate-300">{t("appLead")}</p>
-        </header>
+          ) : null}
+          <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 rounded-md border border-cyan-200/30 bg-slate-950/40 p-1 text-xs">
+                    <span className="px-1 text-cyan-100">{t("languageLabel")}</span>
+                    {languageButtons.map((button) => (
+                      <button
+                        key={`auth-lang-${button.code}`}
+                        type="button"
+                        onClick={() => switchLanguage(button.code)}
+                        className={`rounded px-2 py-1 ${language === button.code ? "bg-cyan-300 text-slate-900" : "text-slate-100"}`}
+                      >
+                        {t(button.labelKey)}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleBackToLogin}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs"
+                  >
+                    {t("backToLogin")} ({authMode === "cloud" ? t("modeCloud") : t("modeGuest")})
+                  </button>
+                </div>
+                {authMode === "cloud" ? (
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="relative flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openProfileEditor}
+                      className={`rounded-md border px-3 py-1 text-xs ${isProfilePanelOpen ? "border-cyan-200/80 bg-cyan-300 text-slate-900" : "border-cyan-200/40 hover:border-cyan-200/70"}`}
+                      aria-expanded={isProfilePanelOpen}
+                    >
+                      {t("profileLink")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProfilePanelOpen(false);
+                        setFriendActionUserId("");
+                        setIsProfileNameEditOpen(false);
+                        setIsProfileBioEditOpen(false);
+                        setIsFriendPanelOpen((prev) => !prev);
+                      }}
+                      className={`rounded-md border px-3 py-1 text-xs ${isFriendPanelOpen ? "border-cyan-200/80 bg-cyan-300 text-slate-900" : "border-cyan-200/40"}`}
+                      aria-expanded={isFriendPanelOpen}
+                    >
+                      {t("friendsTitle")}
+                    </button>
 
-        <section className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="grid min-w-[220px] flex-1 gap-1 text-sm">
-              {t("displayNameAfterLogin")}
-              <input
-                value={profileNameDraft}
-                onChange={(event) => setProfileNameDraft(event.target.value.slice(0, 24))}
-                placeholder="Player"
-                className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={applyPlayerName}
-              className="rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950"
-            >
-              {t("displayNameSave")}
-            </button>
-          </div>
-        </section>
+                    {activePanel === "menu" && isProfilePanelOpen ? (
+                    <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProfilePanelOpen(false);
+                        setIsProfileNameEditOpen(false);
+                        setIsProfileBioEditOpen(false);
+                      }}
+                      className="fixed inset-0 z-20 cursor-default bg-transparent"
+                      aria-label="Close profile panel"
+                    />
+                    <section className="absolute right-0 top-full z-30 mt-2 w-[320px] max-w-[calc(100vw-1rem)] rounded-2xl border border-slate-300/20 bg-slate-900/95 p-4 shadow-[0_18px_35px_rgba(2,6,23,0.55)] sm:w-[360px]">
+                      <p className="text-xs font-semibold">{t("profileLink")}</p>
+                      <p className="mt-1 text-xs text-slate-300">{loginStatusText}</p>
+                      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsProfileNameEditOpen((prev) => !prev)}
+                          className="rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs"
+                        >
+                          {t("displayName")}
+                        </button>
+                      </div>
+                      {isProfileNameEditOpen ? (
+                        <div className="mt-2.5 grid gap-1.5 sm:grid-cols-[1fr_auto]">
+                          <input
+                            value={profileNameDraft}
+                            onChange={(event) => setProfileNameDraft(event.target.value.slice(0, 24))}
+                            placeholder="Player"
+                            className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2.5 py-1.5 text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void applyPlayerName()}
+                            className="rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs"
+                          >
+                            {t("displayNameSave")}
+                          </button>
+                        </div>
+                      ) : null}
+                      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsProfileBioEditOpen((prev) => !prev)}
+                          className="rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs"
+                        >
+                          {t("profileBioLabel")}
+                        </button>
+                      </div>
+                      {isProfileBioEditOpen ? (
+                        <div className="mt-2.5 grid gap-1.5">
+                          <textarea
+                            value={profileBioDraft}
+                            onChange={(event) => setProfileBioDraft(event.target.value.slice(0, 180))}
+                            placeholder={t("profileBioPlaceholder")}
+                            rows={4}
+                            className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2.5 py-1.5 text-xs"
+                          />
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] text-slate-300">{profileBioDraft.length}/180</span>
+                            <button
+                              type="button"
+                              onClick={() => void applyProfileBio()}
+                              className="rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs"
+                            >
+                              {t("profileBioSave")}
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                      <p className="mt-2 text-xs text-slate-300">ID: {authUserId || "-"}</p>
+                    </section>
+                    </>
+                    ) : null}
 
-        {activePanel === "menu" ? (
-        <section className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActivePanel("menu")}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabMenu")}
-            </button>
-            <button
-              type="button"
-              onClick={openOthello}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabOthello")}
-            </button>
-            <button
-              type="button"
-              onClick={openGomoku}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabGomoku")}
-            </button>
-            <button
-              type="button"
-              onClick={openChess}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabChess")}
-            </button>
-            <button
-              type="button"
-              onClick={openShogi}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabShogi")}
-            </button>
-            <button
-              type="button"
-              onClick={openMinesweeper}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabMinesweeper")}
-            </button>
-            <button
-              type="button"
-              onClick={openNumeron}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabNumeron")}
-            </button>
-            <button
-              type="button"
-              onClick={openBlackjack}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabBlackjack")}
-            </button>
-            <button
-              type="button"
-              onClick={openChinchiro}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabChinchiro")}
-            </button>
-            <button
-              type="button"
-              onClick={openSevens}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabSevens")}
-            </button>
-            <button
-              type="button"
-              onClick={openDaifugo}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabDaifugo")}
-            </button>
-            <button
-              type="button"
-              onClick={openFourPanel}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabFourPanel")}
-            </button>
-            <button
-              type="button"
-              onClick={openDrawingRelay}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabDrawingRelay")}
-            </button>
-            <button
-              type="button"
-              onClick={openFitPuzzle}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabFitPuzzle")}
-            </button>
-            <button
-              type="button"
-              onClick={openMahjong}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabMahjong")}
-            </button>
-            <button
-              type="button"
-              onClick={openPoker}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabPoker")}
-            </button>
-            <button
-              type="button"
-              onClick={openSolitaire}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabSolitaire")}
-            </button>
-            <button
-              type="button"
-              onClick={openSurvivors}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabSurvivors")}
-            </button>
-            <button
-              type="button"
-              onClick={openUno}
-              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-            >
-              {t("tabUno")}
-            </button>
-          </div>
-        </section>
-        ) : null}
+                    {activePanel === "menu" && isFriendPanelOpen ? (
+                    <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFriendPanelOpen(false);
+                        setFriendActionUserId("");
+                      }}
+                      className="fixed inset-0 z-20 cursor-default bg-transparent"
+                      aria-label="Close friends panel"
+                    />
+                    <section className="absolute right-0 top-full z-30 mt-2 w-[320px] max-w-[calc(100vw-1rem)] rounded-2xl border border-slate-300/20 bg-slate-900/95 p-4 shadow-[0_18px_35px_rgba(2,6,23,0.55)] sm:w-[360px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold">{t("friendsTitle")}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void refreshFriends(true);
+                        }}
+                        disabled={!canUseFriends || isFriendsLoading || isFriendsActionLoading}
+                        className="rounded-md border border-cyan-200/40 px-2 py-1 text-xs disabled:opacity-60"
+                      >
+                        {t("friendReload")}
+                      </button>
+                    </div>
+
+                    <p className="mt-1 text-xs text-slate-300">{friendsHintText}</p>
+
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setFriendTab("friends")}
+                        className={`rounded-full border px-2.5 py-1 text-[11px] ${friendTab === "friends" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
+                      >
+                        {t("friendsTabFriends")} ({friendIds.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFriendTab("incoming")}
+                        className={`rounded-full border px-2.5 py-1 text-[11px] ${friendTab === "incoming" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
+                      >
+                        {t("friendsTabIncoming")} ({incomingFriendIds.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFriendTab("outgoing")}
+                        className={`rounded-full border px-2.5 py-1 text-[11px] ${friendTab === "outgoing" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
+                      >
+                        {t("friendsTabOutgoing")} ({outgoingFriendIds.length})
+                      </button>
+                    </div>
+
+                    <div className="mt-2.5 grid gap-1.5 sm:grid-cols-[1fr_auto_auto]">
+                      <input
+                        value={friendUserIdDraft}
+                        onChange={(event) => setFriendUserIdDraft(event.target.value.slice(0, 24))}
+                        placeholder={t("friendIdPlaceholder")}
+                        className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2.5 py-1.5 text-xs"
+                        disabled={!canUseFriends || isFriendsActionLoading}
+                      />
+
+                      {friendTab === "friends" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleFriendRequestSend}
+                            disabled={!canUseFriends || isFriendsActionLoading}
+                            className="rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
+                          >
+                            {t("friendRequestSend")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleFriendRemove}
+                            disabled={!canUseFriends || isFriendsActionLoading}
+                            className="rounded-md border border-rose-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
+                          >
+                            {t("friendRemove")}
+                          </button>
+                        </>
+                      ) : null}
+
+                      {friendTab === "incoming" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleFriendApprove}
+                            disabled={!canUseFriends || isFriendsActionLoading}
+                            className="rounded-md border border-emerald-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
+                          >
+                            {t("friendApprove")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleFriendReject}
+                            disabled={!canUseFriends || isFriendsActionLoading}
+                            className="rounded-md border border-rose-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
+                          >
+                            {t("friendReject")}
+                          </button>
+                        </>
+                      ) : null}
+
+                      {friendTab === "outgoing" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleFriendCancel}
+                            disabled={!canUseFriends || isFriendsActionLoading}
+                            className="rounded-md border border-rose-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
+                          >
+                            {t("friendCancel")}
+                          </button>
+                          <span className="hidden sm:block" />
+                        </>
+                      ) : null}
+                    </div>
+
+                    {isFriendsLoading ? (
+                      <p className="mt-3 text-xs text-slate-300">{t("friendsLoading")}</p>
+                    ) : (
+                      <ul className="mt-2.5 max-h-36 space-y-1 overflow-y-auto text-xs text-slate-200">
+                        {activeFriendRows.length === 0 ? (
+                          <li className="text-slate-300">{activeFriendsEmptyText}</li>
+                        ) : (
+                          activeFriendRows.map((id) => (
+                            <li key={`friend-row-${friendTab}-${id}`}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFriendUserIdDraft(id);
+                                  setFriendActionUserId((prev) => (prev === id ? "" : id));
+                                }}
+                                onDoubleClick={() => {
+                                  setFriendUserIdDraft(id);
+                                  void openPublicProfile(id);
+                                }}
+                                className="w-full rounded-md border border-slate-500/40 px-2 py-1 text-left text-xs hover:border-cyan-300/60"
+                              >
+                                {id}
+                              </button>
+                              {friendActionUserId === id ? (
+                                <div className="mt-1 flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => void openPublicProfile(id)}
+                                    className="rounded-md border border-cyan-200/40 px-2 py-1 text-[11px]"
+                                  >
+                                    {t("friendViewProfile")}
+                                  </button>
+                                </div>
+                              ) : null}
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    )}
+
+                    {friendsMessage ? <p className="mt-2 text-xs text-cyan-200">{friendsMessage}</p> : null}
+                    </section>
+                    </>
+                    ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">{t("appTitle")}</h1>
+            {authMode === "cloud" ? (
+              <div className="mt-2 flex justify-end gap-2">
+                {canAccessInquiryViewer ? (
+                  <a
+                    href="/admin/inquiries"
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs hover:border-cyan-200/70"
+                  >
+                    {t("inquiryViewerLink")}
+                  </a>
+                ) : null}
+                <a
+                  href="/inquiry"
+                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs hover:border-cyan-200/70"
+                >
+                  {t("inquiryFormLink")}
+                </a>
+              </div>
+            ) : null}
+          </header>
+        </div>
 
         {message ? (
           <section className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 px-4 py-3">
@@ -7289,173 +7899,107 @@ export default function Home() {
           </section>
         ) : null}
 
+        {isPublicProfileLoading || publicProfile ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setIsPublicProfileLoading(false);
+                setPublicProfile(null);
+              }}
+              className="fixed inset-0 z-40 cursor-default bg-slate-950/50"
+              aria-label="Close profile viewer"
+            />
+            <section className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,420px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-cyan-200/25 bg-slate-900 p-4 shadow-[0_18px_35px_rgba(2,6,23,0.55)]">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-cyan-100">{t("profileViewerTitle")}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPublicProfileLoading(false);
+                    setPublicProfile(null);
+                  }}
+                  className="rounded-md border border-cyan-200/40 px-2 py-1 text-xs"
+                >
+                  {t("closeLabel")}
+                </button>
+              </div>
+
+              {isPublicProfileLoading ? (
+                <p className="mt-3 text-sm text-slate-200">{t("processing")}</p>
+              ) : publicProfile ? (
+                <div className="mt-3 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-14 w-14 overflow-hidden rounded-full border border-cyan-200/40 bg-slate-950/70">
+                      {publicProfile.playerAvatar ? (
+                        <img
+                          src={publicProfile.playerAvatar}
+                          alt="profile avatar"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-300">NO IMG</div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-100">{publicProfile.playerName || publicProfile.userId}</p>
+                      <p className="text-xs text-slate-300">ID: {publicProfile.userId}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-slate-500/35 bg-slate-950/50 p-2.5">
+                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-100">
+                      {publicProfile.profileBio || t("profileViewerNoBio")}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          </>
+        ) : null}
+
         {activePanel === "menu" ? (
-          <section className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="order-2 rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <h2 className="text-xl font-semibold">{t("menuTitle")}</h2>
               <p className="mt-2 text-sm text-slate-300">{t("menuLead")}</p>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={openOthello}
-                  className="rounded-xl border border-emerald-200/30 bg-emerald-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("gameOthello")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openGomoku}
-                  className="rounded-xl border border-lime-200/30 bg-lime-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("gameGomoku")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openUno}
-                  className="rounded-xl border border-cyan-200/30 bg-cyan-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabUno")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openMinesweeper}
-                  className="rounded-xl border border-teal-200/30 bg-teal-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabMinesweeper")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openNumeron}
-                  className="rounded-xl border border-amber-200/30 bg-amber-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabNumeron")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openBlackjack}
-                  className="rounded-xl border border-rose-200/30 bg-rose-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabBlackjack")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openChinchiro}
-                  className="rounded-xl border border-fuchsia-200/30 bg-fuchsia-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabChinchiro")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openSevens}
-                  className="rounded-xl border border-violet-200/30 bg-violet-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabSevens")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openDaifugo}
-                  className="rounded-xl border border-orange-200/30 bg-orange-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabDaifugo")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openFourPanel}
-                  className="rounded-xl border border-sky-200/30 bg-sky-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabFourPanel")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openDrawingRelay}
-                  className="rounded-xl border border-indigo-200/30 bg-indigo-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabDrawingRelay")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openFitPuzzle}
-                  className="rounded-xl border border-pink-200/30 bg-pink-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabFitPuzzle")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openMahjong}
-                  className="rounded-xl border border-red-200/30 bg-red-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabMahjong")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openPoker}
-                  className="rounded-xl border border-rose-200/30 bg-rose-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabPoker")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openSolitaire}
-                  className="rounded-xl border border-amber-200/30 bg-amber-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabSolitaire")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openSurvivors}
-                  className="rounded-xl border border-emerald-200/30 bg-emerald-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("tabSurvivors")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openChess}
-                  className="rounded-xl border border-slate-200/20 bg-slate-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("gameChess")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={openShogi}
-                  className="rounded-xl border border-slate-200/20 bg-slate-400/10 p-4 text-left"
-                >
-                  <p className="text-lg font-semibold">{t("gameShogi")}</p>
-                  <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
-                </button>
+              <div className="mt-4 space-y-4">
+                {menuGameCardGroups.map((group) => (
+                  <section key={`menu-category-${group.category}`}>
+                    <button
+                      type="button"
+                      onClick={() => toggleMenuCardGroup(group.category)}
+                      className="flex w-full items-center justify-between rounded-lg border border-cyan-200/35 bg-slate-950/35 px-3 py-2 text-left text-sm font-semibold tracking-wide text-cyan-100 transition-colors hover:bg-cyan-300/10 hover:border-cyan-200/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/80"
+                      aria-expanded={menuCardOpenState[group.category]}
+                    >
+                      <span>{group.label}</span>
+                      <span className="rounded border border-cyan-200/35 px-2 py-[2px] text-[11px] leading-none">{menuCardOpenState[group.category] ? "−" : "+"}</span>
+                    </button>
+                    {menuCardOpenState[group.category] ? (
+                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                        {group.cards.map((card) => (
+                          <button
+                            key={`menu-card-${card.panel}`}
+                            type="button"
+                            onClick={card.onClick}
+                            className={`${card.className} relative cursor-pointer transition duration-150 hover:-translate-y-0.5 hover:border-cyan-200/75 hover:bg-cyan-300/15 hover:shadow-[0_10px_22px_rgba(56,189,248,0.18)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/90`}
+                          >
+                            <span className="pointer-events-none absolute right-3 top-3 rounded border border-cyan-200/40 bg-slate-950/55 px-2 py-[2px] text-[10px] font-semibold tracking-wide text-cyan-100">OPEN</span>
+                            <p className="text-lg font-semibold">{card.title}</p>
+                            <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </section>
+                ))}
               </div>
             </article>
 
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+            <article className="order-1 rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <h2 className="text-xl font-semibold">{t("roomTitle")}</h2>
 
               <div className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("roomServerUrl")}
-                  <input
-                    value={roomServerUrl}
-                    onChange={(event) => setRoomServerUrl(event.target.value)}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
                 <label className="grid gap-1 text-sm">
                   {t("roomCode")}
                   <input
@@ -7532,9 +8076,13 @@ export default function Home() {
                       void copyInviteLink();
                     }}
                     disabled={!connectedRoomCode}
-                    className="rounded-md border border-amber-200/40 px-3 py-2 text-sm disabled:opacity-60"
+                    className="min-w-[11rem] rounded-md border border-amber-200/40 px-3 py-2 text-center text-sm disabled:opacity-60"
                   >
-                    {t("copyInviteLink")}
+                    {inviteCopyFeedback === "copied"
+                      ? t("inviteLinkCopied")
+                      : inviteCopyFeedback === "failed"
+                        ? t("inviteLinkCopyFailed")
+                        : t("copyInviteLink")}
                   </button>
                   <button
                     type="button"
@@ -7554,248 +8102,136 @@ export default function Home() {
                   </button>
                 </div>
 
-                <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3 text-sm">
-                  <p>{t("roomState")}: {roomStatus}</p>
-                  <p>{t("roomConnected")}: {connectedRoomCode || "-"}</p>
-                  <p>{t("roomRole")}: {roomRole ? roomRoleLabel(roomRole) : "-"}</p>
-                </div>
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
+                  <div className="grid gap-3">
+                    <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3 text-sm">
+                      <p>{t("roomState")}: {roomStatus}</p>
+                      <p>{t("roomConnected")}: {connectedRoomCode || "-"}</p>
+                      <p>{t("roomRole")}: {roomRole ? roomRoleLabel(roomRole) : "-"}</p>
+                      <p>{t("roomMatchedPlayers")}: {connectedRoomCode ? `${roomMatchedPlayerCount}/2` : "-"}</p>
+                      {quickMatchMode ? (
+                        <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-cyan-200/30 bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100">
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-100/35 border-t-cyan-100" aria-hidden="true" />
+                          <span>{t("quickMatchSearching")}</span>
+                        </div>
+                      ) : null}
+                    </div>
 
-                <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
-                  <p className="text-sm font-semibold">{t("multiSyncTitle")}</p>
-                  <p className="mt-1 text-xs text-slate-300">{t("syncHostOnlyHint")}</p>
-                  <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => setIsMultiSyncEnabled((prev) => !prev)}
-                      className="rounded-md border border-cyan-200/40 px-3 py-1"
-                    >
-                      {isMultiSyncEnabled ? t("multiSyncEnabled") : t("multiSyncDisabled")}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
-                  <p className="text-sm font-semibold">{t("roomMembers")}</p>
-                  {roomParticipants.length === 0 ? (
-                    <p className="mt-1 text-sm text-slate-300">{t("roomMembersEmpty")}</p>
-                  ) : (
-                    <ul className="mt-2 space-y-1 text-sm text-slate-200">
-                      {roomParticipants.map((participant) => (
-                        <li key={participant.id}>
-                          {participant.name} ({roomRoleLabel(participant.role)})
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                {connectedRoomCode && roomRole !== "spectator" ? (
-                  <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
-                    <p className="text-sm font-semibold">{t("roomChatTitle")}</p>
-                    <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-500/40 bg-slate-950/60 p-2 text-xs text-slate-200">
-                      {roomChatMessages.length === 0 ? (
-                        <p className="text-slate-300">{t("roomChatEmpty")}</p>
+                    <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
+                      <p className="text-sm font-semibold">{t("roomMembers")}</p>
+                      {roomParticipants.length === 0 ? (
+                        <p className="mt-1 text-sm text-slate-300">{t("roomMembersEmpty")}</p>
                       ) : (
-                        roomChatMessages.map((row, index) => (
-                          <p key={`room-chat-${index}-${row.name}`}>
-                            <span className="text-cyan-200">{row.name}</span>: {row.text}
-                          </p>
-                        ))
+                        <ul className="mt-2 space-y-1 text-sm text-slate-200">
+                          {roomParticipants.map((participant) => (
+                            <li key={participant.id}>
+                              <button
+                                type="button"
+                                onClick={() => setRoomMemberActionId((prev) => (prev === participant.id ? "" : participant.id))}
+                                onDoubleClick={() => {
+                                  void openPublicProfile(participant.id, participant.name);
+                                }}
+                                className="rounded border border-slate-500/40 px-2 py-1 text-left text-sm hover:border-cyan-300/60"
+                              >
+                                {participant.name} ({roomRoleLabel(participant.role)})
+                              </button>
+                              {roomMemberActionId === participant.id ? (
+                                <div className="mt-1 flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void openPublicProfile(participant.id, participant.name);
+                                    }}
+                                    className="rounded-md border border-cyan-200/40 px-2 py-1 text-[11px]"
+                                  >
+                                    {t("friendViewProfile")}
+                                  </button>
+                                </div>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
                       )}
                     </div>
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        value={roomChatInput}
-                        onChange={(event) => setRoomChatInput(event.target.value.slice(0, 200))}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter") return;
-                          sendRoomChat();
-                        }}
-                        placeholder={t("roomChatPlaceholder")}
-                        className="flex-1 rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-sm"
-                        disabled={!connectedRoomCode}
-                      />
-                      <button
-                        type="button"
-                        onClick={sendRoomChat}
-                        disabled={!connectedRoomCode}
-                        className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs disabled:opacity-60"
-                      >
-                        {t("roomChatSend")}
-                      </button>
+                  </div>
+
+                  {connectedRoomCode && roomRole !== "spectator" ? (
+                    <div className="flex h-[15.5rem] flex-col rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
+                      <p className="text-sm font-semibold">{t("roomChatTitle")}</p>
+                      <div className="mt-2 flex-1 space-y-1 overflow-y-auto rounded-md border border-slate-500/40 bg-slate-950/60 p-2 text-xs text-slate-200">
+                        {roomChatMessages.length === 0 ? (
+                          <p className="text-slate-300">{t("roomChatEmpty")}</p>
+                        ) : (
+                          roomChatMessages.map((row, index) => (
+                            <p key={`room-chat-${index}-${row.name}`}>
+                              <span className="text-cyan-200">{row.name}</span>: {row.text}
+                            </p>
+                          ))
+                        )}
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          value={roomChatInput}
+                          onChange={(event) => setRoomChatInput(event.target.value.slice(0, 200))}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter") return;
+                            sendRoomChat();
+                          }}
+                          placeholder={t("roomChatPlaceholder")}
+                          className="flex-1 rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-sm"
+                          disabled={!connectedRoomCode}
+                        />
+                        <button
+                          type="button"
+                          onClick={sendRoomChat}
+                          disabled={!connectedRoomCode}
+                          className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs disabled:opacity-60"
+                        >
+                          {t("roomChatSend")}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ) : null}
+                  ) : null}
 
-                {connectedRoomCode && roomRole === "spectator" ? (
-                  <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
-                    <p className="text-sm font-semibold">{t("spectatorChatTitle")}</p>
-                    <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-500/40 bg-slate-950/60 p-2 text-xs text-slate-200">
-                      {spectatorChatMessages.length === 0 ? (
-                        <p className="text-slate-300">{t("spectatorChatEmpty")}</p>
-                      ) : (
-                        spectatorChatMessages.map((row, index) => (
-                          <p key={`spectator-chat-${index}-${row.name}`}>
-                            <span className="text-cyan-200">{row.name}</span>: {row.text}
-                          </p>
-                        ))
-                      )}
+                  {connectedRoomCode && roomRole === "spectator" ? (
+                    <div className="flex h-[15.5rem] flex-col rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
+                      <p className="text-sm font-semibold">{t("spectatorChatTitle")}</p>
+                      <div className="mt-2 flex-1 space-y-1 overflow-y-auto rounded-md border border-slate-500/40 bg-slate-950/60 p-2 text-xs text-slate-200">
+                        {spectatorChatMessages.length === 0 ? (
+                          <p className="text-slate-300">{t("spectatorChatEmpty")}</p>
+                        ) : (
+                          spectatorChatMessages.map((row, index) => (
+                            <p key={`spectator-chat-${index}-${row.name}`}>
+                              <span className="text-cyan-200">{row.name}</span>: {row.text}
+                            </p>
+                          ))
+                        )}
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          value={spectatorChatInput}
+                          onChange={(event) => setSpectatorChatInput(event.target.value.slice(0, 200))}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter") return;
+                            sendSpectatorChat();
+                          }}
+                          placeholder={t("spectatorChatPlaceholder")}
+                          className="flex-1 rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-sm"
+                          disabled={!connectedRoomCode}
+                        />
+                        <button
+                          type="button"
+                          onClick={sendSpectatorChat}
+                          disabled={!connectedRoomCode}
+                          className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs disabled:opacity-60"
+                        >
+                          {t("spectatorChatSend")}
+                        </button>
+                      </div>
                     </div>
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        value={spectatorChatInput}
-                        onChange={(event) => setSpectatorChatInput(event.target.value.slice(0, 200))}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter") return;
-                          sendSpectatorChat();
-                        }}
-                        placeholder={t("spectatorChatPlaceholder")}
-                        className="flex-1 rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-sm"
-                        disabled={!connectedRoomCode}
-                      />
-                      <button
-                        type="button"
-                        onClick={sendSpectatorChat}
-                        disabled={!connectedRoomCode}
-                        className="rounded-md border border-cyan-200/40 px-3 py-1 text-xs disabled:opacity-60"
-                      >
-                        {t("spectatorChatSend")}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">{t("friendsTitle")}</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void refreshFriends(true);
-                      }}
-                      disabled={!canUseFriends || isFriendsLoading || isFriendsActionLoading}
-                      className="rounded-md border border-cyan-200/40 px-2 py-1 text-xs disabled:opacity-60"
-                    >
-                      {t("friendReload")}
-                    </button>
-                  </div>
-
-                  <p className="mt-1 text-xs text-slate-300">{friendsHintText}</p>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setFriendTab("friends")}
-                      className={`rounded-full border px-3 py-1 text-xs ${friendTab === "friends" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
-                    >
-                      {t("friendsTabFriends")} ({friendIds.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFriendTab("incoming")}
-                      className={`rounded-full border px-3 py-1 text-xs ${friendTab === "incoming" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
-                    >
-                      {t("friendsTabIncoming")} ({incomingFriendIds.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFriendTab("outgoing")}
-                      className={`rounded-full border px-3 py-1 text-xs ${friendTab === "outgoing" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
-                    >
-                      {t("friendsTabOutgoing")} ({outgoingFriendIds.length})
-                    </button>
-                  </div>
-
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                    <input
-                      value={friendUserIdDraft}
-                      onChange={(event) => setFriendUserIdDraft(event.target.value.slice(0, 24))}
-                      placeholder={t("friendIdPlaceholder")}
-                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-3 py-2 text-sm"
-                      disabled={!canUseFriends || isFriendsActionLoading}
-                    />
-
-                    {friendTab === "friends" ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleFriendRequestSend}
-                          disabled={!canUseFriends || isFriendsActionLoading}
-                          className="rounded-md border border-cyan-200/40 px-3 py-2 text-xs disabled:opacity-60"
-                        >
-                          {t("friendRequestSend")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleFriendRemove}
-                          disabled={!canUseFriends || isFriendsActionLoading}
-                          className="rounded-md border border-rose-200/40 px-3 py-2 text-xs disabled:opacity-60"
-                        >
-                          {t("friendRemove")}
-                        </button>
-                      </>
-                    ) : null}
-
-                    {friendTab === "incoming" ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleFriendApprove}
-                          disabled={!canUseFriends || isFriendsActionLoading}
-                          className="rounded-md border border-emerald-200/40 px-3 py-2 text-xs disabled:opacity-60"
-                        >
-                          {t("friendApprove")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleFriendReject}
-                          disabled={!canUseFriends || isFriendsActionLoading}
-                          className="rounded-md border border-rose-200/40 px-3 py-2 text-xs disabled:opacity-60"
-                        >
-                          {t("friendReject")}
-                        </button>
-                      </>
-                    ) : null}
-
-                    {friendTab === "outgoing" ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleFriendCancel}
-                          disabled={!canUseFriends || isFriendsActionLoading}
-                          className="rounded-md border border-rose-200/40 px-3 py-2 text-xs disabled:opacity-60"
-                        >
-                          {t("friendCancel")}
-                        </button>
-                        <span className="hidden sm:block" />
-                      </>
-                    ) : null}
-                  </div>
-
-                  {isFriendsLoading ? (
-                    <p className="mt-3 text-xs text-slate-300">{t("friendsLoading")}</p>
-                  ) : (
-                    <ul className="mt-3 max-h-44 space-y-1 overflow-y-auto text-sm text-slate-200">
-                      {activeFriendRows.length === 0 ? (
-                        <li className="text-slate-300">{activeFriendsEmptyText}</li>
-                      ) : (
-                        activeFriendRows.map((id) => (
-                          <li key={`friend-row-${friendTab}-${id}`}>
-                            <button
-                              type="button"
-                              onClick={() => setFriendUserIdDraft(id)}
-                              className="w-full rounded-md border border-slate-500/40 px-2 py-1 text-left text-xs hover:border-cyan-300/60"
-                            >
-                              {id}
-                            </button>
-                          </li>
-                        ))
-                      )}
-                    </ul>
-                  )}
-
-                  {friendsMessage ? <p className="mt-2 text-xs text-cyan-200">{friendsMessage}</p> : null}
+                  ) : null}
                 </div>
+
               </div>
 
               {menuMessage ? <p className="mt-3 text-sm text-cyan-200">{menuMessage}</p> : null}

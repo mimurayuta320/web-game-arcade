@@ -6,5 +6,23 @@
     "lang": "ja",
     "submittedAt": "2026-07-20T17:20:46.683Z",
     "id": "3072744e-4bbe-4d83-bab1-81c7c27d5485"
+  },
+  {
+    "id": "c8948daf-f703-49f1-a865-682b12924fa8",
+    "name": "ありがとう",
+    "message": "無駄に強いやつがいすぎて困るのでレート戦を追加してほしいです",
+    "url": "http://localhost:3000/",
+    "lang": "ja",
+    "submittedAt": "2026-07-24T08:56:13.092Z",
+    "userId": "NullToufu"
+  },
+  {
+    "id": "d0a345c1-bbaa-4158-b00a-4be65cca1733",
+    "name": "あいうえお",
+    "message": "とうふぼけ",
+    "url": "http://localhost:3000/",
+    "lang": "ja",
+    "submittedAt": "2026-07-24T08:57:37.501Z",
+    "userId": "NullToufu"
   }
 ]

@@ -2,6 +2,18 @@
 
 このファイルは、サーバー起動系コマンドだけをまとめたガイドです。
 
+## 重要: 今後はHTMLサーバーを起動しない
+
+- 今後の開発では、`src/` 配下のHTML/Viteフロント起動（`npm run dev`）は使用しません。
+- フロントは `apps/web` のNext.jsサーバーを起動してください。
+
+Next.jsフロント起動（ルートで実行）:
+
+npm run dev:web
+
+起動URL（デフォルト）:
+http://localhost:3000
+
 ## 1) 最短で共有対戦を始める（推奨）
 
 前提: プロジェクトのルートフォルダで実行
@@ -33,10 +45,10 @@ npm run room
 
 ターミナルC（フロント開発サーバー）
 
-npm run dev
+npm run dev:web
 
 アクセス例:
-http://<このPCのIP>:5173/#NeonBoardArcade
+http://<このPCのIP>:3000
 
 ## 2.5) 本番稼働中でもテスト環境を並行起動する
 
@@ -50,12 +62,12 @@ npm run cloud:test
 
 npm run room:test
 
-ターミナルC（テスト用フロント: 5174）
+ターミナルC（テスト用フロント: 3001）
 
-npm run dev:test
+npm --prefix apps/web run dev -- --port 3001
 
 アクセス例（同一PC）:
-http://localhost:5174/?cloudApi=http://localhost:18787&roomServer=ws://localhost:18788#NeonBoardArcade
+http://localhost:3001/?cloudApi=http://localhost:18787&roomServer=ws://localhost:18788
 
 補足:
 - `cloudApi` はクラウドAPI接続先を固定するクエリです（初回アクセス時にlocalStorageへ保存）。
@@ -77,7 +89,7 @@ $env:Path = "$nodeDir;$env:Path"
 ## 4) 起動確認
 
 - 共有モード: ブラウザでURLを開いてゲーム画面が表示される
-- 分離モード: cloud, room, dev の3つでエラーが出ていない
+- 分離モード: cloud, room, dev:web の3つでエラーが出ていない
 
 ## 5) よくあるエラー
 
@@ -86,7 +98,7 @@ EADDRINUSE が出る場合（ポート競合）
 1. 使用中プロセス確認
 
 netstat -ano | findstr :4173
-netstat -ano | findstr :5173
+netstat -ano | findstr :3000
 netstat -ano | findstr :8787
 netstat -ano | findstr :8788
 
@@ -101,7 +113,7 @@ npm run share
 ## 6) 別PCからアクセスできない場合
 
 - 同じWi-Fi/LANに接続しているか確認
-- Windowsファイアウォールで 4173, 5173, 8787, 8788 の受信を許可
+- Windowsファイアウォールで 4173, 3000, 8787, 8788 の受信を許可
 - 相手には localhost ではなく、このPCのIPアドレスを共有する
 
 ## 7) A5M2でユーザー/戦績を保存する
@@ -133,3 +145,24 @@ npm run cloud
 - 旧 `server/data/profiles.json` が存在し、`users` が空の場合は初回起動時に自動移行されます。
 - パスワード平文はDBへ保存されません。`users.pass_hash_bcrypt` にbcryptハッシュのみ保存されます。
 - 旧方式（scrypt）の既存ユーザーは、ログイン成功時にbcryptへ自動移行されます。
+
+## 8) 管理者専用 問い合わせ閲覧ページ
+
+問い合わせ一覧と削除は管理者ユーザーのみ実行できます。
+
+- 閲覧URL（Next）: `/admin/inquiries`
+- 通常問い合わせフォーム: `/inquiry`
+- API制御: `POST /api/inquiry/list` と `POST /api/inquiry/delete` は管理者のみ許可
+
+管理者ユーザーIDは環境変数で指定できます。
+
+- `INQUIRY_ADMIN_USER_IDS`（カンマ区切り）
+- 未指定時は `admin,NullToufu` を許可
+- Next画面の管理リンク表示制御: `NEXT_PUBLIC_INQUIRY_ADMIN_USER_IDS`（未指定時は `admin,NullToufu`）
+
+例（PowerShell）:
+
+```powershell
+$env:INQUIRY_ADMIN_USER_IDS = "admin,owner01"
+npm run dev:api
+```

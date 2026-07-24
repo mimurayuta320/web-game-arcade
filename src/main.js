@@ -15,6 +15,7 @@ import { cloudApiCandidates } from "./scripts/cloudApiClient.js";
 import { createRoomTransport, resolveRoomServerUrl } from "./scripts/roomTransport.js";
 
 const STORAGE_LANG_KEY = "neon-arcade-lang";
+const STORAGE_UI_LANG_KEY = "neon-ui-language";
 const STORAGE_CLOUD_USER_ID_KEY = "neon-cloud-user-id";
 const STORAGE_CLOUD_PASSWORD_KEY = "neon-cloud-password";
 const STORAGE_PLAYER_NAME_KEY = "neon-player-name";
@@ -150,6 +151,8 @@ const roomRoleText = document.getElementById("roomRoleText");
 const lobbyGameCountNodes = document.querySelectorAll("[data-lobby-game-count]");
 const langSelect = document.getElementById("langSelect");
 const friendsToggleBtn = document.getElementById("friendsToggleBtn");
+const openProfileLink = document.getElementById("openProfileLink");
+const openInquiryFormLink = document.getElementById("openInquiryFormLink");
 
 const messages = {
   ja: {
@@ -234,6 +237,8 @@ const messages = {
     multiPlay: "マルチ",
     quickMatchMulti: "クイックマッチ（マルチ）",
     optionsMenu: "option",
+    profileLink: "プロフィール変更",
+    inquiryFormLink: "問い合わせフォーム",
     quickMatchSearching: "マルチプレイの相手を検索中...",
     quickMatchConnected: "クイックマッチに接続しました（ルーム {code}）",
     quickMatchPrivateSkipped: "非公開ルームに当たったため、別のマッチを検索します...",
@@ -263,6 +268,8 @@ const messages = {
     newMatch: "ゲーム開始",
     menuJa: "メニュー",
     rotate: "回転",
+    commonResetPressed: "リセットしました",
+    commonBackToMenuPressed: "メニューに戻ります",
     shuffle: "シャッフル",
     hint: "ヒント",
     reset: "リセット",
@@ -452,6 +459,8 @@ const messages = {
     multiPlay: "멀티",
     quickMatchMulti: "빠른 매치 (멀티)",
     optionsMenu: "option",
+    profileLink: "프로필 변경",
+    inquiryFormLink: "문의 폼",
     quickMatchSearching: "멀티 플레이 상대를 찾는 중...",
     quickMatchConnected: "빠른 매치에 연결했습니다 (룸 {code})",
     quickMatchPrivateSkipped: "비공개 룸이어서 다른 매치를 찾는 중...",
@@ -481,6 +490,8 @@ const messages = {
     newMatch: "GAME START",
     menuJa: "메뉴",
     rotate: "회전",
+    commonResetPressed: "리셋했습니다",
+    commonBackToMenuPressed: "메뉴로 돌아갑니다",
     shuffle: "셔플",
     hint: "힌트",
     reset: "리셋",
@@ -684,6 +695,8 @@ function applyStaticTranslations() {
     menuMoreBtn.textContent = tr("optionsMenu");
     menuMoreBtn.setAttribute("aria-label", tr("optionsMenu"));
   }
+  if (openProfileLink) openProfileLink.textContent = tr("profileLink");
+  if (openInquiryFormLink) openInquiryFormLink.textContent = tr("inquiryFormLink");
   if (saveCloudAuthBtn) saveCloudAuthBtn.textContent = tr("saveCloudAuth");
   if (backToEntryBtn) backToEntryBtn.textContent = tr("backToLogin");
   if (friendsTitle) friendsTitle.textContent = tr("friendsTitle");
@@ -1077,6 +1090,7 @@ async function mutateFriend(action) {
 function setLanguage(lang) {
   currentLang = messages[lang] ? lang : "ja";
   localStorage.setItem(STORAGE_LANG_KEY, currentLang);
+  localStorage.setItem(STORAGE_UI_LANG_KEY, currentLang);
   applyStaticTranslations();
   updateLobbyView();
   updateRoomStatus({ roomCode: roomSession.code, roomRole: roomSession.role });
@@ -1390,12 +1404,66 @@ function setCardListMessage(text) {
   cardListMessage.textContent = text;
 }
 
+function setVisibleScreenMessage(text) {
+  const visibleScreen = [
+    entryScreen,
+    menuScreen,
+    cardListScreen,
+    casinoListScreen,
+    lobbyScreen,
+    othelloScreen,
+    shogiScreen,
+    chessScreen,
+    unoScreen,
+    gomokuScreen,
+    survivorsScreen,
+    fitPuzzleScreen,
+    minesweeperScreen,
+    solitaireScreen,
+    mahjongScreen,
+    sevensScreen,
+    numeronScreen,
+  ].find((screen) => screen && !screen.classList.contains("hidden"));
+
+  if (!visibleScreen) return;
+  const messageNode = visibleScreen.querySelector(".room-menu-message");
+  if (!messageNode) return;
+  messageNode.textContent = text;
+}
+
+function showCommonButtonMessage(messageKey) {
+  const text = tr(messageKey);
+  setVisibleScreenMessage(text);
+}
+
 function setCasinoListMessage(text) {
   if (!casinoListMessage) return;
   casinoListMessage.textContent = text;
 }
 
 function connectionLabel() {
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const button = target.closest("button");
+  if (!(button instanceof HTMLButtonElement)) return;
+
+  if (button.id === "fitPuzzleResetBtn" || button.id === "solitaireResetBtn") {
+    showCommonButtonMessage("commonResetPressed");
+    return;
+  }
+
+  if (
+    button.id.endsWith("MenuBtn") ||
+    button.id === "lobbyBackBtn" ||
+    button.id === "cardListBackBtn" ||
+    button.id === "casinoListBackBtn"
+  ) {
+    showCommonButtonMessage("commonBackToMenuPressed");
+  }
+});
   if (roomSession.connectionState === "connecting") return tr("connectionConnecting");
   if (roomSession.connectionState === "connected") return tr("connectionConnected");
   if (roomSession.connectionState === "reconnecting") return tr("connectionReconnecting");
@@ -3220,7 +3288,11 @@ backToEntryBtn?.addEventListener("click", () => {
   showEntryScreen();
 });
 
-const initialLang = "ja";
+const savedArcadeLang = String(localStorage.getItem(STORAGE_LANG_KEY) || "").trim().toLowerCase();
+const savedUiLang = String(localStorage.getItem(STORAGE_UI_LANG_KEY) || "").trim().toLowerCase();
+const initialLang = messages[savedArcadeLang]
+  ? savedArcadeLang
+  : (messages[savedUiLang] ? savedUiLang : "ja");
 if (langSelect) langSelect.value = initialLang;
 setLanguage(initialLang);
 ensureBrandedUrlHash();

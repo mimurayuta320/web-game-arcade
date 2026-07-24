@@ -55,9 +55,29 @@ body {
 .menu-more {
   margin-left: auto;
   position: relative;
-  display: grid;
-  gap: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
   justify-items: end;
+  align-items: flex-end;
+}
+
+.menu-top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.menu-top-inline-link {
+  margin-top: 0;
+  margin-left: 0;
+  white-space: nowrap;
+}
+
+.menu-top-actions .start-btn {
+  margin-left: 0;
 }
 
 .menu-more-btn {
@@ -111,18 +131,21 @@ body {
 }
 
 .friends-toggle-btn {
-  margin-top: 0.1rem;
+  margin-top: 0;
   border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 10px;
   background: rgba(6, 14, 20, 0.72);
   color: var(--ink);
-  padding: 0.5rem 0.78rem;
+  padding: 0.46rem 0.82rem;
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   cursor: pointer;
-  text-align: left;
-  width: 100%;
+  text-align: center;
+  width: auto;
+  min-width: 7.2rem;
+  line-height: 1.2;
+  font-family: "Space Grotesk", sans-serif;
 }
 
 .friends-toggle-btn:hover {
@@ -130,9 +153,7 @@ body {
 }
 
 .menu-more .friends-toggle-btn {
-  width: auto;
-  min-width: 7.2rem;
-  text-align: center;
+  flex: 0 0 auto;
 }
 
 .top-bar h1 {
@@ -1860,6 +1881,19 @@ body {
 }
 
 @media (max-width: 900px) {
+  .menu-top-actions {
+    justify-content: flex-end;
+  }
+
+  .menu-top-inline-link {
+    width: 100%;
+  }
+
+  .menu-top-actions .friends-toggle-btn,
+  .menu-top-actions .menu-more-btn {
+    flex: 1 1 auto;
+  }
+
   .fit-puzzle-layout {
     grid-template-columns: 1fr;
   }
