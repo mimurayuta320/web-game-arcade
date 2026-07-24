@@ -29,6 +29,24 @@ export class CloudController {
     return result.payload;
   }
 
+  @Post('auth/logout')
+  authLogout(@Body() body: Record<string, unknown>) {
+    const result = this.cloudService.logout(body);
+    if (!result.ok) {
+      this.throwFailure(result.code, result.message);
+    }
+    return result.payload;
+  }
+
+  @Post('auth/ping')
+  authPing(@Body() body: Record<string, unknown>) {
+    const result = this.cloudService.ping(body);
+    if (!result.ok) {
+      this.throwFailure(result.code, result.message);
+    }
+    return result.payload;
+  }
+
   @Post('profile/load')
   profileLoad(@Body() body: Record<string, unknown>) {
     const result = this.cloudService.loadProfile(body);
@@ -137,6 +155,42 @@ export class CloudController {
     return result.payload;
   }
 
+  @Post('friends/chat/list')
+  listFriendMessages(@Body() body: Record<string, unknown>) {
+    const result = this.cloudService.listFriendMessages(body);
+    if (!result.ok) {
+      this.throwFailure(result.code, result.message);
+    }
+    return result.payload;
+  }
+
+  @Post('friends/chat/send')
+  sendFriendMessage(@Body() body: Record<string, unknown>) {
+    const result = this.cloudService.sendFriendMessage(body);
+    if (!result.ok) {
+      this.throwFailure(result.code, result.message);
+    }
+    return result.payload;
+  }
+
+  @Post('friends/chat/unread')
+  listFriendUnreadCounts(@Body() body: Record<string, unknown>) {
+    const result = this.cloudService.listFriendUnreadCounts(body);
+    if (!result.ok) {
+      this.throwFailure(result.code, result.message);
+    }
+    return result.payload;
+  }
+
+  @Post('friends/chat/read')
+  markFriendMessagesRead(@Body() body: Record<string, unknown>) {
+    const result = this.cloudService.markFriendMessagesRead(body);
+    if (!result.ok) {
+      this.throwFailure(result.code, result.message);
+    }
+    return result.payload;
+  }
+
   @Post('friends/search')
   searchUsers(@Body() body: Record<string, unknown>) {
     const result = this.cloudService.searchUsers(body);
@@ -182,11 +236,16 @@ export class CloudController {
     if (code === 'FORBIDDEN') return HttpStatus.FORBIDDEN;
     if (code === 'RATE_LIMITED') return HttpStatus.TOO_MANY_REQUESTS;
     if (code === 'DUPLICATE_INQUIRY') return HttpStatus.TOO_MANY_REQUESTS;
+    if (code === 'FRIEND_CHAT_RATE_LIMITED') return HttpStatus.TOO_MANY_REQUESTS;
     if (code === 'AUTH_REQUIRED') return HttpStatus.BAD_REQUEST;
+    if (code === 'SESSION_REQUIRED') return HttpStatus.BAD_REQUEST;
+    if (code === 'INVALID_SESSION') return HttpStatus.UNAUTHORIZED;
     if (code === 'USER_NOT_FOUND') return HttpStatus.NOT_FOUND;
     if (code === 'INVALID_PASSWORD') return HttpStatus.UNAUTHORIZED;
+    if (code === 'ALREADY_LOGGED_IN') return HttpStatus.CONFLICT;
     if (code === 'USER_ALREADY_EXISTS') return HttpStatus.CONFLICT;
     if (code === 'FRIEND_NOT_FOUND') return HttpStatus.NOT_FOUND;
+    if (code === 'FRIEND_CHAT_FORBIDDEN') return HttpStatus.FORBIDDEN;
     if (code === 'REQUEST_NOT_FOUND') return HttpStatus.NOT_FOUND;
     if (code === 'NOT_FOUND') return HttpStatus.NOT_FOUND;
     return HttpStatus.BAD_REQUEST;

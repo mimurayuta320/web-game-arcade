@@ -1566,6 +1566,10 @@ function requestInviteToken(roomCode) {
 
 function setConnectionState(nextState) {
   roomSession.connectionState = nextState;
+  const isDisconnectedState = nextState === "reconnecting" || nextState === "offline";
+  if (isDisconnectedState && roomMenuMessage && roomMenuMessage.textContent === tr("quickMatchSearching")) {
+    roomMenuMessage.textContent = "";
+  }
   updateConnectionText();
 }
 

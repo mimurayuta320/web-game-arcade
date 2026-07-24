@@ -18,7 +18,11 @@ type AuthInputResult =
 
 type AuthUserResult =
   | { ok: false; code: string; message: string }
-  | { ok: true; user: UserRow };
+  | { ok: true; user: UserRow; sessionId: string };
+
+type SessionIssueResult =
+  | { ok: false; code: string; message: string }
+  | { ok: true; sessionId: string };
 
 type UserRow = {
   user_id: string;
@@ -44,6 +48,19 @@ type MatchRecord = {
   opponent: string;
 };
 
+type FriendChatMessage = {
+  id: number;
+  senderUserId: string;
+  receiverUserId: string;
+  message: string;
+  createdAt: number;
+};
+
+type FriendChatPeerReadState = {
+  lastReadMessageId: number;
+  lastReadAt: number;
+};
+
 type Profile = {
   bankCoins: number;
   pityCounter: number;
@@ -61,6 +78,8 @@ const MATCH_RESULT_VALUES = new Set(['win', 'lose', 'draw']);
 const INQUIRY_MIN_MESSAGE_LENGTH = Number(process.env.INQUIRY_MIN_MESSAGE_LENGTH || 10);
 const INQUIRY_MIN_INTERVAL_MS = Number(process.env.INQUIRY_MIN_INTERVAL_MS || 30 * 1000);
 const INQUIRY_DUPLICATE_WINDOW_MS = Number(process.env.INQUIRY_DUPLICATE_WINDOW_MS || 10 * 60 * 1000);
+const FRIEND_CHAT_MIN_INTERVAL_MS = Number(process.env.FRIEND_CHAT_MIN_INTERVAL_MS || 1200);
+const AUTH_SESSION_TTL_MS = Number(process.env.AUTH_SESSION_TTL_MS || 30 * 60 * 1000);
 const DEFAULT_PROFILE: Profile = {
   bankCoins: 0,
   pityCounter: 0,
@@ -131,6 +150,9 @@ export class CloudService {
         Date.now(),
       );
 
+    const issued = this.issueSession(auth.userId, body.sessionId);
+    if (!issued.ok) return issued;
+
     return {
       ok: true,
       code: 'OK',
@@ -138,22 +160,60 @@ export class CloudService {
       payload: {
         ok: true,
         created: true,
+        sessionId: issued.sessionId,
         profile: DEFAULT_PROFILE,
       },
     };
   }
 
   login(body: Record<string, unknown>): ApiResult {
-    const auth = this.authenticate(body);
+    const auth = this.authenticate(body, { requireSession: false });
     if (!auth.ok) return auth;
+
+    const issued = this.issueSession(auth.user.user_id, body.sessionId);
+    if (!issued.ok) return issued;
+
     return {
       ok: true,
       code: 'OK',
       message: 'logged in',
       payload: {
         ok: true,
+        sessionId: issued.sessionId,
         profile: this.sanitizeProfile(this.parseProfile(auth.user.profile_json), DEFAULT_PROFILE),
       },
+    };
+  }
+
+  logout(body: Record<string, unknown>): ApiResult {
+    const auth = this.authenticate(body);
+    if (!auth.ok) return auth;
+
+    this.db
+      .prepare(
+        `
+        DELETE FROM auth_sessions
+        WHERE user_id = ? AND session_id = ?
+      `,
+      )
+      .run(auth.user.user_id, auth.sessionId);
+
+    return {
+      ok: true,
+      code: 'OK',
+      message: 'logged out',
+      payload: { ok: true },
+    };
+  }
+
+  ping(body: Record<string, unknown>): ApiResult {
+    const auth = this.authenticate(body);
+    if (!auth.ok) return auth;
+    return {
+      ok: true,
+      code: 'OK',
+      message: 'session alive',
+      payload: { ok: true, sessionId: auth.sessionId },
     };
   }
 
@@ -514,6 +574,193 @@ export class CloudService {
     };
   }
 
+  listFriendMessages(body: Record<string, unknown>): ApiResult {
+    const auth = this.authenticate(body);
+    if (!auth.ok) return auth;
+
+    const friendUserId = this.normalizeUserId(body.friendUserId ?? body.targetUserId);
+    if (!friendUserId) {
+      return { ok: false, code: 'FRIEND_ID_REQUIRED', message: 'friendUserId is required' };
+    }
+    if (!this.readUser(friendUserId)) {
+      return { ok: false, code: 'FRIEND_NOT_FOUND', message: 'Friend user not found' };
+    }
+    if (!this.areAlreadyFriends(auth.user.user_id, friendUserId)) {
+      return { ok: false, code: 'FRIEND_CHAT_FORBIDDEN', message: 'Friend relationship required' };
+    }
+
+    return {
+      ok: true,
+      code: 'OK',
+      message: 'friend messages loaded',
+      payload: {
+        ok: true,
+        friendUserId,
+        messages: this.listFriendMessagesByPair(auth.user.user_id, friendUserId),
+        peerReadState: this.getFriendPeerReadState(auth.user.user_id, friendUserId),
+      },
+    };
+  }
+
+  sendFriendMessage(body: Record<string, unknown>): ApiResult {
+    const auth = this.authenticate(body);
+    if (!auth.ok) return auth;
+
+    const friendUserId = this.normalizeUserId(body.friendUserId ?? body.targetUserId);
+    if (!friendUserId) {
+      return { ok: false, code: 'FRIEND_ID_REQUIRED', message: 'friendUserId is required' };
+    }
+    if (!this.readUser(friendUserId)) {
+      return { ok: false, code: 'FRIEND_NOT_FOUND', message: 'Friend user not found' };
+    }
+    if (!this.areAlreadyFriends(auth.user.user_id, friendUserId)) {
+      return { ok: false, code: 'FRIEND_CHAT_FORBIDDEN', message: 'Friend relationship required' };
+    }
+
+    const message = this.normalizeFriendChatMessage(body.message ?? body.text);
+    if (!message) {
+      return { ok: false, code: 'FRIEND_CHAT_MESSAGE_REQUIRED', message: 'message is required' };
+    }
+
+    const latestRow = this.db
+      .prepare(
+        `
+        SELECT created_at
+        FROM friend_messages
+        WHERE sender_user_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+      `,
+      )
+      .get(auth.user.user_id) as { created_at?: number } | undefined;
+    const latestSentAt = Number(latestRow?.created_at || 0);
+    if (latestSentAt > 0 && Date.now() - latestSentAt < FRIEND_CHAT_MIN_INTERVAL_MS) {
+      return {
+        ok: false,
+        code: 'FRIEND_CHAT_RATE_LIMITED',
+        message: 'Message sending is rate limited',
+      };
+    }
+
+    this.db
+      .prepare(
+        `
+        INSERT INTO friend_messages (sender_user_id, receiver_user_id, message, created_at)
+        VALUES (?, ?, ?, ?)
+      `,
+      )
+      .run(auth.user.user_id, friendUserId, message, Date.now());
+
+    return {
+      ok: true,
+      code: 'OK',
+      message: 'friend message sent',
+      payload: {
+        ok: true,
+        friendUserId,
+        messages: this.listFriendMessagesByPair(auth.user.user_id, friendUserId),
+        peerReadState: this.getFriendPeerReadState(auth.user.user_id, friendUserId),
+      },
+    };
+  }
+
+  listFriendUnreadCounts(body: Record<string, unknown>): ApiResult {
+    const auth = this.authenticate(body);
+    if (!auth.ok) return auth;
+
+    const rows = this.db
+      .prepare(
+        `
+        SELECT fm.sender_user_id AS friend_user_id, COUNT(*) AS unread
+        FROM friend_messages fm
+        LEFT JOIN friend_chat_reads fcr
+          ON fcr.user_id = ? AND fcr.friend_user_id = fm.sender_user_id
+        WHERE fm.receiver_user_id = ?
+          AND fm.id > COALESCE(fcr.last_read_message_id, 0)
+          AND EXISTS (
+            SELECT 1
+            FROM friends fr
+            WHERE fr.user_id = ? AND fr.friend_user_id = fm.sender_user_id
+          )
+        GROUP BY fm.sender_user_id
+      `,
+      )
+      .all(auth.user.user_id, auth.user.user_id, auth.user.user_id) as Array<{
+      friend_user_id: string;
+      unread: number;
+    }>;
+
+    const unreadByFriend: Record<string, number> = {};
+    rows.forEach((row) => {
+      const friendUserId = this.normalizeUserId(row.friend_user_id);
+      const unread = Number.isFinite(row.unread) ? Math.max(0, Math.floor(Number(row.unread))) : 0;
+      if (friendUserId && unread > 0) {
+        unreadByFriend[friendUserId] = unread;
+      }
+    });
+
+    return {
+      ok: true,
+      code: 'OK',
+      message: 'friend unread counts loaded',
+      payload: {
+        ok: true,
+        unreadByFriend,
+      },
+    };
+  }
+
+  markFriendMessagesRead(body: Record<string, unknown>): ApiResult {
+    const auth = this.authenticate(body);
+    if (!auth.ok) return auth;
+
+    const friendUserId = this.normalizeUserId(body.friendUserId ?? body.targetUserId);
+    if (!friendUserId) {
+      return { ok: false, code: 'FRIEND_ID_REQUIRED', message: 'friendUserId is required' };
+    }
+    if (!this.areAlreadyFriends(auth.user.user_id, friendUserId)) {
+      return { ok: false, code: 'FRIEND_CHAT_FORBIDDEN', message: 'Friend relationship required' };
+    }
+
+    const latestIncoming = this.db
+      .prepare(
+        `
+        SELECT MAX(id) AS last_read_message_id
+        FROM friend_messages
+        WHERE sender_user_id = ? AND receiver_user_id = ?
+      `,
+      )
+      .get(friendUserId, auth.user.user_id) as { last_read_message_id?: number } | undefined;
+
+    const lastReadMessageId = Number.isFinite(latestIncoming?.last_read_message_id)
+      ? Math.max(0, Math.floor(Number(latestIncoming?.last_read_message_id || 0)))
+      : 0;
+
+    this.db
+      .prepare(
+        `
+        INSERT INTO friend_chat_reads (user_id, friend_user_id, last_read_message_id, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, friend_user_id)
+        DO UPDATE SET
+          last_read_message_id = excluded.last_read_message_id,
+          updated_at = excluded.updated_at
+      `,
+      )
+      .run(auth.user.user_id, friendUserId, lastReadMessageId, Date.now());
+
+    return {
+      ok: true,
+      code: 'OK',
+      message: 'friend messages marked as read',
+      payload: {
+        ok: true,
+        friendUserId,
+        lastReadMessageId,
+      },
+    };
+  }
+
   searchUsers(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
@@ -774,6 +1021,25 @@ export class CloudService {
         PRIMARY KEY (requester_user_id, target_user_id)
       );
 
+      CREATE TABLE IF NOT EXISTS friend_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_user_id TEXT NOT NULL,
+        receiver_user_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_friend_messages_pair_time
+        ON friend_messages(sender_user_id, receiver_user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS friend_chat_reads (
+        user_id TEXT NOT NULL,
+        friend_user_id TEXT NOT NULL,
+        last_read_message_id INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, friend_user_id)
+      );
+
       CREATE TABLE IF NOT EXISTS scores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         player_name TEXT NOT NULL,
@@ -781,6 +1047,16 @@ export class CloudService {
         game TEXT,
         created_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS auth_sessions (
+        session_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        last_seen_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_auth_sessions_last_seen
+        ON auth_sessions(last_seen_at DESC);
 
       CREATE INDEX IF NOT EXISTS idx_scores_created
         ON scores(created_at DESC);
@@ -817,7 +1093,10 @@ export class CloudService {
     return { ok: true, userId, password };
   }
 
-  private authenticate(body: Record<string, unknown>): AuthUserResult {
+  private authenticate(
+    body: Record<string, unknown>,
+    options?: { requireSession?: boolean },
+  ): AuthUserResult {
     const auth = this.authFromBody(body);
     if (!auth.ok) return auth;
 
@@ -828,7 +1107,10 @@ export class CloudService {
 
     const hasBcrypt = Boolean(user.pass_hash_bcrypt && user.pass_hash_bcrypt.trim());
     if (hasBcrypt && bcrypt.compareSync(auth.password, user.pass_hash_bcrypt)) {
-      return { ok: true, user };
+      if (options?.requireSession === false) {
+        return { ok: true, user, sessionId: '' };
+      }
+      return this.validateAndTouchSession(user.user_id, body.sessionId, user);
     }
 
     const legacyOk = this.verifyLegacyPassword(
@@ -848,7 +1130,10 @@ export class CloudService {
         )
         .run(upgradedHash, Date.now(), user.user_id);
       user.pass_hash_bcrypt = upgradedHash;
-      return { ok: true, user };
+      if (options?.requireSession === false) {
+        return { ok: true, user, sessionId: '' };
+      }
+      return this.validateAndTouchSession(user.user_id, body.sessionId, user);
     }
 
     if (!hasBcrypt && !legacyOk) {
@@ -856,6 +1141,117 @@ export class CloudService {
     }
 
     return { ok: false, code: 'INVALID_PASSWORD', message: 'Invalid password' };
+  }
+
+  private normalizeSessionId(value: unknown): string {
+    return String(value || '').trim().slice(0, 96);
+  }
+
+  private cleanupExpiredSessions() {
+    const threshold = Date.now() - AUTH_SESSION_TTL_MS;
+    this.db
+      .prepare(
+        `
+        DELETE FROM auth_sessions
+        WHERE last_seen_at < ?
+      `,
+      )
+      .run(threshold);
+  }
+
+  private issueSession(userId: string, requestedValue: unknown): SessionIssueResult {
+    this.cleanupExpiredSessions();
+
+    const requestedSessionId = this.normalizeSessionId(requestedValue);
+    const existing = this.db
+      .prepare(
+        `
+        SELECT session_id
+        FROM auth_sessions
+        WHERE user_id = ?
+      `,
+      )
+      .get(userId) as { session_id: string } | undefined;
+
+    if (existing) {
+      if (requestedSessionId && existing.session_id === requestedSessionId) {
+        this.db
+          .prepare(
+            `
+            UPDATE auth_sessions
+            SET last_seen_at = ?
+            WHERE user_id = ?
+          `,
+          )
+          .run(Date.now(), userId);
+        return { ok: true, sessionId: existing.session_id };
+      }
+      return {
+        ok: false,
+        code: 'ALREADY_LOGGED_IN',
+        message: 'This account is already logged in on another device',
+      };
+    }
+
+    const sessionId = requestedSessionId || randomUUID();
+    const now = Date.now();
+    this.db
+      .prepare(
+        `
+        INSERT INTO auth_sessions (session_id, user_id, created_at, last_seen_at)
+        VALUES (?, ?, ?, ?)
+      `,
+      )
+      .run(sessionId, userId, now, now);
+
+    return { ok: true, sessionId };
+  }
+
+  private validateAndTouchSession(
+    userId: string,
+    providedSessionIdRaw: unknown,
+    user: UserRow,
+  ): AuthUserResult {
+    this.cleanupExpiredSessions();
+
+    const providedSessionId = this.normalizeSessionId(providedSessionIdRaw);
+    if (!providedSessionId) {
+      return {
+        ok: false,
+        code: 'SESSION_REQUIRED',
+        message: 'sessionId is required',
+      };
+    }
+
+    const row = this.db
+      .prepare(
+        `
+        SELECT session_id
+        FROM auth_sessions
+        WHERE user_id = ?
+      `,
+      )
+      .get(userId) as { session_id: string } | undefined;
+
+    if (!row || row.session_id !== providedSessionId) {
+      return {
+        ok: false,
+        code: 'INVALID_SESSION',
+        message: 'session is invalid or expired',
+      };
+    }
+
+    this.db
+      .prepare(
+        `
+        UPDATE auth_sessions
+        SET last_seen_at = ?
+        WHERE user_id = ?
+      `,
+      )
+      .run(Date.now(), userId);
+
+    return { ok: true, user, sessionId: providedSessionId };
   }
 
   private readUser(userId: string): UserRow | null {
@@ -1033,6 +1429,15 @@ export class CloudService {
     return String(raw || '')
       .replace(/\D/g, '')
       .slice(0, 6);
+  }
+
+  private normalizeFriendChatMessage(raw: unknown) {
+    const text = String(raw || '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .trim();
+    if (!text) return '';
+    return text.slice(0, 400);
   }
 
   private parseProfile(raw: string): unknown {
@@ -1264,6 +1669,65 @@ export class CloudService {
       .get(userId, friendUserId) as { ok: number } | undefined;
 
     return Boolean(row);
+  }
+
+  private listFriendMessagesByPair(userId: string, friendUserId: string): FriendChatMessage[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT id, sender_user_id, receiver_user_id, message, created_at
+        FROM friend_messages
+        WHERE (sender_user_id = ? AND receiver_user_id = ?)
+           OR (sender_user_id = ? AND receiver_user_id = ?)
+        ORDER BY created_at DESC, id DESC
+        LIMIT 120
+      `,
+      )
+      .all(userId, friendUserId, friendUserId, userId) as Array<{
+      id: number;
+      sender_user_id: string;
+      receiver_user_id: string;
+      message: string;
+      created_at: number;
+    }>;
+
+    return rows
+      .map((row) => ({
+        id: Number(row.id),
+        senderUserId: this.normalizeUserId(row.sender_user_id),
+        receiverUserId: this.normalizeUserId(row.receiver_user_id),
+        message: this.normalizeFriendChatMessage(row.message),
+        createdAt: Number.isFinite(row.created_at) ? Math.floor(Number(row.created_at)) : 0,
+      }))
+      .filter((row) => Boolean(row.senderUserId) && Boolean(row.receiverUserId) && Boolean(row.message))
+      .sort((a, b) => a.createdAt - b.createdAt || a.id - b.id);
+  }
+
+  private getFriendPeerReadState(userId: string, friendUserId: string): FriendChatPeerReadState {
+    const row = this.db
+      .prepare(
+        `
+        SELECT last_read_message_id, updated_at
+        FROM friend_chat_reads
+        WHERE user_id = ? AND friend_user_id = ?
+        LIMIT 1
+      `,
+      )
+      .get(friendUserId, userId) as
+      | { last_read_message_id?: number; updated_at?: number }
+      | undefined;
+
+    const lastReadMessageId = Number.isFinite(row?.last_read_message_id)
+      ? Math.max(0, Math.floor(Number(row?.last_read_message_id || 0)))
+      : 0;
+    const lastReadAt = Number.isFinite(row?.updated_at)
+      ? Math.max(0, Math.floor(Number(row?.updated_at || 0)))
+      : 0;
+
+    return {
+      lastReadMessageId,
+      lastReadAt,
+    };
   }
 
   private readInquiries() {

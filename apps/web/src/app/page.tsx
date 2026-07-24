@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -44,6 +44,7 @@ type CloudAuthResult = {
   ok?: boolean;
   code?: string;
   message?: string;
+  sessionId?: string;
   profile?: {
     playerName?: string;
     profileBio?: string;
@@ -56,6 +57,19 @@ type CloudApiResult = {
   code?: string;
   message?: string;
   [key: string]: unknown;
+};
+
+type FriendChatMessage = {
+  id: number;
+  senderUserId: string;
+  receiverUserId: string;
+  message: string;
+  createdAt: number;
+};
+
+type FriendChatPeerReadState = {
+  lastReadMessageId: number;
+  lastReadAt: number;
 };
 
 type FriendTab = "friends" | "incoming" | "outgoing";
@@ -82,7 +96,15 @@ type Language = "ja" | "ko" | "en" | "zh";
 type OthelloMode = "cpu" | "cpuvscpu" | "local" | "chaos";
 type OthelloCpuLevel = "easy" | "normal" | "hard";
 type OthelloTurnOrder = "black" | "white" | "random";
-type ShogiMode = "local" | "chaos";
+type GomokuMode = "local" | "cpu";
+type GomokuCpuLevel = "easy" | "normal" | "hard";
+type GomokuTurnOrder = "black" | "white" | "random";
+type ChessMode = "local" | "cpu";
+type ChessCpuLevel = "easy" | "normal" | "hard";
+type ChessTurnOrder = "white" | "black" | "random";
+type ShogiMode = "local" | "cpu" | "chaos";
+type ShogiCpuLevel = "easy" | "normal" | "hard";
+type ShogiTurnOrder = "black" | "white" | "random";
 type OthelloChaosTarget = "none" | "black" | "white" | "both" | "player" | "opponent";
 type OthelloChaosHandicap = "none" | "immutable1";
 type OthelloChaosToggle = "off" | "on";
@@ -127,6 +149,10 @@ const LOGIN_I18N = {
     requireAuthFields: "ユーザーIDとパスワードを入力してください。",
     loginLoading: "ログイン中...",
     loginFailed: "ログインに失敗しました。ID/パスワードを確認してください。",
+    loginAlreadyLoggedIn: "このアカウントは別の端末でログイン中です。先にログアウトしてください。",
+    localResetConfirm: "このゲームをリセットします。よろしいですか？",
+    roomSurrenderConfirm: "マルチ対戦中です。リセットすると降参になります。よろしいですか？",
+    roomSurrendered: "{name} が降参しました。",
     registerLoading: "新規登録中...",
     registerFailed: "新規登録に失敗しました。既存IDの可能性があります。",
     registerSuccess: "新規登録が完了しました。",
@@ -134,6 +160,7 @@ const LOGIN_I18N = {
     appTitle: "Neon Board Arcade",
     appLead: "旧HTMLの主要導線をNextへ移行中",
     backToLogin: "ログイン画面に戻る",
+    backToMenuConfirm: "メニューに戻りますか？",
     modeCloud: "Cloud",
     modeGuest: "Guest",
     tabMenu: "メニュー",
@@ -188,7 +215,7 @@ const LOGIN_I18N = {
     roomRoleSpectator: "観戦",
     roomMembers: "参加者",
     roomMatchedPlayers: "マッチ人数",
-    roomMembersEmpty: "未取得",
+    roomMembersEmpty: "未参加",
     profileLink: "プロフィール",
     inquiryViewerLink: "問い合わせ管理",
     inquiryFormLink: "問い合わせフォーム",
@@ -226,10 +253,25 @@ const LOGIN_I18N = {
     friendAlreadyExists: "すでにフレンドです",
     friendActionFailed: "フレンド操作に失敗しました",
     friendViewProfile: "プロフィールを見る",
+    friendOpenChat: "チャット",
+    friendChatWith: "チャット: {userId}",
+    friendChatPlaceholder: "メッセージを入力",
+    friendChatSend: "送信",
+    friendChatLoading: "チャットを読み込み中...",
+    friendChatEmpty: "まだメッセージはありません",
+    friendChatMessageRequired: "メッセージを入力してください",
+    friendChatForbidden: "フレンド同士のみチャットできます",
+    friendChatSendFailed: "チャット送信に失敗しました",
+    friendChatLoadFailed: "チャット取得に失敗しました",
+    friendChatRateLimited: "送信が早すぎます。少し待ってください",
+    friendChatRead: "既読",
+    friendChatReadAt: "既読 {time}",
     profileViewerTitle: "プロフィール",
     profileViewerNoBio: "自己紹介文はまだありません。",
     profileViewerLoadFailed: "プロフィールの取得に失敗しました。",
     closeLabel: "閉じる",
+    roomControlsOpen: "開く",
+    roomControlsClose: "閉じる",
     multiSyncTitle: "マルチ同期",
     multiSyncEnabled: "同期ON",
     multiSyncDisabled: "同期OFF",
@@ -375,6 +417,18 @@ const LOGIN_I18N = {
     othelloChaosDouble: "二回行動",
     gomokuTitle: "五目並べ",
     gomokuReset: "リセット",
+    gomokuModeLabel: "MODE",
+    gomokuModeCpu: "1P vs CPU",
+    gomokuModeLocal: "2P LOCAL",
+    gomokuCpuLevelLabel: "CPU LEVEL",
+    gomokuCpuLevelEasy: "やさしい",
+    gomokuCpuLevelNormal: "ふつう",
+    gomokuCpuLevelHard: "つよい",
+    gomokuTurnOrderLabel: "TURN",
+    gomokuTurnOrderBlack: "1P先手(黒)",
+    gomokuTurnOrderWhite: "1P後手(白)",
+    gomokuTurnOrderRandom: "ランダム",
+    gomokuCpuThinking: "CPUが考えています...",
     gomokuTurnBlack: "黒の番です",
     gomokuTurnWhite: "白の番です",
     gomokuWin: "{winner}の勝ちです",
@@ -383,18 +437,41 @@ const LOGIN_I18N = {
     appliedGomokuToScore: "五目の黒石数をスコア欄へ反映しました。",
     chessTitle: "チェス",
     chessReset: "リセット",
+    chessModeLabel: "MODE",
+    chessModeCpu: "1P vs CPU",
+    chessModeLocal: "2P LOCAL",
+    chessCpuLevelLabel: "CPU LEVEL",
+    chessCpuLevelEasy: "やさしい",
+    chessCpuLevelNormal: "ふつう",
+    chessCpuLevelHard: "つよい",
+    chessTurnOrderLabel: "TURN",
+    chessTurnOrderWhite: "1P先手(白)",
+    chessTurnOrderBlack: "1P後手(黒)",
+    chessTurnOrderRandom: "ランダム",
+    chessCpuThinking: "CPUが考えています...",
     chessTurnWhite: "白の番です",
     chessTurnBlack: "黒の番です",
     chessSelectOwn: "自分の駒を選択してください。",
     chessIllegalMove: "その駒はそこへ移動できません。",
     chessWin: "{winner}の勝ちです（キングを取りました）",
+    chessDraw: "引き分けです。",
     chessApplyScore: "残り駒差をスコアに反映",
     chessAppliedScore: "チェスの残り駒差をスコア欄へ反映しました。",
     shogiTitle: "将棋",
     shogiReset: "リセット",
     shogiModeLabel: "MODE",
+    shogiModeCpu: "1P vs CPU",
     shogiModeLocal: "ローカル2人",
     shogiModeChaos: "CHAOS",
+    shogiCpuLevelLabel: "CPU LEVEL",
+    shogiCpuLevelEasy: "かんたん",
+    shogiCpuLevelNormal: "ふつう",
+    shogiCpuLevelHard: "つよい",
+    shogiTurnOrderLabel: "TURN",
+    shogiTurnOrderBlack: "1P先手(先手)",
+    shogiTurnOrderWhite: "1P後手(後手)",
+    shogiTurnOrderRandom: "ランダム",
+    shogiCpuThinking: "CPUが考えています...",
     shogiTurnBlack: "先手の番です",
     shogiTurnWhite: "後手の番です",
     shogiSelectOwn: "自分の駒を選択してください。",
@@ -589,6 +666,10 @@ const LOGIN_I18N = {
     unoYourHand: "あなたの手札",
     unoCpuHand: "CPU手札",
     unoNoPlayable: "出せるカードがありません。",
+    unoChooseMatchRule: "出し方を選択してください（色一致 / 数字一致）",
+    unoMatchByColor: "色一致",
+    unoMatchByNumber: "数字一致",
+    unoMatchRuleReset: "選択解除",
     unoPlayedCard: "{who} が {card} を出しました。",
     unoDrewCard: "{who} が1枚引きました。",
     unoApplyScore: "残り手札差をスコアに反映",
@@ -661,6 +742,10 @@ const LOGIN_I18N = {
     requireAuthFields: "사용자 ID와 비밀번호를 입력하세요.",
     loginLoading: "로그인 중...",
     loginFailed: "로그인에 실패했습니다. ID/비밀번호를 확인하세요.",
+    loginAlreadyLoggedIn: "이 계정은 다른 기기에서 로그인 중입니다. 먼저 로그아웃해 주세요.",
+    localResetConfirm: "이 게임을 리셋할까요?",
+    roomSurrenderConfirm: "멀티 대전 중입니다. 리셋하면 기권 처리됩니다. 진행할까요?",
+    roomSurrendered: "{name} 님이 기권했습니다.",
     registerLoading: "회원가입 중...",
     registerFailed: "회원가입에 실패했습니다. 이미 존재하는 ID일 수 있습니다.",
     registerSuccess: "회원가입이 완료되었습니다.",
@@ -668,6 +753,7 @@ const LOGIN_I18N = {
     appTitle: "Neon Board Arcade",
     appLead: "기존 HTML 주요 동선을 Next로 이전 중",
     backToLogin: "로그인으로 돌아가기",
+    backToMenuConfirm: "메뉴로 돌아갈까요?",
     modeCloud: "Cloud",
     modeGuest: "Guest",
     tabMenu: "메뉴",
@@ -760,10 +846,25 @@ const LOGIN_I18N = {
     friendAlreadyExists: "이미 친구입니다",
     friendActionFailed: "친구 작업에 실패했습니다",
     friendViewProfile: "프로필 보기",
+    friendOpenChat: "채팅",
+    friendChatWith: "채팅: {userId}",
+    friendChatPlaceholder: "메시지를 입력하세요",
+    friendChatSend: "전송",
+    friendChatLoading: "채팅을 불러오는 중...",
+    friendChatEmpty: "아직 메시지가 없습니다",
+    friendChatMessageRequired: "메시지를 입력하세요",
+    friendChatForbidden: "친구끼리만 채팅할 수 있습니다",
+    friendChatSendFailed: "채팅 전송에 실패했습니다",
+    friendChatLoadFailed: "채팅을 불러오지 못했습니다",
+    friendChatRateLimited: "전송이 너무 빠릅니다. 잠시 후 다시 시도하세요",
+    friendChatRead: "읽음",
+    friendChatReadAt: "읽음 {time}",
     profileViewerTitle: "프로필",
     profileViewerNoBio: "자기소개가 아직 없습니다.",
     profileViewerLoadFailed: "프로필을 불러오지 못했습니다.",
     closeLabel: "닫기",
+    roomControlsOpen: "열기",
+    roomControlsClose: "닫기",
     multiSyncTitle: "멀티 동기화",
     multiSyncEnabled: "동기화 ON",
     multiSyncDisabled: "동기화 OFF",
@@ -909,6 +1010,18 @@ const LOGIN_I18N = {
     othelloChaosDouble: "2회 행동",
     gomokuTitle: "오목 (Next 이전판)",
     gomokuReset: "리셋",
+    gomokuModeLabel: "MODE",
+    gomokuModeCpu: "1P vs CPU",
+    gomokuModeLocal: "2P LOCAL",
+    gomokuCpuLevelLabel: "CPU LEVEL",
+    gomokuCpuLevelEasy: "쉬움",
+    gomokuCpuLevelNormal: "보통",
+    gomokuCpuLevelHard: "어려움",
+    gomokuTurnOrderLabel: "TURN",
+    gomokuTurnOrderBlack: "1P 선공(흑)",
+    gomokuTurnOrderWhite: "1P 후공(백)",
+    gomokuTurnOrderRandom: "랜덤",
+    gomokuCpuThinking: "CPU가 생각 중입니다...",
     gomokuTurnBlack: "흑 차례입니다",
     gomokuTurnWhite: "백 차례입니다",
     gomokuWin: "{winner} 승리",
@@ -917,18 +1030,41 @@ const LOGIN_I18N = {
     appliedGomokuToScore: "오목 흑 돌 수를 점수 입력란에 반영했습니다.",
     chessTitle: "체스 (Next 이전판)",
     chessReset: "리셋",
+    chessModeLabel: "MODE",
+    chessModeCpu: "1P vs CPU",
+    chessModeLocal: "2P LOCAL",
+    chessCpuLevelLabel: "CPU LEVEL",
+    chessCpuLevelEasy: "쉬움",
+    chessCpuLevelNormal: "보통",
+    chessCpuLevelHard: "어려움",
+    chessTurnOrderLabel: "TURN",
+    chessTurnOrderWhite: "1P 선공(백)",
+    chessTurnOrderBlack: "1P 후공(흑)",
+    chessTurnOrderRandom: "랜덤",
+    chessCpuThinking: "CPU가 생각 중입니다...",
     chessTurnWhite: "백 차례입니다",
     chessTurnBlack: "흑 차례입니다",
     chessSelectOwn: "자신의 말을 선택하세요.",
     chessIllegalMove: "해당 말은 그 칸으로 이동할 수 없습니다.",
     chessWin: "{winner} 승리 (킹을 잡았습니다)",
+    chessDraw: "무승부입니다.",
     chessApplyScore: "남은 말 수 차이를 점수에 반영",
     chessAppliedScore: "체스 남은 말 수 차이를 점수 입력란에 반영했습니다.",
     shogiTitle: "장기 (Next 이전판)",
     shogiReset: "리셋",
     shogiModeLabel: "MODE",
+    shogiModeCpu: "1P vs CPU",
     shogiModeLocal: "로컬 2인",
     shogiModeChaos: "CHAOS",
+    shogiCpuLevelLabel: "CPU LEVEL",
+    shogiCpuLevelEasy: "쉬움",
+    shogiCpuLevelNormal: "보통",
+    shogiCpuLevelHard: "어려움",
+    shogiTurnOrderLabel: "TURN",
+    shogiTurnOrderBlack: "1P 선공(선수)",
+    shogiTurnOrderWhite: "1P 후공(후수)",
+    shogiTurnOrderRandom: "랜덤",
+    shogiCpuThinking: "CPU가 생각 중입니다...",
     shogiTurnBlack: "선수 차례입니다",
     shogiTurnWhite: "후수 차례입니다",
     shogiSelectOwn: "자신의 말을 선택하세요.",
@@ -1123,6 +1259,10 @@ const LOGIN_I18N = {
     unoYourHand: "내 손패",
     unoCpuHand: "CPU 손패",
     unoNoPlayable: "낼 수 있는 카드가 없습니다.",
+    unoChooseMatchRule: "카드 기준을 고르세요 (색 일치 / 숫자 일치)",
+    unoMatchByColor: "색 일치",
+    unoMatchByNumber: "숫자 일치",
+    unoMatchRuleReset: "선택 해제",
     unoPlayedCard: "{who} 이(가) {card} 카드를 냈습니다.",
     unoDrewCard: "{who} 이(가) 카드 1장을 뽑았습니다.",
     unoApplyScore: "남은 손패 차이를 점수에 반영",
@@ -1199,6 +1339,10 @@ const EN_I18N: Partial<I18nMap> = {
   requireAuthFields: "Please enter both user ID and password.",
   loginLoading: "Logging in...",
   loginFailed: "Login failed. Please check your ID/password.",
+  loginAlreadyLoggedIn: "This account is already logged in on another device. Please log out there first.",
+  localResetConfirm: "Reset this game?",
+  roomSurrenderConfirm: "You are in multiplayer. Pressing reset will count as surrender. Continue?",
+  roomSurrendered: "{name} surrendered.",
   registerLoading: "Registering...",
   registerFailed: "Registration failed. The ID may already exist.",
   registerSuccess: "Registration completed.",
@@ -1206,6 +1350,7 @@ const EN_I18N: Partial<I18nMap> = {
   appTitle: "Neon Board Arcade",
   appLead: "Main legacy HTML flows are being migrated to Next.",
   backToLogin: "Back to Login",
+  backToMenuConfirm: "Return to menu?",
   modeCloud: "Cloud",
   modeGuest: "Guest",
   tabMenu: "Menu",
@@ -1247,10 +1392,25 @@ const EN_I18N: Partial<I18nMap> = {
   roomMatchedPlayers: "Matched Players",
   profileLink: "Profile",
   friendViewProfile: "View Profile",
+  friendOpenChat: "Chat",
+  friendChatWith: "Chat: {userId}",
+  friendChatPlaceholder: "Type a message",
+  friendChatSend: "Send",
+  friendChatLoading: "Loading chat...",
+  friendChatEmpty: "No messages yet",
+  friendChatMessageRequired: "Please enter a message.",
+  friendChatForbidden: "Only friends can chat.",
+  friendChatSendFailed: "Failed to send message.",
+  friendChatLoadFailed: "Failed to load chat.",
+  friendChatRateLimited: "You are sending too quickly. Please wait.",
+  friendChatRead: "Read",
+  friendChatReadAt: "Read {time}",
   profileViewerTitle: "Profile",
   profileViewerNoBio: "No bio yet.",
   profileViewerLoadFailed: "Failed to load profile.",
   closeLabel: "Close",
+  roomControlsOpen: "Open",
+  roomControlsClose: "Close",
   inquiryViewerLink: "Inquiry Admin",
   inquiryFormLink: "Inquiry Form",
   loading: "Loading...",
@@ -1317,7 +1477,12 @@ const ZH_I18N: Partial<I18nMap> = {
   registerButton: "注册",
   guestButton: "游客模式",
   processing: "处理中...",
+  loginAlreadyLoggedIn: "此账号已在其他设备登录，请先在其他设备退出。",
+  localResetConfirm: "要重置这个游戏吗？",
+  roomSurrenderConfirm: "当前为多人对战，点击重置将判定为认输。是否继续？",
+  roomSurrendered: "{name} 已认输。",
   backToLogin: "返回登录",
+  backToMenuConfirm: "要返回菜单吗？",
   tabMenu: "菜单",
   roomTitle: "房间操作",
   roomCode: "房间号",
@@ -1333,10 +1498,25 @@ const ZH_I18N: Partial<I18nMap> = {
   roomMatchedPlayers: "匹配人数",
   profileLink: "个人资料",
   friendViewProfile: "查看资料",
+  friendOpenChat: "聊天",
+  friendChatWith: "聊天: {userId}",
+  friendChatPlaceholder: "输入消息",
+  friendChatSend: "发送",
+  friendChatLoading: "正在加载聊天...",
+  friendChatEmpty: "暂无消息",
+  friendChatMessageRequired: "请输入消息",
+  friendChatForbidden: "仅好友可聊天",
+  friendChatSendFailed: "发送消息失败",
+  friendChatLoadFailed: "获取聊天失败",
+  friendChatRateLimited: "发送过快，请稍后重试",
+  friendChatRead: "已读",
+  friendChatReadAt: "已读 {time}",
   profileViewerTitle: "个人资料",
   profileViewerNoBio: "暂时没有个人简介。",
   profileViewerLoadFailed: "获取个人资料失败。",
   closeLabel: "关闭",
+  roomControlsOpen: "展开",
+  roomControlsClose: "收起",
   roomChatTitle: "房间聊天",
   roomChatSend: "发送",
   roomChatPlaceholder: "输入消息",
@@ -1768,6 +1948,39 @@ const OTHELLO_CPU_POSITION_WEIGHTS = [
   [-12, -18, -3, -3, -3, -3, -18, -12],
   [40, -12, 10, 6, 6, 10, -12, 40],
 ] as const;
+const CHESS_PIECE_VALUE: Record<ChessPieceType, number> = {
+  K: 100,
+  Q: 9,
+  R: 5,
+  B: 3,
+  N: 3,
+  P: 1,
+};
+const CHESS_CPU_THINK_MS: Record<ChessCpuLevel, number> = {
+  easy: 220,
+  normal: 360,
+  hard: 520,
+};
+const GOMOKU_CPU_THINK_MS: Record<GomokuCpuLevel, number> = {
+  easy: 180,
+  normal: 280,
+  hard: 420,
+};
+const SHOGI_PIECE_VALUE: Record<ShogiPieceType, number> = {
+  K: 100,
+  R: 9,
+  B: 8,
+  G: 6,
+  S: 5,
+  N: 4,
+  L: 3,
+  P: 1,
+};
+const SHOGI_CPU_THINK_MS: Record<ShogiCpuLevel, number> = {
+  easy: 240,
+  normal: 380,
+  hard: 520,
+};
 const OTHELLO_OPENING_BOOK_PRIORITY = [
   [
     [2, 3],
@@ -1808,6 +2021,7 @@ const OTHELLO_OPENING_BOOK_PRIORITY = [
 ] as const;
 const STORAGE_CLOUD_USER_ID_KEY = "neon-cloud-user-id";
 const STORAGE_CLOUD_PASSWORD_KEY = "neon-cloud-password";
+const STORAGE_CLOUD_SESSION_ID_KEY = "neon-cloud-session-id";
 const STORAGE_LANGUAGE_KEY = "neon-ui-language";
 const STORAGE_MENU_TAB_OPEN_STATE_KEY = "neon-menu-tab-open-state";
 const STORAGE_MENU_CARD_OPEN_STATE_KEY = "neon-menu-card-open-state";
@@ -1829,6 +2043,28 @@ const DIRECTIONS = [
   [1, 0],
   [1, 1],
 ] as const;
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function getAutoRoomServerUrl(): string {
+  if (typeof window === "undefined") {
+    return "ws://127.0.0.1:8788";
+  }
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  const host = window.location.host || "127.0.0.1:3000";
+  const hostname = window.location.hostname || "127.0.0.1";
+  if (isLoopbackHost(hostname)) {
+    // Use IPv4 loopback explicitly to avoid ::1 resolution mismatches.
+    return `${protocol}://127.0.0.1:8788`;
+  }
+  // For LAN access (e.g. http://192.168.x.x:3000), target the same host on room port.
+  if (window.location.port === "3000" || window.location.port === "5173") {
+    return `${protocol}://${hostname}:8788`;
+  }
+  return `${protocol}://${host}/room`;
+}
 
 function createInitialBoard(): Cell[][] {
   const board = Array.from({ length: BOARD_SIZE }, () => Array.from({ length: BOARD_SIZE }, () => 0 as Cell));
@@ -2298,6 +2534,107 @@ function hasFiveInRow(board: Cell[][], row: number, col: number, player: 1 | 2):
   return false;
 }
 
+function gomokuLongestLineAt(board: Cell[][], row: number, col: number, player: 1 | 2): number {
+  const dirs = [
+    [1, 0],
+    [0, 1],
+    [1, 1],
+    [1, -1],
+  ] as const;
+
+  let best = 1;
+  for (const [dr, dc] of dirs) {
+    let count = 1;
+    let r = row + dr;
+    let c = col + dc;
+    while (inGomokuBounds(r, c) && board[r][c] === player) {
+      count += 1;
+      r += dr;
+      c += dc;
+    }
+    r = row - dr;
+    c = col - dc;
+    while (inGomokuBounds(r, c) && board[r][c] === player) {
+      count += 1;
+      r -= dr;
+      c -= dc;
+    }
+    if (count > best) best = count;
+  }
+  return best;
+}
+
+function gomokuHasNeighbor(board: Cell[][], row: number, col: number): boolean {
+  for (let dr = -1; dr <= 1; dr += 1) {
+    for (let dc = -1; dc <= 1; dc += 1) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = row + dr;
+      const nc = col + dc;
+      if (!inGomokuBounds(nr, nc)) continue;
+      if (board[nr][nc] !== 0) return true;
+    }
+  }
+  return false;
+}
+
+function pickGomokuCpuMove(board: Cell[][], player: 1 | 2, level: GomokuCpuLevel): { row: number; col: number } | null {
+  const enemy: 1 | 2 = player === 1 ? 2 : 1;
+  const occupied = board.some((line) => line.some((cell) => cell !== 0));
+  const center = Math.floor(GOMOKU_SIZE / 2);
+
+  const candidates: Array<{ row: number; col: number }> = [];
+  for (let row = 0; row < GOMOKU_SIZE; row += 1) {
+    for (let col = 0; col < GOMOKU_SIZE; col += 1) {
+      if (board[row][col] !== 0) continue;
+      if (!occupied || gomokuHasNeighbor(board, row, col)) {
+        candidates.push({ row, col });
+      }
+    }
+  }
+  if (candidates.length === 0) return null;
+
+  if (!occupied) {
+    return { row: center, col: center };
+  }
+
+  if (level === "easy") {
+    return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
+  }
+
+  let bestScore = -Infinity;
+  const bestMoves: Array<{ row: number; col: number }> = [];
+
+  for (const move of candidates) {
+    const next = board.map((line) => [...line]);
+    next[move.row][move.col] = player;
+
+    if (hasFiveInRow(next, move.row, move.col, player)) {
+      return move;
+    }
+
+    const blockBoard = board.map((line) => [...line]);
+    blockBoard[move.row][move.col] = enemy;
+    const blocksWin = hasFiveInRow(blockBoard, move.row, move.col, enemy);
+
+    const myLine = gomokuLongestLineAt(next, move.row, move.col, player);
+    const centerDistance = Math.abs(center - move.row) + Math.abs(center - move.col);
+    const centerScore = Math.max(0, 14 - centerDistance);
+    const levelBonus = level === "hard" ? 1.2 : 1;
+    const blockScore = blocksWin ? 500 : 0;
+    const total = blockScore + myLine * 30 * levelBonus + centerScore + Math.random() * (level === "hard" ? 0.5 : 2.2);
+
+    if (total > bestScore) {
+      bestScore = total;
+      bestMoves.length = 0;
+      bestMoves.push(move);
+    } else if (total === bestScore) {
+      bestMoves.push(move);
+    }
+  }
+
+  return bestMoves[Math.floor(Math.random() * bestMoves.length)] ?? candidates[0] ?? null;
+}
+
 function createUnoDeck(): UnoCard[] {
   const deck: UnoCard[] = [];
   for (const color of UNO_COLORS) {
@@ -2425,6 +2762,58 @@ function isLegalChessMove(
   return false;
 }
 
+function collectLegalChessMoves(board: Array<Array<ChessPiece | null>>, turn: ChessColor) {
+  const moves: Array<{ fromRow: number; fromCol: number; toRow: number; toCol: number; capture: ChessPiece | null }> = [];
+  for (let fromRow = 0; fromRow < 8; fromRow += 1) {
+    for (let fromCol = 0; fromCol < 8; fromCol += 1) {
+      const piece = board[fromRow][fromCol];
+      if (!piece || piece.color !== turn) continue;
+
+      for (let toRow = 0; toRow < 8; toRow += 1) {
+        for (let toCol = 0; toCol < 8; toCol += 1) {
+          if (!isLegalChessMove(board, fromRow, fromCol, toRow, toCol, turn)) continue;
+          moves.push({
+            fromRow,
+            fromCol,
+            toRow,
+            toCol,
+            capture: board[toRow][toCol],
+          });
+        }
+      }
+    }
+  }
+  return moves;
+}
+
+function pickChessCpuMove(
+  board: Array<Array<ChessPiece | null>>,
+  turn: ChessColor,
+  level: ChessCpuLevel,
+) {
+  const legal = collectLegalChessMoves(board, turn);
+  if (legal.length === 0) return null;
+
+  if (level === "easy") {
+    return legal[Math.floor(Math.random() * legal.length)] ?? null;
+  }
+
+  const scored = legal.map((move) => {
+    const mover = board[move.fromRow][move.fromCol];
+    const captureScore = move.capture ? CHESS_PIECE_VALUE[move.capture.type] * 10 : 0;
+    const centerDistance = Math.abs(3.5 - move.toRow) + Math.abs(3.5 - move.toCol);
+    const centerScore = Math.max(0, 7 - centerDistance);
+    const promotionScore = mover?.type === "P" && (move.toRow === 0 || move.toRow === 7) ? 12 : 0;
+    const aggression = level === "hard" && move.capture ? CHESS_PIECE_VALUE[move.capture.type] : 0;
+    const noise = Math.random() * (level === "normal" ? 1.8 : 0.8);
+    const total = captureScore + centerScore + promotionScore + aggression + noise;
+    return { move, total };
+  });
+
+  scored.sort((a, b) => b.total - a.total);
+  return scored[0]?.move ?? null;
+}
+
 function createShogiBoard(): Array<Array<ShogiPiece | null>> {
   const board = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => null as ShogiPiece | null));
   const back: ShogiPieceType[] = ["L", "N", "S", "G", "K", "G", "S", "N", "L"];
@@ -2527,6 +2916,60 @@ function isLegalShogiMove(
   }
 
   return false;
+}
+
+function collectLegalShogiMoves(board: Array<Array<ShogiPiece | null>>, turn: ShogiColor) {
+  const moves: Array<{ fromRow: number; fromCol: number; toRow: number; toCol: number; capture: ShogiPiece | null }> = [];
+  for (let fromRow = 0; fromRow < 9; fromRow += 1) {
+    for (let fromCol = 0; fromCol < 9; fromCol += 1) {
+      const piece = board[fromRow][fromCol];
+      if (!piece || piece.color !== turn) continue;
+
+      for (let toRow = 0; toRow < 9; toRow += 1) {
+        for (let toCol = 0; toCol < 9; toCol += 1) {
+          if (!isLegalShogiMove(board, fromRow, fromCol, toRow, toCol, turn)) continue;
+          moves.push({
+            fromRow,
+            fromCol,
+            toRow,
+            toCol,
+            capture: board[toRow][toCol],
+          });
+        }
+      }
+    }
+  }
+  return moves;
+}
+
+function pickShogiCpuMove(
+  board: Array<Array<ShogiPiece | null>>,
+  turn: ShogiColor,
+  level: ShogiCpuLevel,
+) {
+  const legal = collectLegalShogiMoves(board, turn);
+  if (legal.length === 0) return null;
+
+  if (level === "easy") {
+    return legal[Math.floor(Math.random() * legal.length)] ?? null;
+  }
+
+  const scored = legal.map((move) => {
+    const mover = board[move.fromRow][move.fromCol];
+    const captureScore = move.capture ? SHOGI_PIECE_VALUE[move.capture.type] * 10 : 0;
+    const centerDistance = Math.abs(4 - move.toRow) + Math.abs(4 - move.toCol);
+    const centerScore = Math.max(0, 8 - centerDistance);
+    const forwardGain = turn === "b" ? move.fromRow - move.toRow : move.toRow - move.fromRow;
+    const forwardScore = Math.max(0, forwardGain) * (mover?.type === "P" ? 2.5 : 1.2);
+    const kingPressure = move.capture?.type === "K" ? 1000 : 0;
+    const aggression = level === "hard" && move.capture ? SHOGI_PIECE_VALUE[move.capture.type] : 0;
+    const noise = Math.random() * (level === "normal" ? 1.8 : 1.0);
+    const total = captureScore + centerScore + forwardScore + kingPressure + aggression + noise;
+    return { move, total };
+  });
+
+  scored.sort((a, b) => b.total - a.total);
+  return scored[0]?.move ?? null;
 }
 
 function createMinesweeperBoard(size = 9, mineCount = 10): MineCell[][] {
@@ -2968,7 +3411,7 @@ function solitaireCardLabel(card: SolitaireCard): string {
 
 export default function Home() {
   const [message, setMessage] = useState("");
-  const [playerName, setPlayerName] = useState("player-1");
+  const [playerName, setPlayerName] = useState("");
   const [game, setGame] = useState("othello");
   const [score, setScore] = useState(100);
   const [scores, setScores] = useState<ScoreEntry[]>([]);
@@ -3016,16 +3459,27 @@ export default function Home() {
   const [othelloMessage, setOthelloMessage] = useState<string>(LOGIN_I18N.ja.othelloTurnBlack);
   const [isGameOver, setIsGameOver] = useState(false);
   const [gomokuBoard, setGomokuBoard] = useState<Cell[][]>(() => createGomokuBoard());
+  const [gomokuMode, setGomokuMode] = useState<GomokuMode>("local");
+  const [gomokuCpuLevel, setGomokuCpuLevel] = useState<GomokuCpuLevel>("normal");
+  const [gomokuTurnOrder, setGomokuTurnOrder] = useState<GomokuTurnOrder>("black");
+  const [gomokuPlayerSide, setGomokuPlayerSide] = useState<1 | 2>(1);
   const [gomokuPlayer, setGomokuPlayer] = useState<1 | 2>(1);
   const [gomokuMessage, setGomokuMessage] = useState<string>(LOGIN_I18N.ja.gomokuTurnBlack);
   const [isGomokuOver, setIsGomokuOver] = useState(false);
   const [chessBoard, setChessBoard] = useState<Array<Array<ChessPiece | null>>>(() => createChessBoard());
+  const [chessMode, setChessMode] = useState<ChessMode>("local");
+  const [chessCpuLevel, setChessCpuLevel] = useState<ChessCpuLevel>("normal");
+  const [chessTurnOrder, setChessTurnOrder] = useState<ChessTurnOrder>("white");
+  const [chessPlayerSide, setChessPlayerSide] = useState<ChessColor>("w");
   const [chessTurn, setChessTurn] = useState<ChessColor>("w");
   const [selectedChess, setSelectedChess] = useState<{ row: number; col: number } | null>(null);
   const [chessMessage, setChessMessage] = useState<string>(LOGIN_I18N.ja.chessTurnWhite);
   const [isChessOver, setIsChessOver] = useState(false);
   const [shogiBoard, setShogiBoard] = useState<Array<Array<ShogiPiece | null>>>(() => createShogiBoard());
   const [shogiMode, setShogiMode] = useState<ShogiMode>("local");
+  const [shogiCpuLevel, setShogiCpuLevel] = useState<ShogiCpuLevel>("normal");
+  const [shogiTurnOrder, setShogiTurnOrder] = useState<ShogiTurnOrder>("black");
+  const [shogiPlayerSide, setShogiPlayerSide] = useState<ShogiColor>("b");
   const [shogiTurn, setShogiTurn] = useState<ShogiColor>("b");
   const [selectedShogi, setSelectedShogi] = useState<{ row: number; col: number } | null>(null);
   const [shogiMessage, setShogiMessage] = useState<string>(LOGIN_I18N.ja.shogiTurnBlack);
@@ -3105,8 +3559,12 @@ export default function Home() {
   const [unoDeck, setUnoDeck] = useState<UnoCard[]>([]);
   const [unoPlayerHand, setUnoPlayerHand] = useState<UnoCard[]>([]);
   const [unoCpuHand, setUnoCpuHand] = useState<UnoCard[]>([]);
+  const [unoLocalHands, setUnoLocalHands] = useState<UnoCard[][]>([[], []]);
+  const [unoCpuCount, setUnoCpuCount] = useState(1);
+  const [unoLocalTurnIndex, setUnoLocalTurnIndex] = useState(0);
   const [unoTopCard, setUnoTopCard] = useState<UnoCard | null>(null);
   const [unoTurn, setUnoTurn] = useState<"player" | "cpu">("player");
+  const [unoActivationFilter, setUnoActivationFilter] = useState<"color" | "number" | null>(null);
   const [unoMessage, setUnoMessage] = useState<string>(LOGIN_I18N.ja.unoYourTurn);
   const [isUnoOver, setIsUnoOver] = useState(false);
   const [activePanel, setActivePanel] = useState<Panel>("menu");
@@ -3115,7 +3573,7 @@ export default function Home() {
   const [gameStarted, setGameStarted] = useState<Record<PlayablePanel, boolean>>(INITIAL_GAME_START_STATE);
   const [roomCode, setRoomCode] = useState("");
   const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
-  const [roomServerUrl, setRoomServerUrl] = useState("ws://127.0.0.1:8788");
+  const [isRoomControlsOpen, setIsRoomControlsOpen] = useState(true);
   const [roomStatus, setRoomStatus] = useState("未接続");
   const [connectedRoomCode, setConnectedRoomCode] = useState("");
   const [roomRole, setRoomRole] = useState("");
@@ -3132,7 +3590,8 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authUserId, setAuthUserId] = useState("");
   const [authPassword, setAuthPassword] = useState("");
-  const [profileNameDraft, setProfileNameDraft] = useState("player-1");
+  const [authSessionId, setAuthSessionId] = useState("");
+  const [profileNameDraft, setProfileNameDraft] = useState("");
   const [profileBioDraft, setProfileBioDraft] = useState("");
   const [entryMessage, setEntryMessage] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -3148,6 +3607,16 @@ export default function Home() {
   const [incomingFriendIds, setIncomingFriendIds] = useState<string[]>([]);
   const [outgoingFriendIds, setOutgoingFriendIds] = useState<string[]>([]);
   const [friendActionUserId, setFriendActionUserId] = useState("");
+  const [activeFriendChatUserId, setActiveFriendChatUserId] = useState("");
+  const [friendChatMessages, setFriendChatMessages] = useState<FriendChatMessage[]>([]);
+  const [friendChatPeerReadState, setFriendChatPeerReadState] = useState<FriendChatPeerReadState>({
+    lastReadMessageId: 0,
+    lastReadAt: 0,
+  });
+  const [friendChatDraft, setFriendChatDraft] = useState("");
+  const [isFriendChatLoading, setIsFriendChatLoading] = useState(false);
+  const [isFriendChatSending, setIsFriendChatSending] = useState(false);
+  const [friendUnreadCounts, setFriendUnreadCounts] = useState<Record<string, number>>({});
   const [roomMemberActionId, setRoomMemberActionId] = useState("");
   const [friendsMessage, setFriendsMessage] = useState("");
   const [isFriendsLoading, setIsFriendsLoading] = useState(false);
@@ -3171,6 +3640,9 @@ export default function Home() {
   const inviteCopyFeedbackTimerRef = useRef<number | null>(null);
   const pendingRoomChatIdsRef = useRef<string[]>([]);
   const peerIdRef = useRef(`next-${Math.random().toString(36).slice(2, 10)}`);
+  const autoLoginTriedRef = useRef(false);
+  const prevUnreadTotalRef = useRef(0);
+  const friendChatListRef = useRef<HTMLUListElement | null>(null);
   const snapshotRef = useRef<Record<string, unknown>>({});
   const minesweeperLegacyControllerRef = useRef<{ stop: () => void } | null>(null);
   const fourPanelCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -3185,11 +3657,13 @@ export default function Home() {
   useEffect(() => {
     const savedUserId = localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "";
     const savedPassword = localStorage.getItem(STORAGE_CLOUD_PASSWORD_KEY) || "";
+    const savedSessionId = localStorage.getItem(STORAGE_CLOUD_SESSION_ID_KEY) || "";
     const savedLanguage = localStorage.getItem(STORAGE_LANGUAGE_KEY);
     const savedMenuTabOpenState = localStorage.getItem(STORAGE_MENU_TAB_OPEN_STATE_KEY);
     const savedMenuCardOpenState = localStorage.getItem(STORAGE_MENU_CARD_OPEN_STATE_KEY);
     setAuthUserId(savedUserId);
     setAuthPassword(savedPassword);
+    setAuthSessionId(savedSessionId);
     if (savedLanguage === "ja" || savedLanguage === "ko" || savedLanguage === "en" || savedLanguage === "zh") {
       setLanguage(savedLanguage);
     }
@@ -3221,13 +3695,9 @@ export default function Home() {
     try {
       const url = new URL(window.location.href);
       const roomCodeParam = String(url.searchParams.get(ROOM_CODE_QUERY_PARAM_KEY) || "").replace(/\D/g, "").slice(0, 6);
-      const roomServerParam = String(url.searchParams.get(ROOM_SERVER_QUERY_PARAM_KEY) || "").trim();
       const inviteTokenParam = String(url.searchParams.get(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY) || "").trim();
       if (roomCodeParam) {
         setRoomCode(roomCodeParam);
-      }
-      if (roomServerParam) {
-        setRoomServerUrl(roomServerParam);
       }
       if (inviteTokenParam) {
         setPendingInviteToken(inviteTokenParam);
@@ -3306,6 +3776,26 @@ export default function Home() {
     [t],
   );
 
+  const isLoopbackRuntime = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    return isLoopbackHost(window.location.hostname);
+  }, []);
+
+  const confirmLocalReset = useCallback(() => {
+    if (!isLoopbackRuntime()) return true;
+    return window.confirm(t("localResetConfirm"));
+  }, [isLoopbackRuntime, t]);
+
+  const runWithLocalResetConfirm = useCallback((action: () => void) => {
+    if (!confirmLocalReset()) return;
+    action();
+  }, [confirmLocalReset]);
+
+  const handleBackToMenuClick = useCallback(() => {
+    if (!window.confirm(t("backToMenuConfirm"))) return;
+    setActivePanel("menu");
+  }, [t]);
+
   const stripInviteTokenFromAddressBar = useCallback(() => {
     try {
       const url = new URL(window.location.href);
@@ -3330,22 +3820,40 @@ export default function Home() {
   }, [t]);
 
   const chessPieceLabel = useCallback((piece: ChessPiece) => {
-    const color = piece.color === "w" ? t("whiteStone") : t("blackStone");
-    const map: Record<ChessPieceType, string> = {
-      K: "K",
-      Q: "Q",
-      R: "R",
-      B: "B",
-      N: "N",
-      P: "P",
+    const map: Record<ChessColor, Record<ChessPieceType, string>> = {
+      w: {
+        K: "♔",
+        Q: "♕",
+        R: "♖",
+        B: "♗",
+        N: "♘",
+        P: "♙",
+      },
+      b: {
+        K: "♚",
+        Q: "♛",
+        R: "♜",
+        B: "♝",
+        N: "♞",
+        P: "♟",
+      },
     };
-    return `${color}${map[piece.type]}`;
-  }, [t]);
+    return map[piece.color][piece.type];
+  }, []);
 
   const shogiPieceLabel = useCallback((piece: ShogiPiece) => {
-    const color = piece.color === "b" ? t("blackStone") : t("whiteStone");
-    return `${color}${piece.type}`;
-  }, [t]);
+    const map: Record<ShogiPieceType, string> = {
+      K: "王",
+      R: "飛",
+      B: "角",
+      G: "金",
+      S: "銀",
+      N: "桂",
+      L: "香",
+      P: "歩",
+    };
+    return map[piece.type];
+  }, []);
 
   const roomRoleLabel = useCallback(
     (role: string) => {
@@ -3441,6 +3949,131 @@ export default function Home() {
     [unoColorLabel],
   );
 
+  const renderPlayingCardFace = useCallback(
+    (label: string, options?: { compact?: boolean; muted?: boolean }) => {
+      const text = String(label || "").trim();
+      const suit = text.slice(-1);
+      const rank = text.slice(0, -1);
+      const isSuitCard = suit === "♠" || suit === "♥" || suit === "♦" || suit === "♣";
+
+      if (!isSuitCard || !rank) {
+        return (
+          <span className="inline-flex min-h-9 min-w-16 items-center justify-center rounded-md border border-slate-300/35 bg-white/95 px-2.5 py-1.5 text-xs font-bold text-slate-900 shadow-sm">
+            {text || "-"}
+          </span>
+        );
+      }
+
+      const compact = Boolean(options?.compact);
+      const muted = Boolean(options?.muted);
+      const redSuit = suit === "♥" || suit === "♦";
+      const suitTone = redSuit ? "text-rose-600" : "text-slate-900";
+      const rankTone = muted ? "text-slate-700" : suitTone;
+      const shellTone = muted
+        ? "border-slate-400/50 bg-slate-200/90 text-slate-600"
+        : "border-slate-300/45 bg-white/95";
+
+      return (
+        <span
+          aria-label={text}
+          className={`relative inline-flex shrink-0 items-center justify-center rounded-md shadow-[0_1px_2px_rgba(0,0,0,0.25)] ${compact ? "h-10 w-8 sm:h-11 sm:w-9" : "h-12 w-9 sm:h-14 sm:w-10 lg:h-16 lg:w-12"} ${shellTone}`}
+        >
+          <span className={`absolute left-0.5 top-0.5 rounded-sm bg-white/90 px-[1px] text-[12px] font-black leading-none tracking-tight [font-variant-numeric:tabular-nums] shadow-[0_0_1px_rgba(255,255,255,0.98)] ${rankTone}`}>{rank}</span>
+          <span className={`absolute left-1 top-[11px] text-[8px] leading-none opacity-70 ${suitTone}`}>{suit}</span>
+          <span className={`text-base leading-none opacity-85 ${suitTone}`}>{suit}</span>
+          <span className={`absolute bottom-0 right-0.5 rotate-180 rounded-sm bg-white/90 px-[1px] text-[12px] font-black leading-none tracking-tight [font-variant-numeric:tabular-nums] shadow-[0_0_1px_rgba(255,255,255,0.98)] ${rankTone}`}>{rank}</span>
+          <span className={`absolute bottom-[11px] right-1 rotate-180 text-[8px] leading-none opacity-70 ${suitTone}`}>{suit}</span>
+        </span>
+      );
+    },
+    [],
+  );
+
+  const renderUnoCardFace = useCallback((card: UnoCard) => {
+    const colorClass =
+      card.color === "R"
+        ? "border-rose-300/60 bg-rose-500/85"
+        : card.color === "G"
+          ? "border-emerald-300/60 bg-emerald-500/85"
+          : card.color === "B"
+            ? "border-sky-300/60 bg-sky-500/85"
+            : "border-amber-300/60 bg-amber-400/90";
+    const value = String(card.value || "");
+    return (
+      <span className={`inline-flex h-12 w-9 items-center justify-center rounded-md border text-sm font-black text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] sm:h-14 sm:w-10 sm:text-base lg:h-16 lg:w-12 lg:text-lg ${colorClass}`}>
+        {value}
+      </span>
+    );
+  }, []);
+
+  const renderUnoCardBack = useCallback(() => {
+    return (
+      <span
+        aria-label="UNO card back"
+        className="relative inline-flex h-12 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-indigo-200/55 bg-indigo-900/90 text-[10px] font-black tracking-wider text-indigo-100 shadow-[0_1px_2px_rgba(0,0,0,0.25)] sm:h-14 sm:w-10 lg:h-16 lg:w-12"
+      >
+        <span className="absolute inset-[3px] rounded-[4px] border border-cyan-200/45" />
+        <span className="absolute inset-0 bg-[repeating-linear-gradient(135deg,rgba(125,211,252,0.16)_0px,rgba(125,211,252,0.16)_4px,rgba(15,23,42,0)_4px,rgba(15,23,42,0)_8px)]" />
+        <span className="relative z-[1]">UNO</span>
+      </span>
+    );
+  }, []);
+
+  const playerHandFanStyle = useCallback((
+    index: number,
+    total: number,
+    options?: {
+      overlap?: number;
+      spread?: number;
+      maxRotate?: number;
+      centerLift?: number;
+      centerOffset?: number;
+    },
+  ) => {
+    const baseOverlap = options?.overlap ?? 12;
+    const baseSpread = options?.spread ?? 2.2;
+    const maxRotate = options?.maxRotate ?? 11;
+    const centerLift = options?.centerLift ?? 0.75;
+    const baseCenterOffset = options?.centerOffset ?? 0.8;
+    const squeeze = Math.max(0, total - 8);
+    const overlap = Math.min(26, baseOverlap + squeeze * 1.35);
+    const spread = Math.max(0.85, baseSpread - squeeze * 0.08);
+    const centerOffset = Math.max(0.2, baseCenterOffset - squeeze * 0.045);
+    const center = (total - 1) / 2;
+    const offset = index - center;
+    const maxAbs = Math.max(1, center);
+    const centerBias = Math.max(0, 1 - Math.abs(offset) / maxAbs);
+    const rotate = Math.max(-maxRotate, Math.min(maxRotate, offset * spread));
+    const lift = centerBias * centerLift;
+    const xShift = offset * centerOffset;
+    const stackTop = total - Math.round(Math.abs(offset) * 2);
+    return {
+      marginLeft: index === 0 ? 0 : -overlap,
+      transform: `translateX(${xShift.toFixed(2)}px) translateY(-${lift.toFixed(2)}px) rotate(${rotate.toFixed(2)}deg)`,
+      transformOrigin: "bottom center" as const,
+      zIndex: Math.max(1, stackTop),
+    };
+  }, []);
+
+  const opponentHandStackStyle = useCallback((index: number, total: number) => {
+    const squeeze = Math.max(0, total - 7);
+    const overlap = Math.min(24, 9 + squeeze * 1.6);
+    const center = (total - 1) / 2;
+    const offset = index - center;
+    const distance = Math.abs(index - center);
+    const edgeDrop = center > 0 ? (distance / center) * 5 : 0;
+    const rotate = Math.max(-8, Math.min(8, offset * 1.05));
+    const spread = Math.max(0.45, 0.9 - squeeze * 0.04);
+    const xShift = offset * spread;
+    const stackTop = total - Math.round(distance * 2);
+    return {
+      marginLeft: index === 0 ? 0 : -overlap,
+      transform: `translateX(${xShift.toFixed(2)}px) translateY(${edgeDrop.toFixed(2)}px) rotate(${rotate.toFixed(2)}deg)`,
+      transformOrigin: "bottom center" as const,
+      zIndex: Math.max(1, stackTop),
+    };
+  }, []);
+
   const legalMoveSet = useMemo(() => {
     const set = new Set<string>();
     const enemy: 1 | 2 = currentPlayer === 1 ? 2 : 1;
@@ -3500,10 +4133,13 @@ export default function Home() {
   }, [connectedRoomCode, roomRole]);
 
   const canOperateGomokuNow = useMemo(() => {
-    if (!connectedRoomCode) return true;
+    if (!connectedRoomCode) {
+      if (gomokuMode === "cpu") return gomokuPlayer === gomokuPlayerSide;
+      return true;
+    }
     if (!gomokuRoomPlayer) return false;
     return gomokuPlayer === gomokuRoomPlayer;
-  }, [connectedRoomCode, gomokuPlayer, gomokuRoomPlayer]);
+  }, [connectedRoomCode, gomokuMode, gomokuPlayer, gomokuPlayerSide, gomokuRoomPlayer]);
 
   const chessRoomPlayer = useMemo<ChessColor | null>(() => {
     if (!connectedRoomCode) return null;
@@ -3513,10 +4149,13 @@ export default function Home() {
   }, [connectedRoomCode, roomRole]);
 
   const canOperateChessNow = useMemo(() => {
-    if (!connectedRoomCode) return true;
+    if (!connectedRoomCode) {
+      if (chessMode === "local") return true;
+      return chessTurn === chessPlayerSide;
+    }
     if (!chessRoomPlayer) return false;
     return chessTurn === chessRoomPlayer;
-  }, [chessRoomPlayer, chessTurn, connectedRoomCode]);
+  }, [chessMode, chessPlayerSide, chessRoomPlayer, chessTurn, connectedRoomCode]);
 
   const shogiRoomPlayer = useMemo<ShogiColor | null>(() => {
     if (!connectedRoomCode) return null;
@@ -3526,10 +4165,13 @@ export default function Home() {
   }, [connectedRoomCode, roomRole]);
 
   const canOperateShogiNow = useMemo(() => {
-    if (!connectedRoomCode) return true;
+    if (!connectedRoomCode) {
+      if (shogiMode === "cpu") return shogiTurn === shogiPlayerSide;
+      return true;
+    }
     if (!shogiRoomPlayer) return false;
     return shogiTurn === shogiRoomPlayer;
-  }, [connectedRoomCode, shogiRoomPlayer, shogiTurn]);
+  }, [connectedRoomCode, shogiMode, shogiPlayerSide, shogiRoomPlayer, shogiTurn]);
 
   const unoRoomPlayer = useMemo<"player" | "cpu" | null>(() => {
     if (!connectedRoomCode) return null;
@@ -3539,10 +4181,10 @@ export default function Home() {
   }, [connectedRoomCode, roomRole]);
 
   const canOperateUnoNow = useMemo(() => {
-    if (!connectedRoomCode) return true;
+    if (!connectedRoomCode) return unoLocalTurnIndex === 0;
     if (!unoRoomPlayer) return false;
     return unoTurn === unoRoomPlayer;
-  }, [connectedRoomCode, unoRoomPlayer, unoTurn]);
+  }, [connectedRoomCode, unoLocalTurnIndex, unoRoomPlayer, unoTurn]);
 
   const daifugoRoomPlayer = useMemo<"player" | "cpu" | null>(() => {
     if (!connectedRoomCode) return null;
@@ -3561,6 +4203,92 @@ export default function Home() {
     if (connectedRoomCode && roomRole === "guest") return "cpu";
     return "player";
   }, [connectedRoomCode, roomRole]);
+
+  const unoLocalTotalPlayers = useMemo(() => {
+    return 1 + unoCpuCount;
+  }, [unoCpuCount]);
+
+  const unoLocalPlayerHand = useMemo(() => {
+    return unoLocalHands[0] || [];
+  }, [unoLocalHands]);
+
+  const unoLocalCpuHands = useMemo(() => {
+    return Array.from({ length: unoCpuCount }, (_, i) => unoLocalHands[i + 1] || []);
+  }, [unoCpuCount, unoLocalHands]);
+
+  const isUnoLocalTableMode = useMemo(() => {
+    return !connectedRoomCode && unoLocalTotalPlayers >= 3;
+  }, [connectedRoomCode, unoLocalTotalPlayers]);
+
+  const unoVisibleHand = useMemo(() => {
+    if (connectedRoomCode) {
+      return unoLocalSide === "player" ? unoPlayerHand : unoCpuHand;
+    }
+    return unoLocalPlayerHand;
+  }, [connectedRoomCode, unoCpuHand, unoLocalPlayerHand, unoLocalSide, unoPlayerHand]);
+
+  const unoActivationState = useMemo(() => {
+    const playableByColor = new Set<number>();
+    const playableByNumber = new Set<number>();
+    const playableAny = new Set<number>();
+
+    if (!unoTopCard) {
+      return {
+        playableAny,
+        activeIndices: new Set<number>(),
+        canChooseColor: false,
+        canChooseNumber: false,
+        requiresRuleChoice: false,
+      };
+    }
+
+    unoVisibleHand.forEach((card, index) => {
+      if (!canPlayCard(card, unoTopCard)) return;
+      playableAny.add(index);
+      if (card.color === unoTopCard.color) playableByColor.add(index);
+      if (card.value === unoTopCard.value) playableByNumber.add(index);
+    });
+
+    const canChooseColor = playableByColor.size > 0;
+    const canChooseNumber = playableByNumber.size > 0;
+    const requiresRuleChoice = playableAny.size > 1 && canChooseColor && canChooseNumber;
+
+    const activeIndices = new Set<number>();
+    if (!requiresRuleChoice || !unoActivationFilter) {
+      playableAny.forEach((idx) => activeIndices.add(idx));
+    } else if (unoActivationFilter === "color") {
+      playableByColor.forEach((idx) => activeIndices.add(idx));
+    } else {
+      playableByNumber.forEach((idx) => activeIndices.add(idx));
+    }
+
+    return {
+      playableAny,
+      activeIndices,
+      canChooseColor,
+      canChooseNumber,
+      requiresRuleChoice,
+    };
+  }, [unoActivationFilter, unoTopCard, unoVisibleHand]);
+
+  useEffect(() => {
+    setUnoActivationFilter(null);
+  }, [connectedRoomCode, unoLocalTurnIndex, unoTopCard, unoTurn]);
+
+  const unoCpuSeatLayout = useMemo(() => {
+    const totalCpu = unoLocalCpuHands.length;
+    if (totalCpu <= 0) return [] as Array<{ hand: UnoCard[]; cpuIdx: number; x: number; y: number; orientation: "top" | "left" | "right" }>;
+    return unoLocalCpuHands.map((hand, cpuIdx) => {
+      const ratio = totalCpu === 1 ? 0.5 : cpuIdx / (totalCpu - 1);
+      const angleDeg = -165 + ratio * 150;
+      const rad = (angleDeg * Math.PI) / 180;
+      const x = 50 + 41 * Math.cos(rad);
+      const y = 54 + 31 * Math.sin(rad);
+      const side = Math.cos(rad);
+      const orientation: "top" | "left" | "right" = side < -0.45 ? "left" : side > 0.45 ? "right" : "top";
+      return { hand, cpuIdx, x, y, orientation };
+    });
+  }, [unoLocalCpuHands]);
 
   const daifugoLocalSide = useMemo<"player" | "cpu">(() => {
     if (connectedRoomCode && roomRole === "guest") return "cpu";
@@ -3948,6 +4676,118 @@ export default function Home() {
     }
   }, [connectedRoomCode, playerName]);
 
+  const applySurrenderToPanel = useCallback((panel: PlayablePanel, loserName: string) => {
+    setGameStarted((prev) => ({ ...prev, [panel]: false }));
+    const message = tf("roomSurrendered", { name: loserName || "Player" });
+    if (panel === "othello") {
+      setIsGameOver(true);
+      setOthelloMessage(message);
+      return;
+    }
+    if (panel === "gomoku") {
+      setIsGomokuOver(true);
+      setGomokuMessage(message);
+      return;
+    }
+    if (panel === "chess") {
+      setIsChessOver(true);
+      setChessMessage(message);
+      return;
+    }
+    if (panel === "shogi") {
+      setIsShogiOver(true);
+      setShogiMessage(message);
+      return;
+    }
+    if (panel === "minesweeper") {
+      setIsMineOver(true);
+      setMineMessage(message);
+      return;
+    }
+    if (panel === "numeron") {
+      setIsNumeronOver(true);
+      setNumeronMessage(message);
+      return;
+    }
+    if (panel === "blackjack") {
+      setIsBlackjackOver(true);
+      setBlackjackMessage(message);
+      return;
+    }
+    if (panel === "chinchiro") {
+      setIsChinchiroOver(true);
+      setChinchiroMessage(message);
+      return;
+    }
+    if (panel === "sevens") {
+      setIsSevensOver(true);
+      setSevensMessage(message);
+      return;
+    }
+    if (panel === "daifugo") {
+      setIsDaifugoOver(true);
+      setDaifugoMessage(message);
+      return;
+    }
+    if (panel === "fourPanel") {
+      setFourPanelMessage(message);
+      return;
+    }
+    if (panel === "drawingRelay") {
+      setDrawingRelayMessage(message);
+      return;
+    }
+    if (panel === "fitPuzzle") {
+      setIsFitPuzzleOver(true);
+      setFitPuzzleMessage(message);
+      return;
+    }
+    if (panel === "mahjong") {
+      setIsMahjongOver(true);
+      setMahjongMessage(message);
+      return;
+    }
+    if (panel === "poker") {
+      setPokerPhase("result");
+      setPokerMessage(message);
+      return;
+    }
+    if (panel === "solitaire") {
+      setIsSolitaireOver(true);
+      setSolitaireMessage(message);
+      return;
+    }
+    if (panel === "survivors") {
+      setIsSurvivorsOver(true);
+      setSurvivorsMessage(message);
+      return;
+    }
+    if (panel === "uno") {
+      setIsUnoOver(true);
+      setUnoMessage(message);
+    }
+  }, [tf]);
+
+  const runWithResetGuard = useCallback((panel: PlayablePanel, action: () => void) => {
+    const isRoomPvp = Boolean(connectedRoomCode) && roomRole !== "spectator";
+    if (isRoomPvp) {
+      if (!window.confirm(t("roomSurrenderConfirm"))) return;
+      applySurrenderToPanel(panel, playerName);
+      setMenuMessage(tf("roomSurrendered", { name: playerName }));
+      sendRoomEvent({
+        type: "match-surrender",
+        panel,
+        loserId: peerIdRef.current,
+        loserName: playerName,
+      });
+      return;
+    }
+    runWithLocalResetConfirm(() => {
+      setGameStarted((prev) => ({ ...prev, [panel]: false }));
+      action();
+    });
+  }, [applySurrenderToPanel, connectedRoomCode, playerName, roomRole, runWithLocalResetConfirm, sendRoomEvent, t, tf]);
+
   const applyArcadeSnapshot = useCallback((snapshot: Record<string, unknown>) => {
     const state = snapshot?.state as Record<string, unknown> | undefined;
     if (!state) return;
@@ -4045,6 +4885,16 @@ export default function Home() {
     if (typeof state.isGameOver === "boolean") setIsGameOver(state.isGameOver);
 
     if (Array.isArray(state.gomokuBoard)) setGomokuBoard(state.gomokuBoard as Cell[][]);
+    if (state.gomokuMode === "local" || state.gomokuMode === "cpu") setGomokuMode(state.gomokuMode as GomokuMode);
+    if (state.gomokuCpuLevel === "easy" || state.gomokuCpuLevel === "normal" || state.gomokuCpuLevel === "hard") {
+      setGomokuCpuLevel(state.gomokuCpuLevel as GomokuCpuLevel);
+    }
+    if (state.gomokuTurnOrder === "black" || state.gomokuTurnOrder === "white" || state.gomokuTurnOrder === "random") {
+      setGomokuTurnOrder(state.gomokuTurnOrder as GomokuTurnOrder);
+    }
+    if (state.gomokuPlayerSide === 1 || state.gomokuPlayerSide === 2) {
+      setGomokuPlayerSide(state.gomokuPlayerSide as 1 | 2);
+    }
     if (state.gomokuPlayer === 1 || state.gomokuPlayer === 2) setGomokuPlayer(state.gomokuPlayer as 1 | 2);
     if (typeof state.gomokuMessage === "string") setGomokuMessage(state.gomokuMessage);
     if (typeof state.isGomokuOver === "boolean") setIsGomokuOver(state.isGomokuOver);
@@ -4058,7 +4908,18 @@ export default function Home() {
     if (typeof state.isChessOver === "boolean") setIsChessOver(state.isChessOver);
 
     if (Array.isArray(state.shogiBoard)) setShogiBoard(state.shogiBoard as Array<Array<ShogiPiece | null>>);
-    if (state.shogiMode === "local" || state.shogiMode === "chaos") setShogiMode(state.shogiMode as ShogiMode);
+    if (state.shogiMode === "local" || state.shogiMode === "cpu" || state.shogiMode === "chaos") {
+      setShogiMode(state.shogiMode as ShogiMode);
+    }
+    if (state.shogiCpuLevel === "easy" || state.shogiCpuLevel === "normal" || state.shogiCpuLevel === "hard") {
+      setShogiCpuLevel(state.shogiCpuLevel as ShogiCpuLevel);
+    }
+    if (state.shogiTurnOrder === "black" || state.shogiTurnOrder === "white" || state.shogiTurnOrder === "random") {
+      setShogiTurnOrder(state.shogiTurnOrder as ShogiTurnOrder);
+    }
+    if (state.shogiPlayerSide === "b" || state.shogiPlayerSide === "w") {
+      setShogiPlayerSide(state.shogiPlayerSide as ShogiColor);
+    }
     if (state.shogiTurn === "b" || state.shogiTurn === "w") setShogiTurn(state.shogiTurn as ShogiColor);
     if (state.selectedShogi === null || typeof state.selectedShogi === "object") {
       setSelectedShogi(state.selectedShogi as { row: number; col: number } | null);
@@ -4216,19 +5077,35 @@ export default function Home() {
       setRoomStatus(t("roomStateConnecting"));
       setMenuMessage("");
 
-      const wsUrl = roomServerUrl.trim();
+      const wsUrl = getAutoRoomServerUrl();
+      const connectFailedMessage = `${t("roomConnectFailed")} (${wsUrl})`;
       let ws: WebSocket;
       try {
         ws = new WebSocket(wsUrl);
       } catch {
+        setQuickMatchMode(false);
         setRoomStatus(t("roomStateConnectFailed"));
-        setMenuMessage(t("roomUrlInvalid"));
+        setMenuMessage(connectFailedMessage);
         return;
       }
 
       roomSocketRef.current = ws;
+      let hasOpened = false;
+      const connectTimeout = window.setTimeout(() => {
+        if (hasOpened) return;
+        try {
+          ws.close();
+        } catch {
+          // ignore close error
+        }
+        setQuickMatchMode(false);
+        setRoomStatus(t("roomStateConnectFailed"));
+        setMenuMessage(connectFailedMessage);
+      }, 6000);
 
       ws.onopen = () => {
+        hasOpened = true;
+        window.clearTimeout(connectTimeout);
         setRoomStatus(t("roomStateConnected"));
         if (code) {
           setRoomCode(code);
@@ -4315,6 +5192,41 @@ export default function Home() {
             const col = Number(payload?.col);
             if (!Number.isInteger(row) || !Number.isInteger(col)) return;
             setPendingRemoteShogiClick({ row, col });
+            return;
+          }
+
+          if (type === "match-surrender") {
+            if (String(payload?.from || "") === peerIdRef.current) {
+              return;
+            }
+            const panelText = String(payload?.panel || "");
+            const panel = (
+              panelText === "othello"
+              || panelText === "gomoku"
+              || panelText === "chess"
+              || panelText === "shogi"
+              || panelText === "uno"
+              || panelText === "minesweeper"
+              || panelText === "numeron"
+              || panelText === "blackjack"
+              || panelText === "chinchiro"
+              || panelText === "sevens"
+              || panelText === "daifugo"
+              || panelText === "fourPanel"
+              || panelText === "drawingRelay"
+              || panelText === "fitPuzzle"
+              || panelText === "mahjong"
+              || panelText === "poker"
+              || panelText === "solitaire"
+              || panelText === "survivors"
+            )
+              ? panelText as PlayablePanel
+              : activePanel === "menu" || activePanel === "scores"
+                ? "othello"
+                : activePanel;
+            const loserName = String(payload?.loserName || "Opponent").trim() || "Opponent";
+            applySurrenderToPanel(panel, loserName);
+            setMenuMessage(tf("roomSurrendered", { name: loserName }));
             return;
           }
 
@@ -4552,11 +5464,21 @@ export default function Home() {
       };
 
       ws.onerror = () => {
+        window.clearTimeout(connectTimeout);
+        setQuickMatchMode(false);
         setRoomStatus(t("roomStateError"));
-        setMenuMessage(t("roomConnectFailed"));
+        setMenuMessage(connectFailedMessage);
       };
 
       ws.onclose = () => {
+        window.clearTimeout(connectTimeout);
+        setQuickMatchMode(false);
+        if (!hasOpened) {
+          setOthelloDrawVotes([]);
+          setRoomStatus(t("roomStateConnectFailed"));
+          setMenuMessage(connectFailedMessage);
+          return;
+        }
         setOthelloDrawVotes([]);
         setRoomStatus(t("roomStateClosed"));
       };
@@ -4570,10 +5492,11 @@ export default function Home() {
       pushSpectatorChatMessage,
       roomCode,
       roomErrorLabel,
-      roomServerUrl,
       roomVisibility,
       stripInviteTokenFromAddressBar,
       finalizeOthelloDrawAgreement,
+      applySurrenderToPanel,
+      activePanel,
       t,
       tf,
     ],
@@ -4595,17 +5518,14 @@ export default function Home() {
     const url = new URL(window.location.href);
     url.hash = `#${APP_URL_TAG}`;
     url.searchParams.set(ROOM_CODE_QUERY_PARAM_KEY, room);
-    const endpoint = roomServerUrl.trim();
-    if (endpoint) {
-      url.searchParams.set(ROOM_SERVER_QUERY_PARAM_KEY, endpoint);
-    }
+    url.searchParams.delete(ROOM_SERVER_QUERY_PARAM_KEY);
     if (inviteToken) {
       url.searchParams.set(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY, inviteToken);
     } else {
       url.searchParams.delete(ROOM_INVITE_TOKEN_QUERY_PARAM_KEY);
     }
     return url.toString();
-  }, [roomServerUrl]);
+  }, []);
 
   const showInviteCopyFeedback = useCallback((status: "copied" | "failed") => {
     setInviteCopyFeedback(status);
@@ -4744,6 +5664,10 @@ export default function Home() {
         othelloMessage,
         isGameOver,
         gomokuBoard,
+        gomokuMode,
+        gomokuCpuLevel,
+        gomokuTurnOrder,
+        gomokuPlayerSide,
         gomokuPlayer,
         gomokuMessage,
         isGomokuOver,
@@ -4754,6 +5678,9 @@ export default function Home() {
         isChessOver,
         shogiBoard,
         shogiMode,
+        shogiCpuLevel,
+        shogiTurnOrder,
+        shogiPlayerSide,
         shogiTurn,
         selectedShogi,
         shogiMessage,
@@ -5258,16 +6185,33 @@ export default function Home() {
     setPendingRemoteDaifugoAction(null);
   }, [pendingRemoteDaifugoAction, roomRole]);
 
-  const resetGomoku = () => {
+  const resolveGomokuPlayerSide = (order: GomokuTurnOrder): 1 | 2 => {
+    if (order === "random") return Math.random() < 0.5 ? 1 : 2;
+    return order === "white" ? 2 : 1;
+  };
+
+  const resetGomokuWith = (nextMode: GomokuMode, nextOrder: GomokuTurnOrder) => {
+    const nextPlayerSide = resolveGomokuPlayerSide(nextOrder);
+    const nextFirstPlayer: 1 | 2 = nextOrder === "random" ? (Math.random() < 0.5 ? 1 : 2) : (nextOrder === "white" ? 2 : 1);
     setGomokuBoard(createGomokuBoard());
-    setGomokuPlayer(1);
+    setGomokuPlayer(nextFirstPlayer);
+    setGomokuPlayerSide(nextMode === "cpu" ? nextPlayerSide : 1);
     setIsGomokuOver(false);
-    setGomokuMessage(t("gomokuTurnBlack"));
+    setGomokuMessage(nextFirstPlayer === 1 ? t("gomokuTurnBlack") : t("gomokuTurnWhite"));
+  };
+
+  const resetGomoku = () => {
+    resetGomokuWith(gomokuMode, gomokuTurnOrder);
   };
 
   const onGomokuClick = (row: number, col: number, options?: { isRemote?: boolean }) => {
     if (isGomokuOver) return;
     const isRemote = Boolean(options?.isRemote);
+
+    if (!connectedRoomCode && !isRemote && gomokuMode === "cpu" && gomokuPlayer !== gomokuPlayerSide) {
+      setGomokuMessage(t("gomokuCpuThinking"));
+      return;
+    }
 
     if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
@@ -5317,7 +6261,72 @@ export default function Home() {
     setMenuMessage(`${currentName} → ${nextName}`);
   };
 
-  const resetChess = () => {
+  useEffect(() => {
+    if (activePanel !== "gomoku") return;
+    if (!gameStarted.gomoku) return;
+    if (connectedRoomCode) return;
+    if (gomokuMode !== "cpu") return;
+    if (isGomokuOver) return;
+
+    const cpuPlayer: 1 | 2 = gomokuPlayerSide === 1 ? 2 : 1;
+    if (gomokuPlayer !== cpuPlayer) return;
+
+    setGomokuMessage(t("gomokuCpuThinking"));
+
+    const timer = setTimeout(() => {
+      const move = pickGomokuCpuMove(gomokuBoard, cpuPlayer, gomokuCpuLevel);
+      if (!move) return;
+
+      const next = gomokuBoard.map((line) => [...line]);
+      next[move.row][move.col] = cpuPlayer;
+      setGomokuBoard(next);
+
+      const currentName = cpuPlayer === 1 ? t("blackStone") : t("whiteStone");
+      const nextPlayer: 1 | 2 = cpuPlayer === 1 ? 2 : 1;
+
+      if (hasFiveInRow(next, move.row, move.col, cpuPlayer)) {
+        setIsGomokuOver(true);
+        setGomokuMessage(tf("gomokuWin", { winner: currentName }));
+        return;
+      }
+
+      const isDraw = next.every((line) => line.every((cell) => cell !== 0));
+      if (isDraw) {
+        setIsGomokuOver(true);
+        setGomokuMessage(t("gomokuDraw"));
+        return;
+      }
+
+      setGomokuPlayer(nextPlayer);
+      setGomokuMessage(nextPlayer === 1 ? t("gomokuTurnBlack") : t("gomokuTurnWhite"));
+    }, GOMOKU_CPU_THINK_MS[gomokuCpuLevel]);
+
+    return () => clearTimeout(timer);
+  }, [
+    activePanel,
+    connectedRoomCode,
+    gameStarted.gomoku,
+    gomokuBoard,
+    gomokuCpuLevel,
+    gomokuMode,
+    gomokuPlayer,
+    gomokuPlayerSide,
+    isGomokuOver,
+    t,
+    tf,
+  ]);
+
+  const resolveChessPlayerSide = (order: ChessTurnOrder): ChessColor => {
+    if (order === "random") {
+      return Math.random() < 0.5 ? "w" : "b";
+    }
+    return order === "white" ? "w" : "b";
+  };
+
+  const resetChess = (overrideTurnOrder?: ChessTurnOrder) => {
+    const nextOrder = overrideTurnOrder ?? chessTurnOrder;
+    const nextPlayerSide = resolveChessPlayerSide(nextOrder);
+    setChessPlayerSide(nextPlayerSide);
     setChessBoard(createChessBoard());
     setChessTurn("w");
     setSelectedChess(null);
@@ -5328,6 +6337,11 @@ export default function Home() {
   const onChessClick = (row: number, col: number, options?: { isRemote?: boolean }) => {
     if (isChessOver) return;
     const isRemote = Boolean(options?.isRemote);
+
+    if (!connectedRoomCode && !isRemote && chessMode === "cpu" && chessTurn !== chessPlayerSide) {
+      setChessMessage(t("chessCpuThinking"));
+      return;
+    }
 
     if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
@@ -5406,17 +6420,96 @@ export default function Home() {
     setChessMessage(nextTurn === "w" ? t("chessTurnWhite") : t("chessTurnBlack"));
   };
 
-  const resetShogi = () => {
+  useEffect(() => {
+    if (activePanel !== "chess") return;
+    if (!gameStarted.chess) return;
+    if (connectedRoomCode) return;
+    if (chessMode !== "cpu") return;
+    if (isChessOver) return;
+
+    const cpuColor: ChessColor = chessPlayerSide === "w" ? "b" : "w";
+    if (chessTurn !== cpuColor) return;
+
+    setChessMessage(t("chessCpuThinking"));
+
+    const timer = setTimeout(() => {
+      const move = pickChessCpuMove(chessBoard, cpuColor, chessCpuLevel);
+      if (!move) {
+        setIsChessOver(true);
+        setChessMessage(t("chessDraw"));
+        return;
+      }
+
+      const next = chessBoard.map((line) => [...line]);
+      const moving = next[move.fromRow][move.fromCol];
+      const captured = next[move.toRow][move.toCol];
+      next[move.toRow][move.toCol] = moving;
+      next[move.fromRow][move.fromCol] = null;
+
+      if (moving?.type === "P" && (move.toRow === 0 || move.toRow === 7)) {
+        next[move.toRow][move.toCol] = { color: moving.color, type: "Q" };
+      }
+
+      setChessBoard(next);
+      setSelectedChess(null);
+
+      if (captured?.type === "K") {
+        const winner = cpuColor === "w" ? t("whiteStone") : t("blackStone");
+        setChessMessage(tf("chessWin", { winner }));
+        setIsChessOver(true);
+        return;
+      }
+
+      const nextTurn: ChessColor = cpuColor === "w" ? "b" : "w";
+      setChessTurn(nextTurn);
+      setChessMessage(nextTurn === "w" ? t("chessTurnWhite") : t("chessTurnBlack"));
+    }, CHESS_CPU_THINK_MS[chessCpuLevel]);
+
+    return () => clearTimeout(timer);
+  }, [
+    activePanel,
+    chessBoard,
+    chessCpuLevel,
+    chessMode,
+    chessPlayerSide,
+    chessTurn,
+    connectedRoomCode,
+    gameStarted.chess,
+    isChessOver,
+    t,
+    tf,
+  ]);
+
+  const resolveShogiPlayerSide = (order: ShogiTurnOrder): ShogiColor => {
+    if (order === "random") {
+      return Math.random() < 0.5 ? "b" : "w";
+    }
+    return order === "white" ? "w" : "b";
+  };
+
+  const resetShogiWith = (nextMode: ShogiMode, nextOrder: ShogiTurnOrder) => {
+    const nextPlayerSide = resolveShogiPlayerSide(nextOrder);
+    const nextTurn: ShogiColor = nextOrder === "random" ? (Math.random() < 0.5 ? "b" : "w") : (nextOrder === "white" ? "w" : "b");
+    setShogiPlayerSide(nextMode === "cpu" ? nextPlayerSide : "b");
     setShogiBoard(createShogiBoard());
-    setShogiTurn("b");
+    setShogiTurn(nextTurn);
     setSelectedShogi(null);
     setIsShogiOver(false);
-    setShogiMessage(t("shogiTurnBlack"));
+    setShogiMessage(nextTurn === "b" ? t("shogiTurnBlack") : t("shogiTurnWhite"));
+  };
+
+  const resetShogi = () => {
+    resetShogiWith(shogiMode, shogiTurnOrder);
   };
 
   const onShogiClick = (row: number, col: number, options?: { isRemote?: boolean }) => {
     if (isShogiOver) return;
     const isRemote = Boolean(options?.isRemote);
+
+    if (!connectedRoomCode && !isRemote && shogiMode === "cpu" && shogiTurn !== shogiPlayerSide) {
+      setShogiMessage(t("shogiCpuThinking"));
+      return;
+    }
 
     if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
@@ -5489,6 +6582,60 @@ export default function Home() {
     setShogiTurn(nextTurn);
     setShogiMessage(nextTurn === "b" ? t("shogiTurnBlack") : t("shogiTurnWhite"));
   };
+
+  useEffect(() => {
+    if (activePanel !== "shogi") return;
+    if (!gameStarted.shogi) return;
+    if (connectedRoomCode) return;
+    if (shogiMode !== "cpu") return;
+    if (isShogiOver) return;
+
+    const cpuColor: ShogiColor = shogiPlayerSide === "b" ? "w" : "b";
+    if (shogiTurn !== cpuColor) return;
+
+    setShogiMessage(t("shogiCpuThinking"));
+
+    const timer = setTimeout(() => {
+      const move = pickShogiCpuMove(shogiBoard, cpuColor, shogiCpuLevel);
+      if (!move) {
+        return;
+      }
+
+      const next = shogiBoard.map((line) => [...line]);
+      const moving = next[move.fromRow][move.fromCol];
+      const captured = next[move.toRow][move.toCol];
+      next[move.toRow][move.toCol] = moving;
+      next[move.fromRow][move.fromCol] = null;
+
+      setShogiBoard(next);
+      setSelectedShogi(null);
+
+      if (captured?.type === "K") {
+        const winner = cpuColor === "b" ? t("blackStone") : t("whiteStone");
+        setShogiMessage(tf("shogiWin", { winner }));
+        setIsShogiOver(true);
+        return;
+      }
+
+      const nextTurn: ShogiColor = cpuColor === "b" ? "w" : "b";
+      setShogiTurn(nextTurn);
+      setShogiMessage(nextTurn === "b" ? t("shogiTurnBlack") : t("shogiTurnWhite"));
+    }, SHOGI_CPU_THINK_MS[shogiCpuLevel]);
+
+    return () => clearTimeout(timer);
+  }, [
+    activePanel,
+    connectedRoomCode,
+    gameStarted.shogi,
+    isShogiOver,
+    shogiBoard,
+    shogiCpuLevel,
+    shogiMode,
+    shogiPlayerSide,
+    shogiTurn,
+    t,
+    tf,
+  ]);
 
   const resetMinesweeper = () => {
     setMineBoard(createMinesweeperBoard());
@@ -6584,6 +7731,20 @@ export default function Home() {
 
   const resetUno = useCallback(() => {
     const deck = shuffleCards(createUnoDeck());
+    if (!connectedRoomCode) {
+      const totalPlayers = 1 + unoCpuCount;
+      const hands: UnoCard[][] = Array.from({ length: totalPlayers }, (_, i) => deck.slice(i * 7, i * 7 + 7));
+      const top = deck[totalPlayers * 7] || { color: "R", value: 0 };
+      const rest = deck.slice(totalPlayers * 7 + 1);
+      setUnoLocalHands(hands);
+      setUnoLocalTurnIndex(0);
+      setUnoTopCard(top);
+      setUnoDeck(rest);
+      setIsUnoOver(false);
+      setUnoMessage(t("unoYourTurn"));
+      return;
+    }
+
     const player = deck.slice(0, 7);
     const cpu = deck.slice(7, 14);
     const top = deck[14] || { color: "R", value: 0 };
@@ -6595,7 +7756,7 @@ export default function Home() {
     setUnoTurn("player");
     setIsUnoOver(false);
     setUnoMessage(t("unoYourTurn"));
-  }, [t]);
+  }, [connectedRoomCode, t, unoCpuCount]);
 
   const drawUnoCard = useCallback((): UnoCard | null => {
     if (unoDeck.length <= 0) return null;
@@ -6606,6 +7767,33 @@ export default function Home() {
 
   const playUnoCard = useCallback(
     (index: number, options?: { isRemote?: boolean; side?: "player" | "cpu" }) => {
+      if (!connectedRoomCode) {
+        if (isUnoOver || unoLocalTurnIndex !== 0 || !unoTopCard) return;
+        const currentHand = unoLocalHands[0] || [];
+        const card = currentHand[index];
+        if (!card) return;
+        if (!canPlayCard(card, unoTopCard)) {
+          setUnoMessage(t("unoNoPlayable"));
+          return;
+        }
+
+        const nextHand = currentHand.filter((_, i) => i !== index);
+        const nextHands = [...unoLocalHands];
+        nextHands[0] = nextHand;
+        setUnoLocalHands(nextHands);
+        setUnoTopCard(card);
+        setUnoMessage(tf("unoPlayedCard", { who: "YOU", card: unoCardLabel(card) }));
+
+        if (nextHand.length === 0) {
+          setIsUnoOver(true);
+          setUnoMessage(t("unoPlayerWin"));
+          return;
+        }
+
+        setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
+        return;
+      }
+
       const isRemote = Boolean(options?.isRemote);
       const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
       if (isUnoOver || unoTurn !== side || !unoTopCard) return;
@@ -6651,10 +7839,28 @@ export default function Home() {
 
       setUnoTurn(side === "player" ? "cpu" : "player");
     },
-    [canOperateUnoNow, connectedRoomCode, isUnoOver, roomRole, sendRoomEvent, t, tf, unoCardLabel, unoCpuHand, unoPlayerHand, unoTopCard, unoTurn],
+    [canOperateUnoNow, connectedRoomCode, isUnoOver, roomRole, sendRoomEvent, t, tf, unoCardLabel, unoCpuHand, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoPlayerHand, unoTopCard, unoTurn],
   );
 
   const drawUnoForPlayer = useCallback((options?: { isRemote?: boolean; side?: "player" | "cpu" }) => {
+    if (!connectedRoomCode) {
+      if (isUnoOver || unoLocalTurnIndex !== 0) return;
+      const card = drawUnoCard();
+      if (!card) {
+        setUnoMessage(t("unoNoPlayable"));
+        setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
+        return;
+      }
+      setUnoLocalHands((prev) => {
+        const next = [...prev];
+        next[0] = [...(next[0] || []), card];
+        return next;
+      });
+      setUnoMessage(tf("unoDrewCard", { who: "YOU" }));
+      setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
+      return;
+    }
+
     const isRemote = Boolean(options?.isRemote);
     const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
     if (isUnoOver || unoTurn !== side) return;
@@ -6688,7 +7894,7 @@ export default function Home() {
     }
     setUnoMessage(tf("unoDrewCard", { who: side === "player" ? "YOU" : "CPU" }));
     setUnoTurn(side === "player" ? "cpu" : "player");
-  }, [canOperateUnoNow, connectedRoomCode, drawUnoCard, isUnoOver, roomRole, sendRoomEvent, t, tf, unoTurn]);
+  }, [canOperateUnoNow, connectedRoomCode, drawUnoCard, isUnoOver, roomRole, sendRoomEvent, t, tf, unoLocalTotalPlayers, unoLocalTurnIndex, unoTurn]);
 
   useEffect(() => {
     if (!pendingRemoteUnoAction) return;
@@ -6716,45 +7922,57 @@ export default function Home() {
   useEffect(() => {
     if (connectedRoomCode) return;
     if (!gameStarted.uno) return;
-    if (unoTurn !== "cpu" || isUnoOver || !unoTopCard) return;
+    if (isUnoOver || !unoTopCard) return;
+    if (unoLocalTurnIndex <= 0) return;
 
     setUnoMessage(t("unoCpuTurn"));
     const timer = setTimeout(() => {
-      const playableIndex = unoCpuHand.findIndex((card) => canPlayCard(card, unoTopCard));
+      const cpuIndex = unoLocalTurnIndex;
+      const hand = unoLocalHands[cpuIndex] || [];
+      const playableIndex = hand.findIndex((card) => canPlayCard(card, unoTopCard));
       if (playableIndex >= 0) {
-        const card = unoCpuHand[playableIndex];
-        const nextHand = unoCpuHand.filter((_, i) => i !== playableIndex);
-        setUnoCpuHand(nextHand);
+        const card = hand[playableIndex];
+        const nextHand = hand.filter((_, i) => i !== playableIndex);
+        setUnoLocalHands((prev) => {
+          const next = [...prev];
+          next[cpuIndex] = nextHand;
+          return next;
+        });
         setUnoTopCard(card);
         if (nextHand.length === 0) {
           setIsUnoOver(true);
           setUnoMessage(t("unoCpuWin"));
           return;
         }
-        setUnoMessage(tf("unoPlayedCard", { who: "CPU", card: unoCardLabel(card) }));
-        setUnoTurn("player");
+        setUnoMessage(tf("unoPlayedCard", { who: `CPU ${cpuIndex}`, card: unoCardLabel(card) }));
+        setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
         return;
       }
 
       const drawn = unoDeck[0];
       if (drawn) {
         setUnoDeck((prev) => prev.slice(1));
-        setUnoCpuHand((prev) => [...prev, drawn]);
-        setUnoMessage(tf("unoDrewCard", { who: "CPU" }));
+        setUnoLocalHands((prev) => {
+          const next = [...prev];
+          next[cpuIndex] = [...(next[cpuIndex] || []), drawn];
+          return next;
+        });
+        setUnoMessage(tf("unoDrewCard", { who: `CPU ${cpuIndex}` }));
       }
-      setUnoTurn("player");
+      setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
     }, 550);
 
     return () => clearTimeout(timer);
-  }, [connectedRoomCode, gameStarted.uno, isUnoOver, t, tf, unoCpuHand, unoDeck, unoTopCard, unoTurn, unoCardLabel]);
+  }, [connectedRoomCode, gameStarted.uno, isUnoOver, t, tf, unoDeck, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoTopCard, unoCardLabel]);
 
   const cloudAuthPayload = useMemo(() => {
     if (authMode !== "cloud") return null;
     const userId = authUserId.trim();
     const password = authPassword;
-    if (!userId || !password) return null;
-    return { userId, password };
-  }, [authMode, authPassword, authUserId]);
+    const sessionId = authSessionId.trim();
+    if (!userId || !password || !sessionId) return null;
+    return { userId, password, sessionId };
+  }, [authMode, authPassword, authSessionId, authUserId]);
 
   const canAccessInquiryViewer = useMemo(() => {
     if (authMode !== "cloud") return false;
@@ -6764,11 +7982,26 @@ export default function Home() {
   }, [authMode, authUserId]);
 
   const callCloudApi = useCallback(async <T extends CloudApiResult>(path: string, payload: Record<string, unknown>) => {
-    const res = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
+
+    let res: Response;
+    try {
+      res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if ((error as Error)?.name === "AbortError") {
+        throw new Error("REQUEST_TIMEOUT");
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+
     const data = (await res.json().catch(() => ({}))) as T;
     if (!res.ok) {
       throw new Error(String(data?.code || data?.message || `HTTP ${res.status}`));
@@ -6816,9 +8049,203 @@ export default function Home() {
     if (code === "REQUEST_ALREADY_RECEIVED") return t("friendRequestAlreadyReceived");
     if (code === "REQUEST_NOT_FOUND") return t("friendRequestNotFound");
     if (code === "ALREADY_FRIENDS") return t("friendAlreadyExists");
+    if (code === "FRIEND_CHAT_FORBIDDEN") return t("friendChatForbidden");
+    if (code === "FRIEND_CHAT_MESSAGE_REQUIRED") return t("friendChatMessageRequired");
+    if (code === "FRIEND_CHAT_RATE_LIMITED") return t("friendChatRateLimited");
     if (code === "AUTH_REQUIRED") return t("friendsHintNoAuth");
     return t("friendActionFailed");
   }, [t]);
+
+  const loadFriendUnreadCounts = useCallback(async () => {
+    if (!cloudAuthPayload) {
+      setFriendUnreadCounts({});
+      return;
+    }
+
+    try {
+      const payload = await callCloudApi<CloudApiResult>("/api/friends/chat/unread", {
+        ...cloudAuthPayload,
+      });
+      const source = payload.unreadByFriend;
+      const next: Record<string, number> = {};
+      if (source && typeof source === "object") {
+        Object.entries(source as Record<string, unknown>).forEach(([friendUserId, value]) => {
+          const normalizedId = String(friendUserId || "").trim();
+          const count = Number(value);
+          if (normalizedId && Number.isFinite(count) && count > 0) {
+            next[normalizedId] = Math.floor(count);
+          }
+        });
+      }
+      const nextTotal = Object.values(next).reduce((sum, value) => sum + value, 0);
+      const prevTotal = prevUnreadTotalRef.current;
+      if (nextTotal > prevTotal) {
+        try {
+          const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          if (AudioCtx) {
+            const context = new AudioCtx();
+            const oscillator = context.createOscillator();
+            const gain = context.createGain();
+            oscillator.type = "triangle";
+            oscillator.frequency.value = 880;
+            gain.gain.setValueAtTime(0.0001, context.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.2);
+            oscillator.connect(gain);
+            gain.connect(context.destination);
+            oscillator.start();
+            oscillator.stop(context.currentTime + 0.22);
+            window.setTimeout(() => {
+              void context.close();
+            }, 260);
+          }
+        } catch {
+          // Ignore sound play errors (autoplay/user gesture restrictions)
+        }
+      }
+      prevUnreadTotalRef.current = nextTotal;
+      setFriendUnreadCounts(next);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [callCloudApi, cloudAuthPayload]);
+
+  const markFriendChatRead = useCallback(async (friendUserId: string) => {
+    if (!cloudAuthPayload) return;
+    const normalized = friendUserId.trim().slice(0, 24);
+    if (!normalized) return;
+
+    try {
+      await callCloudApi<CloudApiResult>("/api/friends/chat/read", {
+        ...cloudAuthPayload,
+        friendUserId: normalized,
+      });
+      setFriendUnreadCounts((prev) => {
+        const next = { ...prev };
+        delete next[normalized];
+        return next;
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }, [callCloudApi, cloudAuthPayload]);
+
+  const normalizeFriendChatRows = useCallback((value: unknown): FriendChatMessage[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => {
+        const row = item && typeof item === "object" ? (item as Record<string, unknown>) : null;
+        if (!row) return null;
+        const id = Number(row.id);
+        const senderUserId = String(row.senderUserId || "").trim();
+        const receiverUserId = String(row.receiverUserId || "").trim();
+        const message = String(row.message || "").trim();
+        const createdAt = Number(row.createdAt);
+        if (!Number.isFinite(id) || !senderUserId || !receiverUserId || !message) return null;
+        return {
+          id: Math.floor(id),
+          senderUserId,
+          receiverUserId,
+          message,
+          createdAt: Number.isFinite(createdAt) ? Math.floor(createdAt) : Date.now(),
+        };
+      })
+      .filter((row): row is FriendChatMessage => Boolean(row))
+      .sort((a, b) => a.createdAt - b.createdAt || a.id - b.id);
+  }, []);
+
+  const normalizeFriendChatPeerReadState = useCallback((value: unknown): FriendChatPeerReadState => {
+    const row = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+    const lastReadMessageId = Number(row.lastReadMessageId);
+    const lastReadAt = Number(row.lastReadAt);
+    return {
+      lastReadMessageId: Number.isFinite(lastReadMessageId) ? Math.max(0, Math.floor(lastReadMessageId)) : 0,
+      lastReadAt: Number.isFinite(lastReadAt) ? Math.max(0, Math.floor(lastReadAt)) : 0,
+    };
+  }, []);
+
+  const applyFriendChatPayload = useCallback((payload: CloudApiResult) => {
+    setFriendChatMessages(normalizeFriendChatRows(payload.messages));
+    setFriendChatPeerReadState(normalizeFriendChatPeerReadState(payload.peerReadState));
+  }, [normalizeFriendChatPeerReadState, normalizeFriendChatRows]);
+
+  const loadFriendChat = useCallback(async (friendUserId: string, showLoading = true, shouldMarkRead = false) => {
+    if (!cloudAuthPayload) {
+      setFriendChatMessages([]);
+      setFriendChatPeerReadState({ lastReadMessageId: 0, lastReadAt: 0 });
+      return;
+    }
+
+    const normalized = friendUserId.trim().slice(0, 24);
+    if (!normalized) {
+      setFriendChatMessages([]);
+      setFriendChatPeerReadState({ lastReadMessageId: 0, lastReadAt: 0 });
+      return;
+    }
+
+    if (showLoading) {
+      setIsFriendChatLoading(true);
+    }
+
+    try {
+      const payload = await callCloudApi<CloudApiResult>("/api/friends/chat/list", {
+        ...cloudAuthPayload,
+        friendUserId: normalized,
+      });
+      applyFriendChatPayload(payload);
+      if (shouldMarkRead) {
+        await markFriendChatRead(normalized);
+      }
+    } catch (error) {
+      console.error(error);
+      const code = error instanceof Error ? error.message : "UNKNOWN";
+      setFriendsMessage(code === "FRIEND_CHAT_FORBIDDEN" ? t("friendChatForbidden") : t("friendChatLoadFailed"));
+      setFriendChatMessages([]);
+      setFriendChatPeerReadState({ lastReadMessageId: 0, lastReadAt: 0 });
+    } finally {
+      if (showLoading) {
+        setIsFriendChatLoading(false);
+      }
+    }
+  }, [applyFriendChatPayload, callCloudApi, cloudAuthPayload, markFriendChatRead, t]);
+
+  const openFriendChat = useCallback((friendUserId: string) => {
+    const normalized = friendUserId.trim().slice(0, 24);
+    if (!normalized) return;
+    setActiveFriendChatUserId(normalized);
+    setFriendChatDraft("");
+    void loadFriendChat(normalized, true, true);
+  }, [loadFriendChat]);
+
+  const sendFriendChat = useCallback(async () => {
+    if (!cloudAuthPayload || !activeFriendChatUserId) {
+      setFriendsMessage(t("friendsHintNoAuth"));
+      return;
+    }
+
+    const message = friendChatDraft.trim();
+    if (!message) {
+      setFriendsMessage(t("friendChatMessageRequired"));
+      return;
+    }
+
+    setIsFriendChatSending(true);
+    try {
+      const payload = await callCloudApi<CloudApiResult>("/api/friends/chat/send", {
+        ...cloudAuthPayload,
+        friendUserId: activeFriendChatUserId,
+        message,
+      });
+      applyFriendChatPayload(payload);
+      setFriendChatDraft("");
+    } catch (error) {
+      console.error(error);
+      const code = error instanceof Error ? error.message : "UNKNOWN";
+      setFriendsMessage(code === "FRIEND_CHAT_FORBIDDEN" ? t("friendChatForbidden") : t("friendChatSendFailed"));
+    } finally {
+      setIsFriendChatSending(false);
+    }
+  }, [activeFriendChatUserId, applyFriendChatPayload, callCloudApi, cloudAuthPayload, friendChatDraft, t]);
 
   const refreshFriends = useCallback(async (showLoading = true) => {
     if (!cloudAuthPayload) {
@@ -6841,6 +8268,7 @@ export default function Home() {
       applyFriendPayload(friendsData as Record<string, unknown>);
       applyFriendPayload(incomingData as Record<string, unknown>);
       applyFriendPayload(outgoingData as Record<string, unknown>);
+      await loadFriendUnreadCounts();
     } catch (error) {
       console.error(error);
       setFriendsMessage(t("friendsLoadFailed"));
@@ -6849,7 +8277,7 @@ export default function Home() {
         setIsFriendsLoading(false);
       }
     }
-  }, [applyFriendPayload, callCloudApi, cloudAuthPayload, t]);
+  }, [applyFriendPayload, callCloudApi, cloudAuthPayload, loadFriendUnreadCounts, t]);
 
   const runFriendAction = useCallback(async (
     path: string,
@@ -6914,10 +8342,45 @@ export default function Home() {
       setFriendIds([]);
       setIncomingFriendIds([]);
       setOutgoingFriendIds([]);
+      setFriendUnreadCounts({});
+      prevUnreadTotalRef.current = 0;
+      setActiveFriendChatUserId("");
+      setFriendChatMessages([]);
+      setFriendChatPeerReadState({ lastReadMessageId: 0, lastReadAt: 0 });
+      setFriendChatDraft("");
       return;
     }
     void refreshFriends(true);
   }, [authMode, isAuthenticated, refreshFriends]);
+
+  useEffect(() => {
+    if (!isFriendPanelOpen || friendTab !== "friends" || !activeFriendChatUserId) return;
+    if (activePanel !== "menu") return;
+    if (!canUseFriends) return;
+    const timer = window.setInterval(() => {
+      void loadFriendChat(activeFriendChatUserId, false, true);
+      void loadFriendUnreadCounts();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [activeFriendChatUserId, activePanel, canUseFriends, friendTab, isFriendPanelOpen, loadFriendChat, loadFriendUnreadCounts]);
+
+  useEffect(() => {
+    if (activePanel !== "menu") return;
+    if (!isFriendPanelOpen || friendTab !== "friends" || !activeFriendChatUserId) return;
+    const listEl = friendChatListRef.current;
+    if (!listEl) return;
+    listEl.scrollTop = listEl.scrollHeight;
+  }, [activePanel, activeFriendChatUserId, friendChatMessages, friendTab, isFriendPanelOpen]);
+
+  useEffect(() => {
+    if (!activeFriendChatUserId) return;
+    if (friendTab !== "friends") return;
+    if (friendIds.includes(activeFriendChatUserId)) return;
+    setActiveFriendChatUserId("");
+    setFriendChatMessages([]);
+    setFriendChatPeerReadState({ lastReadMessageId: 0, lastReadAt: 0 });
+    setFriendChatDraft("");
+  }, [activeFriendChatUserId, friendIds, friendTab]);
 
   useEffect(() => {
     if (authMode === "guest") {
@@ -6926,10 +8389,23 @@ export default function Home() {
       setIsProfileBioEditOpen(false);
       setIsFriendPanelOpen(false);
       setFriendActionUserId("");
+      setFriendUnreadCounts({});
+      prevUnreadTotalRef.current = 0;
+      setActiveFriendChatUserId("");
+      setFriendChatMessages([]);
+      setFriendChatPeerReadState({ lastReadMessageId: 0, lastReadAt: 0 });
+      setFriendChatDraft("");
       setRoomMemberActionId("");
       setPublicProfile(null);
     }
   }, [authMode]);
+
+  const totalFriendUnreadCount = useMemo(() => {
+    return Object.values(friendUnreadCounts).reduce((sum, value) => {
+      const safeValue = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+      return sum + safeValue;
+    }, 0);
+  }, [friendUnreadCounts]);
 
   const applyPlayerName = useCallback(async () => {
     const nextName = profileNameDraft.trim().slice(0, 24);
@@ -7156,6 +8632,10 @@ export default function Home() {
   }, [language]);
 
   const applyCloudLoginSuccess = useCallback((userId: string, password: string, data: CloudAuthResult) => {
+    const nextSessionId = String(data?.sessionId || "").trim();
+    if (!nextSessionId) {
+      throw new Error("SESSION_REQUIRED");
+    }
     const cloudName = String(data?.profile?.playerName || "").trim();
     const cloudBio = String(data?.profile?.profileBio || "").slice(0, 180);
     const nextName = (cloudName || userId || "player").slice(0, 24);
@@ -7164,7 +8644,9 @@ export default function Home() {
     setProfileBioDraft(cloudBio);
     localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
     localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
+    localStorage.setItem(STORAGE_CLOUD_SESSION_ID_KEY, nextSessionId);
     setAuthMode("cloud");
+    setAuthSessionId(nextSessionId);
     setEntryMessage("");
     setFriendsMessage("");
     setQuickMatchMode(false);
@@ -7182,18 +8664,26 @@ export default function Home() {
       return;
     }
 
-    setIsAuthLoading(true);
     setEntryMessage(t("loginLoading"));
     try {
-      const data = await callCloudAuthApi("/api/auth/login", { userId, password });
+      const data = await callCloudAuthApi("/api/auth/login", {
+        userId,
+        password,
+        sessionId: authSessionId.trim() || undefined,
+      });
       applyCloudLoginSuccess(userId, password, data);
     } catch (error) {
       console.error(error);
-      setEntryMessage(t("loginFailed"));
+      const code = error instanceof Error ? error.message : "";
+      if (code === "ALREADY_LOGGED_IN") {
+        setEntryMessage(t("loginAlreadyLoggedIn"));
+      } else {
+        setEntryMessage(t("loginFailed"));
+      }
     } finally {
       setIsAuthLoading(false);
     }
-  }, [applyCloudLoginSuccess, authPassword, authUserId, callCloudAuthApi, t]);
+  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudAuthApi, t]);
 
   const handleCloudRegister = useCallback(async () => {
     const userId = authUserId.trim();
@@ -7206,7 +8696,11 @@ export default function Home() {
     setIsAuthLoading(true);
     setEntryMessage(t("registerLoading"));
     try {
-      const data = await callCloudAuthApi("/api/auth/register", { userId, password });
+      const data = await callCloudAuthApi("/api/auth/register", {
+        userId,
+        password,
+        sessionId: authSessionId.trim() || undefined,
+      });
       applyCloudLoginSuccess(userId, password, data);
       setMenuMessage(t("registerSuccess"));
     } catch (error) {
@@ -7215,16 +8709,55 @@ export default function Home() {
     } finally {
       setIsAuthLoading(false);
     }
-  }, [applyCloudLoginSuccess, authPassword, authUserId, callCloudAuthApi, t]);
+  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudAuthApi, t]);
+
+  useEffect(() => {
+    if (autoLoginTriedRef.current) return;
+
+    const savedUserId = String(localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "").trim();
+    const savedPassword = String(localStorage.getItem(STORAGE_CLOUD_PASSWORD_KEY) || "");
+    const savedSessionId = String(localStorage.getItem(STORAGE_CLOUD_SESSION_ID_KEY) || "").trim();
+    if (!savedUserId || !savedPassword) return;
+
+    autoLoginTriedRef.current = true;
+    let cancelled = false;
+
+    setIsAuthLoading(true);
+    setEntryMessage(t("loginLoading"));
+
+    void (async () => {
+      try {
+        const data = await callCloudAuthApi("/api/auth/login", {
+          userId: savedUserId,
+          password: savedPassword,
+          sessionId: savedSessionId || undefined,
+        });
+        if (cancelled) return;
+        applyCloudLoginSuccess(savedUserId, savedPassword, data);
+      } catch (error) {
+        if (cancelled) return;
+        console.error(error);
+        setEntryMessage("");
+      } finally {
+        if (cancelled) return;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyCloudLoginSuccess, callCloudAuthApi, t]);
 
   const handleGuestStart = useCallback(() => {
-    const nextName = playerName.trim().slice(0, 24) || "guest";
+    const nextName = profileNameDraft.trim().slice(0, 24) || "guest";
     setPlayerName(nextName);
     setProfileNameDraft(nextName);
     setProfileBioDraft("");
     localStorage.removeItem(STORAGE_CLOUD_USER_ID_KEY);
     localStorage.removeItem(STORAGE_CLOUD_PASSWORD_KEY);
+    localStorage.removeItem(STORAGE_CLOUD_SESSION_ID_KEY);
     setAuthMode("guest");
+    setAuthSessionId("");
     setEntryMessage("");
     setFriendsMessage("");
     setFriendUserIdDraft("");
@@ -7234,7 +8767,7 @@ export default function Home() {
     setSpectatorChatMessages([]);
     setMenuMessage(t("guestStarted"));
     setIsAuthenticated(true);
-  }, [playerName, t]);
+  }, [profileNameDraft, t]);
 
   useEffect(() => {
     if (activePanel === "scores") {
@@ -7243,6 +8776,21 @@ export default function Home() {
   }, [activePanel]);
 
   const handleBackToLogin = useCallback(() => {
+    if (authMode === "cloud") {
+      const userId = authUserId.trim();
+      const password = authPassword;
+      const sessionId = authSessionId.trim();
+      if (userId && password && sessionId) {
+        void callCloudApi<CloudApiResult>("/api/auth/logout", {
+          userId,
+          password,
+          sessionId,
+        }).catch((error) => {
+          console.warn("logout failed", error);
+        });
+      }
+    }
+
     closeRoomSocket();
     setConnectedRoomCode("");
     setRoomParticipants([]);
@@ -7254,8 +8802,28 @@ export default function Home() {
     setPendingInviteToken("");
     setRoomChatMessages([]);
     setSpectatorChatMessages([]);
+    localStorage.removeItem(STORAGE_CLOUD_SESSION_ID_KEY);
+    setAuthSessionId("");
     setIsAuthenticated(false);
-  }, [closeRoomSocket, t]);
+  }, [authMode, authPassword, authSessionId, authUserId, callCloudApi, closeRoomSocket, t]);
+
+  useEffect(() => {
+    if (!isAuthenticated || authMode !== "cloud" || !cloudAuthPayload) return;
+
+    const ping = () => {
+      void callCloudApi<CloudApiResult>("/api/auth/ping", cloudAuthPayload).catch((error) => {
+        const code = error instanceof Error ? error.message : "";
+        if (code === "INVALID_SESSION") {
+          setEntryMessage(t("loginFailed"));
+          setIsAuthenticated(false);
+        }
+      });
+    };
+
+    ping();
+    const timer = window.setInterval(ping, 60_000);
+    return () => window.clearInterval(timer);
+  }, [authMode, callCloudApi, cloudAuthPayload, isAuthenticated, t]);
 
   const othelloChaosShowsBlackSide =
     othelloChaosTarget === "black"
@@ -7447,26 +9015,12 @@ export default function Home() {
   };
 
   const onOthelloResetClick = () => {
-    const isRoomPvp = Boolean(connectedRoomCode) && roomRole !== "spectator";
-    if (isRoomPvp && gameStarted.othello && !isGameOver) {
-      if (othelloSelfDrawVoted) {
-        setOthelloDrawVotes((prev) => prev.filter((vote) => vote !== peerIdRef.current));
-        sendRoomEvent({ type: "draw-unvote" });
-        setMenuMessage(t("othelloDrawRequestCanceled"));
-      } else {
-        setOthelloDrawVotes((prev) => (prev.includes(peerIdRef.current) ? prev : [...prev, peerIdRef.current]));
-        sendRoomEvent({ type: "draw-vote" });
-        setMenuMessage(t("othelloDrawRequestSent"));
-      }
-      return;
-    }
-
     if (connectedRoomCode && roomRole === "spectator") {
       setMenuMessage(t("spectatorReadOnly"));
       return;
     }
 
-    resetOthello({}, isChaosMode, { rerollRandomSide: true });
+    runWithResetGuard("othello", () => resetOthello({}, isChaosMode, { rerollRandomSide: true }));
   };
 
   useEffect(() => {
@@ -7513,6 +9067,7 @@ export default function Home() {
                 <input
                   value={authUserId}
                   onChange={(event) => setAuthUserId(event.target.value.slice(0, 24))}
+                  autoComplete="username"
                   placeholder="user123"
                   className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
                   disabled={isAuthLoading}
@@ -7525,7 +9080,19 @@ export default function Home() {
                   type="password"
                   value={authPassword}
                   onChange={(event) => setAuthPassword(event.target.value)}
+                  autoComplete="current-password"
                   placeholder="password"
+                  className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
+                  disabled={isAuthLoading}
+                />
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                {t("displayName")}
+                <input
+                  value={profileNameDraft}
+                  onChange={(event) => setProfileNameDraft(event.target.value.slice(0, 24))}
+                  placeholder="Player"
                   className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
                   disabled={isAuthLoading}
                 />
@@ -7711,6 +9278,10 @@ export default function Home() {
                       onClick={() => {
                         setIsFriendPanelOpen(false);
                         setFriendActionUserId("");
+                        setActiveFriendChatUserId("");
+                        setFriendChatMessages([]);
+                        setFriendChatPeerReadState({ lastReadMessageId: 0, lastReadAt: 0 });
+                        setFriendChatDraft("");
                       }}
                       className="fixed inset-0 z-20 cursor-default bg-transparent"
                       aria-label="Close friends panel"
@@ -7739,6 +9310,7 @@ export default function Home() {
                         className={`rounded-full border px-2.5 py-1 text-[11px] ${friendTab === "friends" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
                       >
                         {t("friendsTabFriends")} ({friendIds.length})
+                        {totalFriendUnreadCount > 0 ? ` • ${totalFriendUnreadCount}` : ""}
                       </button>
                       <button
                         type="button"
@@ -7843,10 +9415,26 @@ export default function Home() {
                                 }}
                                 className="w-full rounded-md border border-slate-500/40 px-2 py-1 text-left text-xs hover:border-cyan-300/60"
                               >
-                                {id}
+                                <span className="flex items-center justify-between gap-2">
+                                  <span>{id}</span>
+                                  {friendTab === "friends" && (friendUnreadCounts[id] || 0) > 0 ? (
+                                    <span className="rounded-full bg-rose-400/90 px-1.5 py-0.5 text-[10px] text-slate-950">
+                                      {friendUnreadCounts[id]}
+                                    </span>
+                                  ) : null}
+                                </span>
                               </button>
                               {friendActionUserId === id ? (
                                 <div className="mt-1 flex justify-end">
+                                  {friendTab === "friends" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openFriendChat(id)}
+                                      className="mr-1 rounded-md border border-emerald-200/40 px-2 py-1 text-[11px]"
+                                    >
+                                      {t("friendOpenChat")}
+                                    </button>
+                                  ) : null}
                                   <button
                                     type="button"
                                     onClick={() => void openPublicProfile(id)}
@@ -7862,10 +9450,125 @@ export default function Home() {
                       </ul>
                     )}
 
+                    {friendTab === "friends" && activeFriendChatUserId ? (
+                      <div className="mt-3 rounded-xl border border-emerald-200/25 bg-slate-950/60 p-2.5">
+                        <p className="text-[11px] text-emerald-100">{tf("friendChatWith", { userId: activeFriendChatUserId })}</p>
+
+                        {isFriendChatLoading ? (
+                          <p className="mt-2 text-xs text-slate-300">{t("friendChatLoading")}</p>
+                        ) : (
+                          <ul ref={friendChatListRef} className="mt-2 max-h-36 space-y-1 overflow-y-auto text-xs">
+                            {friendChatMessages.length === 0 ? (
+                              <li className="text-slate-300">{t("friendChatEmpty")}</li>
+                            ) : (
+                              friendChatMessages.map((row) => (
+                                <li
+                                  key={`friend-chat-${row.id}`}
+                                  className={`rounded-md px-2 py-1 ${row.senderUserId === authUserId.trim() ? "bg-cyan-300/15 text-cyan-100" : "bg-slate-800/70 text-slate-100"}`}
+                                >
+                                  <p className="text-[10px] opacity-80">{row.senderUserId}</p>
+                                  <p className="whitespace-pre-wrap break-words">{row.message}</p>
+                                  {row.senderUserId === authUserId.trim() && row.id <= friendChatPeerReadState.lastReadMessageId ? (
+                                    <p className="mt-1 text-[10px] text-cyan-200/80">
+                                      {friendChatPeerReadState.lastReadAt > 0
+                                        ? tf("friendChatReadAt", { time: new Date(friendChatPeerReadState.lastReadAt).toLocaleTimeString() })
+                                        : t("friendChatRead")}
+                                    </p>
+                                  ) : null}
+                                </li>
+                              ))
+                            )}
+                          </ul>
+                        )}
+
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <input
+                            value={friendChatDraft}
+                            onChange={(event) => setFriendChatDraft(event.target.value.slice(0, 400))}
+                            placeholder={t("friendChatPlaceholder")}
+                            className="min-w-0 flex-1 rounded-md border border-slate-500/40 bg-slate-900/70 px-2 py-1.5 text-xs"
+                            disabled={!canUseFriends || isFriendChatSending}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && !event.shiftKey) {
+                                event.preventDefault();
+                                void sendFriendChat();
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void sendFriendChat()}
+                            disabled={!canUseFriends || isFriendChatSending}
+                            className="rounded-md border border-emerald-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
+                          >
+                            {t("friendChatSend")}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
                     {friendsMessage ? <p className="mt-2 text-xs text-cyan-200">{friendsMessage}</p> : null}
                     </section>
                     </>
                     ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                {authMode !== "cloud" ? (
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="relative flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={openProfileEditor}
+                        className={`rounded-md border px-3 py-1 text-xs ${isProfilePanelOpen ? "border-cyan-200/80 bg-cyan-300 text-slate-900" : "border-cyan-200/40 hover:border-cyan-200/70"}`}
+                        aria-expanded={isProfilePanelOpen}
+                      >
+                        {t("profileLink")}
+                      </button>
+
+                      {activePanel === "menu" && isProfilePanelOpen ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsProfilePanelOpen(false);
+                              setIsProfileNameEditOpen(false);
+                            }}
+                            className="fixed inset-0 z-20 cursor-default bg-transparent"
+                            aria-label="Close profile panel"
+                          />
+                          <section className="absolute right-0 top-full z-30 mt-2 w-[320px] max-w-[calc(100vw-1rem)] rounded-2xl border border-slate-300/20 bg-slate-900/95 p-4 shadow-[0_18px_35px_rgba(2,6,23,0.55)] sm:w-[360px]">
+                            <p className="text-xs font-semibold">{t("profileLink")}</p>
+                            <p className="mt-1 text-xs text-slate-300">{loginStatusText}</p>
+                            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsProfileNameEditOpen((prev) => !prev)}
+                                className="rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs"
+                              >
+                                {t("displayName")}
+                              </button>
+                            </div>
+                            {isProfileNameEditOpen ? (
+                              <div className="mt-2.5 grid gap-1.5 sm:grid-cols-[1fr_auto]">
+                                <input
+                                  value={profileNameDraft}
+                                  onChange={(event) => setProfileNameDraft(event.target.value.slice(0, 24))}
+                                  placeholder="Player"
+                                  className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2.5 py-1.5 text-xs"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void applyPlayerName()}
+                                  className="rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs"
+                                >
+                                  {t("displayNameSave")}
+                                </button>
+                              </div>
+                            ) : null}
+                          </section>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}
@@ -7961,7 +9664,6 @@ export default function Home() {
           <section className="grid gap-5">
             <article className="order-2 rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <h2 className="text-xl font-semibold">{t("menuTitle")}</h2>
-              <p className="mt-2 text-sm text-slate-300">{t("menuLead")}</p>
 
               <div className="mt-4 space-y-4">
                 {menuGameCardGroups.map((group) => (
@@ -7997,8 +9699,19 @@ export default function Home() {
             </article>
 
             <article className="order-1 rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <h2 className="text-xl font-semibold">{t("roomTitle")}</h2>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-xl font-semibold">{t("roomTitle")}</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsRoomControlsOpen((prev) => !prev)}
+                  className="rounded-md border border-slate-300/35 px-3 py-1.5 text-xs text-slate-100 transition-colors hover:border-cyan-200/70 hover:text-cyan-100"
+                  aria-expanded={isRoomControlsOpen}
+                >
+                  {isRoomControlsOpen ? t("roomControlsClose") : t("roomControlsOpen")}
+                </button>
+              </div>
 
+              {isRoomControlsOpen ? (
               <div className="mt-4 grid gap-3">
                 <label className="grid gap-1 text-sm">
                   {t("roomCode")}
@@ -8108,7 +9821,7 @@ export default function Home() {
                       <p>{t("roomState")}: {roomStatus}</p>
                       <p>{t("roomConnected")}: {connectedRoomCode || "-"}</p>
                       <p>{t("roomRole")}: {roomRole ? roomRoleLabel(roomRole) : "-"}</p>
-                      <p>{t("roomMatchedPlayers")}: {connectedRoomCode ? `${roomMatchedPlayerCount}/2` : "-"}</p>
+                      <p>{t("roomMatchedPlayers")}: {connectedRoomCode ? `${roomMatchedPlayerCount}/8` : "-"}</p>
                       {quickMatchMode ? (
                         <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-cyan-200/30 bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100">
                           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-100/35 border-t-cyan-100" aria-hidden="true" />
@@ -8233,6 +9946,7 @@ export default function Home() {
                 </div>
 
               </div>
+              ) : null}
 
               {menuMessage ? <p className="mt-3 text-sm text-cyan-200">{menuMessage}</p> : null}
             </article>
@@ -8261,7 +9975,7 @@ export default function Home() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActivePanel("menu")}
+                  onClick={handleBackToMenuClick}
                   className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                 >
                   {t("backToMenu")}
@@ -8554,7 +10268,7 @@ export default function Home() {
                 <p className="mb-2 text-xs text-rose-200">{othelloDestroyGuideText}</p>
               ) : null}
 
-              <div className={`grid w-full max-w-[520px] grid-cols-8 gap-1 rounded-xl bg-emerald-900/70 p-2 ${othelloShowChaosSidePanel ? "mx-auto md:mx-0" : "mx-auto"} ${!gameStarted.othello ? "pointer-events-none opacity-60" : ""}`}>
+              <div className={`grid w-full max-w-[min(96vw,680px)] grid-cols-8 gap-[3px] rounded-xl bg-emerald-900/70 p-1.5 sm:gap-1 sm:p-2 ${othelloShowChaosSidePanel ? "mx-auto md:mx-0" : "mx-auto"} ${!gameStarted.othello ? "pointer-events-none opacity-60" : ""}`}>
                 {board.map((line, row) =>
                   line.map((cell, col) => {
                     const key = `${row}-${col}`;
@@ -8660,8 +10374,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "gomoku" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("gomokuTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -8674,14 +10388,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetGomoku}
+                    onClick={() => runWithResetGuard("gomoku", resetGomoku)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("gomokuReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -8694,7 +10408,69 @@ export default function Home() {
               <p className="text-sm text-slate-300">{gomokuMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateGomokuNow)}</p> : null}
 
-              <div className={`mt-4 grid w-full max-w-[560px] grid-cols-15 gap-1 rounded-xl bg-amber-900/70 p-2 ${!gameStarted.gomoku ? "pointer-events-none opacity-60" : ""}`} style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
+              {!connectedRoomCode ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>{t("gomokuModeLabel")}</span>
+                    <select
+                      value={gomokuMode}
+                      onChange={(event) => {
+                        const nextMode = (event.target.value === "cpu" ? "cpu" : "local") as GomokuMode;
+                        setGomokuMode(nextMode);
+                        resetGomokuWith(nextMode, gomokuTurnOrder);
+                      }}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
+                    >
+                      <option value="cpu">{t("gomokuModeCpu")}</option>
+                      <option value="local">{t("gomokuModeLocal")}</option>
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>{t("gomokuCpuLevelLabel")}</span>
+                    <select
+                      value={gomokuCpuLevel}
+                      onChange={(event) => {
+                        const nextLevel = event.target.value === "easy"
+                          ? "easy"
+                          : event.target.value === "hard"
+                            ? "hard"
+                            : "normal";
+                        setGomokuCpuLevel(nextLevel as GomokuCpuLevel);
+                      }}
+                      disabled={gomokuMode !== "cpu"}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-50"
+                    >
+                      <option value="easy">{t("gomokuCpuLevelEasy")}</option>
+                      <option value="normal">{t("gomokuCpuLevelNormal")}</option>
+                      <option value="hard">{t("gomokuCpuLevelHard")}</option>
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>{t("gomokuTurnOrderLabel")}</span>
+                    <select
+                      value={gomokuTurnOrder}
+                      onChange={(event) => {
+                        const nextOrder = event.target.value === "white"
+                          ? "white"
+                          : event.target.value === "random"
+                            ? "random"
+                            : "black";
+                        setGomokuTurnOrder(nextOrder as GomokuTurnOrder);
+                        resetGomokuWith(gomokuMode, nextOrder as GomokuTurnOrder);
+                      }}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
+                    >
+                      <option value="black">{t("gomokuTurnOrderBlack")}</option>
+                      <option value="white">{t("gomokuTurnOrderWhite")}</option>
+                      <option value="random">{t("gomokuTurnOrderRandom")}</option>
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+
+              <div className={`mt-4 mx-auto grid w-full max-w-[min(98vw,820px)] grid-cols-15 gap-[2px] rounded-xl bg-amber-900/70 p-1 sm:gap-[3px] sm:p-1.5 md:gap-1 md:p-2 ${!gameStarted.gomoku ? "pointer-events-none opacity-60" : ""}`} style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
                 {gomokuBoard.map((line, row) =>
                   line.map((cell, col) => {
                     const key = `g-${row}-${col}`;
@@ -8730,8 +10506,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "chess" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("chessTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -8744,14 +10520,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetChess}
+                    onClick={() => runWithResetGuard("chess", () => resetChess())}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("chessReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -8764,7 +10540,67 @@ export default function Home() {
               <p className="text-sm text-slate-300">{chessMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateChessNow)}</p> : null}
 
-              <div className={`mt-4 grid w-full max-w-[520px] grid-cols-8 gap-1 rounded-xl bg-sky-900/50 p-2 ${!gameStarted.chess ? "pointer-events-none opacity-60" : ""}`}>
+              {!connectedRoomCode ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>{t("chessModeLabel")}</span>
+                    <select
+                      value={chessMode}
+                      onChange={(event) => {
+                        const nextMode = (event.target.value === "cpu" ? "cpu" : "local") as ChessMode;
+                        setChessMode(nextMode);
+                        resetChess();
+                      }}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
+                    >
+                      <option value="cpu">{t("chessModeCpu")}</option>
+                      <option value="local">{t("chessModeLocal")}</option>
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>{t("chessCpuLevelLabel")}</span>
+                    <select
+                      value={chessCpuLevel}
+                      onChange={(event) => {
+                        const nextLevel = (event.target.value === "easy" || event.target.value === "hard")
+                          ? event.target.value
+                          : "normal";
+                        setChessCpuLevel(nextLevel as ChessCpuLevel);
+                      }}
+                      disabled={chessMode !== "cpu"}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <option value="easy">{t("chessCpuLevelEasy")}</option>
+                      <option value="normal">{t("chessCpuLevelNormal")}</option>
+                      <option value="hard">{t("chessCpuLevelHard")}</option>
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>{t("chessTurnOrderLabel")}</span>
+                    <select
+                      value={chessTurnOrder}
+                      onChange={(event) => {
+                        const nextOrder = event.target.value === "black"
+                          ? "black"
+                          : event.target.value === "random"
+                            ? "random"
+                            : "white";
+                        setChessTurnOrder(nextOrder as ChessTurnOrder);
+                        resetChess(nextOrder as ChessTurnOrder);
+                      }}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
+                    >
+                      <option value="white">{t("chessTurnOrderWhite")}</option>
+                      <option value="black">{t("chessTurnOrderBlack")}</option>
+                      <option value="random">{t("chessTurnOrderRandom")}</option>
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+
+              <div className={`mt-4 mx-auto grid w-full max-w-[min(96vw,680px)] grid-cols-8 gap-[3px] rounded-xl bg-emerald-900/70 p-1.5 sm:gap-1 sm:p-2 ${!gameStarted.chess ? "pointer-events-none opacity-60" : ""}`}>
                 {chessBoard.map((line, row) =>
                   line.map((piece, col) => {
                     const isSelected = selectedChess?.row === row && selectedChess?.col === col;
@@ -8776,7 +10612,7 @@ export default function Home() {
                         type="button"
                         onClick={() => onChessClick(row, col)}
                         disabled={!canOperateChessNow || isChessOver || !gameStarted.chess}
-                        className={`aspect-square rounded-sm px-1 text-[11px] font-semibold ${dark ? "bg-slate-700/95" : "bg-slate-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} disabled:cursor-not-allowed disabled:opacity-70`}
+                        className={`aspect-square rounded-sm px-1 text-2xl font-semibold leading-none sm:text-4xl ${dark ? "bg-emerald-700/95 hover:bg-emerald-600/95" : "bg-emerald-600/95 hover:bg-emerald-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} disabled:cursor-not-allowed disabled:opacity-70`}
                         aria-label={`chess-${row + 1}-${col + 1}`}
                       >
                         {piece ? chessPieceLabel(piece) : ""}
@@ -8793,8 +10629,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "shogi" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("shogiTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -8807,14 +10643,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetShogi}
+                    onClick={() => runWithResetGuard("shogi", resetShogi)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("shogiReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -8828,24 +10664,73 @@ export default function Home() {
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateShogiNow)}</p> : null}
 
               {!connectedRoomCode ? (
-                <div className="mt-3 grid max-w-[220px] gap-1 text-xs text-slate-300">
-                  <span>{t("shogiModeLabel")}</span>
-                  <select
-                    value={shogiMode}
-                    onChange={(event) => {
-                      const nextMode = (event.target.value === "chaos" ? "chaos" : "local") as ShogiMode;
-                      setShogiMode(nextMode);
-                      resetShogi();
-                    }}
-                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
-                  >
-                    <option value="local">{t("shogiModeLocal")}</option>
-                    <option value="chaos">{t("shogiModeChaos")}</option>
-                  </select>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>{t("shogiModeLabel")}</span>
+                    <select
+                      value={shogiMode}
+                      onChange={(event) => {
+                        const nextMode = event.target.value === "cpu"
+                          ? "cpu"
+                          : event.target.value === "chaos"
+                            ? "chaos"
+                            : "local";
+                        setShogiMode(nextMode as ShogiMode);
+                        resetShogiWith(nextMode as ShogiMode, shogiTurnOrder);
+                      }}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm min-[360px]:text-[13px]"
+                    >
+                      <option value="cpu">{t("shogiModeCpu")}</option>
+                      <option value="local">{t("shogiModeLocal")}</option>
+                      <option value="chaos">{t("shogiModeChaos")}</option>
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>{t("shogiCpuLevelLabel")}</span>
+                    <select
+                      value={shogiCpuLevel}
+                      onChange={(event) => {
+                        const nextLevel = event.target.value === "easy"
+                          ? "easy"
+                          : event.target.value === "hard"
+                            ? "hard"
+                            : "normal";
+                        setShogiCpuLevel(nextLevel as ShogiCpuLevel);
+                      }}
+                      disabled={shogiMode !== "cpu"}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm min-[360px]:text-[13px] disabled:opacity-50"
+                    >
+                      <option value="easy">{t("shogiCpuLevelEasy")}</option>
+                      <option value="normal">{t("shogiCpuLevelNormal")}</option>
+                      <option value="hard">{t("shogiCpuLevelHard")}</option>
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>{t("shogiTurnOrderLabel")}</span>
+                    <select
+                      value={shogiTurnOrder}
+                      onChange={(event) => {
+                        const nextOrder = event.target.value === "white"
+                          ? "white"
+                          : event.target.value === "random"
+                            ? "random"
+                            : "black";
+                        setShogiTurnOrder(nextOrder as ShogiTurnOrder);
+                        resetShogiWith(shogiMode, nextOrder as ShogiTurnOrder);
+                      }}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm min-[360px]:text-[13px]"
+                    >
+                      <option value="black">{t("shogiTurnOrderBlack")}</option>
+                      <option value="white">{t("shogiTurnOrderWhite")}</option>
+                      <option value="random">{t("shogiTurnOrderRandom")}</option>
+                    </select>
+                  </label>
                 </div>
               ) : null}
 
-              <div className={`mt-4 grid w-full max-w-[560px] grid-cols-9 gap-1 rounded-xl bg-amber-900/60 p-2 ${!gameStarted.shogi ? "pointer-events-none opacity-60" : ""}`} style={{ gridTemplateColumns: "repeat(9, minmax(0, 1fr))" }}>
+              <div className={`mt-4 mx-auto grid w-full max-w-[min(96vw,680px)] grid-cols-9 gap-[3px] rounded-xl bg-amber-900/60 p-1.5 sm:gap-1 sm:p-2 ${!gameStarted.shogi ? "pointer-events-none opacity-60" : ""}`} style={{ gridTemplateColumns: "repeat(9, minmax(0, 1fr))" }}>
                 {shogiBoard.map((line, row) =>
                   line.map((piece, col) => {
                     const isSelected = selectedShogi?.row === row && selectedShogi?.col === col;
@@ -8856,10 +10741,19 @@ export default function Home() {
                         type="button"
                         onClick={() => onShogiClick(row, col)}
                         disabled={!canOperateShogiNow || isShogiOver || !gameStarted.shogi}
-                        className={`aspect-square rounded-sm px-1 text-[11px] font-semibold ${dark ? "bg-amber-700/95" : "bg-amber-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} disabled:cursor-not-allowed disabled:opacity-70`}
+                        className={`aspect-square rounded-sm px-0.5 sm:px-1 ${dark ? "bg-amber-700/95" : "bg-amber-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} disabled:cursor-not-allowed disabled:opacity-70`}
                         aria-label={`shogi-${row + 1}-${col + 1}`}
                       >
-                        {piece ? shogiPieceLabel(piece) : ""}
+                        {piece ? (
+                          <span
+                            className={`mx-auto grid h-[82%] w-[76%] place-items-center border border-amber-900/80 bg-gradient-to-b from-amber-100 via-amber-200 to-amber-300 text-[clamp(10px,2.45vw,20px)] font-black leading-none text-amber-950 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_2px_4px_rgba(0,0,0,0.25)] [clip-path:polygon(18%_0%,82%_0%,100%_100%,0%_100%)] ${piece.color === "w" ? "rotate-180" : ""}`}
+                            aria-label={`${piece.color === "b" ? t("blackStone") : t("whiteStone")}${shogiPieceLabel(piece)}`}
+                          >
+                            <span className="translate-y-[1px]">{shogiPieceLabel(piece)}</span>
+                          </span>
+                        ) : (
+                          ""
+                        )}
                       </button>
                     );
                   }),
@@ -9002,14 +10896,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetNumeron}
+                    onClick={() => runWithResetGuard("numeron", resetNumeron)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("numeronReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9087,8 +10981,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "blackjack" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("blackjackTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -9101,14 +10995,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetBlackjack}
+                    onClick={() => runWithResetGuard("blackjack", resetBlackjack)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("blackjackReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9122,12 +11016,28 @@ export default function Home() {
               <p className="text-sm text-slate-300">{blackjackMessage}</p>
 
               <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
-                <p className="text-sm">
-                  {t("blackjackDealer")}: {blackjackDealerHand.map((card) => blackjackCardLabel(card)).join(" ")} ({blackjackHandValue(blackjackDealerHand)})
-                </p>
-                <p className="text-sm">
-                  {t("blackjackPlayer")}: {blackjackPlayerHand.map((card) => blackjackCardLabel(card)).join(" ")} ({blackjackHandValue(blackjackPlayerHand)})
-                </p>
+                <div>
+                  <p className="text-sm font-semibold">{t("blackjackDealer")} ({blackjackHandValue(blackjackDealerHand)})</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {blackjackDealerHand.map((card, index) => (
+                      <span key={`bj-dealer-${card.suit}-${card.rank}-${index}`}>{renderPlayingCardFace(blackjackCardLabel(card))}</span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{t("blackjackPlayer")} ({blackjackHandValue(blackjackPlayerHand)})</p>
+                  <div className="mt-2 flex items-end overflow-x-auto pb-2 pr-2 pl-1">
+                    {blackjackPlayerHand.map((card, index) => (
+                      <span
+                        key={`bj-player-${card.suit}-${card.rank}-${index}`}
+                        className="inline-flex shrink-0 transition-transform duration-150 hover:-translate-y-1"
+                        style={playerHandFanStyle(index, blackjackPlayerHand.length, { overlap: 11, spread: 1.9, maxRotate: 10, centerLift: 0.5, centerOffset: 0.5 })}
+                      >
+                        {renderPlayingCardFace(blackjackCardLabel(card))}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
@@ -9156,8 +11066,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "chinchiro" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("chinchiroTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -9170,14 +11080,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetChinchiro}
+                    onClick={() => runWithResetGuard("chinchiro", resetChinchiro)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("chinchiroReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9217,8 +11127,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "sevens" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("sevensTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -9231,14 +11141,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetSevens}
+                    onClick={() => runWithResetGuard("sevens", resetSevens)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("sevensReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9276,19 +11186,24 @@ export default function Home() {
 
               <div className="mt-4 grid gap-2">
                 <p className="text-sm font-semibold">{t("sevensPlayerHand")} ({sevensHands[0].length})</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-end overflow-x-auto pb-2 pr-2 pl-1">
                   {sevensHands[0].map((card, index) => {
                     const playable = isSevensPlayable(card, sevensTable);
                     return (
-                      <button
+                      <span
                         key={`${card.suit}-${card.rank}-${index}`}
-                        type="button"
-                        onClick={() => onSevensPlay(index)}
-                        disabled={isSevensOver || sevensTurn !== "player"}
-                        className={`rounded-md border px-2 py-1 text-xs ${playable ? "border-cyan-300/60 bg-cyan-400/10" : "border-slate-500/30 bg-slate-800/40"}`}
+                        className="inline-flex shrink-0"
+                        style={playerHandFanStyle(index, sevensHands[0].length, { overlap: 15, spread: 2.8, maxRotate: 14, centerLift: 0.8, centerOffset: 0.95 })}
                       >
-                        {sevensCardLabel(card)}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => onSevensPlay(index)}
+                          disabled={isSevensOver || sevensTurn !== "player"}
+                          className={`origin-bottom rounded-md border px-2 py-1 text-xs transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 ${playable ? "border-cyan-300/60 bg-cyan-400/10" : "border-slate-500/30 bg-slate-800/40"}`}
+                        >
+                          {renderPlayingCardFace(sevensCardLabel(card), { compact: true, muted: !playable })}
+                        </button>
+                      </span>
                     );
                   })}
                 </div>
@@ -9314,8 +11229,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "daifugo" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("daifugoTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -9328,14 +11243,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetDaifugo}
+                    onClick={() => runWithResetGuard("daifugo", resetDaifugo)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("daifugoReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9350,25 +11265,33 @@ export default function Home() {
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateDaifugoNow)}</p> : null}
 
               <div className="mt-4 grid gap-2 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4 text-sm">
-                <p>{t("daifugoTable")}: {daifugoTableCard ? daifugoCardLabel(daifugoTableCard) : "-"}</p>
+                <p className="flex items-center gap-2">
+                  <span>{t("daifugoTable")}:</span>
+                  {daifugoTableCard ? renderPlayingCardFace(daifugoCardLabel(daifugoTableCard)) : <span>-</span>}
+                </p>
                 <p>{t("daifugoCpuHand")}: {daifugoLocalSide === "player" ? daifugoHands[1].length : daifugoHands[0].length}</p>
               </div>
 
               <div className="mt-4">
                 <p className="text-sm font-semibold">{t("daifugoYourHand")} ({daifugoLocalSide === "player" ? daifugoHands[0].length : daifugoHands[1].length})</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {(daifugoLocalSide === "player" ? daifugoHands[0] : daifugoHands[1]).map((card, index) => {
+                <div className="mt-2 flex items-end overflow-x-auto pb-2 pr-2 pl-1">
+                  {(daifugoLocalSide === "player" ? daifugoHands[0] : daifugoHands[1]).map((card, index, cards) => {
                     const playable = !daifugoTableCard || daifugoPower(card.rank) > daifugoPower(daifugoTableCard.rank);
                     return (
-                      <button
+                      <span
                         key={`${card.suit}-${card.rank}-${index}`}
-                        type="button"
-                        onClick={() => onDaifugoPlay(index, { side: daifugoLocalSide })}
-                        disabled={isDaifugoOver || !canOperateDaifugoNow}
-                        className={`rounded-md border px-2 py-1 text-xs ${playable ? "border-cyan-300/60 bg-cyan-400/10" : "border-slate-500/30 bg-slate-800/40"}`}
+                        className="inline-flex shrink-0"
+                        style={playerHandFanStyle(index, cards.length, { overlap: 15, spread: 2.7, maxRotate: 14, centerLift: 0.75, centerOffset: 0.9 })}
                       >
-                        {daifugoCardLabel(card)}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => onDaifugoPlay(index, { side: daifugoLocalSide })}
+                          disabled={isDaifugoOver || !canOperateDaifugoNow}
+                          className={`origin-bottom rounded-md border px-2 py-1 text-xs transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 ${playable ? "border-cyan-300/60 bg-cyan-400/10" : "border-slate-500/30 bg-slate-800/40"}`}
+                        >
+                          {renderPlayingCardFace(daifugoCardLabel(card), { compact: true, muted: !playable })}
+                        </button>
+                      </span>
                     );
                   })}
                 </div>
@@ -9406,14 +11329,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetFourPanel}
+                    onClick={() => runWithResetGuard("fourPanel", resetFourPanel)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("fourPanelReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9499,14 +11422,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetDrawingRelay}
+                    onClick={() => runWithResetGuard("drawingRelay", resetDrawingRelay)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("drawingRelayReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9607,14 +11530,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetFitPuzzle}
+                    onClick={() => runWithResetGuard("fitPuzzle", resetFitPuzzle)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("fitPuzzleReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9668,14 +11591,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetMahjong}
+                    onClick={() => runWithResetGuard("mahjong", resetMahjong)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("mahjongReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9743,8 +11666,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "poker" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("pokerTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -9757,14 +11680,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetPoker}
+                    onClick={() => runWithResetGuard("poker", resetPoker)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("pokerDeal")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9780,19 +11703,27 @@ export default function Home() {
               <div className="mt-4 grid gap-4 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
                 <div>
                   <p className="text-sm font-semibold">{t("pokerPlayerHand")}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex items-end overflow-x-auto pb-2 pr-2 pl-1">
                     {pokerPlayerHand.map((card, index) => {
                       const held = pokerHold[index];
                       return (
-                        <button
+                        <span
                           key={`poker-player-${card.suit}-${card.rank}-${index}`}
-                          type="button"
-                          onClick={() => togglePokerHold(index)}
-                          disabled={pokerPhase !== "draw"}
-                          className={`rounded-md border px-3 py-2 text-sm ${held ? "border-cyan-200 bg-cyan-400/20" : "border-slate-400/30 bg-slate-800/40"}`}
+                          className="inline-flex shrink-0"
+                          style={playerHandFanStyle(index, pokerPlayerHand.length, { overlap: 10, spread: 1.8, maxRotate: 9, centerLift: 0.4, centerOffset: 0.45 })}
                         >
-                          {pokerCardLabel(card)} {held ? `(${t("pokerHeld")})` : ""}
-                        </button>
+                          <button
+                            type="button"
+                            aria-pressed={held}
+                            onClick={() => togglePokerHold(index)}
+                            disabled={pokerPhase !== "draw"}
+                            className={`origin-bottom rounded-md border p-1.5 text-sm transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 aria-pressed:-translate-y-2 ${held ? "border-cyan-200 bg-cyan-400/20" : "border-slate-400/30 bg-slate-800/40"}`}
+                          >
+                            <span className="inline-flex items-center">
+                              {renderPlayingCardFace(pokerCardLabel(card))}
+                            </span>
+                          </button>
+                        </span>
                       );
                     })}
                   </div>
@@ -9806,7 +11737,9 @@ export default function Home() {
                         key={`poker-cpu-${card.suit}-${card.rank}-${index}`}
                         className="rounded-md border border-slate-400/30 bg-slate-800/40 px-3 py-2 text-sm"
                       >
-                        {pokerPhase === "result" ? pokerCardLabel(card) : "??"}
+                        {pokerPhase === "result"
+                          ? renderPlayingCardFace(pokerCardLabel(card))
+                          : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">??</span>}
                       </div>
                     ))}
                   </div>
@@ -9839,8 +11772,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "solitaire" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("solitaireTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -9853,14 +11786,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetSolitaire}
+                    onClick={() => runWithResetGuard("solitaire", resetSolitaire)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("solitaireReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -9889,7 +11822,10 @@ export default function Home() {
                     onClick={onSolitaireSelectWaste}
                     className={`rounded-md border px-3 py-2 text-sm ${solitaireSelection?.from === "waste" ? "border-cyan-200 bg-cyan-400/20" : "border-slate-400/40 bg-slate-800/50"}`}
                   >
-                    {t("solitaireWaste")}: {solitaireWaste.length > 0 ? solitaireCardLabel(solitaireWaste[solitaireWaste.length - 1] as SolitaireCard) : "-"}
+                    <span className="inline-flex items-center gap-2">
+                      <span>{t("solitaireWaste")}:</span>
+                      {solitaireWaste.length > 0 ? renderPlayingCardFace(solitaireCardLabel(solitaireWaste[solitaireWaste.length - 1] as SolitaireCard)) : <span>-</span>}
+                    </span>
                   </button>
                 </div>
 
@@ -9904,7 +11840,10 @@ export default function Home() {
                         onClick={() => onSolitaireMoveToFoundation(suit)}
                         className="rounded-md border border-emerald-200/30 bg-emerald-400/10 px-3 py-2 text-sm"
                       >
-                        {solitaireSuitSymbol(suit)} {top ? solitaireCardLabel(top) : "A"}
+                        <span className="inline-flex items-center gap-2">
+                          <span>{solitaireSuitSymbol(suit)}</span>
+                          {top ? renderPlayingCardFace(solitaireCardLabel(top), { compact: true }) : <span className="text-xs">A</span>}
+                        </span>
                       </button>
                     );
                   })}
@@ -9928,7 +11867,7 @@ export default function Home() {
                           onClick={() => onSolitaireSelectTableau(col)}
                           className={`mt-2 w-full rounded border px-2 py-2 text-sm ${selected ? "border-cyan-200 bg-cyan-400/20" : "border-slate-500/40 bg-slate-800/40"}`}
                         >
-                          {top ? solitaireCardLabel(top) : "-"}
+                          {top ? renderPlayingCardFace(solitaireCardLabel(top)) : "-"}
                         </button>
                         <p className="mt-1 text-xs text-slate-400">{pile.length} cards</p>
                       </div>
@@ -9959,14 +11898,14 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetSurvivors}
+                    onClick={() => runWithResetGuard("survivors", resetSurvivors)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("survivorsReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
@@ -10010,8 +11949,8 @@ export default function Home() {
         ) : null}
 
         {activePanel === "uno" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("unoTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -10024,19 +11963,38 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={resetUno}
+                    onClick={() => runWithResetGuard("uno", resetUno)}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("unoReset")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActivePanel("menu")}
+                    onClick={handleBackToMenuClick}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("backToMenu")}
                   </button>
                 </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-slate-300">CPU人数:</span>
+                <select
+                  value={String(unoCpuCount)}
+                  onChange={(event) => setUnoCpuCount(Math.max(1, Math.min(7, Number(event.target.value))))}
+                  disabled={gameStarted.uno || Boolean(connectedRoomCode)}
+                  className="rounded border border-cyan-200/40 bg-slate-950/70 px-2 py-1 disabled:opacity-60"
+                >
+                  <option value="1">1 (2人戦)</option>
+                  <option value="2">2 (3人戦)</option>
+                  <option value="3">3 (4人戦)</option>
+                  <option value="4">4 (5人戦)</option>
+                  <option value="5">5 (6人戦)</option>
+                  <option value="6">6 (7人戦)</option>
+                  <option value="7">7 (8人戦)</option>
+                </select>
+                {connectedRoomCode ? <span className="text-xs text-slate-400">ルーム対戦中は固定</span> : null}
               </div>
 
               {!gameStarted.uno ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
@@ -10045,30 +12003,224 @@ export default function Home() {
               <p className="text-sm text-slate-300">{unoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateUnoNow)}</p> : null}
 
-              <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
-                <p className="text-sm">{t("unoTopCard")}: {unoTopCard ? unoCardLabel(unoTopCard) : "-"}</p>
-                <p className="text-sm">{t("unoCpuHand")}: {unoLocalSide === "player" ? unoCpuHand.length : unoPlayerHand.length}</p>
-              </div>
-
-              <div className="mt-4">
-                <p className="text-sm font-semibold">{t("unoYourHand")}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {(unoLocalSide === "player" ? unoPlayerHand : unoCpuHand).map((card, index) => {
-                    const playable = unoTopCard ? canPlayCard(card, unoTopCard) : true;
-                    return (
-                      <button
-                        key={`${card.color}-${card.value}-${index}`}
-                        type="button"
-                        onClick={() => playUnoCard(index, { side: unoLocalSide })}
-                        disabled={!canOperateUnoNow || isUnoOver}
-                        className={`rounded-md border px-3 py-2 text-sm ${playable ? "border-cyan-300/60 bg-cyan-400/10" : "border-slate-400/30 bg-slate-800/40"}`}
-                      >
-                        {unoCardLabel(card)}
-                      </button>
-                    );
-                  })}
+              {canOperateUnoNow && !isUnoOver && unoActivationState.requiresRuleChoice ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                  <span>{t("unoChooseMatchRule")}</span>
+                  <button
+                    type="button"
+                    onClick={() => setUnoActivationFilter("color")}
+                    disabled={!unoActivationState.canChooseColor}
+                    className={`rounded border px-2 py-1 ${unoActivationFilter === "color" ? "border-cyan-200 bg-cyan-400/20 text-cyan-100" : "border-slate-400/40"}`}
+                  >
+                    {t("unoMatchByColor")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUnoActivationFilter("number")}
+                    disabled={!unoActivationState.canChooseNumber}
+                    className={`rounded border px-2 py-1 ${unoActivationFilter === "number" ? "border-cyan-200 bg-cyan-400/20 text-cyan-100" : "border-slate-400/40"}`}
+                  >
+                    {t("unoMatchByNumber")}
+                  </button>
+                  {unoActivationFilter ? (
+                    <button
+                      type="button"
+                      onClick={() => setUnoActivationFilter(null)}
+                      className="rounded border border-slate-400/40 px-2 py-1"
+                    >
+                      {t("unoMatchRuleReset")}
+                    </button>
+                  ) : null}
                 </div>
-              </div>
+              ) : null}
+
+              {isUnoLocalTableMode ? (
+                <div className="mt-4 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
+                  <div className="relative min-h-[560px] rounded-xl border border-cyan-300/30 bg-slate-900/70">
+                    <div className="pointer-events-none absolute inset-4 rounded-[999px] border border-cyan-300/20 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.16)_0%,rgba(8,47,73,0.22)_48%,rgba(2,6,23,0.08)_100%)]" />
+                    <div className="absolute inset-0 grid place-items-center px-4">
+                      <div className="grid place-items-center rounded-xl border border-cyan-300/35 bg-slate-900/70 p-4">
+                        <p className="text-xs font-semibold tracking-wide text-cyan-200">{t("unoTopCard")}</p>
+                        <div className="mt-2 grid min-h-[120px] w-full max-w-[220px] place-items-center rounded-lg border-2 border-dashed border-cyan-300/45 bg-cyan-400/5 p-3">
+                          {unoTopCard ? renderUnoCardFace(unoTopCard) : <span className="text-sm text-slate-400">-</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {unoCpuSeatLayout.map(({ hand, cpuIdx, x, y, orientation }) => {
+                      const seatIndex = cpuIdx + 1;
+                      const isTurnSeat = unoLocalTurnIndex === seatIndex;
+                      const isSideSeat = orientation !== "top";
+                      const visibleCount = isSideSeat ? Math.min(hand.length, 4) : Math.min(hand.length, 5);
+                      const hiddenCount = Math.max(0, hand.length - visibleCount);
+                      const seatWidth = orientation === "top" ? "min(62vw, 420px)" : "170px";
+                      const seatStyle = {
+                        left: `${x.toFixed(2)}%`,
+                        top: `${y.toFixed(2)}%`,
+                        transform: "translate(-50%, -50%)",
+                        width: seatWidth,
+                        zIndex: 10 + cpuIdx,
+                      };
+                      return (
+                        <div key={`uno-table-cpu-${cpuIdx}`} className="absolute" style={seatStyle}>
+                          <div className={`rounded-lg border px-2 py-1 ${isTurnSeat ? "border-cyan-200/70 bg-cyan-400/12" : "border-slate-400/35 bg-slate-900/45"}`}>
+                            <p className="text-center text-xs font-semibold text-slate-200">CPU {cpuIdx + 1}: {hand.length}</p>
+                          </div>
+                          {isSideSeat ? (
+                            <div className="mt-1 flex max-h-[210px] justify-center overflow-y-auto pb-1">
+                              <div className="flex flex-col items-center pt-1">
+                                {Array.from({ length: visibleCount }).map((_, cardIndex) => (
+                                  <span
+                                    key={`uno-table-cpu-side-${cpuIdx}-${cardIndex}`}
+                                    className="inline-flex"
+                                    style={{
+                                      marginTop: cardIndex === 0 ? 0 : -26,
+                                      transform: `rotate(${orientation === "left" ? "-90deg" : "90deg"}) translateY(${Math.max(0, 8 - cardIndex * 0.4).toFixed(2)}px)`,
+                                      transformOrigin: "center",
+                                      zIndex: cardIndex + 1,
+                                    }}
+                                  >
+                                    {renderUnoCardBack()}
+                                  </span>
+                                ))}
+                                {hiddenCount > 0 ? <p className="mt-1 text-center text-[11px] font-semibold text-cyan-200/90">+{hiddenCount}</p> : null}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-1 overflow-x-auto pb-1">
+                              <div className="relative left-1/2 flex min-h-[70px] w-max -translate-x-1/2 items-end pr-2 pl-1">
+                                {Array.from({ length: visibleCount }).map((_, cardIndex) => (
+                                  <span
+                                    key={`uno-table-cpu-top-${cpuIdx}-${cardIndex}`}
+                                    className="inline-flex shrink-0"
+                                    style={opponentHandStackStyle(cardIndex, visibleCount)}
+                                  >
+                                    {renderUnoCardBack()}
+                                  </span>
+                                ))}
+                              </div>
+                              {hiddenCount > 0 ? <p className="mt-1 text-center text-[11px] font-semibold text-cyan-200/90">+{hiddenCount}</p> : null}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    <div className="absolute bottom-3 left-1/2 z-10 w-[88%] max-w-[760px] -translate-x-1/2">
+                      <p className={`text-center text-sm font-semibold ${unoLocalTurnIndex === 0 ? "text-cyan-200" : "text-slate-100"}`}>{t("unoYourHand")}</p>
+                      <div className="mt-1 overflow-x-auto pb-1">
+                        <div className="relative left-1/2 flex w-max -translate-x-1/2 items-end px-2">
+                          {unoVisibleHand.map((card, index) => {
+                            const playable = unoTopCard ? canPlayCard(card, unoTopCard) : true;
+                            const lockedByRuleChoice = unoActivationState.requiresRuleChoice && !unoActivationFilter;
+                            const cardActive = playable && !lockedByRuleChoice && unoActivationState.activeIndices.has(index);
+                            return (
+                              <span
+                                key={`${card.color}-${card.value}-${index}`}
+                                className="inline-flex shrink-0"
+                                style={playerHandFanStyle(index, unoVisibleHand.length, { overlap: 13, spread: 2.4, maxRotate: 13, centerLift: 0.65, centerOffset: 0.85 })}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => playUnoCard(index, { side: unoLocalSide })}
+                                  disabled={!canOperateUnoNow || isUnoOver || !cardActive}
+                                  className={`origin-bottom rounded-md border p-1.5 text-sm transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 ${cardActive ? "border-cyan-300/70 bg-cyan-400/20" : playable ? "border-amber-300/50 bg-amber-400/10" : "border-slate-400/30 bg-slate-800/40"}`}
+                                >
+                                  <span className="inline-flex items-center">
+                                    {renderUnoCardFace(card)}
+                                  </span>
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
+                    {connectedRoomCode ? (
+                      <>
+                        <p className="text-sm">{t("unoCpuHand")}: {unoLocalSide === "player" ? unoCpuHand.length : unoPlayerHand.length}</p>
+                        <div className="overflow-x-auto pb-1">
+                          <div className="relative left-1/2 flex min-h-[78px] w-max -translate-x-1/2 items-end pr-2 pl-1">
+                            {Array.from({ length: unoLocalSide === "player" ? unoCpuHand.length : unoPlayerHand.length }).map((_, index) => (
+                              <span
+                                key={`uno-opponent-back-${index}`}
+                                className="inline-flex shrink-0"
+                                style={opponentHandStackStyle(index, unoLocalSide === "player" ? unoCpuHand.length : unoPlayerHand.length)}
+                              >
+                                {renderUnoCardBack()}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="grid gap-2">
+                        {unoLocalCpuHands.map((hand, cpuIdx) => (
+                          <div key={`uno-cpu-hand-${cpuIdx}`} className="grid gap-1">
+                            <p className="text-sm">CPU {cpuIdx + 1}手札: {hand.length}</p>
+                            <div className="overflow-x-auto pb-1">
+                              <div className="relative left-1/2 flex min-h-[70px] w-max -translate-x-1/2 items-end pr-2 pl-1">
+                                {Array.from({ length: hand.length }).map((_, cardIndex) => (
+                                  <span
+                                    key={`uno-opponent-${cpuIdx}-back-${cardIndex}`}
+                                    className="inline-flex shrink-0"
+                                    style={opponentHandStackStyle(cardIndex, hand.length)}
+                                  >
+                                    {renderUnoCardBack()}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="grid place-items-center rounded-xl border border-cyan-300/35 bg-slate-900/70 p-4">
+                      <p className="text-xs font-semibold tracking-wide text-cyan-200">{t("unoTopCard")}</p>
+                      <div className="mt-2 grid min-h-[120px] w-full max-w-[220px] place-items-center rounded-lg border-2 border-dashed border-cyan-300/45 bg-cyan-400/5 p-3">
+                        {unoTopCard ? renderUnoCardFace(unoTopCard) : <span className="text-sm text-slate-400">-</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold">{t("unoYourHand")}</p>
+                    <div className="mt-2 overflow-x-auto pb-2">
+                      <div className="relative left-1/2 flex w-max -translate-x-1/2 items-end px-2">
+                        {unoVisibleHand.map((card, index) => {
+                          const playable = unoTopCard ? canPlayCard(card, unoTopCard) : true;
+                          const lockedByRuleChoice = unoActivationState.requiresRuleChoice && !unoActivationFilter;
+                          const cardActive = playable && !lockedByRuleChoice && unoActivationState.activeIndices.has(index);
+                          return (
+                            <span
+                              key={`${card.color}-${card.value}-${index}`}
+                              className="inline-flex shrink-0"
+                              style={playerHandFanStyle(index, unoVisibleHand.length, { overlap: 13, spread: 2.4, maxRotate: 13, centerLift: 0.65, centerOffset: 0.85 })}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => playUnoCard(index, { side: unoLocalSide })}
+                                disabled={!canOperateUnoNow || isUnoOver || !cardActive}
+                                className={`origin-bottom rounded-md border p-1.5 text-sm transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 ${cardActive ? "border-cyan-300/70 bg-cyan-400/20" : playable ? "border-amber-300/50 bg-amber-400/10" : "border-slate-400/30 bg-slate-800/40"}`}
+                              >
+                                <span className="inline-flex items-center">
+                                  {renderUnoCardFace(card)}
+                                </span>
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                 <button

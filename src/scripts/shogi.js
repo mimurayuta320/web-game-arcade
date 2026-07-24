@@ -2474,10 +2474,14 @@ export function initShogi(options = {}) {
         const piece = state.board[row][col];
         if (piece) {
           const span = document.createElement("span");
+          const label = document.createElement("span");
           const facingClass = `facing-${pieceFacingForRender(piece)}`;
           const campClass = piece.camp ? `camp-${piece.camp}` : "";
           span.className = `shogi-piece ${facingClass} ${campClass} ${piece.owner === localOwner ? "self" : "opponent"}`;
-          span.textContent = pieceDisplayLabel(piece, mineViewerOwner());
+          span.setAttribute("aria-label", pieceDisplayLabel(piece, mineViewerOwner()));
+          label.className = "shogi-piece-label";
+          label.textContent = pieceDisplayLabel(piece, mineViewerOwner());
+          span.appendChild(label);
           cell.appendChild(span);
         }
 

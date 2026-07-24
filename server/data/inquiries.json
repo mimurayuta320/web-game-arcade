@@ -8,15 +8,6 @@
     "id": "3072744e-4bbe-4d83-bab1-81c7c27d5485"
   },
   {
-    "id": "c8948daf-f703-49f1-a865-682b12924fa8",
-    "name": "ありがとう",
-    "message": "無駄に強いやつがいすぎて困るのでレート戦を追加してほしいです",
-    "url": "http://localhost:3000/",
-    "lang": "ja",
-    "submittedAt": "2026-07-24T08:56:13.092Z",
-    "userId": "NullToufu"
-  },
-  {
     "id": "d0a345c1-bbaa-4158-b00a-4be65cca1733",
     "name": "あいうえお",
     "message": "とうふぼけ",
@@ -24,5 +15,14 @@
     "lang": "ja",
     "submittedAt": "2026-07-24T08:57:37.501Z",
     "userId": "NullToufu"
+  },
+  {
+    "id": "17697430-d879-46e5-b5a8-28afcba6db59",
+    "name": "阿部晋三マイクロビキニ部",
+    "message": "ころすよてめーを・・・・・・・・・",
+    "url": "https://them-figure-seems-incorporate.trycloudflare.com/",
+    "lang": "ja",
+    "submittedAt": "2026-07-24T13:00:15.425Z",
+    "userId": "阿部晋三マイクロビキニ部"
   }
 ]

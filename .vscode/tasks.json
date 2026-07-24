@@ -4,17 +4,16 @@
 		{
 			"label": "Run Web Game Dev Server",
 			"type": "shell",
-			"command": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64\\npm.cmd",
+			"command": "powershell",
 			"args": [
-				"run",
-				"dev"
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"${workspaceFolder}\\scripts\\run-dev-public.ps1",
+				"-WorkspaceFolder",
+				"${workspaceFolder}"
 			],
-			"options": {
-				"env": {
-					"Path": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;${env:Path}",
-					"PATH": "${workspaceFolder}\\.tools\\node-v24.18.0-win-x64;${env:PATH}"
-				}
-			},
 			"isBackground": true,
 			"group": "build"
 		},

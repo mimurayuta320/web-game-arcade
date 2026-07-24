@@ -14,6 +14,7 @@ const HOST = process.env.SHARE_HOST || "0.0.0.0";
 const PORT = Number(process.env.SHARE_PORT || 4173);
 const ROOM_PATH = process.env.ROOM_PATH || "/room";
 const CLOUD_API_BASE = process.env.SHARE_CLOUD_API_BASE || "http://127.0.0.1:8787";
+const WEB_APP_BASE = String(process.env.SHARE_WEB_APP_BASE || "").trim();
 const MAX_ROOM_PLAYERS = Number(process.env.ROOM_MAX_PLAYERS || 8);
 const CHAT_RATE_MIN_INTERVAL_MS = Number(process.env.ROOM_CHAT_MIN_INTERVAL_MS || 700);
 const CHAT_RATE_WINDOW_MS = Number(process.env.ROOM_CHAT_WINDOW_MS || 12000);
@@ -173,6 +174,37 @@ function normalizePlayerName(raw) {
   return trimmed.slice(0, 18);
 }
 
+function normalizeRoomCode(raw) {
+  return String(raw || "").replace(/\D/g, "").slice(0, 6);
+}
+
+function generateRoomCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function allocateRoomCode() {
+  for (let i = 0; i < 120; i += 1) {
+    const code = generateRoomCode();
+    if (!rooms.has(code) || (rooms.get(code)?.size || 0) === 0) return code;
+  }
+  return generateRoomCode();
+}
+
+function pickQuickJoinRoomCode() {
+  let bestCode = "";
+  for (const [code, members] of rooms.entries()) {
+    const size = members?.size || 0;
+    if (size <= 0 || size >= MAX_ROOM_PLAYERS) continue;
+    const meta = roomMetaOf(code);
+    if (!meta.isPublic || meta.inGame) continue;
+    const activePlayers = activePlayerCount(code);
+    if (activePlayers < 1 || activePlayers >= 2) continue;
+    bestCode = code;
+    break;
+  }
+  return bestCode;
+}
+
 function ensureDb() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -244,7 +276,10 @@ function readRawBody(req) {
 }
 
 async function proxyApiRequest(req, res, requestUrl) {
-  const target = `${CLOUD_API_BASE}${requestUrl.pathname}${requestUrl.search}`;
+  const proxiedPath = requestUrl.pathname.startsWith("/api/cloud/")
+    ? requestUrl.pathname.replace(/^\/api\/cloud\//, "/api/")
+    : requestUrl.pathname;
+  const target = `${CLOUD_API_BASE}${proxiedPath}${requestUrl.search}`;
 
   if (req.method === "OPTIONS") {
     sendApiJson(res, 204, { ok: true });
@@ -282,6 +317,59 @@ async function proxyApiRequest(req, res, requestUrl) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   });
   res.end(bodyText);
+}
+
+async function proxyWebAppRequest(req, res, requestUrl) {
+  if (!WEB_APP_BASE) return false;
+
+  const target = `${WEB_APP_BASE}${requestUrl.pathname}${requestUrl.search}`;
+  const upstreamHeaders = {};
+  for (const [key, value] of Object.entries(req.headers || {})) {
+    const lower = String(key).toLowerCase();
+    if (lower === "host" || lower === "connection" || lower === "content-length") {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      upstreamHeaders[key] = value.join(", ");
+    } else if (typeof value === "string") {
+      upstreamHeaders[key] = value;
+    }
+  }
+
+  const rawBody = ["GET", "HEAD"].includes(req.method || "")
+    ? undefined
+    : await readRawBody(req);
+
+  let response;
+  try {
+    response = await fetch(target, {
+      method: req.method,
+      headers: upstreamHeaders,
+      body: rawBody,
+    });
+  } catch (error) {
+    res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({
+      ok: false,
+      code: "WEB_APP_UNAVAILABLE",
+      message: error?.message || "Failed to reach web app",
+    }));
+    return true;
+  }
+
+  const downstreamHeaders = {};
+  response.headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (lower === "connection" || lower === "transfer-encoding" || lower === "content-encoding") {
+      return;
+    }
+    downstreamHeaders[key] = value;
+  });
+
+  const body = Buffer.from(await response.arrayBuffer());
+  res.writeHead(response.status, downstreamHeaders);
+  res.end(body);
+  return true;
 }
 
 function hashPassword(password, saltHex) {
@@ -425,10 +513,16 @@ function broadcastRoom(code, payload, exceptWs = null) {
 }
 
 function joinRoom(ws, payload) {
-  const code = String(payload.room || "").trim();
+  const quickJoin = String(payload?.type || "") === "quick-join";
+  let code = quickJoin ? pickQuickJoinRoomCode() : normalizeRoomCode(payload.room);
+
+  if (quickJoin && !code) {
+    code = allocateRoomCode();
+  }
+
   if (!code) {
     sendJson(ws, { type: "error", code: "ROOM_REQUIRED" });
-    return false;
+    return { ok: false, joined: false };
   }
 
   if (ws.roomCode && ws.roomCode !== code) {
@@ -459,6 +553,7 @@ function joinRoom(ws, payload) {
   }
 
   let joined = false;
+  let assignedRole = "guest";
   if (!ws.roomCode) {
     ws.roomCode = code;
     members.add(ws);
@@ -466,10 +561,22 @@ function joinRoom(ws, payload) {
     joined = true;
     if (!meta.hostPeerId && ws.peerId && !ws.spectator) {
       meta.hostPeerId = ws.peerId;
+      assignedRole = "host";
+    } else if (ws.spectator) {
+      assignedRole = "spectator";
+    }
+    if (quickJoin && members.size === 1) {
+      meta.isPublic = true;
     }
     if (ws.peerId) {
       meta.privateAccessPeerIds.add(ws.peerId);
     }
+  }
+
+  if (ws.spectator) {
+    assignedRole = "spectator";
+  } else if (ws.peerId && meta.hostPeerId === ws.peerId) {
+    assignedRole = "host";
   }
 
   const requestedPublic = asBoolean(payload?.roomPublic, meta.isPublic);
@@ -477,7 +584,14 @@ function joinRoom(ws, payload) {
     meta.isPublic = requestedPublic;
   }
 
-  return { ok: true, joined };
+  return {
+    ok: true,
+    joined,
+    code,
+    quickJoin,
+    assignedRole,
+    isPublic: Boolean(meta.isPublic),
+  };
 }
 
 function roomParticipants(code) {
@@ -772,6 +886,21 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (WEB_APP_BASE) {
+    try {
+      const proxied = await proxyWebAppRequest(req, res, requestUrl);
+      if (proxied) return;
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({
+        ok: false,
+        code: "WEB_APP_PROXY_ERROR",
+        message: err?.message || "Web app proxy failed",
+      }));
+      return;
+    }
+  }
+
   if (!fs.existsSync(distDir)) {
     res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("dist directory not found. Run npm run build first.");
@@ -844,6 +973,18 @@ wss.on("connection", (ws) => {
     }
 
     const type = String(payload.type || "");
+    if (type === "quick-join") {
+      sendJson(ws, {
+        type: "room-assigned",
+        code: joinResult.code,
+        role: joinResult.assignedRole,
+        roomPublic: joinResult.isPublic,
+        participants: roomParticipants(code),
+      });
+      broadcastRoomState(code);
+      return;
+    }
+
     if (type === "host-mute") {
       handleHostMute(code, ws, payload);
       return;

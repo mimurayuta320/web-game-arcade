@@ -6,6 +6,7 @@ const STORAGE_UI_LANG_KEY = "neon-ui-language";
 const STORAGE_CLOUD_USER_ID_KEY = "neon-cloud-user-id";
 const STORAGE_CLOUD_PASSWORD_KEY = "neon-cloud-password";
 const STORAGE_PLAYER_NAME_KEY = "neon-player-name";
+const STORAGE_PROFILE_BIO_KEY = "neon-profile-bio";
 const MAX_AVATAR_DATA_URL_LENGTH = 180000;
 const MAX_AVATAR_FILE_SIZE = 120 * 1024;
 
@@ -15,6 +16,7 @@ const DEFAULT_PROFILE = {
   unlockedSkins: ["classic"],
   selectedSkin: "classic",
   playerName: "Player",
+  profileBio: "",
   playerAvatar: "",
   matchStats: {
     total: 0,
@@ -34,6 +36,8 @@ const messages = {
     userIdLabel: "クラウドID",
     playerNameLabel: "プレイヤー名",
     playerNamePlaceholder: "あなたの名前",
+    profileBioLabel: "自己紹介文",
+    profileBioPlaceholder: "自己紹介文を入力（180文字まで）",
     avatarLabel: "アバター画像",
     avatarClear: "アバター削除",
     save: "保存",
@@ -77,6 +81,8 @@ const messages = {
     userIdLabel: "클라우드 ID",
     playerNameLabel: "플레이어 이름",
     playerNamePlaceholder: "내 이름",
+    profileBioLabel: "자기소개",
+    profileBioPlaceholder: "자기소개를 입력하세요 (최대 180자)",
     avatarLabel: "아바타 이미지",
     avatarClear: "아바타 삭제",
     save: "저장",
@@ -120,6 +126,8 @@ const messages = {
     userIdLabel: "Cloud ID",
     playerNameLabel: "Player Name",
     playerNamePlaceholder: "Your name",
+    profileBioLabel: "Bio",
+    profileBioPlaceholder: "Write your bio (up to 180 chars)",
     avatarLabel: "Avatar Image",
     avatarClear: "Clear Avatar",
     save: "Save",
@@ -164,8 +172,10 @@ const profileTitle = document.getElementById("profileTitle");
 const profileLead = document.getElementById("profileLead");
 const profileUserIdLabel = document.getElementById("profileUserIdLabel");
 const profilePlayerNameLabel = document.getElementById("profilePlayerNameLabel");
+const profileBioLabel = document.getElementById("profileBioLabel");
 const profileAvatarLabel = document.getElementById("profileAvatarLabel");
 const playerNameInput = document.getElementById("profilePlayerName");
+const profileBioInput = document.getElementById("profileBio");
 const avatarFileInput = document.getElementById("profileAvatarFile");
 const avatarPreview = document.getElementById("profileAvatarPreview");
 const avatarPlaceholder = document.getElementById("profileAvatarPlaceholder");
@@ -214,8 +224,10 @@ function applyTranslations() {
   if (profileLead) profileLead.textContent = tr("lead");
   if (profileUserIdLabel) profileUserIdLabel.textContent = tr("userIdLabel");
   if (profilePlayerNameLabel) profilePlayerNameLabel.textContent = tr("playerNameLabel");
+  if (profileBioLabel) profileBioLabel.textContent = tr("profileBioLabel");
   if (profileAvatarLabel) profileAvatarLabel.textContent = tr("avatarLabel");
   if (playerNameInput) playerNameInput.placeholder = tr("playerNamePlaceholder");
+  if (profileBioInput) profileBioInput.placeholder = tr("profileBioPlaceholder");
   if (avatarClearBtn) avatarClearBtn.textContent = tr("avatarClear");
   if (saveBtn) saveBtn.textContent = tr("save");
   if (reloadBtn) reloadBtn.textContent = tr("reload");
@@ -229,6 +241,10 @@ function normalizeName(raw) {
   const trimmed = String(raw || "").trim().replace(/\s+/g, " ");
   if (!trimmed) return "Player";
   return trimmed.slice(0, 18);
+}
+
+function normalizeProfileBio(raw) {
+  return String(raw || "").trim().slice(0, 180);
 }
 
 function normalizeAvatarDataUrl(raw) {
@@ -253,6 +269,7 @@ function cloneProfile(profile) {
     unlockedSkins: Array.isArray(source.unlockedSkins) ? source.unlockedSkins.filter((row) => typeof row === "string") : ["classic"],
     selectedSkin: typeof source.selectedSkin === "string" ? source.selectedSkin : "classic",
     playerName: normalizeName(source.playerName || "Player"),
+    profileBio: normalizeProfileBio(source.profileBio),
     playerAvatar: normalizeAvatarDataUrl(source.playerAvatar),
     matchStats: {
       total: Math.max(0, numberOr(matchStats.total, 0)),
@@ -376,11 +393,13 @@ function renderProfile(profile) {
   currentProfile = safe;
 
   if (playerNameInput) playerNameInput.value = safe.playerName;
+  if (profileBioInput) profileBioInput.value = safe.profileBio;
   setAvatarPreview(safe.playerAvatar);
   renderStats(safe);
   renderRecentMatches(safe);
 
   localStorage.setItem(STORAGE_PLAYER_NAME_KEY, safe.playerName);
+  localStorage.setItem(STORAGE_PROFILE_BIO_KEY, safe.profileBio);
 }
 
 function updateModeUi(auth) {
@@ -402,7 +421,8 @@ async function loadProfile() {
 
   if (!auth) {
     const localName = normalizeName(localStorage.getItem(STORAGE_PLAYER_NAME_KEY) || "Player");
-    renderProfile({ ...DEFAULT_PROFILE, playerName: localName });
+    const localBio = normalizeProfileBio(localStorage.getItem(STORAGE_PROFILE_BIO_KEY) || "");
+    renderProfile({ ...DEFAULT_PROFILE, playerName: localName, profileBio: localBio });
     setStatus(tr("guestLoaded"));
     return;
   }
@@ -427,14 +447,17 @@ async function saveProfile(event) {
   event.preventDefault();
   const auth = getCloudAuth();
   const name = normalizeName(playerNameInput?.value || "Player");
+  const profileBio = normalizeProfileBio(profileBioInput?.value || "");
 
   const nextProfile = {
     ...currentProfile,
     playerName: name,
+    profileBio,
     playerAvatar: normalizeAvatarDataUrl(currentProfile.playerAvatar),
   };
 
   localStorage.setItem(STORAGE_PLAYER_NAME_KEY, name);
+  localStorage.setItem(STORAGE_PROFILE_BIO_KEY, profileBio);
 
   if (!auth) {
     renderProfile(nextProfile);

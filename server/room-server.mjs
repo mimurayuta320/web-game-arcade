@@ -218,7 +218,7 @@ function pickQuickJoinRoomCode() {
     const activePlayers = activePlayerCount(code);
     // Quick match should join rooms that already have at least one active player.
     // Skip spectator-only rooms so the first real entrant can become host in a new room.
-    if (activePlayers < 1 || activePlayers >= 2) continue;
+    if (activePlayers < 1 || activePlayers >= MAX_ROOM_PLAYERS) continue;
     bestCode = code;
     break;
   }
