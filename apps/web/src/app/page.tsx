@@ -1,6 +1,7 @@
 "use client";
 
 import { PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import LegacyFitPuzzle from "./components/LegacyFitPuzzle";
 
 type Panel = "menu" | "scores" | "othello" | "gomoku" | "chess" | "shogi" | "uno" | "minesweeper" | "numeron" | "blackjack" | "chinchiro" | "sevens" | "daifugo" | "fourPanel" | "drawingRelay" | "fitPuzzle" | "mahjong" | "poker" | "solitaire" | "survivors";
 type PlayablePanel = Exclude<Panel, "menu" | "scores">;
@@ -40,6 +41,35 @@ type ScoreEntry = {
   createdAt?: string;
 };
 
+type FitPuzzleDifficulty = "easy" | "normal" | "hard";
+
+type FitPuzzleStageProfile = {
+  bias: "balanced" | "long" | "blocks";
+  mutationSteps: number;
+  minComplex: number;
+  minBranch: number;
+};
+
+type FitPuzzleCustomStage = {
+  rows: number;
+  cols: number;
+  pieceCount: number;
+  title: string;
+  profile: FitPuzzleStageProfile;
+  openingRotation: "mixed" | "mostly-rotated";
+  assistLimit: number;
+  seed: number;
+};
+
+type FitPuzzleProgress = {
+  highestUnlockedStage: number;
+  selectedStageIndex: number;
+  difficulty: FitPuzzleDifficulty;
+  noRotateMode: boolean;
+  customStages: FitPuzzleCustomStage[];
+  updatedAt: string | null;
+};
+
 type CloudAuthResult = {
   ok?: boolean;
   code?: string;
@@ -49,6 +79,7 @@ type CloudAuthResult = {
     playerName?: string;
     profileBio?: string;
     playerAvatar?: string;
+    fitPuzzleProgress?: unknown;
   };
 };
 
@@ -179,7 +210,7 @@ const LOGIN_I18N = {
     tabFourPanel: "4コマリレー",
     tabDrawingRelay: "お絵かきリレー",
     tabFitPuzzle: "フィットパズル",
-    tabMahjong: "麻雀ペア",
+    tabMahjong: "麻雀",
     tabPoker: "ポーカー",
     tabSolitaire: "ソリティア",
     tabSurvivors: "Survivors",
@@ -338,7 +369,10 @@ const LOGIN_I18N = {
     visibilityPublic: "公開",
     visibilityPrivate: "非公開",
     gameStart: "ゲーム開始",
+    gameStarting: "カウント中...",
     gameStartPrompt: "「ゲーム開始」を押すと操作できます。",
+    gameStartCountdown: "開始まで {count}",
+    roomWaitHostStart: "参加側はホストのゲーム開始を待ってください。",
     othelloTitle: "オセロ",
     othelloReset: "リセット",
     othelloModeLabel: "MODE",
@@ -489,16 +523,54 @@ const LOGIN_I18N = {
     numeronTitle: "ヌメロン",
     numeronReset: "リセット",
     numeronHint: "0-9の数字を重複なしで3桁選んで予想してください。",
+    numeronHintWithDigits: "0-9の数字を重複なしで{digits}桁選んで予想してください。",
     numeronGuess: "予想",
     numeronClearDraft: "入力クリア",
     numeronSubmitGuess: "判定する",
     numeronInvalidGuess: "3桁の重複なし数字を入力してください。",
+    numeronInvalidGuessDigits: "{digits}桁の重複なし数字を入力してください。",
     numeronResult: "{guess}: {hits} HIT / {blows} BLOW",
     numeronWin: "正解です！",
     numeronApplyScore: "挑戦回数からスコア反映",
     numeronAppliedScore: "ヌメロンの挑戦回数からスコア欄へ反映しました。",
     numeronHistory: "履歴",
     numeronSecretLabel: "シークレット",
+    numeronDigitsLabel: "DIGITS",
+    numeronTryLabel: "TRIES",
+    numeronLimitLabel: "LIMIT",
+    numeronCandidatesLabel: "CANDIDATES",
+    numeronBack: "1文字戻す",
+    numeronAssistTitle: "アシスト",
+    numeronHighLowDigit: "HIGH&LOW数字",
+    numeronUseHighLow: "HIGH&LOW",
+    numeronUseReveal: "REVEAL",
+    numeronNoCharges: "もう使えません。",
+    numeronTryLimitReached: "手数上限です。シークレットは {secret} でした。",
+    numeronHighLowResult: "{digit} -> {result}",
+    numeronRevealResult: "{index}桁目は {digit}",
+    numeronSecretSetupTitle: "あなたのシークレット設定",
+    numeronSecretInputPlaceholder: "重複なしの数字",
+    numeronSecretSet: "この数字で開始",
+    numeronSecretRandom: "ランダム",
+    numeronSecretSetDone: "シークレットを設定しました。",
+    numeronSetSecretFirst: "先にシークレットを設定してください。",
+    numeronSecretReady: "シークレット設定済み",
+    numeronEditSecret: "シークレット再編集",
+    numeronCloseSecretEditor: "閉じる",
+    numeronOpponentField: "相手の場",
+    numeronOpponentHistory: "相手への予想履歴",
+    numeronYourField: "自分の場",
+    numeronYourSecret: "自分のシークレット",
+    numeronEnemyIncomingHistory: "敵からの履歴",
+    numeronEnemyHistoryOpen: "履歴を開く",
+    numeronEnemyHistoryClose: "履歴を閉じる",
+    numeronEnemyResult: "敵 {guess}: {hits} HIT / {blows} BLOW",
+    numeronEnemySolved: "敵が正解しました… ({guess})",
+    numeronItemConfirmHighLow: "HIGH&LOWを使用しますか？",
+    numeronItemConfirmReveal: "REVEALを使用しますか？",
+    numeronItemUseYes: "はい",
+    numeronItemUseNo: "いいえ",
+    numeronItemUseCanceled: "アイテム使用をキャンセルしました。",
     blackjackTitle: "ブラックジャック",
     blackjackReset: "配り直し",
     blackjackYourTurn: "あなたのターンです。HIT か STAND を選択してください。",
@@ -564,6 +636,10 @@ const LOGIN_I18N = {
     fourPanelReset: "リセット",
     fourPanelSubmit: "このコマを確定",
     fourPanelClear: "描画クリア",
+    fourPanelUndoStroke: "1手戻す",
+    fourPanelUndoPanel: "1コマ戻す",
+    fourPanelUndoUnavailable: "これ以上戻せません。",
+    fourPanelShortcutHint: "Ctrl+Z: 1手戻す / Enter: 確定 / Delete: クリア",
     fourPanelHint: "コマを描いて確定すると次のコマへ進みます。",
     fourPanelNotDrawn: "コマが未描画です。描いてから確定してください。",
     fourPanelDone: "4コマ完成です。",
@@ -594,26 +670,57 @@ const LOGIN_I18N = {
     fitPuzzleMoves: "手数",
     fitPuzzleApplyScore: "手数からスコア反映",
     fitPuzzleAppliedScore: "フィットパズルの結果をスコア欄へ反映しました。",
-    mahjongTitle: "麻雀ペア",
+    mahjongTitle: "麻雀",
     mahjongReset: "配牌し直し",
-    mahjongShuffle: "シャッフル",
+    mahjongShuffle: "ツモる",
     mahjongHintButton: "ヒント",
-    mahjongHint: "同じ牌を2枚選んで消してください。",
-    mahjongNoHint: "現在消せるペアがありません。シャッフルしてください。",
-    mahjongHintLine: "ヒント: {a} と {b}",
-    mahjongRemoved: "ペアを消しました。",
-    mahjongRemovedAndShuffle: "ペアを消しました。手がなくなったため自動シャッフルしました。",
-    mahjongBlocked: "同じ牌ですが、2回までに曲がる経路がありません。",
-    mahjongSwitched: "選択を切り替えました。",
-    mahjongClear: "クリア！ すべての牌を消しました。",
-    mahjongRemaining: "残り牌: {count}",
+    mahjongHint: "13枚からツモって14枚にし、1枚打牌してください。14枚で和了判定できます。",
+    mahjongNoHint: "この形では有効な待ちが見つかりません。",
+    mahjongHintLine: "有効牌: {a}",
+    mahjongRemoved: "打牌しました。",
+    mahjongRemovedAndShuffle: "テンパイ候補がありません。形を作り直しましょう。",
+    mahjongBlocked: "14枚時は牌を選んで打牌、13枚時はツモってください。",
+    mahjongSwitched: "打牌候補を選択しました。もう一度押して確定します。",
+    mahjongClear: "ツモ！ 和了です。",
+    mahjongRemaining: "山牌残り: {count}",
+    mahjongDrawn: "ツモ: {tile}。打牌してください。",
+    mahjongWinReady: "{tile} をツモ。和了できます。",
+    mahjongNeedDiscardFirst: "先に打牌してください。",
+    mahjongNeedDrawFirst: "先にツモってください。",
+    mahjongCannotWinYet: "まだ和了形ではありません。",
+    mahjongRyukyoku: "流局です。山牌が尽きました。",
+    mahjongTsumo: "ツモ和了",
+    mahjongHand: "手牌",
+    mahjongRiver: "河",
+    mahjongWall: "山",
+    mahjongRound: "局",
+    mahjongSeat: "自風",
+    mahjongDora: "ドラ表示",
+    mahjongJunme: "巡目",
+    mahjongOpponent: "対面",
+    mahjongHonba: "本場",
+    mahjongKyotaku: "供託",
+    mahjongRiichi: "リーチ",
+    mahjongHintDiscard: "打牌候補: {tile} 切り -> 待ち {waits} ({outs} 枚)",
+    mahjongResultTitle: "和了結果",
+    mahjongResultHanFu: "{han} 翻 / {fu} 符",
+    mahjongResultPoint: "目安点: {point}",
+    mahjongResultYakuman: "役満",
+    mahjongYakuMenzenTsumo: "門前清自摸和",
+    mahjongYakuTanyao: "断么九",
+    mahjongYakuToitoi: "対々和",
+    mahjongYakuYakuhai: "役牌",
+    mahjongYakuChiitoitsu: "七対子",
+    mahjongYakuHonitsu: "混一色",
+    mahjongYakuChinitsu: "清一色",
+    mahjongYakuKokushi: "国士無双",
     mahjongApplyScore: "進行度をスコアに反映",
-    mahjongAppliedScore: "麻雀ペアの結果をスコア欄へ反映しました。",
+    mahjongAppliedScore: "麻雀の結果をスコア欄へ反映しました。",
     pokerTitle: "ポーカー",
     pokerDeal: "配り直し",
-    pokerDraw: "カード交換",
-    pokerHint: "残したいカードを選択して交換してください。",
-    pokerReady: "交換が完了しました。結果を確認してください。",
+    pokerDraw: "勝負",
+    pokerHint: "大会ルールです。BET後に次へで進行します。",
+    pokerReady: "ショーダウンが完了しました。結果を確認してください。",
     pokerPlayerHand: "あなたの手",
     pokerCpuHand: "CPUの手",
     pokerResultWin: "あなたの勝ちです。",
@@ -639,6 +746,10 @@ const LOGIN_I18N = {
     solitaireInvalidMove: "その場所には移動できません。",
     solitaireSelected: "移動先を選んでください。",
     solitaireCleared: "クリア！ すべて土台へ移動しました。",
+    solitaireUndo: "1手戻す",
+    solitaireUndoUnavailable: "これ以上戻せません。",
+    solitaireAutoClear: "CLEAR",
+    solitaireAutoClearUnavailable: "まだCLEARは使えません。",
     solitaireFoundations: "土台枚数: {count}",
     solitaireApplyScore: "進行度をスコアに反映",
     solitaireAppliedScore: "ソリティアの結果をスコア欄へ反映しました。",
@@ -709,7 +820,7 @@ const LOGIN_I18N = {
     gameFourPanel: "4コマリレー",
     gameDrawingRelay: "お絵かきリレー",
     gameFitPuzzle: "フィットパズル",
-    gameMahjong: "麻雀ペア",
+    gameMahjong: "麻雀",
     gamePoker: "ポーカー",
     gameSolitaire: "ソリティア",
     gameSurvivors: "Survivors",
@@ -772,7 +883,7 @@ const LOGIN_I18N = {
     tabFourPanel: "4컷 릴레이",
     tabDrawingRelay: "그림 릴레이",
     tabFitPuzzle: "핏 퍼즐",
-    tabMahjong: "마작 페어",
+    tabMahjong: "마작",
     tabPoker: "포커",
     tabSolitaire: "솔리테어",
     tabSurvivors: "Survivors",
@@ -931,7 +1042,10 @@ const LOGIN_I18N = {
     visibilityPublic: "공개",
     visibilityPrivate: "비공개",
     gameStart: "게임 시작",
+    gameStarting: "카운트 중...",
     gameStartPrompt: "\"게임 시작\"을 누르면 조작할 수 있습니다.",
+    gameStartCountdown: "시작까지 {count}",
+    roomWaitHostStart: "참가자는 호스트의 게임 시작을 기다려 주세요.",
     othelloTitle: "오셀로 (Next 이전판)",
     othelloReset: "리셋",
     othelloModeLabel: "MODE",
@@ -1082,16 +1196,54 @@ const LOGIN_I18N = {
     numeronTitle: "뉴메론 (Next 이전판)",
     numeronReset: "리셋",
     numeronHint: "0-9 숫자를 중복 없이 3자리로 선택해 추측하세요.",
+    numeronHintWithDigits: "0-9 숫자를 중복 없이 {digits}자리로 선택해 추측하세요.",
     numeronGuess: "추측",
     numeronClearDraft: "입력 지우기",
     numeronSubmitGuess: "판정",
     numeronInvalidGuess: "중복 없는 3자리 숫자를 입력하세요.",
+    numeronInvalidGuessDigits: "중복 없는 {digits}자리 숫자를 입력하세요.",
     numeronResult: "{guess}: {hits} HIT / {blows} BLOW",
     numeronWin: "정답입니다!",
     numeronApplyScore: "시도 횟수로 점수 반영",
     numeronAppliedScore: "뉴메론 시도 횟수를 점수 입력란에 반영했습니다.",
     numeronHistory: "기록",
     numeronSecretLabel: "시크릿",
+    numeronDigitsLabel: "DIGITS",
+    numeronTryLabel: "TRIES",
+    numeronLimitLabel: "LIMIT",
+    numeronCandidatesLabel: "CANDIDATES",
+    numeronBack: "한 글자 지우기",
+    numeronAssistTitle: "보조 기능",
+    numeronHighLowDigit: "HIGH&LOW 숫자",
+    numeronUseHighLow: "HIGH&LOW",
+    numeronUseReveal: "REVEAL",
+    numeronNoCharges: "더 이상 사용할 수 없습니다.",
+    numeronTryLimitReached: "시도 횟수 제한입니다. 시크릿은 {secret} 였습니다.",
+    numeronHighLowResult: "{digit} -> {result}",
+    numeronRevealResult: "{index}번째 자리는 {digit}",
+    numeronSecretSetupTitle: "내 시크릿 설정",
+    numeronSecretInputPlaceholder: "중복 없는 숫자",
+    numeronSecretSet: "이 숫자로 시작",
+    numeronSecretRandom: "랜덤",
+    numeronSecretSetDone: "시크릿을 설정했습니다.",
+    numeronSetSecretFirst: "먼저 시크릿을 설정해 주세요.",
+    numeronSecretReady: "시크릿 설정 완료",
+    numeronEditSecret: "시크릿 다시 편집",
+    numeronCloseSecretEditor: "닫기",
+    numeronOpponentField: "상대 필드",
+    numeronOpponentHistory: "상대 추측 이력",
+    numeronYourField: "내 필드",
+    numeronYourSecret: "내 시크릿",
+    numeronEnemyIncomingHistory: "적의 추측 기록",
+    numeronEnemyHistoryOpen: "기록 열기",
+    numeronEnemyHistoryClose: "기록 닫기",
+    numeronEnemyResult: "적 {guess}: {hits} HIT / {blows} BLOW",
+    numeronEnemySolved: "적이 정답을 맞췄습니다... ({guess})",
+    numeronItemConfirmHighLow: "HIGH&LOW를 사용하시겠습니까?",
+    numeronItemConfirmReveal: "REVEAL을 사용하시겠습니까?",
+    numeronItemUseYes: "예",
+    numeronItemUseNo: "아니요",
+    numeronItemUseCanceled: "아이템 사용을 취소했습니다.",
     blackjackTitle: "블랙잭 (Next 이전판)",
     blackjackReset: "다시 배분",
     blackjackYourTurn: "당신의 차례입니다. HIT 또는 STAND를 선택하세요.",
@@ -1157,6 +1309,10 @@ const LOGIN_I18N = {
     fourPanelReset: "리셋",
     fourPanelSubmit: "이 컷 확정",
     fourPanelClear: "그림 지우기",
+    fourPanelUndoStroke: "한 획 되돌리기",
+    fourPanelUndoPanel: "한 컷 되돌리기",
+    fourPanelUndoUnavailable: "더 이상 되돌릴 수 없습니다.",
+    fourPanelShortcutHint: "Ctrl+Z: 한 획 되돌리기 / Enter: 확정 / Delete: 지우기",
     fourPanelHint: "컷을 그리고 확정하면 다음 컷으로 진행합니다.",
     fourPanelNotDrawn: "컷이 비어 있습니다. 그린 뒤 확정하세요.",
     fourPanelDone: "4컷 완성입니다.",
@@ -1187,26 +1343,57 @@ const LOGIN_I18N = {
     fitPuzzleMoves: "이동 수",
     fitPuzzleApplyScore: "이동 수로 점수 반영",
     fitPuzzleAppliedScore: "핏 퍼즐 결과를 점수 입력란에 반영했습니다.",
-    mahjongTitle: "마작 페어 (Next 이전판)",
+    mahjongTitle: "마작",
     mahjongReset: "다시 배치",
-    mahjongShuffle: "셔플",
+    mahjongShuffle: "쯔모",
     mahjongHintButton: "힌트",
-    mahjongHint: "같은 패 2장을 선택해 제거하세요.",
-    mahjongNoHint: "현재 제거 가능한 페어가 없습니다. 셔플하세요.",
-    mahjongHintLine: "힌트: {a} 와 {b}",
-    mahjongRemoved: "페어를 제거했습니다.",
-    mahjongRemovedAndShuffle: "페어를 제거했고, 수가 없어 자동 셔플했습니다.",
-    mahjongBlocked: "같은 패이지만 2번 이내로 꺾는 경로가 없습니다.",
-    mahjongSwitched: "선택을 변경했습니다.",
-    mahjongClear: "클리어! 모든 패를 제거했습니다.",
-    mahjongRemaining: "남은 패: {count}",
+    mahjongHint: "13패에서 쯔모해 14패를 만들고 1장을 버리세요. 14패에서 화료 판정이 가능합니다.",
+    mahjongNoHint: "현재 형태에서는 유효 대기가 없습니다.",
+    mahjongHintLine: "유효패: {a}",
+    mahjongRemoved: "패를 버렸습니다.",
+    mahjongRemovedAndShuffle: "텐파이 후보가 없습니다. 형태를 다시 만드세요.",
+    mahjongBlocked: "14패일 때는 패를 버리고, 13패일 때는 쯔모하세요.",
+    mahjongSwitched: "버릴 패를 선택했습니다. 다시 누르면 확정됩니다.",
+    mahjongClear: "쯔모! 화료입니다.",
+    mahjongRemaining: "남은 산패: {count}",
+    mahjongDrawn: "쯔모: {tile}. 패를 버리세요.",
+    mahjongWinReady: "{tile} 쯔모. 화료 가능합니다.",
+    mahjongNeedDiscardFirst: "먼저 패를 버리세요.",
+    mahjongNeedDrawFirst: "먼저 쯔모하세요.",
+    mahjongCannotWinYet: "아직 화료 형태가 아닙니다.",
+    mahjongRyukyoku: "유국입니다. 산패가 다 떨어졌습니다.",
+    mahjongTsumo: "쯔모 화료",
+    mahjongHand: "손패",
+    mahjongRiver: "버림패",
+    mahjongWall: "산",
+    mahjongRound: "국",
+    mahjongSeat: "자풍",
+    mahjongDora: "도라 표시",
+    mahjongJunme: "순목",
+    mahjongOpponent: "상대",
+    mahjongHonba: "본장",
+    mahjongKyotaku: "공탁",
+    mahjongRiichi: "리치",
+    mahjongHintDiscard: "추천 타패: {tile} -> 대기 {waits} ({outs}장)",
+    mahjongResultTitle: "화료 결과",
+    mahjongResultHanFu: "{han} 판 / {fu} 부",
+    mahjongResultPoint: "예상 점수: {point}",
+    mahjongResultYakuman: "역만",
+    mahjongYakuMenzenTsumo: "멘젠 쯔모",
+    mahjongYakuTanyao: "탕야오",
+    mahjongYakuToitoi: "또이또이",
+    mahjongYakuYakuhai: "역패",
+    mahjongYakuChiitoitsu: "치또이츠",
+    mahjongYakuHonitsu: "혼일색",
+    mahjongYakuChinitsu: "청일색",
+    mahjongYakuKokushi: "국사무쌍",
     mahjongApplyScore: "진행도를 점수에 반영",
-    mahjongAppliedScore: "마작 페어 결과를 점수 입력란에 반영했습니다.",
+    mahjongAppliedScore: "마작 결과를 점수 입력란에 반영했습니다.",
     pokerTitle: "포커 (Next 이전판)",
     pokerDeal: "다시 배분",
-    pokerDraw: "카드 교체",
-    pokerHint: "남길 카드를 선택한 뒤 교체하세요.",
-    pokerReady: "교체가 완료되었습니다. 결과를 확인하세요.",
+    pokerDraw: "승부",
+    pokerHint: "대회 룰입니다. BET 후 다음으로 진행하세요.",
+    pokerReady: "쇼다운이 완료되었습니다. 결과를 확인하세요.",
     pokerPlayerHand: "내 패",
     pokerCpuHand: "CPU 패",
     pokerResultWin: "당신의 승리입니다.",
@@ -1232,6 +1419,10 @@ const LOGIN_I18N = {
     solitaireInvalidMove: "그 위치로는 이동할 수 없습니다.",
     solitaireSelected: "이동할 위치를 선택하세요.",
     solitaireCleared: "클리어! 모든 카드를 기초 더미로 옮겼습니다.",
+    solitaireUndo: "한 수 되돌리기",
+    solitaireUndoUnavailable: "더 이상 되돌릴 수 없습니다.",
+    solitaireAutoClear: "CLEAR",
+    solitaireAutoClearUnavailable: "아직 CLEAR를 사용할 수 없습니다.",
     solitaireFoundations: "기초 더미 수: {count}",
     solitaireApplyScore: "진행도를 점수에 반영",
     solitaireAppliedScore: "솔리테어 결과를 점수 입력란에 반영했습니다.",
@@ -1302,7 +1493,7 @@ const LOGIN_I18N = {
     gameFourPanel: "4컷 릴레이",
     gameDrawingRelay: "그림 릴레이",
     gameFitPuzzle: "핏 퍼즐",
-    gameMahjong: "마작 페어",
+    gameMahjong: "마작",
     gamePoker: "포커",
     gameSolitaire: "솔리테어",
     gameSurvivors: "Survivors",
@@ -1354,6 +1545,9 @@ const EN_I18N: Partial<I18nMap> = {
   modeCloud: "Cloud",
   modeGuest: "Guest",
   tabMenu: "Menu",
+  gameStarting: "Counting...",
+  gameStartCountdown: "Starting in {count}",
+  roomWaitHostStart: "Participants should wait for the host to start the game.",
   tabOthello: "Othello",
   tabGomoku: "Gomoku",
   tabShogi: "Shogi",
@@ -1368,7 +1562,7 @@ const EN_I18N: Partial<I18nMap> = {
   tabFourPanel: "4-Panel Relay",
   tabDrawingRelay: "Drawing Relay",
   tabFitPuzzle: "Fit Puzzle",
-  tabMahjong: "Mahjong Pair",
+  tabMahjong: "Mahjong",
   tabPoker: "Poker",
   tabSolitaire: "Solitaire",
   tabSurvivors: "Survivors",
@@ -1428,7 +1622,7 @@ const EN_I18N: Partial<I18nMap> = {
   gameFourPanel: "4-Panel Relay",
   gameDrawingRelay: "Drawing Relay",
   gameFitPuzzle: "Fit Puzzle",
-  gameMahjong: "Mahjong Pair",
+  gameMahjong: "Mahjong",
   gamePoker: "Poker",
   gameSolitaire: "Solitaire",
   gameSurvivors: "Survivors",
@@ -1484,6 +1678,9 @@ const ZH_I18N: Partial<I18nMap> = {
   backToLogin: "返回登录",
   backToMenuConfirm: "要返回菜单吗？",
   tabMenu: "菜单",
+  gameStarting: "倒计时中...",
+  gameStartCountdown: "倒计时 {count}",
+  roomWaitHostStart: "参与方请等待房主开始游戏。",
   roomTitle: "房间操作",
   roomCode: "房间号",
   roomPublic: "公开",
@@ -1554,6 +1751,7 @@ type NumeronHistory = {
   hits: number;
   blows: number;
 };
+type NumeronDigitCount = 3 | 4;
 type BlackjackCard = {
   suit: "S" | "H" | "D" | "C";
   rank: number;
@@ -1593,6 +1791,7 @@ type PokerEval = {
     | "fourKind"
     | "straightFlush";
 };
+  type PokerPhase = "betting" | "preflop" | "flop" | "turn" | "river" | "showdown";
 type SolitaireSuit = "H" | "D" | "C" | "S";
 type SolitaireCard = {
   suit: SolitaireSuit;
@@ -1601,16 +1800,64 @@ type SolitaireCard = {
 };
 type SolitaireSelection =
   | { from: "waste" }
+  | { from: "foundation"; suit: SolitaireSuit }
   | { from: "tableau"; col: number; index: number };
+type SolitaireDragOverTarget =
+  | { kind: "foundation"; suit: SolitaireSuit }
+  | { kind: "tableau"; col: number };
+type SolitaireSnapshot = {
+  stock: SolitaireCard[];
+  waste: SolitaireCard[];
+  foundations: Record<SolitaireSuit, SolitaireCard[]>;
+  tableau: SolitaireCard[][];
+  selection: SolitaireSelection | null;
+  message: string;
+  isOver: boolean;
+};
+type SolitairePartyPiece = {
+  id: string;
+  left: number;
+  delay: number;
+  duration: number;
+  drift: number;
+  spin: number;
+  size: number;
+  color: string;
+};
+type SolitaireFoundationFlight = {
+  id: string;
+  label: string;
+  red: boolean;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  delayMs: number;
+  durationMs: number;
+  phase: "start" | "end";
+};
 type SurvivorsEnemy = {
   id: string;
   hp: number;
   maxHp: number;
 };
-type MahjongCell = number | null;
-type MahjongCoord = {
-  row: number;
-  col: number;
+type BrushCursorPreview = {
+  x: number;
+  y: number;
+  size: number;
+  visible: boolean;
+};
+type MahjongCell = number;
+type MahjongMeld = {
+  type: "triplet" | "sequence";
+  tile: MahjongCell;
+};
+type MahjongWinSummary = {
+  yakuKeys: Array<keyof typeof LOGIN_I18N.ja>;
+  han: number;
+  fu: number;
+  point: number;
+  isYakuman: boolean;
 };
 
 const FOUR_PANEL_RANDOM_TITLES = [
@@ -1622,6 +1869,14 @@ const FOUR_PANEL_RANDOM_TITLES = [
   "温泉でタイムスリップ",
 ];
 
+const pickRandomFourPanelTitle = () => {
+  return FOUR_PANEL_RANDOM_TITLES[Math.floor(Math.random() * FOUR_PANEL_RANDOM_TITLES.length)] || FOUR_PANEL_RANDOM_TITLES[0];
+};
+
+const normalizeFourPanelTitle = (value: string) => {
+  return String(value || "").trim().slice(0, 40);
+};
+
 const DRAWING_RELAY_PROMPTS = [
   "空飛ぶラーメン屋",
   "筋トレするペンギン",
@@ -1630,11 +1885,116 @@ const DRAWING_RELAY_PROMPTS = [
   "ドラゴンと文化祭",
   "秘密基地の夜",
 ];
+const DEFAULT_FOUR_PANEL_BRUSH_COLOR = "#111827";
+const DEFAULT_DRAWING_RELAY_BRUSH_COLOR = "#0f172a";
+const BRUSH_SIZE_MIN = 1;
+const BRUSH_SIZE_MAX = 50;
+
+const hexToRgba = (hexColor: string, opacityPercent: number) => {
+  const raw = hexColor.replace("#", "");
+  if (raw.length !== 6) return hexColor;
+  const r = Number.parseInt(raw.slice(0, 2), 16);
+  const g = Number.parseInt(raw.slice(2, 4), 16);
+  const b = Number.parseInt(raw.slice(4, 6), 16);
+  const alpha = Math.min(100, Math.max(0, opacityPercent)) / 100;
+  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`;
+};
+
+const clampBrushSize = (value: number) => {
+  if (!Number.isFinite(value)) return BRUSH_SIZE_MIN;
+  const rounded = Math.round(value);
+  return Math.max(BRUSH_SIZE_MIN, Math.min(BRUSH_SIZE_MAX, rounded));
+};
+
+const brushCursorFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>, brushSize: number) => {
+  const canvas = event.currentTarget;
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.max(0, Math.min(rect.width || 0, event.clientX - rect.left));
+  const y = Math.max(0, Math.min(rect.height || 0, event.clientY - rect.top));
+  const size = clampBrushSize(brushSize);
+  return { x, y, size };
+};
+
+const drawBrushSegment = (
+  ctx: CanvasRenderingContext2D,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  diameter: number,
+  color: string,
+  minDistance = 0,
+) => {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const distance = Math.hypot(dx, dy);
+  const radius = Math.max(0.5, diameter / 2);
+
+  if (distance > 0.001 && distance < minDistance) {
+    return false;
+  }
+
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = diameter;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+
+  if (distance <= 0.001) {
+    ctx.beginPath();
+    ctx.arc(from.x, from.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    return true;
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.lineTo(to.x, to.y);
+  ctx.stroke();
+  return true;
+};
+
+const beginStrokeLayerSession = (
+  canvas: HTMLCanvasElement,
+  layerRef: React.MutableRefObject<HTMLCanvasElement | null>,
+  baseSnapshotRef: React.MutableRefObject<ImageData | null>,
+) => {
+  const baseCtx = canvas.getContext("2d");
+  if (!baseCtx) return null;
+
+  baseSnapshotRef.current = baseCtx.getImageData(0, 0, canvas.width, canvas.height);
+
+  let layer = layerRef.current;
+  if (!layer) {
+    layer = document.createElement("canvas");
+    layerRef.current = layer;
+  }
+  if (layer.width !== canvas.width || layer.height !== canvas.height) {
+    layer.width = canvas.width;
+    layer.height = canvas.height;
+  }
+
+  const layerCtx = layer.getContext("2d");
+  if (!layerCtx) return null;
+  layerCtx.clearRect(0, 0, layer.width, layer.height);
+  return { baseCtx, layer, layerCtx };
+};
+
+const compositeStrokeLayer = (
+  baseCtx: CanvasRenderingContext2D,
+  baseSnapshot: ImageData,
+  layer: HTMLCanvasElement,
+  opacityPercent: number,
+) => {
+  baseCtx.putImageData(baseSnapshot, 0, 0);
+  baseCtx.save();
+  baseCtx.globalAlpha = Math.min(100, Math.max(0, opacityPercent)) / 100;
+  baseCtx.drawImage(layer, 0, 0);
+  baseCtx.restore();
+};
 
 const FIT_PUZZLE_SIZE = 3;
-const MAHJONG_ROWS = 6;
-const MAHJONG_COLS = 8;
-const MAHJONG_TYPE_COUNT = 16;
+const MAHJONG_TYPE_COUNT = 34;
+const MAHJONG_START_HAND_COUNT = 13;
+const MAHJONG_WAIT_HINT_LIMIT = 8;
 const MAHJONG_TILE_LABELS = [
   "M1",
   "M2",
@@ -1671,24 +2031,151 @@ const MAHJONG_TILE_LABELS = [
   "G",
   "R",
 ] as const;
-const MAHJONG_DIRECTIONS = [
-  [-1, 0],
-  [1, 0],
-  [0, -1],
-  [0, 1],
-] as const;
+const MAHJONG_ORPHAN_TILE_IDS = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33] as const;
+const FOUR_PANEL_EMPTY_SNAPSHOT = "__EMPTY__";
 
 function mahjongTileLabel(id: number): string {
   if (!Number.isInteger(id) || id < 0) return "?";
   return MAHJONG_TILE_LABELS[id % MAHJONG_TILE_LABELS.length] || "?";
 }
 
-function createMahjongGrid(rows: number, cols: number, value: MahjongCell = null): MahjongCell[][] {
-  return Array.from({ length: rows }, () => Array.from({ length: cols }, () => value));
+function mahjongTileFace(tile: number): { main: string; sub: string; toneClass: string } {
+  if (tile >= 0 && tile <= 8) {
+    return { main: String((tile % 9) + 1), sub: "萬", toneClass: "text-rose-700" };
+  }
+  if (tile >= 9 && tile <= 17) {
+    return { main: String((tile % 9) + 1), sub: "筒", toneClass: "text-slate-700" };
+  }
+  if (tile >= 18 && tile <= 26) {
+    return { main: String((tile % 9) + 1), sub: "索", toneClass: "text-emerald-700" };
+  }
+
+  const honorFaces = ["東", "南", "西", "北", "白", "發", "中"];
+  const honorIndex = tile - 27;
+  const main = honorFaces[honorIndex] || "?";
+  const toneClass = tile === 33 ? "text-red-700" : tile === 32 ? "text-emerald-700" : "text-slate-800";
+  return { main, sub: "", toneClass };
 }
 
-function cloneMahjongBoard(board: MahjongCell[][]): MahjongCell[][] {
-  return board.map((row) => [...row]);
+const MAHJONG_DIGIT_KANJI = ["一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
+const MAHJONG_PIN_COORDS = [
+  [[50, 50]],
+  [[50, 24], [50, 76]],
+  [[50, 18], [50, 50], [50, 82]],
+  [[30, 24], [70, 24], [30, 76], [70, 76]],
+  [[30, 24], [70, 24], [50, 50], [30, 76], [70, 76]],
+  [[30, 20], [70, 20], [30, 50], [70, 50], [30, 80], [70, 80]],
+  [[30, 16], [70, 16], [50, 34], [30, 50], [70, 50], [30, 84], [70, 84]],
+  [[30, 14], [70, 14], [30, 36], [70, 36], [30, 64], [70, 64], [30, 86], [70, 86]],
+  [[30, 14], [50, 14], [70, 14], [30, 50], [50, 50], [70, 50], [30, 86], [50, 86], [70, 86]],
+] as const;
+
+const MAHJONG_SOU_COORDS = [
+  [[50, 50]],
+  [[40, 28], [60, 72]],
+  [[35, 22], [50, 50], [65, 78]],
+  [[35, 24], [65, 24], [35, 76], [65, 76]],
+  [[35, 24], [65, 24], [50, 50], [35, 76], [65, 76]],
+  [[35, 18], [65, 18], [35, 50], [65, 50], [35, 82], [65, 82]],
+  [[25, 18], [50, 18], [75, 18], [25, 50], [75, 50], [25, 82], [75, 82]],
+  [[25, 16], [50, 16], [75, 16], [25, 39], [75, 39], [25, 62], [75, 62], [50, 84]],
+  [[25, 16], [50, 16], [75, 16], [25, 39], [50, 39], [75, 39], [25, 72], [50, 72], [75, 72]],
+] as const;
+
+function mahjongTileKind(tile: number): "man" | "pin" | "sou" | "honor" {
+  if (tile >= 0 && tile <= 8) return "man";
+  if (tile >= 9 && tile <= 17) return "pin";
+  if (tile >= 18 && tile <= 26) return "sou";
+  return "honor";
+}
+
+function mahjongTileRank(tile: number): number {
+  return (tile % 9) + 1;
+}
+
+function renderMahjongTileArt(tile: number, compact = false) {
+  const kind = mahjongTileKind(tile);
+  const rank = mahjongTileRank(tile);
+  const isRedFive = rank === 5 && (kind === "man" || kind === "pin" || kind === "sou");
+  const brushFont = "'Yu Mincho', 'Hiragino Mincho ProN', 'MS Mincho', serif";
+
+  if (kind === "man") {
+    return (
+      <>
+        <span
+          className={`block text-center ${compact ? "text-sm" : "text-xl"} font-black leading-none tracking-tight ${isRedFive ? "text-red-700" : "text-slate-800"}`}
+          style={{ fontFamily: brushFont }}
+        >
+          {MAHJONG_DIGIT_KANJI[rank - 1]}
+        </span>
+        <span
+          className={`mt-0.5 block text-center ${compact ? "text-[8px]" : "text-[10px]"} font-semibold leading-none ${isRedFive ? "text-red-700" : "text-slate-700"}`}
+          style={{ fontFamily: brushFont }}
+        >
+          萬
+        </span>
+      </>
+    );
+  }
+
+  if (kind === "pin") {
+    const coords = MAHJONG_PIN_COORDS[rank - 1] || [];
+    return (
+      <div className={`relative mx-auto ${compact ? "h-8 w-5" : "h-11 w-7"}`}>
+        {coords.map(([x, y], idx) => {
+          const ring = isRedFive ? "bg-red-700" : rank === 1 ? "bg-rose-700" : "bg-sky-800";
+          const center = isRedFive ? "bg-rose-300" : "bg-white";
+          return (
+            <span
+              key={`mahjong-pin-${tile}-${idx}`}
+              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
+              style={{ left: `${x}%`, top: `${y}%` }}
+            >
+              <span className={`block h-2.5 w-2.5 rounded-full ${ring} shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]`}>
+                <span className={`mx-auto mt-[3px] block h-1 w-1 rounded-full ${center}`} />
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (kind === "sou") {
+    const coords = MAHJONG_SOU_COORDS[rank - 1] || [];
+    return (
+      <div className={`relative mx-auto ${compact ? "h-8 w-5" : "h-11 w-7"}`}>
+        {coords.map(([x, y], idx) => {
+          const stem = isRedFive ? "bg-red-700" : "bg-emerald-700";
+          return (
+            <span
+              key={`mahjong-sou-${tile}-${idx}`}
+              className="absolute -translate-x-1/2 -translate-y-1/2"
+              style={{ left: `${x}%`, top: `${y}%` }}
+            >
+              <span className={`relative block h-3 w-1.5 rounded-full ${stem} shadow-[inset_0_0_0_1px_rgba(255,255,255,0.22)]`}>
+                <span className="absolute -top-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-emerald-300/80" />
+                <span className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-emerald-300/80" />
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const face = mahjongTileFace(tile);
+  if (tile === 31) {
+    return <span className={`block text-center ${compact ? "text-base" : "text-2xl"} font-black leading-none text-slate-400`} style={{ fontFamily: brushFont }}>▢</span>;
+  }
+  return (
+    <span
+      className={`block text-center ${compact ? "text-base" : "text-2xl"} font-extrabold leading-none tracking-tight ${face.toneClass}`}
+      style={{ fontFamily: brushFont, textShadow: "0 0.4px 0 rgba(15,23,42,0.15)" }}
+    >
+      {face.main}
+    </span>
+  );
 }
 
 function shuffleNumberList(list: number[]): number[] {
@@ -1700,134 +2187,353 @@ function shuffleNumberList(list: number[]): number[] {
   return next;
 }
 
-function mahjongAllTileCoords(board: MahjongCell[][]): MahjongCoord[] {
-  const coords: MahjongCoord[] = [];
-  for (let row = 0; row < board.length; row += 1) {
-    for (let col = 0; col < board[row].length; col += 1) {
-      if (board[row][col] !== null) coords.push({ row, col });
+function sortMahjongTiles(tiles: number[]): number[] {
+  return [...tiles].sort((a, b) => a - b);
+}
+
+function normalizeMahjongTileList(source: unknown): number[] {
+  if (!Array.isArray(source)) return [];
+  return source
+    .flat(Infinity)
+    .filter((value): value is number => Number.isInteger(value) && value >= 0 && value < MAHJONG_TYPE_COUNT);
+}
+
+function createMahjongWall(): number[] {
+  const wall: number[] = [];
+  for (let tile = 0; tile < MAHJONG_TYPE_COUNT; tile += 1) {
+    for (let copy = 0; copy < 4; copy += 1) {
+      wall.push(tile);
     }
   }
-  return coords;
+  return shuffleNumberList(wall);
 }
 
-function mahjongRemainingCount(board: MahjongCell[][]): number {
-  return mahjongAllTileCoords(board).length;
-}
-
-function mahjongCanConnectWithTwoTurns(board: MahjongCell[][], a: MahjongCoord, b: MahjongCoord): boolean {
-  if (a.row === b.row && a.col === b.col) return false;
-
-  const rows = board.length;
-  const cols = board[0]?.length || 0;
-  const start = { row: a.row + 1, col: a.col + 1 };
-  const target = { row: b.row + 1, col: b.col + 1 };
-
-  const inRange = (row: number, col: number) => row >= 0 && row <= rows + 1 && col >= 0 && col <= cols + 1;
-  const isBlocked = (row: number, col: number) => {
-    if (row === target.row && col === target.col) return false;
-    if (row <= 0 || row > rows || col <= 0 || col > cols) return false;
-    return board[row - 1][col - 1] !== null;
+function createMahjongStartBoard(): { hand: MahjongCell[]; wall: MahjongCell[] } {
+  const wall = createMahjongWall();
+  const hand = sortMahjongTiles(wall.slice(0, MAHJONG_START_HAND_COUNT));
+  return {
+    hand,
+    wall: wall.slice(MAHJONG_START_HAND_COUNT),
   };
+}
 
-  const visited = Array.from({ length: rows + 2 }, () =>
-    Array.from({ length: cols + 2 }, () => Array.from({ length: 4 }, () => 3)),
-  );
+function mahjongRemainingCount(wall: MahjongCell[]): number {
+  return wall.length;
+}
 
-  const queue: Array<{ row: number; col: number; dir: number; turns: number }> = [
-    { row: start.row, col: start.col, dir: -1, turns: 0 },
-  ];
+function mahjongCountTiles(tiles: MahjongCell[]): number[] {
+  const counts = Array.from({ length: MAHJONG_TYPE_COUNT }, () => 0);
+  tiles.forEach((tile) => {
+    counts[tile] += 1;
+  });
+  return counts;
+}
 
-  let head = 0;
-  while (head < queue.length) {
-    const current = queue[head];
-    head += 1;
-
-    for (let dirIndex = 0; dirIndex < 4; dirIndex += 1) {
-      const turns = current.dir === -1 || current.dir === dirIndex ? current.turns : current.turns + 1;
-      if (turns > 2) continue;
-
-      const [dr, dc] = MAHJONG_DIRECTIONS[dirIndex];
-      let nextRow = current.row + dr;
-      let nextCol = current.col + dc;
-
-      while (inRange(nextRow, nextCol) && !isBlocked(nextRow, nextCol)) {
-        if (turns < visited[nextRow][nextCol][dirIndex]) {
-          visited[nextRow][nextCol][dirIndex] = turns;
-          if (nextRow === target.row && nextCol === target.col) {
-            return true;
-          }
-          queue.push({ row: nextRow, col: nextCol, dir: dirIndex, turns });
-        }
-        nextRow += dr;
-        nextCol += dc;
-      }
+function mahjongCanFormMelds(counts: number[]): boolean {
+  let first = -1;
+  for (let i = 0; i < counts.length; i += 1) {
+    if (counts[i] > 0) {
+      first = i;
+      break;
     }
+  }
+  if (first < 0) return true;
+
+  if (counts[first] >= 3) {
+    counts[first] -= 3;
+    if (mahjongCanFormMelds(counts)) {
+      counts[first] += 3;
+      return true;
+    }
+    counts[first] += 3;
+  }
+
+  const suit = Math.floor(first / 9);
+  const rank = first % 9;
+  const canChow = suit <= 2 && rank <= 6 && counts[first + 1] > 0 && counts[first + 2] > 0;
+  if (canChow) {
+    counts[first] -= 1;
+    counts[first + 1] -= 1;
+    counts[first + 2] -= 1;
+    if (mahjongCanFormMelds(counts)) {
+      counts[first] += 1;
+      counts[first + 1] += 1;
+      counts[first + 2] += 1;
+      return true;
+    }
+    counts[first] += 1;
+    counts[first + 1] += 1;
+    counts[first + 2] += 1;
   }
 
   return false;
 }
 
-function mahjongFindFirstMove(board: MahjongCell[][]): { a: MahjongCoord; b: MahjongCoord } | null {
-  const coords = mahjongAllTileCoords(board);
-  for (let i = 0; i < coords.length; i += 1) {
-    const a = coords[i];
-    const tileId = board[a.row][a.col];
-    for (let j = i + 1; j < coords.length; j += 1) {
-      const b = coords[j];
-      if (board[b.row][b.col] !== tileId) continue;
-      if (mahjongCanConnectWithTwoTurns(board, a, b)) {
-        return { a, b };
-      }
+function mahjongIsStandardWin(hand: MahjongCell[]): boolean {
+  if (hand.length !== 14) return false;
+  const counts = mahjongCountTiles(hand);
+  for (let pairTile = 0; pairTile < counts.length; pairTile += 1) {
+    if (counts[pairTile] < 2) continue;
+    counts[pairTile] -= 2;
+    if (mahjongCanFormMelds(counts)) {
+      counts[pairTile] += 2;
+      return true;
+    }
+    counts[pairTile] += 2;
+  }
+  return false;
+}
+
+function mahjongIsSevenPairs(hand: MahjongCell[]): boolean {
+  if (hand.length !== 14) return false;
+  const counts = mahjongCountTiles(hand);
+  let pairUnits = 0;
+  for (let i = 0; i < counts.length; i += 1) {
+    const count = counts[i];
+    if (count % 2 !== 0) return false;
+    pairUnits += count / 2;
+  }
+  return pairUnits === 7;
+}
+
+function mahjongIsThirteenOrphans(hand: MahjongCell[]): boolean {
+  if (hand.length !== 14) return false;
+  const counts = mahjongCountTiles(hand);
+  let pairFound = false;
+
+  for (let tile = 0; tile < MAHJONG_TYPE_COUNT; tile += 1) {
+    const isOrphan = MAHJONG_ORPHAN_TILE_IDS.includes(tile as (typeof MAHJONG_ORPHAN_TILE_IDS)[number]);
+    if (!isOrphan && counts[tile] > 0) return false;
+  }
+
+  for (const tile of MAHJONG_ORPHAN_TILE_IDS) {
+    if (counts[tile] === 0) return false;
+    if (counts[tile] >= 2) {
+      if (pairFound) return false;
+      pairFound = true;
     }
   }
+
+  return pairFound;
+}
+
+function mahjongIsWinningHand(hand: MahjongCell[]): boolean {
+  return mahjongIsStandardWin(hand) || mahjongIsSevenPairs(hand) || mahjongIsThirteenOrphans(hand);
+}
+
+function mahjongFindWinningTiles(hand: MahjongCell[]): MahjongCell[] {
+  if (hand.length !== 13) return [];
+  const counts = mahjongCountTiles(hand);
+  const waits: MahjongCell[] = [];
+  for (let tile = 0; tile < MAHJONG_TYPE_COUNT; tile += 1) {
+    if (counts[tile] >= 4) continue;
+    if (mahjongIsWinningHand([...hand, tile])) waits.push(tile);
+  }
+  return waits;
+}
+
+function mahjongFindBestDiscards(hand: MahjongCell[]): Array<{ index: number; tile: MahjongCell; waits: MahjongCell[]; outs: number }> {
+  if (hand.length !== 14) return [];
+
+  const results: Array<{ index: number; tile: MahjongCell; waits: MahjongCell[]; outs: number }> = [];
+  const seenTile = new Set<number>();
+
+  for (let index = 0; index < hand.length; index += 1) {
+    const tile = hand[index];
+    if (seenTile.has(tile)) continue;
+    seenTile.add(tile);
+
+    const nextHand = hand.filter((_, i) => i !== index);
+    const waits = mahjongFindWinningTiles(nextHand);
+    const nextCounts = mahjongCountTiles(nextHand);
+    const outs = waits.reduce((sum, waitTile) => sum + Math.max(0, 4 - nextCounts[waitTile]), 0);
+    results.push({ index, tile, waits, outs });
+  }
+
+  return results.sort((a, b) => {
+    if (b.outs !== a.outs) return b.outs - a.outs;
+    if (b.waits.length !== a.waits.length) return b.waits.length - a.waits.length;
+    return a.tile - b.tile;
+  });
+}
+
+function mahjongIsHonor(tile: MahjongCell): boolean {
+  return tile >= 27;
+}
+
+function mahjongIsTerminal(tile: MahjongCell): boolean {
+  if (mahjongIsHonor(tile)) return false;
+  const rank = (tile % 9) + 1;
+  return rank === 1 || rank === 9;
+}
+
+function mahjongIsTerminalOrHonor(tile: MahjongCell): boolean {
+  return mahjongIsHonor(tile) || mahjongIsTerminal(tile);
+}
+
+function mahjongTileSuit(tile: MahjongCell): "m" | "p" | "s" | "z" {
+  if (tile <= 8) return "m";
+  if (tile <= 17) return "p";
+  if (tile <= 26) return "s";
+  return "z";
+}
+
+function mahjongExtractStandardPattern(hand: MahjongCell[]): { pairTile: MahjongCell; melds: MahjongMeld[] } | null {
+  if (hand.length !== 14) return null;
+  const counts = mahjongCountTiles(hand);
+
+  const recurse = (work: number[], melds: MahjongMeld[]): MahjongMeld[] | null => {
+    let first = -1;
+    for (let i = 0; i < work.length; i += 1) {
+      if (work[i] > 0) {
+        first = i;
+        break;
+      }
+    }
+    if (first < 0) return melds;
+
+    if (work[first] >= 3) {
+      work[first] -= 3;
+      const tripletResult = recurse(work, [...melds, { type: "triplet", tile: first }]);
+      work[first] += 3;
+      if (tripletResult) return tripletResult;
+    }
+
+    const suit = Math.floor(first / 9);
+    const rank = first % 9;
+    if (suit <= 2 && rank <= 6 && work[first + 1] > 0 && work[first + 2] > 0) {
+      work[first] -= 1;
+      work[first + 1] -= 1;
+      work[first + 2] -= 1;
+      const sequenceResult = recurse(work, [...melds, { type: "sequence", tile: first }]);
+      work[first] += 1;
+      work[first + 1] += 1;
+      work[first + 2] += 1;
+      if (sequenceResult) return sequenceResult;
+    }
+
+    return null;
+  };
+
+  for (let pairTile = 0; pairTile < counts.length; pairTile += 1) {
+    if (counts[pairTile] < 2) continue;
+    counts[pairTile] -= 2;
+    const melds = recurse(counts, []);
+    counts[pairTile] += 2;
+    if (melds && melds.length === 4) {
+      return { pairTile, melds };
+    }
+  }
+
   return null;
 }
 
-function reshuffleMahjongBoard(board: MahjongCell[][]): MahjongCell[][] {
-  const coords = mahjongAllTileCoords(board);
-  const tiles = coords
-    .map((coord) => board[coord.row][coord.col])
-    .filter((tile): tile is number => typeof tile === "number");
-  const shuffled = shuffleNumberList(tiles);
-  const next = cloneMahjongBoard(board);
-  coords.forEach((coord, index) => {
-    next[coord.row][coord.col] = shuffled[index] ?? null;
-  });
-  return next;
+function mahjongEstimatePoint(han: number, fu: number, isYakuman: boolean): number {
+  if (isYakuman) return 32000;
+  if (han <= 0) return 0;
+
+  const mangan = han >= 5 || (han === 4 && fu >= 40) || (han === 3 && fu >= 70);
+  let basePoint: number;
+  if (han >= 13) basePoint = 8000;
+  else if (han >= 11) basePoint = 6000;
+  else if (han >= 8) basePoint = 4000;
+  else if (han >= 6) basePoint = 3000;
+  else if (mangan) basePoint = 2000;
+  else basePoint = fu * (2 ** (han + 2));
+
+  return Math.ceil((basePoint * 4) / 100) * 100;
 }
 
-function ensureMahjongPlayable(board: MahjongCell[][]): MahjongCell[][] {
-  let next = cloneMahjongBoard(board);
-  if (mahjongRemainingCount(next) === 0) return next;
-  for (let attempt = 0; attempt < 24; attempt += 1) {
-    if (mahjongFindFirstMove(next)) return next;
-    next = reshuffleMahjongBoard(next);
-  }
-  return next;
-}
+function mahjongSummarizeWin(hand: MahjongCell[]): MahjongWinSummary | null {
+  if (!mahjongIsWinningHand(hand)) return null;
 
-function createMahjongStartBoard(): MahjongCell[][] {
-  const cells = MAHJONG_ROWS * MAHJONG_COLS;
-  const pairCount = Math.floor(cells / 2);
-  const deck: number[] = [];
+  const yakuKeys: Array<keyof typeof LOGIN_I18N.ja> = ["mahjongYakuMenzenTsumo"];
 
-  for (let i = 0; i < pairCount; i += 1) {
-    const id = i % MAHJONG_TYPE_COUNT;
-    deck.push(id, id);
+  if (mahjongIsThirteenOrphans(hand)) {
+    yakuKeys.push("mahjongYakuKokushi");
+    return {
+      yakuKeys,
+      han: 13,
+      fu: 0,
+      point: mahjongEstimatePoint(13, 0, true),
+      isYakuman: true,
+    };
   }
 
-  const shuffled = shuffleNumberList(deck);
-  const board = createMahjongGrid(MAHJONG_ROWS, MAHJONG_COLS, null);
+  if (mahjongIsSevenPairs(hand)) {
+    let han = 3;
+    yakuKeys.push("mahjongYakuChiitoitsu");
 
-  let index = 0;
-  for (let row = 0; row < MAHJONG_ROWS; row += 1) {
-    for (let col = 0; col < MAHJONG_COLS; col += 1) {
-      board[row][col] = shuffled[index] ?? null;
-      index += 1;
+    const hasHonor = hand.some((tile) => mahjongIsHonor(tile));
+    const suitSet = new Set(hand.filter((tile) => !mahjongIsHonor(tile)).map((tile) => mahjongTileSuit(tile)));
+    if (!hasHonor && suitSet.size === 1) {
+      han += 6;
+      yakuKeys.push("mahjongYakuChinitsu");
+    } else if (hasHonor && suitSet.size === 1) {
+      han += 3;
+      yakuKeys.push("mahjongYakuHonitsu");
     }
+
+    return {
+      yakuKeys,
+      han,
+      fu: 25,
+      point: mahjongEstimatePoint(han, 25, false),
+      isYakuman: false,
+    };
   }
 
-  return ensureMahjongPlayable(board);
+  const pattern = mahjongExtractStandardPattern(hand);
+  if (!pattern) return null;
+
+  let han = 1;
+
+  const allSimple = hand.every((tile) => !mahjongIsTerminalOrHonor(tile));
+  if (allSimple) {
+    han += 1;
+    yakuKeys.push("mahjongYakuTanyao");
+  }
+
+  const allTriplets = pattern.melds.every((meld) => meld.type === "triplet");
+  if (allTriplets) {
+    han += 2;
+    yakuKeys.push("mahjongYakuToitoi");
+  }
+
+  const dragonTripletCount = pattern.melds.filter((meld) => meld.type === "triplet" && meld.tile >= 31 && meld.tile <= 33).length;
+  for (let i = 0; i < dragonTripletCount; i += 1) {
+    han += 1;
+    yakuKeys.push("mahjongYakuYakuhai");
+  }
+
+  const hasHonor = hand.some((tile) => mahjongIsHonor(tile));
+  const suitSet = new Set(hand.filter((tile) => !mahjongIsHonor(tile)).map((tile) => mahjongTileSuit(tile)));
+  if (!hasHonor && suitSet.size === 1) {
+    han += 6;
+    yakuKeys.push("mahjongYakuChinitsu");
+  } else if (hasHonor && suitSet.size === 1) {
+    han += 3;
+    yakuKeys.push("mahjongYakuHonitsu");
+  }
+
+  let fu = 20;
+  fu += 2;
+  if (pattern.pairTile >= 31 && pattern.pairTile <= 33) fu += 2;
+
+  pattern.melds.forEach((meld) => {
+    if (meld.type !== "triplet") return;
+    fu += mahjongIsTerminalOrHonor(meld.tile) ? 8 : 4;
+  });
+
+  fu = Math.max(20, Math.ceil(fu / 10) * 10);
+
+  return {
+    yakuKeys,
+    han,
+    fu,
+    point: mahjongEstimatePoint(han, fu, false),
+    isYakuman: false,
+  };
 }
 
 function createFitPuzzleSolvedTiles(): number[] {
@@ -2025,6 +2731,12 @@ const STORAGE_CLOUD_SESSION_ID_KEY = "neon-cloud-session-id";
 const STORAGE_LANGUAGE_KEY = "neon-ui-language";
 const STORAGE_MENU_TAB_OPEN_STATE_KEY = "neon-menu-tab-open-state";
 const STORAGE_MENU_CARD_OPEN_STATE_KEY = "neon-menu-card-open-state";
+const STORAGE_FIT_PUZZLE_PROGRESS_KEY = "neon-fit-puzzle-progress-v1";
+const CHINCHIRO_VISIBLE = false;
+const CASINO_SHARED_BANK_STORAGE_KEY = "neon-casino-shared-bank-v1";
+const DEFAULT_CASINO_BANKROLL = 1000;
+const MIN_CASINO_BET = 10;
+const CASINO_BET_STEP = 10;
 const ROOM_SERVER_QUERY_PARAM_KEY = "roomServer";
 const ROOM_CODE_QUERY_PARAM_KEY = "roomCode";
 const ROOM_INVITE_TOKEN_QUERY_PARAM_KEY = "inviteToken";
@@ -2033,6 +2745,7 @@ const INQUIRY_ADMIN_USER_IDS = String(process.env.NEXT_PUBLIC_INQUIRY_ADMIN_USER
   .map((id) => id.trim().slice(0, 24))
   .filter(Boolean);
 const APP_URL_TAG = "NeonBoardArcade";
+const BLACKJACK_DEALER_REVEAL_DELAY_MS = 700;
 const DIRECTIONS = [
   [-1, -1],
   [-1, 0],
@@ -2046,6 +2759,84 @@ const DIRECTIONS = [
 
 function isLoopbackHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function clampCasinoBet(value: number, bankroll: number): number {
+  const safeBankroll = Math.max(0, Math.floor(Number.isFinite(bankroll) ? bankroll : 0));
+  const max = Math.max(MIN_CASINO_BET, Math.floor(safeBankroll / CASINO_BET_STEP) * CASINO_BET_STEP || MIN_CASINO_BET);
+  const normalized = Math.floor(Number.isFinite(value) ? value : MIN_CASINO_BET);
+  return Math.max(MIN_CASINO_BET, Math.min(max, Math.floor(normalized / CASINO_BET_STEP) * CASINO_BET_STEP));
+}
+
+function isBlackjack(cards: BlackjackCard[]): boolean {
+  return Array.isArray(cards) && cards.length === 2 && blackjackHandValue(cards) === 21;
+}
+
+function parseIntSafe(raw: unknown, fallback = 0): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.floor(n);
+}
+
+function normalizeFitPuzzleProgress(raw: unknown): FitPuzzleProgress | null {
+  if (!raw || typeof raw !== "object") return null;
+  const src = raw as Record<string, unknown>;
+
+  const normalizeStage = (stage: unknown): FitPuzzleCustomStage | null => {
+    if (!stage || typeof stage !== "object") return null;
+    const row = stage as Record<string, unknown>;
+    const rows = Math.max(4, Math.min(12, parseIntSafe(row.rows, 10)));
+    const cols = Math.max(4, Math.min(12, parseIntSafe(row.cols, 10)));
+    const maxCells = rows * cols;
+    const pieceCount = Math.max(2, Math.min(maxCells, parseIntSafe(row.pieceCount, Math.max(2, Math.floor(maxCells / 2)))));
+    const title = String(row.title || "").trim().slice(0, 40) || "カスタム";
+    const profileRaw = row.profile && typeof row.profile === "object" ? row.profile as Record<string, unknown> : {};
+    const bias = profileRaw.bias === "long" || profileRaw.bias === "blocks" ? profileRaw.bias : "balanced";
+    const openingRotation = row.openingRotation === "mostly-rotated" ? "mostly-rotated" : "mixed";
+    return {
+      rows,
+      cols,
+      pieceCount,
+      title,
+      profile: {
+        bias,
+        mutationSteps: Math.max(0, Math.min(20000, parseIntSafe(profileRaw.mutationSteps, rows * cols * 6))),
+        minComplex: Math.max(0, Math.min(200, parseIntSafe(profileRaw.minComplex, 0))),
+        minBranch: Math.max(0, Math.min(200, parseIntSafe(profileRaw.minBranch, 0))),
+      },
+      openingRotation,
+      assistLimit: Math.max(0, Math.min(10, parseIntSafe(row.assistLimit, 0))),
+      seed: Math.max(1, parseIntSafe(row.seed, 1)),
+    };
+  };
+
+  const customStages = Array.isArray(src.customStages)
+    ? src.customStages.map((stage) => normalizeStage(stage)).filter(Boolean) as FitPuzzleCustomStage[]
+    : [];
+
+  return {
+    highestUnlockedStage: Math.max(0, parseIntSafe(src.highestUnlockedStage, 0)),
+    selectedStageIndex: Math.max(0, parseIntSafe(src.selectedStageIndex, 0)),
+    difficulty: src.difficulty === "easy" || src.difficulty === "hard" ? src.difficulty : "normal",
+    noRotateMode: Boolean(src.noRotateMode),
+    customStages,
+    updatedAt: typeof src.updatedAt === "string" && src.updatedAt.trim() ? src.updatedAt.trim().slice(0, 64) : null,
+  };
+}
+
+function cloudFitPuzzleProgressStorageKey(userIdRaw: string): string {
+  const userId = String(userIdRaw || "").trim().slice(0, 24) || "anonymous";
+  return `${STORAGE_FIT_PUZZLE_PROGRESS_KEY}:cloud:${userId}`;
+}
+
+function readFitPuzzleProgressFromStorage(key: string): FitPuzzleProgress | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return normalizeFitPuzzleProgress(JSON.parse(raw));
+  } catch {
+    return null;
+  }
 }
 
 function getAutoRoomServerUrl(): string {
@@ -3053,6 +3844,73 @@ function evaluateNumeron(secret: string, guess: string): { hits: number; blows: 
   return { hits, blows };
 }
 
+function normalizeNumeronDigitCount(value: unknown): NumeronDigitCount {
+  return value === 4 || value === "4" ? 4 : 3;
+}
+
+function isValidNumeronCode(value: string, digitCount: NumeronDigitCount): boolean {
+  const re = new RegExp(`^\\d{${digitCount}}$`);
+  return re.test(value) && new Set(value.split("")).size === digitCount;
+}
+
+function sanitizeNumeronSecretInput(value: string, digitCount: NumeronDigitCount): string {
+  const digits = value.replace(/\D/g, "").split("");
+  const unique: string[] = [];
+  for (let i = 0; i < digits.length; i += 1) {
+    const digit = digits[i];
+    if (unique.includes(digit)) continue;
+    unique.push(digit);
+    if (unique.length >= digitCount) break;
+  }
+  return unique.join("");
+}
+
+function normalizeNumeronDigitDraft(value: unknown, digitCount: NumeronDigitCount): string[] {
+  if (Array.isArray(value)) {
+    const packed = value.filter((digit): digit is string => typeof digit === "string").join("");
+    return sanitizeNumeronSecretInput(packed, digitCount).split("");
+  }
+  if (typeof value === "string") {
+    return sanitizeNumeronSecretInput(value, digitCount).split("");
+  }
+  return [];
+}
+
+function createNumeronAllCodes(digitCount: NumeronDigitCount): string[] {
+  const all: string[] = [];
+  const used = new Set<number>();
+  const draft: number[] = [];
+
+  const visit = () => {
+    if (draft.length >= digitCount) {
+      all.push(draft.join(""));
+      return;
+    }
+    for (let digit = 0; digit <= 9; digit += 1) {
+      if (used.has(digit)) continue;
+      used.add(digit);
+      draft.push(digit);
+      visit();
+      draft.pop();
+      used.delete(digit);
+    }
+  };
+
+  visit();
+  return all;
+}
+
+function buildNumeronCandidates(history: NumeronHistory[], digitCount: NumeronDigitCount): string[] {
+  let candidates = createNumeronAllCodes(digitCount);
+  history.forEach((entry) => {
+    candidates = candidates.filter((code) => {
+      const result = evaluateNumeron(code, entry.guess);
+      return result.hits === entry.hits && result.blows === entry.blows;
+    });
+  });
+  return candidates;
+}
+
 function createBlackjackDeck(): BlackjackCard[] {
   const suits: Array<"S" | "H" | "D" | "C"> = ["S", "H", "D", "C"];
   const deck: BlackjackCard[] = [];
@@ -3287,8 +4145,13 @@ function pokerCardLabel(card: PokerCard): string {
   return `${pokerRankLabel(card.rank)}${suitMap[card.suit]}`;
 }
 
-function evaluatePokerHand(cards: PokerCard[]): PokerEval {
-  const ranks = cards.map((card) => card.rank);
+function evaluatePokerFiveCard(cards: PokerCard[]): PokerEval {
+  if (cards.length < 5) {
+    return { score: [0], name: "highCard" };
+  }
+
+  const picked = cards.slice(0, 5);
+  const ranks = picked.map((card) => card.rank);
   const ranksDesc = [...ranks].sort((a, b) => b - a);
   const rankCountMap = new Map<number, number>();
   ranks.forEach((rank) => {
@@ -3300,7 +4163,7 @@ function evaluatePokerHand(cards: PokerCard[]): PokerEval {
     return b[0] - a[0];
   });
 
-  const isFlush = cards.every((card) => card.suit === cards[0]?.suit);
+  const isFlush = picked.every((card) => card.suit === picked[0]?.suit);
   const uniqueAsc = [...new Set(ranks)].sort((a, b) => a - b);
   const isWheel = uniqueAsc.length === 5 && uniqueAsc[0] === 2 && uniqueAsc[1] === 3 && uniqueAsc[2] === 4 && uniqueAsc[3] === 5 && uniqueAsc[4] === 14;
   const isStraight = uniqueAsc.length === 5 && ((uniqueAsc[4] - uniqueAsc[0] === 4 && uniqueAsc.every((rank, i) => i === 0 || rank - uniqueAsc[i - 1] === 1)) || isWheel);
@@ -3331,6 +4194,41 @@ function evaluatePokerHand(cards: PokerCard[]): PokerEval {
   }
 
   return { score: [0, ...ranksDesc], name: "highCard" };
+}
+
+function evaluatePokerHand(cards: PokerCard[]): PokerEval {
+  if (cards.length === 2) {
+    const [a, b] = cards;
+    if (a && b && a.rank === b.rank) {
+      return { score: [1, a.rank], name: "onePair" };
+    }
+    const high = Math.max(a?.rank || 0, b?.rank || 0);
+    const low = Math.min(a?.rank || 0, b?.rank || 0);
+    return { score: [0, high, low], name: "highCard" };
+  }
+
+  return evaluatePokerFiveCard(cards);
+}
+
+function evaluatePokerBestOfSeven(cards: PokerCard[]): PokerEval {
+  if (cards.length <= 5) return evaluatePokerHand(cards);
+
+  let best: PokerEval | null = null;
+  const total = cards.length;
+  for (let a = 0; a < total - 4; a += 1) {
+    for (let b = a + 1; b < total - 3; b += 1) {
+      for (let c = b + 1; c < total - 2; c += 1) {
+        for (let d = c + 1; d < total - 1; d += 1) {
+          for (let e = d + 1; e < total; e += 1) {
+            const current = evaluatePokerFiveCard([cards[a], cards[b], cards[c], cards[d], cards[e]]);
+            if (!best || comparePokerEval(current, best) > 0) best = current;
+          }
+        }
+      }
+    }
+  }
+
+  return best || { score: [0], name: "highCard" };
 }
 
 function comparePokerEval(a: PokerEval, b: PokerEval): number {
@@ -3475,6 +4373,25 @@ export default function Home() {
   const [selectedChess, setSelectedChess] = useState<{ row: number; col: number } | null>(null);
   const [chessMessage, setChessMessage] = useState<string>(LOGIN_I18N.ja.chessTurnWhite);
   const [isChessOver, setIsChessOver] = useState(false);
+  const chessMoveTargets = useMemo(() => {
+    const targets = new Map<string, { capture: boolean }>();
+    if (!selectedChess) return targets;
+
+    const selectedPiece = chessBoard[selectedChess.row]?.[selectedChess.col];
+    if (!selectedPiece || selectedPiece.color !== chessTurn) return targets;
+
+    for (let row = 0; row < 8; row += 1) {
+      for (let col = 0; col < 8; col += 1) {
+        if (!isLegalChessMove(chessBoard, selectedChess.row, selectedChess.col, row, col, chessTurn)) continue;
+        const targetPiece = chessBoard[row][col];
+        targets.set(`${row}-${col}`, {
+          capture: Boolean(targetPiece && targetPiece.color !== selectedPiece.color),
+        });
+      }
+    }
+
+    return targets;
+  }, [chessBoard, selectedChess, chessTurn]);
   const [shogiBoard, setShogiBoard] = useState<Array<Array<ShogiPiece | null>>>(() => createShogiBoard());
   const [shogiMode, setShogiMode] = useState<ShogiMode>("local");
   const [shogiCpuLevel, setShogiCpuLevel] = useState<ShogiCpuLevel>("normal");
@@ -3482,23 +4399,56 @@ export default function Home() {
   const [shogiPlayerSide, setShogiPlayerSide] = useState<ShogiColor>("b");
   const [shogiTurn, setShogiTurn] = useState<ShogiColor>("b");
   const [selectedShogi, setSelectedShogi] = useState<{ row: number; col: number } | null>(null);
+  const shogiMoveTargets = useMemo(() => {
+    const targets = new Map<string, { capture: boolean }>();
+    if (!selectedShogi) return targets;
+
+    const selectedPiece = shogiBoard[selectedShogi.row]?.[selectedShogi.col];
+    if (!selectedPiece || selectedPiece.color !== shogiTurn) return targets;
+
+    for (let row = 0; row < 9; row += 1) {
+      for (let col = 0; col < 9; col += 1) {
+        if (!isLegalShogiMove(shogiBoard, selectedShogi.row, selectedShogi.col, row, col, shogiTurn)) continue;
+        const targetPiece = shogiBoard[row][col];
+        targets.set(`${row}-${col}`, {
+          capture: Boolean(targetPiece && targetPiece.color !== selectedPiece.color),
+        });
+      }
+    }
+
+    return targets;
+  }, [selectedShogi, shogiBoard, shogiTurn]);
   const [shogiMessage, setShogiMessage] = useState<string>(LOGIN_I18N.ja.shogiTurnBlack);
   const [isShogiOver, setIsShogiOver] = useState(false);
   const [mineBoard, setMineBoard] = useState<MineCell[][]>(() => createMinesweeperBoard());
   const [mineMessage, setMineMessage] = useState<string>(LOGIN_I18N.ja.minesHint);
   const [isMineOver, setIsMineOver] = useState(false);
   const [numeronSecret, setNumeronSecret] = useState(() => createNumeronSecret());
+  const [numeronDigitCount, setNumeronDigitCount] = useState<NumeronDigitCount>(3);
+  const [numeronSecretDraft, setNumeronSecretDraft] = useState<string[]>([]);
+  const [isNumeronSecretConfirmed, setIsNumeronSecretConfirmed] = useState(false);
+  const [isNumeronSecretPanelOpen, setIsNumeronSecretPanelOpen] = useState(true);
   const [numeronDraft, setNumeronDraft] = useState<string[]>([]);
   const [numeronHistory, setNumeronHistory] = useState<NumeronHistory[]>([]);
+  const [numeronEnemyHistory, setNumeronEnemyHistory] = useState<NumeronHistory[]>([]);
+  const [isNumeronEnemyHistoryOpen, setIsNumeronEnemyHistoryOpen] = useState(false);
+  const [numeronPendingItem, setNumeronPendingItem] = useState<"highlow" | "reveal" | null>(null);
+  const [numeronHintDigit, setNumeronHintDigit] = useState("5");
+  const [numeronAssistCharges, setNumeronAssistCharges] = useState<{ highlow: number; reveal: number }>({ highlow: 1, reveal: 1 });
   const [isNumeronOver, setIsNumeronOver] = useState(false);
   const [numeronMessage, setNumeronMessage] = useState<string>(LOGIN_I18N.ja.numeronHint);
   const [blackjackDeck, setBlackjackDeck] = useState<BlackjackCard[]>([]);
   const [blackjackPlayerHand, setBlackjackPlayerHand] = useState<BlackjackCard[]>([]);
   const [blackjackDealerHand, setBlackjackDealerHand] = useState<BlackjackCard[]>([]);
+  const [blackjackBet, setBlackjackBet] = useState(MIN_CASINO_BET);
+  const [blackjackWager, setBlackjackWager] = useState(0);
   const [blackjackMessage, setBlackjackMessage] = useState<string>(LOGIN_I18N.ja.blackjackYourTurn);
   const [isBlackjackOver, setIsBlackjackOver] = useState(false);
+  const [isBlackjackDealerResolving, setIsBlackjackDealerResolving] = useState(false);
   const [chinchiroPlayerDice, setChinchiroPlayerDice] = useState<[number, number, number] | null>(null);
   const [chinchiroDealerDice, setChinchiroDealerDice] = useState<[number, number, number] | null>(null);
+  const [chinchiroBet, setChinchiroBet] = useState(MIN_CASINO_BET);
+  const [chinchiroWager, setChinchiroWager] = useState(0);
   const [chinchiroMessage, setChinchiroMessage] = useState<string>(LOGIN_I18N.ja.chinchiroHint);
   const [isChinchiroOver, setIsChinchiroOver] = useState(false);
   const [sevensHands, setSevensHands] = useState<[SevensCard[], SevensCard[]]>([[], []]);
@@ -3516,25 +4466,51 @@ export default function Home() {
   const [fourPanelTitle, setFourPanelTitle] = useState(FOUR_PANEL_RANDOM_TITLES[0]);
   const [fourPanelImages, setFourPanelImages] = useState<string[]>([]);
   const [fourPanelIndex, setFourPanelIndex] = useState(0);
+  const [fourPanelBrushSize, setFourPanelBrushSize] = useState(5);
+  const [fourPanelBrushColor, setFourPanelBrushColor] = useState(DEFAULT_FOUR_PANEL_BRUSH_COLOR);
+  const [fourPanelBrushOpacity, setFourPanelBrushOpacity] = useState(100);
+  const [fourPanelCursor, setFourPanelCursor] = useState<BrushCursorPreview>({ x: 0, y: 0, size: 5, visible: false });
   const [fourPanelMessage, setFourPanelMessage] = useState<string>(LOGIN_I18N.ja.fourPanelHint);
   const [drawingRelayPrompt, setDrawingRelayPrompt] = useState(DRAWING_RELAY_PROMPTS[0]);
   const [drawingRelayImage, setDrawingRelayImage] = useState("");
   const [drawingRelayGuess, setDrawingRelayGuess] = useState("");
   const [drawingRelayPhase, setDrawingRelayPhase] = useState<"draw" | "guess" | "done">("draw");
+  const [drawingRelayBrushSize, setDrawingRelayBrushSize] = useState(5);
+  const [drawingRelayBrushColor, setDrawingRelayBrushColor] = useState(DEFAULT_DRAWING_RELAY_BRUSH_COLOR);
+  const [drawingRelayBrushOpacity, setDrawingRelayBrushOpacity] = useState(100);
+  const [drawingRelayCursor, setDrawingRelayCursor] = useState<BrushCursorPreview>({ x: 0, y: 0, size: 5, visible: false });
   const [drawingRelayMessage, setDrawingRelayMessage] = useState<string>(LOGIN_I18N.ja.drawingRelayHintDraw);
   const [fitPuzzleTiles, setFitPuzzleTiles] = useState<number[]>(() => createFitPuzzleShuffledTiles());
   const [fitPuzzleMoves, setFitPuzzleMoves] = useState(0);
   const [fitPuzzleMessage, setFitPuzzleMessage] = useState<string>(LOGIN_I18N.ja.fitPuzzleHint);
   const [isFitPuzzleOver, setIsFitPuzzleOver] = useState(false);
-  const [mahjongBoard, setMahjongBoard] = useState<MahjongCell[][]>(() => createMahjongStartBoard());
-  const [mahjongSelected, setMahjongSelected] = useState<MahjongCoord | null>(null);
+  const mahjongStartRef = useRef<{ hand: MahjongCell[]; wall: MahjongCell[] } | null>(null);
+  if (!mahjongStartRef.current) {
+    mahjongStartRef.current = createMahjongStartBoard();
+  }
+  const [mahjongBoard, setMahjongBoard] = useState<MahjongCell[]>(() => [...(mahjongStartRef.current?.hand || [])]);
+  const [mahjongWall, setMahjongWall] = useState<MahjongCell[]>(() => [...(mahjongStartRef.current?.wall || [])]);
+  const [mahjongRiver, setMahjongRiver] = useState<MahjongCell[]>([]);
+  const [mahjongSelected, setMahjongSelected] = useState<number | null>(null);
+  const [mahjongLastDraw, setMahjongLastDraw] = useState<MahjongCell | null>(null);
+  const [mahjongRoundWind, setMahjongRoundWind] = useState<"東" | "南" | "西" | "北">("東");
+  const [mahjongRoundNumber, setMahjongRoundNumber] = useState(1);
+  const [mahjongSeatWind, setMahjongSeatWind] = useState<"東" | "南" | "西" | "北">("東");
+  const [mahjongHonba, setMahjongHonba] = useState(0);
+  const [mahjongKyotaku, setMahjongKyotaku] = useState(0);
+  const [mahjongRiichiTileIndex, setMahjongRiichiTileIndex] = useState<number | null>(null);
+  const [mahjongDoraIndicator, setMahjongDoraIndicator] = useState<MahjongCell | null>(() => mahjongStartRef.current?.wall[4] ?? null);
+  const [mahjongWinSummary, setMahjongWinSummary] = useState<MahjongWinSummary | null>(null);
   const [mahjongMessage, setMahjongMessage] = useState<string>(LOGIN_I18N.ja.mahjongHint);
   const [isMahjongOver, setIsMahjongOver] = useState(false);
   const [pokerDeck, setPokerDeck] = useState<PokerCard[]>([]);
   const [pokerPlayerHand, setPokerPlayerHand] = useState<PokerCard[]>([]);
   const [pokerCpuHand, setPokerCpuHand] = useState<PokerCard[]>([]);
-  const [pokerHold, setPokerHold] = useState<boolean[]>([false, false, false, false, false]);
-  const [pokerPhase, setPokerPhase] = useState<"draw" | "result">("draw");
+  const [pokerCommunity, setPokerCommunity] = useState<PokerCard[]>([]);
+  const [pokerBet, setPokerBet] = useState(MIN_CASINO_BET);
+  const [pokerWager, setPokerWager] = useState(0);
+  const [pokerHold, setPokerHold] = useState<boolean[]>([false, false]);
+  const [pokerPhase, setPokerPhase] = useState<PokerPhase>("betting");
   const [pokerMessage, setPokerMessage] = useState<string>(LOGIN_I18N.ja.pokerHint);
   const [pokerPlayerEval, setPokerPlayerEval] = useState<PokerEval | null>(null);
   const [pokerCpuEval, setPokerCpuEval] = useState<PokerEval | null>(null);
@@ -3545,6 +4521,11 @@ export default function Home() {
   const [solitaireTableau, setSolitaireTableau] = useState<SolitaireCard[][]>(Array.from({ length: 7 }, () => []));
   const [solitaireSelection, setSolitaireSelection] = useState<SolitaireSelection | null>(null);
   const [solitaireMessage, setSolitaireMessage] = useState<string>(LOGIN_I18N.ja.solitaireHint);
+  const [solitaireUndoStack, setSolitaireUndoStack] = useState<SolitaireSnapshot[]>([]);
+  const [solitaireDraggingSelection, setSolitaireDraggingSelection] = useState<SolitaireSelection | null>(null);
+  const [solitaireDragOverTarget, setSolitaireDragOverTarget] = useState<SolitaireDragOverTarget | null>(null);
+  const [solitairePartyPieces, setSolitairePartyPieces] = useState<SolitairePartyPiece[]>([]);
+  const [solitaireFoundationFlights, setSolitaireFoundationFlights] = useState<SolitaireFoundationFlight[]>([]);
   const [isSolitaireOver, setIsSolitaireOver] = useState(false);
   const [survivorsWave, setSurvivorsWave] = useState(1);
   const [survivorsHp, setSurvivorsHp] = useState(100);
@@ -3561,6 +4542,7 @@ export default function Home() {
   const [unoCpuHand, setUnoCpuHand] = useState<UnoCard[]>([]);
   const [unoLocalHands, setUnoLocalHands] = useState<UnoCard[][]>([[], []]);
   const [unoCpuCount, setUnoCpuCount] = useState(1);
+  const [unoRoomCpuCount, setUnoRoomCpuCount] = useState(0);
   const [unoLocalTurnIndex, setUnoLocalTurnIndex] = useState(0);
   const [unoTopCard, setUnoTopCard] = useState<UnoCard | null>(null);
   const [unoTurn, setUnoTurn] = useState<"player" | "cpu">("player");
@@ -3571,6 +4553,8 @@ export default function Home() {
   const [menuTabOpenState, setMenuTabOpenState] = useState<Record<MenuTabCategory, boolean>>(INITIAL_MENU_TAB_OPEN_STATE);
   const [menuCardOpenState, setMenuCardOpenState] = useState<Record<MenuCategory, boolean>>(INITIAL_MENU_CARD_OPEN_STATE);
   const [gameStarted, setGameStarted] = useState<Record<PlayablePanel, boolean>>(INITIAL_GAME_START_STATE);
+  const [startCountdownPanel, setStartCountdownPanel] = useState<PlayablePanel | null>(null);
+  const [startCountdownSec, setStartCountdownSec] = useState(0);
   const [roomCode, setRoomCode] = useState("");
   const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
   const [isRoomControlsOpen, setIsRoomControlsOpen] = useState(true);
@@ -3593,9 +4577,12 @@ export default function Home() {
   const [authSessionId, setAuthSessionId] = useState("");
   const [profileNameDraft, setProfileNameDraft] = useState("");
   const [profileBioDraft, setProfileBioDraft] = useState("");
+  const [fitPuzzleProgress, setFitPuzzleProgress] = useState<FitPuzzleProgress | null>(null);
   const [entryMessage, setEntryMessage] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authMode, setAuthMode] = useState<"guest" | "cloud">("guest");
+  const [casinoBankroll, setCasinoBankroll] = useState(DEFAULT_CASINO_BANKROLL);
+  const [showCasinoWinBurst, setShowCasinoWinBurst] = useState(false);
   const [language, setLanguage] = useState<Language>("ja");
   const [isProfilePanelOpen, setIsProfilePanelOpen] = useState(false);
   const [isProfileNameEditOpen, setIsProfileNameEditOpen] = useState(false);
@@ -3640,17 +4627,33 @@ export default function Home() {
   const inviteCopyFeedbackTimerRef = useRef<number | null>(null);
   const pendingRoomChatIdsRef = useRef<string[]>([]);
   const peerIdRef = useRef(`next-${Math.random().toString(36).slice(2, 10)}`);
-  const autoLoginTriedRef = useRef(false);
+  const startCountdownTimerRef = useRef<number | null>(null);
+  const casinoWinBurstTimerRef = useRef<number | null>(null);
+  const blackjackDealerResolveTimerRef = useRef<number | null>(null);
   const prevUnreadTotalRef = useRef(0);
   const friendChatListRef = useRef<HTMLUListElement | null>(null);
   const snapshotRef = useRef<Record<string, unknown>>({});
   const minesweeperLegacyControllerRef = useRef<{ stop: () => void } | null>(null);
   const fourPanelCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fourPanelDrawingRef = useRef(false);
+  const fourPanelLastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const fourPanelStrokeLayerRef = useRef<HTMLCanvasElement | null>(null);
+  const fourPanelStrokeBaseSnapshotRef = useRef<ImageData | null>(null);
   const fourPanelHasStrokeRef = useRef(false);
+  const fourPanelUndoStackRef = useRef<string[]>([]);
   const drawingRelayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRelayDrawingRef = useRef(false);
+  const drawingRelayLastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const drawingRelayStrokeLayerRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRelayStrokeBaseSnapshotRef = useRef<ImageData | null>(null);
   const drawingRelayHasStrokeRef = useRef(false);
+  const numeronGuessPanelRef = useRef<HTMLDivElement | null>(null);
+  const fitPuzzleProgressRef = useRef<FitPuzzleProgress | null>(null);
+  const fitPuzzleProgressSaveTimerRef = useRef<number | null>(null);
+  const solitairePartyTimerRef = useRef<number | null>(null);
+  const solitaireFlightTimersRef = useRef<number[]>([]);
+  const solitaireDragSelectionRef = useRef<SolitaireSelection | null>(null);
+  const casinoBankHydratedRef = useRef(false);
 
 
 
@@ -3707,6 +4710,47 @@ export default function Home() {
     }
   }, []);
 
+  const casinoScopeId = useMemo(() => {
+    const cloudUserId = authUserId.trim().slice(0, 24);
+    if (authMode === "cloud" && cloudUserId) {
+      return `cloud:${cloudUserId}`;
+    }
+    return "guest";
+  }, [authMode, authUserId]);
+
+  const casinoStorageKey = useMemo(() => {
+    return `${CASINO_SHARED_BANK_STORAGE_KEY}:${casinoScopeId}`;
+  }, [casinoScopeId]);
+
+  useEffect(() => {
+    let nextBank = DEFAULT_CASINO_BANKROLL;
+    try {
+      const raw = Number(localStorage.getItem(casinoStorageKey));
+      if (Number.isFinite(raw) && raw >= 0) {
+        nextBank = Math.floor(raw);
+      }
+    } catch {
+      // ignore storage read failure
+    }
+    setCasinoBankroll(nextBank);
+    casinoBankHydratedRef.current = true;
+  }, [casinoStorageKey]);
+
+  useEffect(() => {
+    if (!casinoBankHydratedRef.current) return;
+    try {
+      localStorage.setItem(casinoStorageKey, String(Math.max(0, Math.floor(casinoBankroll))));
+    } catch {
+      // ignore storage write failure
+    }
+  }, [casinoBankroll, casinoStorageKey]);
+
+  useEffect(() => {
+    setBlackjackBet((prev) => clampCasinoBet(prev, casinoBankroll));
+    setChinchiroBet((prev) => clampCasinoBet(prev, casinoBankroll));
+    setPokerBet((prev) => clampCasinoBet(prev, casinoBankroll));
+  }, [casinoBankroll]);
+
   const t = useCallback(
     (key: keyof typeof LOGIN_I18N.ja) => {
       if (language === "en") {
@@ -3726,6 +4770,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.lang = language;
+  }, [language]);
+
+  const clearSolitaireFlightTimers = useCallback(() => {
+    if (solitaireFlightTimersRef.current.length === 0) return;
+    for (let i = 0; i < solitaireFlightTimersRef.current.length; i += 1) {
+      window.clearTimeout(solitaireFlightTimersRef.current[i]);
+    }
+    solitaireFlightTimersRef.current = [];
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_MENU_TAB_OPEN_STATE_KEY, JSON.stringify(menuTabOpenState));
   }, [menuTabOpenState]);
 
@@ -3734,12 +4791,33 @@ export default function Home() {
   }, [menuCardOpenState]);
 
   useEffect(() => {
+    if (CHINCHIRO_VISIBLE) return;
+    if (activePanel === "chinchiro") {
+      setActivePanel("menu");
+    }
+  }, [activePanel]);
+
+  useEffect(() => {
+    fitPuzzleProgressRef.current = fitPuzzleProgress;
+  }, [fitPuzzleProgress]);
+
+  useEffect(() => {
     return () => {
       if (inviteCopyFeedbackTimerRef.current !== null) {
         window.clearTimeout(inviteCopyFeedbackTimerRef.current);
       }
+      if (startCountdownTimerRef.current !== null) {
+        window.clearInterval(startCountdownTimerRef.current);
+      }
+      if (fitPuzzleProgressSaveTimerRef.current !== null) {
+        window.clearTimeout(fitPuzzleProgressSaveTimerRef.current);
+      }
+      if (solitairePartyTimerRef.current !== null) {
+        window.clearTimeout(solitairePartyTimerRef.current);
+      }
+      clearSolitaireFlightTimers();
     };
-  }, []);
+  }, [clearSolitaireFlightTimers]);
 
   useEffect(() => {
     if (activePanel !== "minesweeper") {
@@ -3791,10 +4869,100 @@ export default function Home() {
     action();
   }, [confirmLocalReset]);
 
+  const normalizeCasinoBankroll = useCallback(() => {
+    if (casinoBankroll >= MIN_CASINO_BET) return casinoBankroll;
+    setCasinoBankroll(DEFAULT_CASINO_BANKROLL);
+    return DEFAULT_CASINO_BANKROLL;
+  }, [casinoBankroll]);
+
+  const stepBlackjackBet = useCallback((delta: number) => {
+    setBlackjackBet((prev) => clampCasinoBet(prev + delta, casinoBankroll));
+  }, [casinoBankroll]);
+
+  const stepChinchiroBet = useCallback((delta: number) => {
+    setChinchiroBet((prev) => clampCasinoBet(prev + delta, casinoBankroll));
+  }, [casinoBankroll]);
+
+  const stepPokerBet = useCallback((delta: number) => {
+    setPokerBet((prev) => clampCasinoBet(prev + delta, casinoBankroll));
+  }, [casinoBankroll]);
+
+  const allInBlackjackBet = useCallback(() => {
+    setBlackjackBet(clampCasinoBet(casinoBankroll, casinoBankroll));
+  }, [casinoBankroll]);
+
+  const allInChinchiroBet = useCallback(() => {
+    setChinchiroBet(clampCasinoBet(casinoBankroll, casinoBankroll));
+  }, [casinoBankroll]);
+
+  const allInPokerBet = useCallback(() => {
+    setPokerBet(clampCasinoBet(casinoBankroll, casinoBankroll));
+  }, [casinoBankroll]);
+
+  const setBlackjackBetByRatio = useCallback((ratio: number) => {
+    const safeRatio = Math.min(1, Math.max(0.1, ratio));
+    const target = Math.floor((casinoBankroll * safeRatio) / CASINO_BET_STEP) * CASINO_BET_STEP;
+    setBlackjackBet(clampCasinoBet(target, casinoBankroll));
+  }, [casinoBankroll]);
+
+  const setPokerBetByRatio = useCallback((ratio: number) => {
+    const safeRatio = Math.min(1, Math.max(0.1, ratio));
+    const target = Math.floor((casinoBankroll * safeRatio) / CASINO_BET_STEP) * CASINO_BET_STEP;
+    setPokerBet(clampCasinoBet(target, casinoBankroll));
+  }, [casinoBankroll]);
+
+  const formatChip = useCallback((value: number) => {
+    const locale = language === "ko" ? "ko-KR" : language === "en" ? "en-US" : "ja-JP";
+    return new Intl.NumberFormat(locale).format(Math.max(0, Math.floor(value)));
+  }, [language]);
+
+  const isBlackjackRoundActive = !isBlackjackOver && blackjackWager > 0 && blackjackPlayerHand.length > 0;
+  const isPokerRoundActive = pokerPhase !== "betting" && pokerPhase !== "showdown" && pokerWager > 0 && pokerPlayerHand.length > 0;
+
+  const clearBlackjackDealerResolveTimer = useCallback(() => {
+    if (blackjackDealerResolveTimerRef.current !== null) {
+      window.clearTimeout(blackjackDealerResolveTimerRef.current);
+      blackjackDealerResolveTimerRef.current = null;
+    }
+  }, []);
+
+  const triggerCasinoWinBurst = useCallback(() => {
+    if (casinoWinBurstTimerRef.current !== null) {
+      window.clearTimeout(casinoWinBurstTimerRef.current);
+      casinoWinBurstTimerRef.current = null;
+    }
+    setShowCasinoWinBurst(false);
+    window.requestAnimationFrame(() => {
+      setShowCasinoWinBurst(true);
+      casinoWinBurstTimerRef.current = window.setTimeout(() => {
+        setShowCasinoWinBurst(false);
+        casinoWinBurstTimerRef.current = null;
+      }, 900);
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearBlackjackDealerResolveTimer();
+      if (casinoWinBurstTimerRef.current !== null) {
+        window.clearTimeout(casinoWinBurstTimerRef.current);
+        casinoWinBurstTimerRef.current = null;
+      }
+    };
+  }, [clearBlackjackDealerResolveTimer]);
+
   const handleBackToMenuClick = useCallback(() => {
+    if (activePanel === "fitPuzzle") {
+      setActivePanel("menu");
+      return;
+    }
     if (!window.confirm(t("backToMenuConfirm"))) return;
     setActivePanel("menu");
-  }, [t]);
+  }, [activePanel, t]);
+
+  const handleBackToMenuDirect = useCallback(() => {
+    setActivePanel("menu");
+  }, []);
 
   const stripInviteTokenFromAddressBar = useCallback(() => {
     try {
@@ -3819,6 +4987,21 @@ export default function Home() {
     return t("pokerHandStraightFlush");
   }, [t]);
 
+  const pokerPhaseLabel = useMemo(() => {
+    if (pokerPhase === "betting") return "BET";
+    if (pokerPhase === "preflop") return "PREFLOP";
+    if (pokerPhase === "flop") return "FLOP";
+    if (pokerPhase === "turn") return "TURN";
+    if (pokerPhase === "river") return "RIVER";
+    return "SHOWDOWN";
+  }, [pokerPhase]);
+
+  const pokerActionLabel = useMemo(() => {
+    if (pokerPhase === "betting") return "BET";
+    if (language === "ko") return "다음";
+    return "次へ";
+  }, [language, pokerPhase]);
+
   const chessPieceLabel = useCallback((piece: ChessPiece) => {
     const map: Record<ChessColor, Record<ChessPieceType, string>> = {
       w: {
@@ -3840,6 +5023,15 @@ export default function Home() {
     };
     return map[piece.color][piece.type];
   }, []);
+
+  const chessPlayerColorLabel = useMemo(
+    () => (chessPlayerSide === "w" ? t("whiteStone") : t("blackStone")),
+    [chessPlayerSide, t],
+  );
+  const chessEnemyColorLabel = useMemo(
+    () => (chessPlayerSide === "w" ? t("blackStone") : t("whiteStone")),
+    [chessPlayerSide, t],
+  );
 
   const shogiPieceLabel = useCallback((piece: ShogiPiece) => {
     const map: Record<ShogiPieceType, string> = {
@@ -4157,6 +5349,16 @@ export default function Home() {
     return chessTurn === chessRoomPlayer;
   }, [chessMode, chessPlayerSide, chessRoomPlayer, chessTurn, connectedRoomCode]);
 
+  const isChessBoardFlippedForViewer = useMemo(() => connectedRoomCode && roomRole === "guest", [connectedRoomCode, roomRole]);
+  const chessDisplayRows = useMemo(
+    () => (isChessBoardFlippedForViewer ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]),
+    [isChessBoardFlippedForViewer],
+  );
+  const chessDisplayCols = useMemo(
+    () => (isChessBoardFlippedForViewer ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]),
+    [isChessBoardFlippedForViewer],
+  );
+
   const shogiRoomPlayer = useMemo<ShogiColor | null>(() => {
     if (!connectedRoomCode) return null;
     if (roomRole === "host") return "b";
@@ -4180,11 +5382,26 @@ export default function Home() {
     return null;
   }, [connectedRoomCode, roomRole]);
 
+  const unoRoomHumanIndex = useMemo(() => {
+    if (!connectedRoomCode) return 0;
+    if (roomRole === "host") return 0;
+    if (roomRole === "guest") return 1;
+    return -1;
+  }, [connectedRoomCode, roomRole]);
+
+  const isUnoExtendedMode = useMemo(() => {
+    return !connectedRoomCode || unoRoomCpuCount > 0;
+  }, [connectedRoomCode, unoRoomCpuCount]);
+
   const canOperateUnoNow = useMemo(() => {
+    if (isUnoExtendedMode) {
+      if (connectedRoomCode && roomRole === "spectator") return false;
+      return unoRoomHumanIndex >= 0 && unoLocalTurnIndex === unoRoomHumanIndex;
+    }
     if (!connectedRoomCode) return unoLocalTurnIndex === 0;
     if (!unoRoomPlayer) return false;
     return unoTurn === unoRoomPlayer;
-  }, [connectedRoomCode, unoLocalTurnIndex, unoRoomPlayer, unoTurn]);
+  }, [connectedRoomCode, isUnoExtendedMode, roomRole, unoLocalTurnIndex, unoRoomHumanIndex, unoRoomPlayer, unoTurn]);
 
   const daifugoRoomPlayer = useMemo<"player" | "cpu" | null>(() => {
     if (!connectedRoomCode) return null;
@@ -4208,6 +5425,10 @@ export default function Home() {
     return 1 + unoCpuCount;
   }, [unoCpuCount]);
 
+  const unoRoomTotalPlayers = useMemo(() => {
+    return 2 + unoRoomCpuCount;
+  }, [unoRoomCpuCount]);
+
   const unoLocalPlayerHand = useMemo(() => {
     return unoLocalHands[0] || [];
   }, [unoLocalHands]);
@@ -4221,11 +5442,15 @@ export default function Home() {
   }, [connectedRoomCode, unoLocalTotalPlayers]);
 
   const unoVisibleHand = useMemo(() => {
+    if (connectedRoomCode && isUnoExtendedMode) {
+      if (unoRoomHumanIndex < 0) return [];
+      return unoLocalHands[unoRoomHumanIndex] || [];
+    }
     if (connectedRoomCode) {
       return unoLocalSide === "player" ? unoPlayerHand : unoCpuHand;
     }
     return unoLocalPlayerHand;
-  }, [connectedRoomCode, unoCpuHand, unoLocalPlayerHand, unoLocalSide, unoPlayerHand]);
+  }, [connectedRoomCode, isUnoExtendedMode, unoCpuHand, unoLocalHands, unoLocalPlayerHand, unoLocalSide, unoPlayerHand, unoRoomHumanIndex]);
 
   const unoActivationState = useMemo(() => {
     const playableByColor = new Set<number>();
@@ -4278,17 +5503,75 @@ export default function Home() {
   const unoCpuSeatLayout = useMemo(() => {
     const totalCpu = unoLocalCpuHands.length;
     if (totalCpu <= 0) return [] as Array<{ hand: UnoCard[]; cpuIdx: number; x: number; y: number; orientation: "top" | "left" | "right" }>;
+    const radiusX = totalCpu >= 6 ? 44 : totalCpu >= 4 ? 42 : 41;
+    const radiusY = totalCpu >= 6 ? 34 : totalCpu >= 4 ? 33 : 31;
     return unoLocalCpuHands.map((hand, cpuIdx) => {
       const ratio = totalCpu === 1 ? 0.5 : cpuIdx / (totalCpu - 1);
       const angleDeg = -165 + ratio * 150;
       const rad = (angleDeg * Math.PI) / 180;
-      const x = 50 + 41 * Math.cos(rad);
-      const y = 54 + 31 * Math.sin(rad);
+      const x = 50 + radiusX * Math.cos(rad);
+      const y = 54 + radiusY * Math.sin(rad);
       const side = Math.cos(rad);
       const orientation: "top" | "left" | "right" = side < -0.45 ? "left" : side > 0.45 ? "right" : "top";
       return { hand, cpuIdx, x, y, orientation };
     });
   }, [unoLocalCpuHands]);
+
+  const unoRoomSeatLayout = useMemo(() => {
+    if (!connectedRoomCode) {
+      return [] as Array<{ label: string; handCount: number | null; x: number; y: number; orientation: "top" | "left" | "right" }>;
+    }
+    const active = roomParticipants.filter((p) => p.role === "host" || p.role === "guest");
+    const withHands = active.map((p, idx) => ({
+      label: String(p.name || "").trim() || `P${idx + 1}`,
+      handCount: isUnoExtendedMode ? (unoLocalHands[idx]?.length ?? null) : null,
+      id: p.id,
+    }));
+    const opponents = withHands.filter((p) => p.id !== peerIdRef.current);
+    const cpuSeats = isUnoExtendedMode
+      ? Array.from({ length: unoRoomCpuCount }, (_, i) => ({
+        label: `CPU ${i + 1}`,
+        handCount: unoLocalHands[active.length + i]?.length ?? null,
+        id: `cpu-${i}`,
+      }))
+      : [];
+    const seatEntities = [...opponents, ...cpuSeats];
+    const total = seatEntities.length;
+    if (total <= 0) {
+      return [] as Array<{ label: string; handCount: number | null; x: number; y: number; orientation: "top" | "left" | "right" }>;
+    }
+
+    const radiusX = total >= 6 ? 44 : total >= 4 ? 42 : 41;
+    const radiusY = total >= 6 ? 34 : total >= 4 ? 33 : 31;
+
+    return seatEntities.map((seat, idx) => {
+      const ratio = total === 1 ? 0.5 : idx / (total - 1);
+      const angleDeg = -165 + ratio * 150;
+      const rad = (angleDeg * Math.PI) / 180;
+      const x = 50 + radiusX * Math.cos(rad);
+      const y = 54 + radiusY * Math.sin(rad);
+      const side = Math.cos(rad);
+      const orientation: "top" | "left" | "right" = side < -0.45 ? "left" : side > 0.45 ? "right" : "top";
+      const seatLabel = seat.label;
+      return {
+        label: seatLabel.length > 10 ? `${seatLabel.slice(0, 10)}…` : seatLabel,
+        handCount: seat.handCount,
+        x,
+        y,
+        orientation,
+      };
+    });
+  }, [connectedRoomCode, isUnoExtendedMode, roomParticipants, unoLocalHands, unoRoomCpuCount]);
+
+  const isUnoRoomTableMode = useMemo(() => {
+    if (!connectedRoomCode) return false;
+    const activeCount = roomParticipants.filter((p) => p.role === "host" || p.role === "guest").length;
+    return activeCount + (isUnoExtendedMode ? unoRoomCpuCount : 0) >= 3;
+  }, [connectedRoomCode, isUnoExtendedMode, roomParticipants, unoRoomCpuCount]);
+
+  const isUnoTableMode = useMemo(() => {
+    return isUnoLocalTableMode || isUnoRoomTableMode;
+  }, [isUnoLocalTableMode, isUnoRoomTableMode]);
 
   const daifugoLocalSide = useMemo<"player" | "cpu">(() => {
     if (connectedRoomCode && roomRole === "guest") return "cpu";
@@ -4431,8 +5714,24 @@ export default function Home() {
   };
 
   const startPanelGame = (panel: PlayablePanel, reset: () => void) => {
-    setGameStarted((prev) => ({ ...prev, [panel]: true }));
+    if (connectedRoomCode && roomRole === "spectator") {
+      setMenuMessage(t("spectatorReadOnly"));
+      return;
+    }
+    if (connectedRoomCode && roomRole !== "host") {
+      setMenuMessage(t("roomWaitHostStart"));
+      return;
+    }
+
+    if (startCountdownTimerRef.current !== null) {
+      window.clearInterval(startCountdownTimerRef.current);
+      startCountdownTimerRef.current = null;
+    }
+
+    setStartCountdownPanel(null);
+    setStartCountdownSec(0);
     reset();
+    setGameStarted((prev) => ({ ...prev, [panel]: true }));
   };
 
   const openOthello = () => {
@@ -4539,6 +5838,13 @@ export default function Home() {
         party: "パズル・パーティー",
       };
 
+  const chinchiroTabButton: { panel: Panel; category: MenuTabCategory; label: string; onClick: () => void } = {
+    panel: "chinchiro",
+    category: "casino",
+    label: t("tabChinchiro"),
+    onClick: openChinchiro,
+  };
+
   const menuTabButtons: Array<{ panel: Panel; category: MenuTabCategory; label: string; onClick: () => void }> = [
     { panel: "menu", category: "menu", label: t("tabMenu"), onClick: () => setActivePanel("menu") },
     { panel: "othello", category: "board", label: t("tabOthello"), onClick: openOthello },
@@ -4551,7 +5857,7 @@ export default function Home() {
     { panel: "solitaire", category: "card", label: t("tabSolitaire"), onClick: openSolitaire },
     { panel: "blackjack", category: "casino", label: t("tabBlackjack"), onClick: openBlackjack },
     { panel: "poker", category: "casino", label: t("tabPoker"), onClick: openPoker },
-    { panel: "chinchiro", category: "casino", label: t("tabChinchiro"), onClick: openChinchiro },
+    ...(CHINCHIRO_VISIBLE ? [chinchiroTabButton] : []),
     { panel: "minesweeper", category: "party", label: t("tabMinesweeper"), onClick: openMinesweeper },
     { panel: "numeron", category: "party", label: t("tabNumeron"), onClick: openNumeron },
     { panel: "fitPuzzle", category: "party", label: t("tabFitPuzzle"), onClick: openFitPuzzle },
@@ -4591,6 +5897,14 @@ export default function Home() {
         party: "パズル・パーティー",
       };
 
+  const chinchiroGameCard: { panel: PlayablePanel; category: MenuCategory; title: string; className: string; onClick: () => void } = {
+    panel: "chinchiro",
+    category: "casino",
+    title: t("tabChinchiro"),
+    onClick: openChinchiro,
+    className: "rounded-xl border border-fuchsia-200/30 bg-fuchsia-400/10 p-4 text-left",
+  };
+
   const menuGameCards: Array<{ panel: PlayablePanel; category: MenuCategory; title: string; className: string; onClick: () => void }> = [
     { panel: "othello", category: "board", title: t("gameOthello"), onClick: openOthello, className: "rounded-xl border border-emerald-200/30 bg-emerald-400/10 p-4 text-left" },
     { panel: "gomoku", category: "board", title: t("gameGomoku"), onClick: openGomoku, className: "rounded-xl border border-lime-200/30 bg-lime-400/10 p-4 text-left" },
@@ -4602,7 +5916,7 @@ export default function Home() {
     { panel: "solitaire", category: "card", title: t("tabSolitaire"), onClick: openSolitaire, className: "rounded-xl border border-amber-200/30 bg-amber-400/10 p-4 text-left" },
     { panel: "blackjack", category: "casino", title: t("tabBlackjack"), onClick: openBlackjack, className: "rounded-xl border border-rose-200/30 bg-rose-400/10 p-4 text-left" },
     { panel: "poker", category: "casino", title: t("tabPoker"), onClick: openPoker, className: "rounded-xl border border-rose-200/30 bg-rose-400/10 p-4 text-left" },
-    { panel: "chinchiro", category: "casino", title: t("tabChinchiro"), onClick: openChinchiro, className: "rounded-xl border border-fuchsia-200/30 bg-fuchsia-400/10 p-4 text-left" },
+    ...(CHINCHIRO_VISIBLE ? [chinchiroGameCard] : []),
     { panel: "minesweeper", category: "party", title: t("tabMinesweeper"), onClick: openMinesweeper, className: "rounded-xl border border-teal-200/30 bg-teal-400/10 p-4 text-left" },
     { panel: "numeron", category: "party", title: t("tabNumeron"), onClick: openNumeron, className: "rounded-xl border border-amber-200/30 bg-amber-400/10 p-4 text-left" },
     { panel: "fitPuzzle", category: "party", title: t("tabFitPuzzle"), onClick: openFitPuzzle, className: "rounded-xl border border-pink-200/30 bg-pink-400/10 p-4 text-left" },
@@ -4677,6 +5991,12 @@ export default function Home() {
   }, [connectedRoomCode, playerName]);
 
   const applySurrenderToPanel = useCallback((panel: PlayablePanel, loserName: string) => {
+    if (startCountdownTimerRef.current !== null) {
+      window.clearInterval(startCountdownTimerRef.current);
+      startCountdownTimerRef.current = null;
+    }
+    setStartCountdownPanel(null);
+    setStartCountdownSec(0);
     setGameStarted((prev) => ({ ...prev, [panel]: false }));
     const message = tf("roomSurrendered", { name: loserName || "Player" });
     if (panel === "othello") {
@@ -4748,7 +6068,7 @@ export default function Home() {
       return;
     }
     if (panel === "poker") {
-      setPokerPhase("result");
+      setPokerPhase("showdown");
       setPokerMessage(message);
       return;
     }
@@ -4783,6 +6103,12 @@ export default function Home() {
       return;
     }
     runWithLocalResetConfirm(() => {
+      if (startCountdownTimerRef.current !== null) {
+        window.clearInterval(startCountdownTimerRef.current);
+        startCountdownTimerRef.current = null;
+      }
+      setStartCountdownPanel(null);
+      setStartCountdownSec(0);
       setGameStarted((prev) => ({ ...prev, [panel]: false }));
       action();
     });
@@ -4793,6 +6119,35 @@ export default function Home() {
     if (!state) return;
 
     if (state.activePanel) setActivePanel(state.activePanel as Panel);
+    if (state.gameStarted && typeof state.gameStarted === "object") {
+      setGameStarted((state.gameStarted as Record<PlayablePanel, boolean>));
+    }
+    if (
+      state.startCountdownPanel === null
+      || state.startCountdownPanel === "othello"
+      || state.startCountdownPanel === "gomoku"
+      || state.startCountdownPanel === "chess"
+      || state.startCountdownPanel === "shogi"
+      || state.startCountdownPanel === "uno"
+      || state.startCountdownPanel === "minesweeper"
+      || state.startCountdownPanel === "numeron"
+      || state.startCountdownPanel === "blackjack"
+      || state.startCountdownPanel === "chinchiro"
+      || state.startCountdownPanel === "sevens"
+      || state.startCountdownPanel === "daifugo"
+      || state.startCountdownPanel === "fourPanel"
+      || state.startCountdownPanel === "drawingRelay"
+      || state.startCountdownPanel === "fitPuzzle"
+      || state.startCountdownPanel === "mahjong"
+      || state.startCountdownPanel === "poker"
+      || state.startCountdownPanel === "solitaire"
+      || state.startCountdownPanel === "survivors"
+    ) {
+      setStartCountdownPanel((state.startCountdownPanel ?? null) as PlayablePanel | null);
+    }
+    if (Number.isFinite(state.startCountdownSec)) {
+      setStartCountdownSec(Math.max(0, Math.floor(Number(state.startCountdownSec))));
+    }
 
     if (Array.isArray(state.board)) setBoard(state.board as Cell[][]);
     if (Array.isArray(state.othelloFixedMask)) setOthelloFixedMask(state.othelloFixedMask as boolean[][]);
@@ -4932,14 +6287,42 @@ export default function Home() {
     if (typeof state.isMineOver === "boolean") setIsMineOver(state.isMineOver);
 
     if (typeof state.numeronSecret === "string") setNumeronSecret(state.numeronSecret);
+    setNumeronDigitCount(normalizeNumeronDigitCount(state.numeronDigitCount));
+    {
+      const count = normalizeNumeronDigitCount(state.numeronDigitCount);
+      setNumeronSecretDraft(normalizeNumeronDigitDraft(state.numeronSecretDraft ?? state.numeronSecretInput, count));
+    }
+    if (typeof state.isNumeronSecretConfirmed === "boolean") {
+      setIsNumeronSecretConfirmed(state.isNumeronSecretConfirmed);
+    } else {
+      const restoredCount = normalizeNumeronDigitCount(state.numeronDigitCount);
+      const restoredSecret = typeof state.numeronSecret === "string" ? state.numeronSecret : "";
+      const restoredHistory = Array.isArray(state.numeronHistory) ? (state.numeronHistory as NumeronHistory[]) : [];
+      setIsNumeronSecretConfirmed(isValidNumeronCode(restoredSecret, restoredCount) || restoredHistory.length > 0);
+    }
+    if (typeof state.isNumeronSecretPanelOpen === "boolean") {
+      setIsNumeronSecretPanelOpen(state.isNumeronSecretPanelOpen);
+    }
     if (Array.isArray(state.numeronDraft)) setNumeronDraft(state.numeronDraft as string[]);
     if (Array.isArray(state.numeronHistory)) setNumeronHistory(state.numeronHistory as NumeronHistory[]);
+    if (Array.isArray(state.numeronEnemyHistory)) setNumeronEnemyHistory(state.numeronEnemyHistory as NumeronHistory[]);
+    if (typeof state.isNumeronEnemyHistoryOpen === "boolean") setIsNumeronEnemyHistoryOpen(state.isNumeronEnemyHistoryOpen);
+    if (/^\d$/.test(String(state.numeronHintDigit ?? ""))) setNumeronHintDigit(String(state.numeronHintDigit));
+    if (state.numeronAssistCharges && typeof state.numeronAssistCharges === "object") {
+      const charges = state.numeronAssistCharges as { highlow?: unknown; reveal?: unknown };
+      setNumeronAssistCharges({
+        highlow: typeof charges.highlow === "number" ? Math.max(0, Math.floor(charges.highlow)) : 1,
+        reveal: typeof charges.reveal === "number" ? Math.max(0, Math.floor(charges.reveal)) : 1,
+      });
+    }
     if (typeof state.isNumeronOver === "boolean") setIsNumeronOver(state.isNumeronOver);
     if (typeof state.numeronMessage === "string") setNumeronMessage(state.numeronMessage);
 
     if (Array.isArray(state.blackjackDeck)) setBlackjackDeck(state.blackjackDeck as BlackjackCard[]);
     if (Array.isArray(state.blackjackPlayerHand)) setBlackjackPlayerHand(state.blackjackPlayerHand as BlackjackCard[]);
     if (Array.isArray(state.blackjackDealerHand)) setBlackjackDealerHand(state.blackjackDealerHand as BlackjackCard[]);
+    if (typeof state.blackjackBet === "number") setBlackjackBet(Math.max(MIN_CASINO_BET, Math.floor(state.blackjackBet)));
+    if (typeof state.blackjackWager === "number") setBlackjackWager(Math.max(0, Math.floor(state.blackjackWager)));
     if (typeof state.blackjackMessage === "string") setBlackjackMessage(state.blackjackMessage);
     if (typeof state.isBlackjackOver === "boolean") setIsBlackjackOver(state.isBlackjackOver);
 
@@ -4949,6 +6332,8 @@ export default function Home() {
     if (state.chinchiroDealerDice === null || Array.isArray(state.chinchiroDealerDice)) {
       setChinchiroDealerDice(state.chinchiroDealerDice as [number, number, number] | null);
     }
+    if (typeof state.chinchiroBet === "number") setChinchiroBet(Math.max(MIN_CASINO_BET, Math.floor(state.chinchiroBet)));
+    if (typeof state.chinchiroWager === "number") setChinchiroWager(Math.max(0, Math.floor(state.chinchiroWager)));
     if (typeof state.chinchiroMessage === "string") setChinchiroMessage(state.chinchiroMessage);
     if (typeof state.isChinchiroOver === "boolean") setIsChinchiroOver(state.isChinchiroOver);
 
@@ -4988,9 +6373,50 @@ export default function Home() {
     if (typeof state.fitPuzzleMessage === "string") setFitPuzzleMessage(state.fitPuzzleMessage);
     if (typeof state.isFitPuzzleOver === "boolean") setIsFitPuzzleOver(state.isFitPuzzleOver);
 
-    if (Array.isArray(state.mahjongBoard)) setMahjongBoard(state.mahjongBoard as MahjongCell[][]);
-    if (state.mahjongSelected === null || typeof state.mahjongSelected === "object") {
-      setMahjongSelected(state.mahjongSelected as MahjongCoord | null);
+    if (Array.isArray(state.mahjongBoard)) {
+      const parsedHand = sortMahjongTiles(normalizeMahjongTileList(state.mahjongBoard));
+      if (parsedHand.length === 13 || parsedHand.length === 14) {
+        setMahjongBoard(parsedHand);
+      }
+    }
+    if (Array.isArray(state.mahjongWall)) {
+      const parsedWall = normalizeMahjongTileList(state.mahjongWall);
+      setMahjongWall(parsedWall);
+    }
+    if (Array.isArray(state.mahjongRiver)) {
+      const parsedRiver = normalizeMahjongTileList(state.mahjongRiver);
+      setMahjongRiver(parsedRiver);
+    }
+    if (state.mahjongSelected === null || typeof state.mahjongSelected === "number") {
+      setMahjongSelected(state.mahjongSelected as number | null);
+    }
+    if (state.mahjongLastDraw === null || typeof state.mahjongLastDraw === "number") {
+      setMahjongLastDraw(state.mahjongLastDraw as MahjongCell | null);
+    }
+    if (state.mahjongRoundWind === "東" || state.mahjongRoundWind === "南" || state.mahjongRoundWind === "西" || state.mahjongRoundWind === "北") {
+      setMahjongRoundWind(state.mahjongRoundWind);
+    }
+    if (typeof state.mahjongRoundNumber === "number") {
+      const nextRound = Math.max(1, Math.min(4, Math.floor(state.mahjongRoundNumber)));
+      setMahjongRoundNumber(nextRound);
+    }
+    if (state.mahjongSeatWind === "東" || state.mahjongSeatWind === "南" || state.mahjongSeatWind === "西" || state.mahjongSeatWind === "北") {
+      setMahjongSeatWind(state.mahjongSeatWind);
+    }
+    if (typeof state.mahjongHonba === "number") {
+      setMahjongHonba(Math.max(0, Math.floor(state.mahjongHonba)));
+    }
+    if (typeof state.mahjongKyotaku === "number") {
+      setMahjongKyotaku(Math.max(0, Math.floor(state.mahjongKyotaku)));
+    }
+    if (state.mahjongRiichiTileIndex === null || typeof state.mahjongRiichiTileIndex === "number") {
+      setMahjongRiichiTileIndex(state.mahjongRiichiTileIndex as number | null);
+    }
+    if (state.mahjongDoraIndicator === null || typeof state.mahjongDoraIndicator === "number") {
+      setMahjongDoraIndicator(state.mahjongDoraIndicator as MahjongCell | null);
+    }
+    if (state.mahjongWinSummary === null || typeof state.mahjongWinSummary === "object") {
+      setMahjongWinSummary(state.mahjongWinSummary as MahjongWinSummary | null);
     }
     if (typeof state.mahjongMessage === "string") setMahjongMessage(state.mahjongMessage);
     if (typeof state.isMahjongOver === "boolean") setIsMahjongOver(state.isMahjongOver);
@@ -4998,8 +6424,20 @@ export default function Home() {
     if (Array.isArray(state.pokerDeck)) setPokerDeck(state.pokerDeck as PokerCard[]);
     if (Array.isArray(state.pokerPlayerHand)) setPokerPlayerHand(state.pokerPlayerHand as PokerCard[]);
     if (Array.isArray(state.pokerCpuHand)) setPokerCpuHand(state.pokerCpuHand as PokerCard[]);
+    if (Array.isArray(state.pokerCommunity)) setPokerCommunity(state.pokerCommunity as PokerCard[]);
+    if (typeof state.pokerBet === "number") setPokerBet(Math.max(MIN_CASINO_BET, Math.floor(state.pokerBet)));
+    if (typeof state.pokerWager === "number") setPokerWager(Math.max(0, Math.floor(state.pokerWager)));
     if (Array.isArray(state.pokerHold)) setPokerHold(state.pokerHold as boolean[]);
-    if (state.pokerPhase === "draw" || state.pokerPhase === "result") setPokerPhase(state.pokerPhase as "draw" | "result");
+    if (
+      state.pokerPhase === "betting"
+      || state.pokerPhase === "preflop"
+      || state.pokerPhase === "flop"
+      || state.pokerPhase === "turn"
+      || state.pokerPhase === "river"
+      || state.pokerPhase === "showdown"
+    ) {
+      setPokerPhase(state.pokerPhase as PokerPhase);
+    }
     if (typeof state.pokerMessage === "string") setPokerMessage(state.pokerMessage);
     if (state.pokerPlayerEval === null || typeof state.pokerPlayerEval === "object") {
       setPokerPlayerEval(state.pokerPlayerEval as PokerEval | null);
@@ -5015,6 +6453,7 @@ export default function Home() {
     ) {
       setPokerOutcome(state.pokerOutcome as "win" | "lose" | "draw" | "pending");
     }
+    if (typeof state.casinoBankroll === "number") setCasinoBankroll(Math.max(0, Math.floor(state.casinoBankroll)));
 
     if (Array.isArray(state.solitaireStock)) setSolitaireStock(state.solitaireStock as SolitaireCard[]);
     if (Array.isArray(state.solitaireWaste)) setSolitaireWaste(state.solitaireWaste as SolitaireCard[]);
@@ -5042,6 +6481,9 @@ export default function Home() {
     if (Array.isArray(state.unoDeck)) setUnoDeck(state.unoDeck as UnoCard[]);
     if (Array.isArray(state.unoPlayerHand)) setUnoPlayerHand(state.unoPlayerHand as UnoCard[]);
     if (Array.isArray(state.unoCpuHand)) setUnoCpuHand(state.unoCpuHand as UnoCard[]);
+    if (Array.isArray(state.unoLocalHands)) setUnoLocalHands(state.unoLocalHands as UnoCard[][]);
+    if (typeof state.unoRoomCpuCount === "number") setUnoRoomCpuCount(Math.max(0, Math.min(6, Math.trunc(state.unoRoomCpuCount))));
+    if (typeof state.unoLocalTurnIndex === "number") setUnoLocalTurnIndex(Math.max(0, Math.trunc(state.unoLocalTurnIndex)));
     if (state.unoTopCard === null || typeof state.unoTopCard === "object") setUnoTopCard(state.unoTopCard as UnoCard | null);
     if (state.unoTurn === "player" || state.unoTurn === "cpu") setUnoTurn(state.unoTurn as "player" | "cpu");
     if (typeof state.unoMessage === "string") setUnoMessage(state.unoMessage);
@@ -5633,6 +7075,9 @@ export default function Home() {
     snapshotRef.current = {
       state: {
         activePanel,
+        gameStarted,
+        startCountdownPanel,
+        startCountdownSec,
         board,
         othelloFixedMask,
         othelloBrokenMask,
@@ -5689,17 +7134,29 @@ export default function Home() {
         mineMessage,
         isMineOver,
         numeronSecret,
+        numeronDigitCount,
+        numeronSecretDraft,
+        isNumeronSecretConfirmed,
+        isNumeronSecretPanelOpen,
         numeronDraft,
         numeronHistory,
+        numeronEnemyHistory,
+        isNumeronEnemyHistoryOpen,
+        numeronHintDigit,
+        numeronAssistCharges,
         isNumeronOver,
         numeronMessage,
         blackjackDeck,
         blackjackPlayerHand,
         blackjackDealerHand,
+        blackjackBet,
+        blackjackWager,
         blackjackMessage,
         isBlackjackOver,
         chinchiroPlayerDice,
         chinchiroDealerDice,
+        chinchiroBet,
+        chinchiroWager,
         chinchiroMessage,
         isChinchiroOver,
         sevensHands,
@@ -5728,18 +7185,33 @@ export default function Home() {
         fitPuzzleMessage,
         isFitPuzzleOver,
         mahjongBoard,
+        mahjongWall,
+        mahjongRiver,
         mahjongSelected,
+        mahjongLastDraw,
+        mahjongRoundWind,
+        mahjongRoundNumber,
+        mahjongSeatWind,
+        mahjongHonba,
+        mahjongKyotaku,
+        mahjongRiichiTileIndex,
+        mahjongDoraIndicator,
+        mahjongWinSummary,
         mahjongMessage,
         isMahjongOver,
         pokerDeck,
         pokerPlayerHand,
         pokerCpuHand,
+        pokerCommunity,
+        pokerBet,
+        pokerWager,
         pokerHold,
         pokerPhase,
         pokerMessage,
         pokerPlayerEval,
         pokerCpuEval,
         pokerOutcome,
+        casinoBankroll,
         solitaireStock,
         solitaireWaste,
         solitaireFoundations,
@@ -5760,6 +7232,9 @@ export default function Home() {
         unoDeck,
         unoPlayerHand,
         unoCpuHand,
+        unoLocalHands,
+        unoRoomCpuCount,
+        unoLocalTurnIndex,
         unoTopCard,
         unoTurn,
         unoMessage,
@@ -6669,56 +8144,351 @@ export default function Home() {
     setMineMessage(t("minesHint"));
   };
 
-  const resetNumeron = () => {
-    setNumeronSecret(createNumeronSecret());
+  const numeronTryLimit = numeronDigitCount === 3 ? 8 : 10;
+  const numeronCandidateCount = useMemo(
+    () => buildNumeronCandidates(numeronHistory, numeronDigitCount).length,
+    [numeronHistory, numeronDigitCount],
+  );
+
+  const resetNumeron = (nextDigitCount: NumeronDigitCount = numeronDigitCount) => {
+    const nextSecretDraft = normalizeNumeronDigitDraft(numeronSecretDraft, nextDigitCount);
+    const fixedSecret = nextSecretDraft.length === nextDigitCount ? nextSecretDraft.join("") : "";
+    setNumeronDigitCount(nextDigitCount);
+    setNumeronSecretDraft(nextSecretDraft);
+    setNumeronSecret(fixedSecret || createNumeronSecret(nextDigitCount));
+    setIsNumeronSecretConfirmed(false);
+    setIsNumeronSecretPanelOpen(true);
     setNumeronDraft([]);
     setNumeronHistory([]);
+    setNumeronEnemyHistory([]);
+    setIsNumeronEnemyHistoryOpen(false);
+    setNumeronPendingItem(null);
+    setNumeronHintDigit("5");
+    setNumeronAssistCharges({ highlow: 1, reveal: 1 });
     setIsNumeronOver(false);
-    setNumeronMessage(t("numeronHint"));
+    setNumeronMessage(tf("numeronHintWithDigits", { digits: nextDigitCount }));
+  };
+
+  const pickNumeronEnemyGuess = () => {
+    const guessed = new Set(numeronEnemyHistory.map((entry) => entry.guess));
+    const narrowed = buildNumeronCandidates(numeronEnemyHistory, numeronDigitCount).filter((code) => !guessed.has(code));
+    const pool = narrowed.length > 0
+      ? narrowed
+      : createNumeronAllCodes(numeronDigitCount).filter((code) => !guessed.has(code));
+    if (pool.length <= 0) {
+      return createNumeronSecret(numeronDigitCount);
+    }
+    return pool[Math.floor(Math.random() * pool.length)];
   };
 
   const onNumeronPickDigit = (digit: string) => {
-    if (isNumeronOver) return;
+    if (isNumeronOver || !isNumeronSecretConfirmed || Boolean(numeronPendingItem)) return;
     if (!/^\d$/.test(digit)) return;
     setNumeronDraft((prev) => {
-      if (prev.includes(digit) || prev.length >= 3) return prev;
+      if (prev.includes(digit) || prev.length >= numeronDigitCount) return prev;
       return [...prev, digit];
     });
   };
 
-  const onNumeronSubmit = () => {
+  const onNumeronPickSecretDigit = (digit: string) => {
+    if (isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed) return;
+    if (!/^\d$/.test(digit)) return;
+    setNumeronSecretDraft((prev) => {
+      if (prev.includes(digit) || prev.length >= numeronDigitCount) return prev;
+      return [...prev, digit];
+    });
+  };
+
+  const onNumeronBackDigit = () => {
+    if (isNumeronOver || !isNumeronSecretConfirmed || Boolean(numeronPendingItem)) return;
+    setNumeronDraft((prev) => prev.slice(0, -1));
+  };
+
+  const onNumeronBackSecretDigit = () => {
+    if (isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed) return;
+    setNumeronSecretDraft((prev) => prev.slice(0, -1));
+  };
+
+  const onNumeronClearSecretDraft = () => {
+    if (isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed) return;
+    setNumeronSecretDraft([]);
+  };
+
+  const runNumeronUseHighLow = () => {
     if (isNumeronOver) return;
-    const guess = numeronDraft.join("");
-    if (!/^\d{3}$/.test(guess) || new Set(guess.split("")).size !== 3) {
+    if (numeronAssistCharges.highlow <= 0) {
+      setNumeronMessage(t("numeronNoCharges"));
+      return;
+    }
+    if (!/^\d$/.test(numeronHintDigit)) {
       setNumeronMessage(t("numeronInvalidGuess"));
       return;
     }
 
+    const resultText = numeronSecret.includes(numeronHintDigit)
+      ? (Number(numeronHintDigit) >= 5 ? "HIGH" : "LOW")
+      : "NONE";
+    setNumeronAssistCharges((prev) => ({ ...prev, highlow: Math.max(0, prev.highlow - 1) }));
+    setNumeronMessage(tf("numeronHighLowResult", { digit: numeronHintDigit, result: resultText }));
+  };
+
+  const runNumeronUseReveal = () => {
+    if (isNumeronOver) return;
+    if (numeronAssistCharges.reveal <= 0) {
+      setNumeronMessage(t("numeronNoCharges"));
+      return;
+    }
+
+    const revealIndex = Math.floor(Math.random() * numeronSecret.length);
+    setNumeronAssistCharges((prev) => ({ ...prev, reveal: Math.max(0, prev.reveal - 1) }));
+    setNumeronMessage(tf("numeronRevealResult", { index: String(revealIndex + 1), digit: numeronSecret[revealIndex] ?? "?" }));
+  };
+
+  const onNumeronUseHighLow = () => {
+    if (isNumeronOver || numeronAssistCharges.highlow <= 0) return;
+    setNumeronPendingItem("highlow");
+    setNumeronMessage(t("numeronItemConfirmHighLow"));
+  };
+
+  const onNumeronUseReveal = () => {
+    if (isNumeronOver || numeronAssistCharges.reveal <= 0) return;
+    setNumeronPendingItem("reveal");
+    setNumeronMessage(t("numeronItemConfirmReveal"));
+  };
+
+  const onNumeronConfirmItemUse = () => {
+    if (numeronPendingItem === "highlow") {
+      runNumeronUseHighLow();
+    } else if (numeronPendingItem === "reveal") {
+      runNumeronUseReveal();
+    }
+    setNumeronPendingItem(null);
+  };
+
+  const onNumeronCancelItemUse = () => {
+    if (!numeronPendingItem) return;
+    setNumeronPendingItem(null);
+    setNumeronMessage(t("numeronItemUseCanceled"));
+  };
+
+  const onNumeronSetSecret = () => {
+    if (numeronHistory.length > 0 || isNumeronOver || isNumeronSecretConfirmed) return;
+    const next = numeronSecretDraft.join("");
+    if (!isValidNumeronCode(next, numeronDigitCount)) {
+      setNumeronMessage(tf("numeronInvalidGuessDigits", { digits: numeronDigitCount }));
+      return;
+    }
+    setNumeronSecret(next);
+    setIsNumeronSecretConfirmed(true);
+    setIsNumeronSecretPanelOpen(false);
+    setNumeronDraft([]);
+    setNumeronMessage(t("numeronSecretSetDone"));
+  };
+
+  const onNumeronSetRandomSecret = () => {
+    if (numeronHistory.length > 0 || isNumeronOver || isNumeronSecretConfirmed) return;
+    const random = createNumeronSecret(numeronDigitCount);
+    setNumeronSecret(random);
+    setNumeronSecretDraft(random.split(""));
+    setIsNumeronSecretConfirmed(true);
+    setIsNumeronSecretPanelOpen(false);
+    setNumeronDraft([]);
+    setNumeronMessage(tf("numeronHintWithDigits", { digits: numeronDigitCount }));
+  };
+
+  useEffect(() => {
+    if (activePanel !== "numeron") return;
+    if (!gameStarted.numeron) return;
+    if (!isNumeronSecretConfirmed || isNumeronSecretPanelOpen) return;
+    numeronGuessPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [activePanel, gameStarted.numeron, isNumeronSecretConfirmed, isNumeronSecretPanelOpen]);
+
+  const onNumeronSubmit = () => {
+    if (isNumeronOver) return;
+    if (numeronPendingItem) {
+      setNumeronMessage(numeronPendingItem === "highlow" ? t("numeronItemConfirmHighLow") : t("numeronItemConfirmReveal"));
+      return;
+    }
+    if (!isNumeronSecretConfirmed) {
+      setNumeronMessage(t("numeronSetSecretFirst"));
+      return;
+    }
+    const guess = numeronDraft.join("");
+    if (!isValidNumeronCode(guess, numeronDigitCount)) {
+      setNumeronMessage(tf("numeronInvalidGuessDigits", { digits: numeronDigitCount }));
+      return;
+    }
+
     const result = evaluateNumeron(numeronSecret, guess);
-    setNumeronHistory((prev) => [...prev, { guess, hits: result.hits, blows: result.blows }]);
+    const nextHistory = [...numeronHistory, { guess, hits: result.hits, blows: result.blows }];
+    setNumeronHistory(nextHistory);
     setNumeronDraft([]);
     setNumeronMessage(tf("numeronResult", { guess, hits: result.hits, blows: result.blows }));
 
-    if (result.hits >= 3) {
+    if (result.hits >= numeronDigitCount) {
       setIsNumeronOver(true);
       setNumeronMessage(t("numeronWin"));
+      return;
     }
+
+    if (nextHistory.length >= numeronTryLimit) {
+      setIsNumeronOver(true);
+      setNumeronMessage(tf("numeronTryLimitReached", { secret: numeronSecret }));
+      return;
+    }
+
+    const enemyGuess = pickNumeronEnemyGuess();
+    const enemyResult = evaluateNumeron(numeronSecret, enemyGuess);
+    const nextEnemyHistory = [...numeronEnemyHistory, { guess: enemyGuess, hits: enemyResult.hits, blows: enemyResult.blows }];
+    setNumeronEnemyHistory(nextEnemyHistory);
+
+    if (enemyResult.hits >= numeronDigitCount) {
+      setIsNumeronOver(true);
+      setNumeronMessage(t("numeronEnemySolved").replace("{guess}", enemyGuess));
+      return;
+    }
+
+    setNumeronMessage(
+      `${tf("numeronResult", { guess, hits: result.hits, blows: result.blows })} / ${tf("numeronEnemyResult", {
+        guess: enemyGuess,
+        hits: enemyResult.hits,
+        blows: enemyResult.blows,
+      })}`,
+    );
   };
 
+  useEffect(() => {
+    if (activePanel !== "numeron" || !gameStarted.numeron) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
+      }
+
+      if (/^\d$/.test(event.key)) {
+        onNumeronPickDigit(event.key);
+        event.preventDefault();
+        return;
+      }
+      if (event.key === "Backspace") {
+        onNumeronBackDigit();
+        event.preventDefault();
+        return;
+      }
+      if (event.key === "Delete") {
+        setNumeronDraft([]);
+        event.preventDefault();
+        return;
+      }
+      if (event.key === "Enter") {
+        onNumeronSubmit();
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activePanel, gameStarted.numeron, isNumeronOver, numeronDigitCount, numeronDraft, numeronAssistCharges, numeronHintDigit, numeronSecret, numeronHistory, numeronPendingItem]);
+
   const resetBlackjack = useCallback(() => {
+    clearBlackjackDealerResolveTimer();
+    setIsBlackjackDealerResolving(false);
+    const bank = normalizeCasinoBankroll();
+    setBlackjackBet(clampCasinoBet(blackjackBet, bank));
+    setBlackjackWager(0);
+    setBlackjackDeck([]);
+    setBlackjackPlayerHand([]);
+    setBlackjackDealerHand([]);
+    setIsBlackjackOver(false);
+    setBlackjackMessage("BETを決めてDEALしてください。");
+  }, [blackjackBet, clearBlackjackDealerResolveTimer, normalizeCasinoBankroll, t]);
+
+  const settleBlackjackRound = useCallback((playerHand: BlackjackCard[], dealerStart: BlackjackCard[], deckStart: BlackjackCard[], wager: number) => {
+    let localDeck = [...deckStart];
+    const dealer = [...dealerStart];
+    while (blackjackHandValue(dealer) < 17 && localDeck.length > 0) {
+      dealer.push(localDeck.shift() as BlackjackCard);
+    }
+
+    const playerValue = blackjackHandValue(playerHand);
+    const dealerValue = blackjackHandValue(dealer);
+
+    setBlackjackDeck(localDeck);
+    setBlackjackDealerHand(dealer);
+    setIsBlackjackOver(true);
+
+    if (dealerValue > 21 || playerValue > dealerValue) {
+      setCasinoBankroll((prev) => prev + wager * 2);
+      triggerCasinoWinBurst();
+      setBlackjackMessage(`${t("blackjackWin")} (+${wager})`);
+      return;
+    }
+    if (playerValue < dealerValue) {
+      setBlackjackMessage(`${t("blackjackLose")} (-${wager})`);
+      return;
+    }
+    setCasinoBankroll((prev) => prev + wager);
+    setBlackjackMessage(`${t("blackjackPush")} (+${wager})`);
+  }, [t, triggerCasinoWinBurst]);
+
+  const onBlackjackDeal = () => {
+    clearBlackjackDealerResolveTimer();
+    setIsBlackjackDealerResolving(false);
+    if (!gameStarted.blackjack) return;
+    if ((!isBlackjackOver && blackjackPlayerHand.length > 0) || isBlackjackDealerResolving) return;
+
+    const bank = normalizeCasinoBankroll();
+    if (bank < MIN_CASINO_BET) {
+      setBlackjackMessage("チップが不足しています。");
+      return;
+    }
+
+    const wager = clampCasinoBet(blackjackBet, bank);
     const deck = shuffleBlackjackDeck(createBlackjackDeck());
     const player = [deck[0], deck[2]].filter(Boolean) as BlackjackCard[];
     const dealer = [deck[1], deck[3]].filter(Boolean) as BlackjackCard[];
     const rest = deck.slice(4);
+    const playerNatural = isBlackjack(player);
+    const dealerNatural = isBlackjack(dealer);
+
+    setCasinoBankroll(Math.max(0, bank - wager));
+    setBlackjackBet(wager);
+    setBlackjackWager(wager);
     setBlackjackDeck(rest);
     setBlackjackPlayerHand(player);
     setBlackjackDealerHand(dealer);
+
+    if (playerNatural && dealerNatural) {
+      setCasinoBankroll((prev) => prev + wager);
+      setIsBlackjackOver(true);
+      setBlackjackMessage(`${t("blackjackPush")} (+${wager})`);
+      return;
+    }
+    if (playerNatural) {
+      const payout = Math.floor(wager * 2.5);
+      setCasinoBankroll((prev) => prev + payout);
+      triggerCasinoWinBurst();
+      setIsBlackjackOver(true);
+      setBlackjackMessage(`${t("blackjackWin")} (+${Math.floor(wager * 1.5)})`);
+      return;
+    }
+    if (dealerNatural) {
+      setIsBlackjackOver(true);
+      setBlackjackMessage(`${t("blackjackLose")} (-${wager})`);
+      return;
+    }
+
     setIsBlackjackOver(false);
-    setBlackjackMessage(t("blackjackYourTurn"));
-  }, [t]);
+    setBlackjackMessage(`${t("blackjackYourTurn")} (BET ${wager})`);
+  };
 
   const onBlackjackHit = () => {
-    if (isBlackjackOver || blackjackDeck.length === 0) return;
+    if (isBlackjackOver || isBlackjackDealerResolving || blackjackDeck.length === 0 || blackjackPlayerHand.length === 0) return;
     const nextCard = blackjackDeck[0];
     const restDeck = blackjackDeck.slice(1);
     const nextHand = [...blackjackPlayerHand, nextCard];
@@ -6729,7 +8499,7 @@ export default function Home() {
 
     if (value > 21) {
       setIsBlackjackOver(true);
-      setBlackjackMessage(t("blackjackBust"));
+      setBlackjackMessage(`${t("blackjackBust")} (-${blackjackWager})`);
       return;
     }
 
@@ -6737,30 +8507,49 @@ export default function Home() {
   };
 
   const onBlackjackStand = () => {
-    if (isBlackjackOver) return;
+    if (isBlackjackOver || isBlackjackDealerResolving || blackjackPlayerHand.length === 0 || blackjackDealerHand.length === 0) return;
+    clearBlackjackDealerResolveTimer();
+    setBlackjackMessage(t("blackjackDealerTurn"));
+    setIsBlackjackDealerResolving(true);
+    blackjackDealerResolveTimerRef.current = window.setTimeout(() => {
+      blackjackDealerResolveTimerRef.current = null;
+      settleBlackjackRound(blackjackPlayerHand, blackjackDealerHand, blackjackDeck, blackjackWager);
+      setIsBlackjackDealerResolving(false);
+    }, BLACKJACK_DEALER_REVEAL_DELAY_MS);
+  };
 
-    let localDeck = [...blackjackDeck];
-    const dealer = [...blackjackDealerHand];
-    while (blackjackHandValue(dealer) < 17 && localDeck.length > 0) {
-      dealer.push(localDeck.shift() as BlackjackCard);
-    }
-
-    const playerValue = blackjackHandValue(blackjackPlayerHand);
-    const dealerValue = blackjackHandValue(dealer);
-
-    setBlackjackDeck(localDeck);
-    setBlackjackDealerHand(dealer);
-    setIsBlackjackOver(true);
-
-    if (dealerValue > 21 || playerValue > dealerValue) {
-      setBlackjackMessage(t("blackjackWin"));
+  const onBlackjackDouble = () => {
+    if (isBlackjackOver || isBlackjackDealerResolving || blackjackPlayerHand.length !== 2 || blackjackDealerHand.length === 0) return;
+    if (casinoBankroll < blackjackWager) {
+      setBlackjackMessage("DOUBLEするには同額のチップが必要です。");
       return;
     }
-    if (playerValue < dealerValue) {
-      setBlackjackMessage(t("blackjackLose"));
+    if (blackjackDeck.length === 0) return;
+
+    const nextWager = blackjackWager * 2;
+    const nextCard = blackjackDeck[0];
+    const restDeck = blackjackDeck.slice(1);
+    const nextHand = [...blackjackPlayerHand, nextCard];
+
+    setCasinoBankroll((prev) => Math.max(0, prev - blackjackWager));
+    setBlackjackWager(nextWager);
+    setBlackjackPlayerHand(nextHand);
+
+    if (blackjackHandValue(nextHand) > 21) {
+      setBlackjackDeck(restDeck);
+      setIsBlackjackOver(true);
+      setBlackjackMessage(`${t("blackjackBust")} (-${nextWager})`);
       return;
     }
-    setBlackjackMessage(t("blackjackPush"));
+
+    clearBlackjackDealerResolveTimer();
+    setBlackjackMessage(t("blackjackDealerTurn"));
+    setIsBlackjackDealerResolving(true);
+    blackjackDealerResolveTimerRef.current = window.setTimeout(() => {
+      blackjackDealerResolveTimerRef.current = null;
+      settleBlackjackRound(nextHand, blackjackDealerHand, restDeck, nextWager);
+      setIsBlackjackDealerResolving(false);
+    }, BLACKJACK_DEALER_REVEAL_DELAY_MS);
   };
 
   const chinchiroHandLabel = useCallback((hand: ChinchiroHand) => {
@@ -6773,11 +8562,16 @@ export default function Home() {
   }, [t, tf]);
 
   const resetChinchiro = useCallback(() => {
+    const bank = normalizeCasinoBankroll();
+    const wager = clampCasinoBet(chinchiroBet, bank);
+    setCasinoBankroll(Math.max(0, bank - wager));
+    setChinchiroBet(wager);
+    setChinchiroWager(wager);
     setChinchiroPlayerDice(null);
     setChinchiroDealerDice(null);
     setIsChinchiroOver(false);
-    setChinchiroMessage(t("chinchiroHint"));
-  }, [t]);
+    setChinchiroMessage(`${t("chinchiroHint")} (BET ${wager})`);
+  }, [chinchiroBet, normalizeCasinoBankroll, t]);
 
   const onChinchiroRoll = () => {
     if (isChinchiroOver) return;
@@ -6791,17 +8585,25 @@ export default function Home() {
     setIsChinchiroOver(true);
 
     let resultLabel = t("chinchiroDraw");
+    let bankrollDiff = 0;
     if (playerHand.rank > dealerHand.rank || (playerHand.rank === dealerHand.rank && playerHand.eye > dealerHand.eye)) {
       resultLabel = t("chinchiroWin");
+      bankrollDiff = chinchiroWager;
+      setCasinoBankroll((prev) => prev + chinchiroWager * 2);
+      triggerCasinoWinBurst();
     } else if (playerHand.rank < dealerHand.rank || (playerHand.rank === dealerHand.rank && playerHand.eye < dealerHand.eye)) {
       resultLabel = t("chinchiroLose");
+      bankrollDiff = -chinchiroWager;
+    } else {
+      bankrollDiff = 0;
+      setCasinoBankroll((prev) => prev + chinchiroWager);
     }
 
     setChinchiroMessage(
       tf("chinchiroResultLine", {
         player: chinchiroHandLabel(playerHand),
         dealer: chinchiroHandLabel(dealerHand),
-        result: resultLabel,
+        result: `${resultLabel} (${bankrollDiff >= 0 ? "+" : ""}${bankrollDiff})`,
       }),
     );
   };
@@ -6961,64 +8763,168 @@ export default function Home() {
     setDaifugoTurn(side === "player" ? "cpu" : "player");
   };
 
-  const clearFourPanelCanvas = useCallback(() => {
+  const clearFourPanelCanvas = useCallback((options?: { recordUndo?: boolean }) => {
+    const canvas = fourPanelCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    if (options?.recordUndo && fourPanelHasStrokeRef.current) {
+      fourPanelUndoStackRef.current.push(canvas.toDataURL("image/png"));
+      if (fourPanelUndoStackRef.current.length > 40) {
+        fourPanelUndoStackRef.current = fourPanelUndoStackRef.current.slice(-40);
+      }
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    fourPanelHasStrokeRef.current = false;
+    fourPanelLastPointRef.current = null;
+    fourPanelStrokeBaseSnapshotRef.current = null;
+    if (fourPanelStrokeLayerRef.current) {
+      const layerCtx = fourPanelStrokeLayerRef.current.getContext("2d");
+      layerCtx?.clearRect(0, 0, fourPanelStrokeLayerRef.current.width, fourPanelStrokeLayerRef.current.height);
+    }
+  }, []);
+
+  const restoreFourPanelCanvas = useCallback((snapshot: string) => {
     const canvas = fourPanelCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    fourPanelHasStrokeRef.current = false;
+    if (!snapshot || snapshot === FOUR_PANEL_EMPTY_SNAPSHOT) {
+      fourPanelHasStrokeRef.current = false;
+      fourPanelLastPointRef.current = null;
+      fourPanelStrokeBaseSnapshotRef.current = null;
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      fourPanelHasStrokeRef.current = true;
+      fourPanelLastPointRef.current = null;
+      fourPanelStrokeBaseSnapshotRef.current = null;
+    };
+    img.src = snapshot;
   }, []);
 
+  const undoFourPanelStroke = useCallback(() => {
+    const prev = fourPanelUndoStackRef.current.pop();
+    if (typeof prev !== "string") {
+      setFourPanelMessage(t("fourPanelUndoUnavailable"));
+      return;
+    }
+    restoreFourPanelCanvas(prev);
+    setFourPanelMessage(t("fourPanelHint"));
+  }, [restoreFourPanelCanvas, t]);
+
+  const undoFourPanelPanel = useCallback(() => {
+    if (fourPanelImages.length <= 0) {
+      setFourPanelMessage(t("fourPanelUndoUnavailable"));
+      return;
+    }
+    const rollbackImage = fourPanelImages[fourPanelImages.length - 1] || "";
+    const nextImages = fourPanelImages.slice(0, -1);
+    setFourPanelImages(nextImages);
+    setFourPanelIndex(nextImages.length);
+    fourPanelUndoStackRef.current = [];
+    restoreFourPanelCanvas(rollbackImage);
+    setFourPanelMessage(tf("fourPanelProgress", { current: nextImages.length + 1 }));
+  }, [fourPanelImages, restoreFourPanelCanvas, t, tf]);
+
+  const randomizeFourPanelTitle = useCallback(() => {
+    setFourPanelTitle(pickRandomFourPanelTitle());
+  }, []);
+
+  const fourPanelResolvedTitle = useMemo(() => {
+    return normalizeFourPanelTitle(fourPanelTitle) || FOUR_PANEL_RANDOM_TITLES[0];
+  }, [fourPanelTitle]);
+
   const resetFourPanel = useCallback(() => {
-    const title = FOUR_PANEL_RANDOM_TITLES[Math.floor(Math.random() * FOUR_PANEL_RANDOM_TITLES.length)] || FOUR_PANEL_RANDOM_TITLES[0];
-    setFourPanelTitle(title);
+    setFourPanelTitle((prev) => normalizeFourPanelTitle(prev) || pickRandomFourPanelTitle());
     setFourPanelImages([]);
     setFourPanelIndex(0);
     setFourPanelMessage(t("fourPanelHint"));
+    setFourPanelCursor((prev) => ({ ...prev, visible: false }));
+    fourPanelUndoStackRef.current = [];
     clearFourPanelCanvas();
   }, [clearFourPanelCanvas, t]);
 
   const fourPanelPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const canvas = event.currentTarget;
     const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
+    const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
     return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
     };
   };
 
   const onFourPanelPointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (activePanel !== "fourPanel" || fourPanelIndex >= 4) return;
     const canvas = event.currentTarget;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const preview = brushCursorFromEvent(event, fourPanelBrushSize);
+    setFourPanelCursor({ ...preview, visible: true });
+    fourPanelUndoStackRef.current.push(
+      fourPanelHasStrokeRef.current ? canvas.toDataURL("image/png") : FOUR_PANEL_EMPTY_SNAPSHOT,
+    );
+    if (fourPanelUndoStackRef.current.length > 40) {
+      fourPanelUndoStackRef.current = fourPanelUndoStackRef.current.slice(-40);
+    }
     const { x, y } = fourPanelPoint(event);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#111827";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
+    const session = beginStrokeLayerSession(canvas, fourPanelStrokeLayerRef, fourPanelStrokeBaseSnapshotRef);
+    if (!session) return;
+    const brushColor = hexToRgba(fourPanelBrushColor, 100);
+    fourPanelLastPointRef.current = { x, y };
+    drawBrushSegment(session.layerCtx, { x, y }, { x, y }, fourPanelBrushSize, brushColor);
+    if (fourPanelStrokeBaseSnapshotRef.current) {
+      compositeStrokeLayer(session.baseCtx, fourPanelStrokeBaseSnapshotRef.current, session.layer, fourPanelBrushOpacity);
+    }
+    fourPanelHasStrokeRef.current = true;
     fourPanelDrawingRef.current = true;
     canvas.setPointerCapture(event.pointerId);
   };
 
+  const onFourPanelPointerEnter = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const preview = brushCursorFromEvent(event, fourPanelBrushSize);
+    setFourPanelCursor({ ...preview, visible: true });
+  };
+
   const onFourPanelPointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const preview = brushCursorFromEvent(event, fourPanelBrushSize);
+    setFourPanelCursor({ ...preview, visible: true });
     if (!fourPanelDrawingRef.current || activePanel !== "fourPanel" || fourPanelIndex >= 4) return;
     const canvas = event.currentTarget;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const baseCtx = canvas.getContext("2d");
+    const layer = fourPanelStrokeLayerRef.current;
+    const baseSnapshot = fourPanelStrokeBaseSnapshotRef.current;
+    if (!baseCtx || !layer || !baseSnapshot) return;
+    const layerCtx = layer.getContext("2d");
+    if (!layerCtx) return;
     const { x, y } = fourPanelPoint(event);
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    const last = fourPanelLastPointRef.current || { x, y };
+    const brushColor = hexToRgba(fourPanelBrushColor, 100);
+    const minDistance = Math.max(0.5, fourPanelBrushSize * 0.12);
+    const drew = drawBrushSegment(layerCtx, last, { x, y }, fourPanelBrushSize, brushColor, minDistance);
+    if (!drew) return;
+    compositeStrokeLayer(baseCtx, baseSnapshot, layer, fourPanelBrushOpacity);
+    fourPanelLastPointRef.current = { x, y };
     fourPanelHasStrokeRef.current = true;
   };
 
   const onFourPanelPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const preview = brushCursorFromEvent(event, fourPanelBrushSize);
+    setFourPanelCursor({ ...preview, visible: true });
     if (!fourPanelDrawingRef.current) return;
     fourPanelDrawingRef.current = false;
+    fourPanelLastPointRef.current = null;
+    fourPanelStrokeBaseSnapshotRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const onFourPanelPointerLeave = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    onFourPanelPointerUp(event);
+    setFourPanelCursor((prev) => ({ ...prev, visible: false }));
   };
 
   const submitFourPanel = () => {
@@ -7034,6 +8940,7 @@ export default function Home() {
     const next = [...fourPanelImages, image];
     setFourPanelImages(next);
     setFourPanelIndex(next.length);
+    fourPanelUndoStackRef.current = [];
     clearFourPanelCanvas();
 
     if (next.length >= 4) {
@@ -7044,6 +8951,33 @@ export default function Home() {
     setFourPanelMessage(tf("fourPanelProgress", { current: next.length + 1 }));
   };
 
+  useEffect(() => {
+    if (activePanel !== "fourPanel") return;
+    if (!gameStarted.fourPanel) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submitFourPanel();
+        return;
+      }
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        clearFourPanelCanvas({ recordUndo: true });
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        undoFourPanelStroke();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [activePanel, clearFourPanelCanvas, gameStarted.fourPanel, submitFourPanel, undoFourPanelStroke]);
+
   const clearDrawingRelayCanvas = useCallback(() => {
     const canvas = drawingRelayCanvasRef.current;
     if (!canvas) return;
@@ -7051,6 +8985,12 @@ export default function Home() {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawingRelayHasStrokeRef.current = false;
+    drawingRelayLastPointRef.current = null;
+    drawingRelayStrokeBaseSnapshotRef.current = null;
+    if (drawingRelayStrokeLayerRef.current) {
+      const layerCtx = drawingRelayStrokeLayerRef.current.getContext("2d");
+      layerCtx?.clearRect(0, 0, drawingRelayStrokeLayerRef.current.width, drawingRelayStrokeLayerRef.current.height);
+    }
   }, []);
 
   const resetDrawingRelay = useCallback(() => {
@@ -7060,49 +9000,80 @@ export default function Home() {
     setDrawingRelayGuess("");
     setDrawingRelayPhase("draw");
     setDrawingRelayMessage(t("drawingRelayHintDraw"));
+    setDrawingRelayCursor((prev) => ({ ...prev, visible: false }));
     clearDrawingRelayCanvas();
   }, [clearDrawingRelayCanvas, t]);
 
   const drawingRelayPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const canvas = event.currentTarget;
     const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
+    const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
     return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
     };
   };
 
   const onDrawingRelayPointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (activePanel !== "drawingRelay" || drawingRelayPhase !== "draw") return;
     const canvas = event.currentTarget;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const preview = brushCursorFromEvent(event, drawingRelayBrushSize);
+    setDrawingRelayCursor({ ...preview, visible: true });
     const { x, y } = drawingRelayPoint(event);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
+    const session = beginStrokeLayerSession(canvas, drawingRelayStrokeLayerRef, drawingRelayStrokeBaseSnapshotRef);
+    if (!session) return;
+    const brushColor = hexToRgba(drawingRelayBrushColor, 100);
+    drawingRelayLastPointRef.current = { x, y };
+    drawBrushSegment(session.layerCtx, { x, y }, { x, y }, drawingRelayBrushSize, brushColor);
+    if (drawingRelayStrokeBaseSnapshotRef.current) {
+      compositeStrokeLayer(session.baseCtx, drawingRelayStrokeBaseSnapshotRef.current, session.layer, drawingRelayBrushOpacity);
+    }
+    drawingRelayHasStrokeRef.current = true;
     drawingRelayDrawingRef.current = true;
     canvas.setPointerCapture(event.pointerId);
   };
 
+  const onDrawingRelayPointerEnter = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const preview = brushCursorFromEvent(event, drawingRelayBrushSize);
+    setDrawingRelayCursor({ ...preview, visible: true });
+  };
+
   const onDrawingRelayPointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const preview = brushCursorFromEvent(event, drawingRelayBrushSize);
+    setDrawingRelayCursor({ ...preview, visible: true });
     if (!drawingRelayDrawingRef.current || activePanel !== "drawingRelay" || drawingRelayPhase !== "draw") return;
     const canvas = event.currentTarget;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const baseCtx = canvas.getContext("2d");
+    const layer = drawingRelayStrokeLayerRef.current;
+    const baseSnapshot = drawingRelayStrokeBaseSnapshotRef.current;
+    if (!baseCtx || !layer || !baseSnapshot) return;
+    const layerCtx = layer.getContext("2d");
+    if (!layerCtx) return;
     const { x, y } = drawingRelayPoint(event);
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    const last = drawingRelayLastPointRef.current || { x, y };
+    const brushColor = hexToRgba(drawingRelayBrushColor, 100);
+    const minDistance = Math.max(0.5, drawingRelayBrushSize * 0.12);
+    const drew = drawBrushSegment(layerCtx, last, { x, y }, drawingRelayBrushSize, brushColor, minDistance);
+    if (!drew) return;
+    compositeStrokeLayer(baseCtx, baseSnapshot, layer, drawingRelayBrushOpacity);
+    drawingRelayLastPointRef.current = { x, y };
     drawingRelayHasStrokeRef.current = true;
   };
 
   const onDrawingRelayPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const preview = brushCursorFromEvent(event, drawingRelayBrushSize);
+    setDrawingRelayCursor({ ...preview, visible: true });
     if (!drawingRelayDrawingRef.current) return;
     drawingRelayDrawingRef.current = false;
+    drawingRelayLastPointRef.current = null;
+    drawingRelayStrokeBaseSnapshotRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const onDrawingRelayPointerLeave = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    onDrawingRelayPointerUp(event);
+    setDrawingRelayCursor((prev) => ({ ...prev, visible: false }));
   };
 
   const submitDrawingRelayDrawing = () => {
@@ -7162,147 +9133,273 @@ export default function Home() {
   };
 
   const resetMahjong = useCallback(() => {
-    setMahjongBoard(createMahjongStartBoard());
+    const start = createMahjongStartBoard();
+    setMahjongBoard(start.hand);
+    setMahjongWall(start.wall);
+    setMahjongRiver([]);
     setMahjongSelected(null);
+    setMahjongLastDraw(null);
+    setMahjongRoundWind("東");
+    setMahjongRoundNumber(1);
+    setMahjongSeatWind("東");
+    setMahjongHonba(0);
+    setMahjongKyotaku(0);
+    setMahjongRiichiTileIndex(null);
+    setMahjongDoraIndicator(start.wall[4] ?? null);
+    setMahjongWinSummary(null);
     setIsMahjongOver(false);
     setMahjongMessage(t("mahjongHint"));
   }, [t]);
 
   const onMahjongHint = () => {
     if (isMahjongOver) return;
-    const move = mahjongFindFirstMove(mahjongBoard);
-    if (!move) {
-      setMahjongMessage(t("mahjongNoHint"));
-      return;
-    }
-    const aLabel = `${mahjongTileLabel(mahjongBoard[move.a.row][move.a.col] ?? -1)}(${move.a.row + 1},${move.a.col + 1})`;
-    const bLabel = `${mahjongTileLabel(mahjongBoard[move.b.row][move.b.col] ?? -1)}(${move.b.row + 1},${move.b.col + 1})`;
-    setMahjongMessage(tf("mahjongHintLine", { a: aLabel, b: bLabel }));
-  };
 
-  const onMahjongShuffle = () => {
-    if (isMahjongOver) return;
-    const next = ensureMahjongPlayable(reshuffleMahjongBoard(mahjongBoard));
-    setMahjongBoard(next);
-    setMahjongSelected(null);
-    setMahjongMessage(t("mahjongHint"));
-  };
-
-  const onMahjongTileClick = (row: number, col: number) => {
-    if (isMahjongOver) return;
-    const tile = mahjongBoard[row]?.[col] ?? null;
-    if (tile === null) return;
-
-    const picked = { row, col };
-    if (!mahjongSelected) {
-      setMahjongSelected(picked);
+    if (mahjongBoard.length === 13) {
+      const waits = mahjongFindWinningTiles(mahjongBoard);
+      if (waits.length === 0) {
+        setMahjongMessage(t("mahjongNoHint"));
+        return;
+      }
+      const label = waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
+      setMahjongMessage(tf("mahjongHintLine", { a: label }));
       return;
     }
 
-    if (mahjongSelected.row === row && mahjongSelected.col === col) {
-      setMahjongSelected(null);
-      return;
-    }
-
-    const selectedTile = mahjongBoard[mahjongSelected.row]?.[mahjongSelected.col] ?? null;
-    if (selectedTile !== tile) {
-      setMahjongSelected(picked);
-      setMahjongMessage(t("mahjongSwitched"));
-      return;
-    }
-
-    if (!mahjongCanConnectWithTwoTurns(mahjongBoard, mahjongSelected, picked)) {
-      setMahjongSelected(picked);
+    if (mahjongBoard.length !== 14) {
       setMahjongMessage(t("mahjongBlocked"));
       return;
     }
 
-    const nextBoard = cloneMahjongBoard(mahjongBoard);
-    nextBoard[mahjongSelected.row][mahjongSelected.col] = null;
-    nextBoard[row][col] = null;
-
-    if (mahjongRemainingCount(nextBoard) === 0) {
-      setMahjongBoard(nextBoard);
-      setMahjongSelected(null);
-      setIsMahjongOver(true);
-      setMahjongMessage(t("mahjongClear"));
+    if (mahjongIsWinningHand(mahjongBoard)) {
+      const readyTile = mahjongLastDraw !== null ? mahjongTileLabel(mahjongLastDraw) : "*";
+      setMahjongMessage(tf("mahjongWinReady", { tile: readyTile }));
       return;
     }
 
-    if (!mahjongFindFirstMove(nextBoard)) {
-      const playable = ensureMahjongPlayable(nextBoard);
-      setMahjongBoard(playable);
-      setMahjongSelected(null);
+    const suggestions = mahjongFindBestDiscards(mahjongBoard);
+    const best = suggestions.find((item) => item.waits.length > 0 && item.outs > 0);
+    if (!best) {
       setMahjongMessage(t("mahjongRemovedAndShuffle"));
       return;
     }
+    const waitLabel = best.waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
+    setMahjongMessage(tf("mahjongHintDiscard", {
+      tile: mahjongTileLabel(best.tile),
+      waits: waitLabel,
+      outs: best.outs,
+    }));
+  };
+
+  const onMahjongShuffle = () => {
+    if (isMahjongOver) return;
+    if (mahjongBoard.length === 14) {
+      setMahjongMessage(t("mahjongNeedDiscardFirst"));
+      return;
+    }
+    if (mahjongWall.length <= 0) {
+      setMahjongHonba((prev) => prev + 1);
+      setIsMahjongOver(true);
+      setMahjongMessage(t("mahjongRyukyoku"));
+      return;
+    }
+
+    const drawTile = mahjongWall[0];
+    const nextWall = mahjongWall.slice(1);
+    const nextHand = [...sortMahjongTiles(mahjongBoard), drawTile];
+
+    setMahjongBoard(nextHand);
+    setMahjongWall(nextWall);
+    setMahjongSelected(null);
+    setMahjongLastDraw(drawTile);
+    setMahjongWinSummary(null);
+
+    if (mahjongIsWinningHand(nextHand)) {
+      setMahjongMessage(tf("mahjongWinReady", { tile: mahjongTileLabel(drawTile) }));
+      return;
+    }
+
+    setMahjongMessage(tf("mahjongDrawn", { tile: mahjongTileLabel(drawTile) }));
+  };
+
+  const onMahjongTsumo = () => {
+    if (isMahjongOver) return;
+    if (mahjongBoard.length !== 14) {
+      setMahjongMessage(t("mahjongNeedDrawFirst"));
+      return;
+    }
+
+    if (!mahjongIsWinningHand(mahjongBoard)) {
+      setMahjongMessage(t("mahjongCannotWinYet"));
+      return;
+    }
+
+    const summary = mahjongSummarizeWin(mahjongBoard);
+    setMahjongWinSummary(summary);
+    setMahjongKyotaku(0);
+    setIsMahjongOver(true);
+    setMahjongMessage(t("mahjongClear"));
+  };
+
+  const onMahjongApplyScore = () => {
+    if (!mahjongWinSummary) return;
+    setScore(Math.max(0, Math.floor(mahjongWinSummary.point)));
+    setMessage(t("mahjongAppliedScore"));
+  };
+
+  const onMahjongTileClick = (index: number) => {
+    if (isMahjongOver) return;
+
+    if (mahjongBoard.length !== 14) {
+      setMahjongMessage(t("mahjongNeedDrawFirst"));
+      return;
+    }
+
+    if (index < 0 || index >= mahjongBoard.length) {
+      setMahjongMessage(t("mahjongNoHint"));
+      return;
+    }
+
+    if (mahjongSelected !== index) {
+      setMahjongSelected(index);
+      setMahjongMessage(t("mahjongSwitched"));
+      return;
+    }
+
+    const discardTile = mahjongBoard[index];
+    const nextBoard = sortMahjongTiles(mahjongBoard.filter((_, i) => i !== index));
+    const nextRiver = [...mahjongRiver, discardTile];
 
     setMahjongBoard(nextBoard);
+    setMahjongRiver(nextRiver);
     setMahjongSelected(null);
-    setMahjongMessage(t("mahjongRemoved"));
+    setMahjongLastDraw(null);
+    setMahjongWinSummary(null);
+
+    if (mahjongWall.length === 0) {
+      setMahjongSelected(null);
+      setMahjongHonba((prev) => prev + 1);
+      setIsMahjongOver(true);
+      setMahjongMessage(t("mahjongRyukyoku"));
+      return;
+    }
+
+    const waits = mahjongFindWinningTiles(nextBoard);
+    if (waits.length === 0) {
+      setMahjongMessage(t("mahjongRemoved"));
+      return;
+    }
+
+    if (mahjongRiichiTileIndex === null) {
+      setMahjongRiichiTileIndex(nextRiver.length - 1);
+      setMahjongKyotaku(1);
+    }
+
+    const waitLabel = waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
+    setMahjongMessage(tf("mahjongHintLine", { a: waitLabel }));
   };
 
   const resetPoker = useCallback(() => {
+    const bank = normalizeCasinoBankroll();
+    const nextBet = clampCasinoBet(pokerBet, bank);
     const deck = shufflePokerDeck(createPokerDeck());
-    const player = deck.slice(0, 5);
-    const cpu = deck.slice(5, 10);
-    const rest = deck.slice(10);
+    const player = deck.slice(0, 2);
+    const cpu = deck.slice(2, 4);
+    const rest = deck.slice(4);
+    setPokerBet(nextBet);
+    setPokerWager(0);
     setPokerPlayerHand(player);
     setPokerCpuHand(cpu);
+    setPokerCommunity([]);
     setPokerDeck(rest);
-    setPokerHold([false, false, false, false, false]);
-    setPokerPhase("draw");
-    setPokerMessage(t("pokerHint"));
+    setPokerHold([false, false]);
+    setPokerPhase("betting");
+    setPokerMessage(`${t("pokerHint")} (BET ${nextBet})`);
     setPokerPlayerEval(null);
     setPokerCpuEval(null);
     setPokerOutcome("pending");
-  }, [t]);
-
-  const togglePokerHold = (index: number) => {
-    if (pokerPhase !== "draw") return;
-    setPokerHold((prev) => prev.map((flag, i) => (i === index ? !flag : flag)));
-  };
+  }, [normalizeCasinoBankroll, pokerBet, t]);
 
   const onPokerDraw = () => {
-    if (pokerPhase !== "draw") return;
-    let rest = [...pokerDeck];
+    if (pokerPhase === "showdown") return;
 
-    const nextPlayer = pokerPlayerHand.map((card, index) => {
-      if (pokerHold[index]) return card;
-      const next = rest.shift();
-      return next || card;
-    });
-
-    const cpuHold = pokerCpuHoldIndexes(pokerCpuHand);
-    const nextCpu = pokerCpuHand.map((card, index) => {
-      if (cpuHold.has(index)) return card;
-      const next = rest.shift();
-      return next || card;
-    });
-
-    const playerEval = evaluatePokerHand(nextPlayer);
-    const cpuEval = evaluatePokerHand(nextCpu);
-    const cmp = comparePokerEval(playerEval, cpuEval);
-
-    setPokerPlayerHand(nextPlayer);
-    setPokerCpuHand(nextCpu);
-    setPokerDeck(rest);
-    setPokerPhase("result");
-    setPokerPlayerEval(playerEval);
-    setPokerCpuEval(cpuEval);
-
-    if (cmp > 0) {
-      setPokerOutcome("win");
-      setPokerMessage(t("pokerResultWin"));
+    if (pokerPhase === "preflop") {
+      const rest = [...pokerDeck];
+      const flop = [rest.shift(), rest.shift(), rest.shift()].filter(Boolean) as PokerCard[];
+      setPokerDeck(rest);
+      setPokerCommunity(flop);
+      setPokerPhase("flop");
+      setPokerMessage("フロップ: 次へでターンカードを公開します。");
       return;
     }
-    if (cmp < 0) {
-      setPokerOutcome("lose");
-      setPokerMessage(t("pokerResultLose"));
+
+    if (pokerPhase === "flop") {
+      const rest = [...pokerDeck];
+      const turn = rest.shift();
+      if (!turn) return;
+      setPokerDeck(rest);
+      setPokerCommunity((prev) => [...prev, turn]);
+      setPokerPhase("turn");
+      setPokerMessage("ターン: 次へでリバーカードを公開します。");
       return;
     }
-    setPokerOutcome("draw");
-    setPokerMessage(t("pokerResultDraw"));
+
+    if (pokerPhase === "turn") {
+      const rest = [...pokerDeck];
+      const river = rest.shift();
+      if (!river) return;
+      setPokerDeck(rest);
+      setPokerCommunity((prev) => [...prev, river]);
+      setPokerPhase("river");
+      setPokerMessage("リバー: 次へでショーダウンします。");
+      return;
+    }
+
+    if (pokerPhase === "river") {
+      const playerEval = evaluatePokerBestOfSeven([...pokerPlayerHand, ...pokerCommunity]);
+      const cpuEval = evaluatePokerBestOfSeven([...pokerCpuHand, ...pokerCommunity]);
+      const cmp = comparePokerEval(playerEval, cpuEval);
+
+      setPokerPhase("showdown");
+      setPokerPlayerEval(playerEval);
+      setPokerCpuEval(cpuEval);
+
+      if (cmp > 0) {
+        setCasinoBankroll((prev) => prev + pokerWager * 2);
+        triggerCasinoWinBurst();
+        setPokerOutcome("win");
+        setPokerMessage(`${t("pokerResultWin")} (+${pokerWager})`);
+        return;
+      }
+      if (cmp < 0) {
+        setPokerOutcome("lose");
+        setPokerMessage(`${t("pokerResultLose")} (-${pokerWager})`);
+        return;
+      }
+      setCasinoBankroll((prev) => prev + pokerWager);
+      setPokerOutcome("draw");
+      setPokerMessage(`${t("pokerResultDraw")} (+${pokerWager})`);
+      return;
+    }
+
+    if (pokerPhase !== "betting") return;
+    const bank = normalizeCasinoBankroll();
+    if (bank < MIN_CASINO_BET) {
+      setPokerMessage("チップが不足しています。");
+      return;
+    }
+
+    const wager = clampCasinoBet(pokerBet, bank);
+
+    setCasinoBankroll(Math.max(0, bank - wager));
+    setPokerBet(wager);
+    setPokerWager(wager);
+    setPokerCommunity([]);
+    setPokerHold([false, false]);
+    setPokerPlayerEval(null);
+    setPokerCpuEval(null);
+    setPokerOutcome("pending");
+    setPokerPhase("preflop");
+    setPokerMessage("プリフロップ: 次へでフロップを公開します。");
   };
 
   const resetSolitaire = useCallback(() => {
@@ -7325,12 +9422,32 @@ export default function Home() {
     setSolitaireFoundations({ H: [], D: [], C: [], S: [] });
     setSolitaireTableau(tableau);
     setSolitaireSelection(null);
+    setSolitaireUndoStack([]);
+    setSolitaireDraggingSelection(null);
+    setSolitaireDragOverTarget(null);
+    setSolitairePartyPieces([]);
+    setSolitaireFoundationFlights([]);
+    clearSolitaireFlightTimers();
     setSolitaireMessage(t("solitaireHint"));
     setIsSolitaireOver(false);
-  }, [t]);
+  }, [clearSolitaireFlightTimers, t]);
 
   const foundationCount = useCallback((foundations: Record<SolitaireSuit, SolitaireCard[]>) => {
     return foundations.H.length + foundations.D.length + foundations.C.length + foundations.S.length;
+  }, []);
+
+  const isMovableSolitaireTableauStack = useCallback((tableau: SolitaireCard[][], col: number, startIndex: number) => {
+    const pile = tableau[col] || [];
+    if (startIndex < 0 || startIndex >= pile.length) return false;
+    if (!pile[startIndex]?.faceUp) return false;
+    for (let i = startIndex; i < pile.length - 1; i += 1) {
+      const upper = pile[i];
+      const lower = pile[i + 1];
+      if (!upper.faceUp || !lower.faceUp) return false;
+      if (solitaireIsRed(upper.suit) === solitaireIsRed(lower.suit)) return false;
+      if (upper.rank !== lower.rank + 1) return false;
+    }
+    return true;
   }, []);
 
   const flipTableauTopIfNeeded = useCallback((tableau: SolitaireCard[][], col: number) => {
@@ -7342,17 +9459,174 @@ export default function Home() {
     return next;
   }, []);
 
+  const cloneSolitairePile = useCallback((cards: SolitaireCard[]) => cards.map((card) => ({ ...card })), []);
+
+  const cloneSolitaireFoundations = useCallback((foundations: Record<SolitaireSuit, SolitaireCard[]>) => ({
+    H: cloneSolitairePile(foundations.H || []),
+    D: cloneSolitairePile(foundations.D || []),
+    C: cloneSolitairePile(foundations.C || []),
+    S: cloneSolitairePile(foundations.S || []),
+  }), [cloneSolitairePile]);
+
+  const cloneSolitaireTableau = useCallback((tableau: SolitaireCard[][]) => (
+    tableau.map((pile) => cloneSolitairePile(pile))
+  ), [cloneSolitairePile]);
+
+  const makeSolitaireSnapshot = useCallback((): SolitaireSnapshot => ({
+    stock: cloneSolitairePile(solitaireStock),
+    waste: cloneSolitairePile(solitaireWaste),
+    foundations: cloneSolitaireFoundations(solitaireFoundations),
+    tableau: cloneSolitaireTableau(solitaireTableau),
+    selection: solitaireSelection
+      ? solitaireSelection.from === "waste"
+        ? { from: "waste" }
+        : solitaireSelection.from === "foundation"
+          ? { from: "foundation", suit: solitaireSelection.suit }
+        : { from: "tableau", col: solitaireSelection.col, index: solitaireSelection.index }
+      : null,
+    message: solitaireMessage,
+    isOver: isSolitaireOver,
+  }), [
+    cloneSolitaireFoundations,
+    cloneSolitairePile,
+    cloneSolitaireTableau,
+    isSolitaireOver,
+    solitaireFoundations,
+    solitaireMessage,
+    solitaireSelection,
+    solitaireStock,
+    solitaireTableau,
+    solitaireWaste,
+  ]);
+
+  const pushSolitaireUndo = useCallback((snapshot: SolitaireSnapshot) => {
+    setSolitaireUndoStack((prev) => {
+      const next = [...prev, snapshot];
+      if (next.length > 120) return next.slice(next.length - 120);
+      return next;
+    });
+  }, []);
+
+  const restoreSolitaireSnapshot = useCallback((snapshot: SolitaireSnapshot) => {
+    setSolitaireStock(cloneSolitairePile(snapshot.stock));
+    setSolitaireWaste(cloneSolitairePile(snapshot.waste));
+    setSolitaireFoundations(cloneSolitaireFoundations(snapshot.foundations));
+    setSolitaireTableau(cloneSolitaireTableau(snapshot.tableau));
+    setSolitaireSelection(snapshot.selection
+      ? snapshot.selection.from === "waste"
+        ? { from: "waste" }
+        : snapshot.selection.from === "foundation"
+          ? { from: "foundation", suit: snapshot.selection.suit }
+        : { from: "tableau", col: snapshot.selection.col, index: snapshot.selection.index }
+      : null);
+    setSolitaireDraggingSelection(null);
+    setSolitaireDragOverTarget(null);
+    setSolitaireMessage(snapshot.message || t("solitaireHint"));
+    setIsSolitaireOver(Boolean(snapshot.isOver));
+    setSolitairePartyPieces([]);
+    setSolitaireFoundationFlights([]);
+    clearSolitaireFlightTimers();
+    if (solitairePartyTimerRef.current !== null) {
+      window.clearTimeout(solitairePartyTimerRef.current);
+      solitairePartyTimerRef.current = null;
+    }
+  }, [clearSolitaireFlightTimers, cloneSolitaireFoundations, cloneSolitairePile, cloneSolitaireTableau, t]);
+
+  const emitSolitaireFoundationFlights = useCallback((
+    flights: Array<{ card: SolitaireCard; toSuit: SolitaireSuit; from: "waste" | "tableau"; col?: number; index?: number; delayMs?: number }>,
+  ) => {
+    if (flights.length === 0) return;
+
+    const foundationX: Record<SolitaireSuit, number> = { H: 64, D: 74, C: 84, S: 94 };
+    const now = Date.now();
+    const created = flights.map((entry, index) => {
+      const fromX = entry.from === "waste" ? 20 : 8 + (entry.col ?? 0) * 13.3;
+      const fromY = entry.from === "waste" ? 17 : 34 + Math.min(44, (entry.index ?? 0) * 5.8);
+      const delayMs = entry.delayMs ?? index * 40;
+      return {
+        id: `sf-${now}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+        label: solitaireCardLabel(entry.card),
+        red: solitaireIsRed(entry.card.suit),
+        startX: fromX,
+        startY: fromY,
+        endX: foundationX[entry.toSuit],
+        endY: 17,
+        delayMs,
+        durationMs: 420,
+        phase: "start" as const,
+      };
+    });
+
+    const createdIds = new Set(created.map((flight) => flight.id));
+    setSolitaireFoundationFlights((prev) => [...prev, ...created]);
+
+    window.requestAnimationFrame(() => {
+      setSolitaireFoundationFlights((prev) => prev.map((flight) => (
+        createdIds.has(flight.id) ? { ...flight, phase: "end" } : flight
+      )));
+    });
+
+    const lifetime = Math.max(...created.map((flight) => flight.delayMs + flight.durationMs)) + 150;
+    const timer = window.setTimeout(() => {
+      setSolitaireFoundationFlights((prev) => prev.filter((flight) => !createdIds.has(flight.id)));
+      solitaireFlightTimersRef.current = solitaireFlightTimersRef.current.filter((id) => id !== timer);
+    }, lifetime);
+    solitaireFlightTimersRef.current.push(timer);
+  }, []);
+
+  const undoSolitaireMove = useCallback(() => {
+    let restored = false;
+    setSolitaireUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const next = [...prev];
+      const snapshot = next.pop();
+      if (snapshot) {
+        restoreSolitaireSnapshot(snapshot);
+        restored = true;
+      }
+      return next;
+    });
+    if (!restored) {
+      setSolitaireMessage(t("solitaireUndoUnavailable"));
+    }
+  }, [restoreSolitaireSnapshot, t]);
+
+  const triggerSolitaireClearEffect = useCallback(() => {
+    const palette = ["#ffd166", "#ff6b35", "#16db93", "#6de2ff", "#ff8fab", "#fff1a8"];
+    const pieces = Array.from({ length: 56 }, (_, index) => ({
+      id: `p-${Date.now()}-${index}`,
+      left: Math.random() * 100,
+      delay: Math.random() * 0.22,
+      duration: 1.25 + Math.random() * 0.95,
+      drift: (Math.random() - 0.5) * 34,
+      spin: (Math.random() - 0.5) * 340,
+      size: 7 + Math.random() * 7,
+      color: palette[Math.floor(Math.random() * palette.length)] as string,
+    }));
+    setSolitairePartyPieces(pieces);
+
+    if (solitairePartyTimerRef.current !== null) {
+      window.clearTimeout(solitairePartyTimerRef.current);
+    }
+    solitairePartyTimerRef.current = window.setTimeout(() => {
+      setSolitairePartyPieces([]);
+      solitairePartyTimerRef.current = null;
+    }, 2600);
+  }, []);
+
   const tryAutoWinSolitaire = useCallback((foundations: Record<SolitaireSuit, SolitaireCard[]>) => {
     if (foundationCount(foundations) >= 52) {
+      triggerSolitaireClearEffect();
       setIsSolitaireOver(true);
       setSolitaireMessage(t("solitaireCleared"));
       return true;
     }
     return false;
-  }, [foundationCount, t]);
+  }, [foundationCount, t, triggerSolitaireClearEffect]);
 
   const drawSolitaireStock = () => {
     if (isSolitaireOver) return;
+    const undoPoint = makeSolitaireSnapshot();
     if (solitaireStock.length > 0) {
       const nextStock = [...solitaireStock];
       const drawn = nextStock.pop();
@@ -7360,6 +9634,7 @@ export default function Home() {
       setSolitaireStock(nextStock);
       setSolitaireWaste([...solitaireWaste, { ...drawn, faceUp: true }]);
       setSolitaireSelection(null);
+      pushSolitaireUndo(undoPoint);
       return;
     }
 
@@ -7368,6 +9643,7 @@ export default function Home() {
       setSolitaireStock(restocked);
       setSolitaireWaste([]);
       setSolitaireSelection(null);
+      pushSolitaireUndo(undoPoint);
     }
   };
 
@@ -7383,12 +9659,15 @@ export default function Home() {
     });
   };
 
-  const onSolitaireSelectTableau = (col: number) => {
+  const onSolitaireSelectTableau = (col: number, index: number) => {
     if (isSolitaireOver) return;
     const pile = solitaireTableau[col] || [];
-    const index = pile.length - 1;
     const card = pile[index];
     if (!card || !card.faceUp) return;
+    if (!isMovableSolitaireTableauStack(solitaireTableau, col, index)) {
+      setSolitaireMessage(t("solitaireInvalidMove"));
+      return;
+    }
     setSolitaireSelection((prev) => {
       if (prev?.from === "tableau" && prev.col === col && prev.index === index) {
         setSolitaireMessage(t("solitaireHint"));
@@ -7399,26 +9678,189 @@ export default function Home() {
     });
   };
 
-  const onSolitaireMoveToFoundation = (suit: SolitaireSuit) => {
-    if (isSolitaireOver || !solitaireSelection) return;
-
-    let card: SolitaireCard | null = null;
-    if (solitaireSelection.from === "waste") {
-      card = solitaireWaste[solitaireWaste.length - 1] || null;
-    } else {
-      card = solitaireTableau[solitaireSelection.col]?.[solitaireSelection.index] || null;
+  const canDragSolitaireSelection = useCallback((selection: SolitaireSelection) => {
+    if (isSolitaireOver || !gameStarted.solitaire) return false;
+    if (selection.from === "waste") {
+      return solitaireWaste.length > 0;
     }
-    if (!card) return;
+    if (selection.from === "foundation") {
+      const pile = solitaireFoundations[selection.suit] || [];
+      return pile.length > 0;
+    }
+    const pile = solitaireTableau[selection.col] || [];
+    const card = pile[selection.index];
+    if (!card || !card.faceUp) return false;
+    return isMovableSolitaireTableauStack(solitaireTableau, selection.col, selection.index);
+  }, [gameStarted.solitaire, isMovableSolitaireTableauStack, isSolitaireOver, solitaireFoundations, solitaireTableau, solitaireWaste.length]);
+
+  const parseSolitaireDragSelection = (payload: string | null): SolitaireSelection | null => {
+    if (!payload) return null;
+    try {
+      const parsed = JSON.parse(payload) as unknown;
+      if (!parsed || typeof parsed !== "object") return null;
+      const value = parsed as Record<string, unknown>;
+      if (value.from === "waste") return { from: "waste" };
+      if (value.from === "foundation") {
+        const suit = value.suit;
+        if (suit === "H" || suit === "D" || suit === "C" || suit === "S") {
+          return { from: "foundation", suit };
+        }
+        return null;
+      }
+      if (value.from === "tableau") {
+        const col = typeof value.col === "number" ? value.col : -1;
+        const index = typeof value.index === "number" ? value.index : -1;
+        if (col >= 0 && col < 7 && index >= 0) {
+          return { from: "tableau", col, index };
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const getSolitaireDragSelection = (e: React.DragEvent): SolitaireSelection | null => {
+    const fromRef = solitaireDragSelectionRef.current;
+    if (fromRef) return fromRef;
+    return parseSolitaireDragSelection(e.dataTransfer?.getData("application/x-solitaire-selection") || null);
+  };
+
+  const canMoveSolitaireSelectionToFoundation = useCallback((selection: SolitaireSelection, suit: SolitaireSuit) => {
+    let movingCard: SolitaireCard | null = null;
+    if (selection.from === "waste") {
+      movingCard = solitaireWaste[solitaireWaste.length - 1] || null;
+    } else if (selection.from === "foundation") {
+      return false;
+    } else {
+      const pile = solitaireTableau[selection.col] || [];
+      if (!isMovableSolitaireTableauStack(solitaireTableau, selection.col, selection.index)) return false;
+      movingCard = pile[selection.index] || null;
+    }
+    if (!movingCard) return false;
+    const foundationPile = solitaireFoundations[suit];
+    const needed = foundationPile.length + 1;
+    return movingCard.suit === suit && movingCard.rank === needed;
+  }, [isMovableSolitaireTableauStack, solitaireFoundations, solitaireTableau, solitaireWaste]);
+
+  const canMoveSolitaireSelectionToTableau = useCallback((selection: SolitaireSelection, targetCol: number) => {
+    if (selection.from === "tableau" && selection.col === targetCol) return false;
+    const targetPile = solitaireTableau[targetCol] || [];
+    const targetTop = targetPile[targetPile.length - 1] || null;
+
+    let movingCards: SolitaireCard[] = [];
+    if (selection.from === "waste") {
+      const top = solitaireWaste[solitaireWaste.length - 1] || null;
+      movingCards = top ? [top] : [];
+    } else if (selection.from === "foundation") {
+      const pile = solitaireFoundations[selection.suit] || [];
+      const top = pile[pile.length - 1] || null;
+      movingCards = top ? [top] : [];
+    } else {
+      const sourcePile = solitaireTableau[selection.col] || [];
+      if (!isMovableSolitaireTableauStack(solitaireTableau, selection.col, selection.index)) return false;
+      movingCards = sourcePile.slice(selection.index);
+    }
+
+    const movingCard = movingCards[0] || null;
+    if (!movingCard) return false;
+    if (!targetTop) return movingCard.rank === 13;
+    return targetTop.faceUp && solitaireIsRed(targetTop.suit) !== solitaireIsRed(movingCard.suit) && targetTop.rank === movingCard.rank + 1;
+  }, [isMovableSolitaireTableauStack, solitaireFoundations, solitaireTableau, solitaireWaste]);
+
+  const onSolitaireDragStart = (e: React.DragEvent, selection: SolitaireSelection) => {
+    if (!canDragSolitaireSelection(selection)) {
+      e.preventDefault();
+      return;
+    }
+    solitaireDragSelectionRef.current = selection;
+    setSolitaireDraggingSelection(selection);
+    setSolitaireDragOverTarget(null);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("application/x-solitaire-selection", JSON.stringify(selection));
+  };
+
+  const onSolitaireDragEnd = () => {
+    solitaireDragSelectionRef.current = null;
+    setSolitaireDraggingSelection(null);
+    setSolitaireDragOverTarget(null);
+  };
+
+  const onSolitaireDragOverFoundation = (e: React.DragEvent, suit: SolitaireSuit) => {
+    if (isSolitaireOver || !gameStarted.solitaire) return;
+    const dragged = getSolitaireDragSelection(e);
+    if (!dragged || !canMoveSolitaireSelectionToFoundation(dragged, suit)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setSolitaireDragOverTarget({ kind: "foundation", suit });
+  };
+
+  const onSolitaireDragOverTableau = (e: React.DragEvent, col: number) => {
+    if (isSolitaireOver || !gameStarted.solitaire) return;
+    const dragged = getSolitaireDragSelection(e);
+    if (!dragged || !canMoveSolitaireSelectionToTableau(dragged, col)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setSolitaireDragOverTarget({ kind: "tableau", col });
+  };
+
+  const onSolitaireDropToFoundation = (e: React.DragEvent, suit: SolitaireSuit) => {
+    if (isSolitaireOver || !gameStarted.solitaire) return;
+    e.preventDefault();
+    const dragged = getSolitaireDragSelection(e);
+    solitaireDragSelectionRef.current = null;
+    setSolitaireDraggingSelection(null);
+    setSolitaireDragOverTarget(null);
+    if (!dragged) return;
+    moveSolitaireSelectionToFoundation(dragged, suit);
+  };
+
+  const onSolitaireDropToTableau = (e: React.DragEvent, targetCol: number) => {
+    if (isSolitaireOver || !gameStarted.solitaire) return;
+    e.preventDefault();
+    const dragged = getSolitaireDragSelection(e);
+    solitaireDragSelectionRef.current = null;
+    setSolitaireDraggingSelection(null);
+    setSolitaireDragOverTarget(null);
+    if (!dragged) return;
+    moveSolitaireSelectionToTableau(dragged, targetCol);
+  };
+
+  const moveSolitaireSelectionToFoundation = (selection: SolitaireSelection, suit: SolitaireSuit, opts: { recordUndo?: boolean } = {}) => {
+    const { recordUndo = true } = opts;
+    const undoPoint = recordUndo ? makeSolitaireSnapshot() : null;
+    let movingCards: SolitaireCard[] = [];
+    if (selection.from === "waste") {
+      const top = solitaireWaste[solitaireWaste.length - 1] || null;
+      movingCards = top ? [top] : [];
+    } else if (selection.from === "foundation") {
+      const top = solitaireFoundations[selection.suit][solitaireFoundations[selection.suit].length - 1] || null;
+      movingCards = top ? [top] : [];
+    } else {
+      const pile = solitaireTableau[selection.col] || [];
+      if (!isMovableSolitaireTableauStack(solitaireTableau, selection.col, selection.index)) {
+        setSolitaireMessage(t("solitaireInvalidMove"));
+        return false;
+      }
+      movingCards = pile.slice(selection.index);
+    }
+    if (movingCards.length !== 1) {
+      setSolitaireMessage(t("solitaireInvalidMove"));
+      return false;
+    }
+
+    const card = movingCards[0] || null;
+    if (!card) return false;
     if (card.suit !== suit) {
       setSolitaireMessage(t("solitaireInvalidMove"));
-      return;
+      return false;
     }
 
     const foundationPile = solitaireFoundations[suit];
     const needed = foundationPile.length + 1;
     if (card.rank !== needed) {
       setSolitaireMessage(t("solitaireInvalidMove"));
-      return;
+      return false;
     }
 
     const nextFoundations = {
@@ -7429,33 +9871,71 @@ export default function Home() {
     };
     nextFoundations[suit].push({ ...card, faceUp: true });
 
-    if (solitaireSelection.from === "waste") {
+    if (selection.from === "waste") {
+      emitSolitaireFoundationFlights([{ card, toSuit: suit, from: "waste" }]);
+    } else if (selection.from === "foundation") {
+      setSolitaireMessage(t("solitaireInvalidMove"));
+      return false;
+    } else {
+      const fromPile = solitaireTableau[selection.col] || [];
+      emitSolitaireFoundationFlights([{
+        card,
+        toSuit: suit,
+        from: "tableau",
+        col: selection.col,
+        index: Math.max(0, fromPile.length - 1),
+      }]);
+    }
+
+    if (selection.from === "waste") {
       setSolitaireWaste(solitaireWaste.slice(0, -1));
     } else {
       const nextTableau = solitaireTableau.map((pile) => [...pile]);
-      nextTableau[solitaireSelection.col] = nextTableau[solitaireSelection.col].slice(0, -1);
-      setSolitaireTableau(flipTableauTopIfNeeded(nextTableau, solitaireSelection.col));
+      nextTableau[selection.col] = nextTableau[selection.col].slice(0, selection.index);
+      setSolitaireTableau(flipTableauTopIfNeeded(nextTableau, selection.col));
     }
 
     setSolitaireFoundations(nextFoundations);
     setSolitaireSelection(null);
+    if (undoPoint) {
+      pushSolitaireUndo(undoPoint);
+    }
     if (!tryAutoWinSolitaire(nextFoundations)) {
       setSolitaireMessage(t("solitaireHint"));
     }
+    return true;
   };
 
-  const onSolitaireMoveToTableau = (targetCol: number) => {
-    if (isSolitaireOver || !solitaireSelection) return;
+  const moveSolitaireSelectionToTableau = (selection: SolitaireSelection, targetCol: number, opts: { recordUndo?: boolean } = {}) => {
+    const { recordUndo = true } = opts;
+    const undoPoint = recordUndo ? makeSolitaireSnapshot() : null;
     const targetPile = solitaireTableau[targetCol] || [];
     const targetTop = targetPile[targetPile.length - 1] || null;
 
-    let movingCard: SolitaireCard | null = null;
-    if (solitaireSelection.from === "waste") {
-      movingCard = solitaireWaste[solitaireWaste.length - 1] || null;
-    } else {
-      movingCard = solitaireTableau[solitaireSelection.col]?.[solitaireSelection.index] || null;
+    if (selection.from === "tableau" && selection.col === targetCol) {
+      setSolitaireMessage(t("solitaireHint"));
+      return false;
     }
-    if (!movingCard) return;
+
+    let movingCards: SolitaireCard[] = [];
+    if (selection.from === "waste") {
+      const top = solitaireWaste[solitaireWaste.length - 1] || null;
+      movingCards = top ? [top] : [];
+    } else if (selection.from === "foundation") {
+      const pile = solitaireFoundations[selection.suit] || [];
+      const top = pile[pile.length - 1] || null;
+      movingCards = top ? [top] : [];
+    } else {
+      const sourcePile = solitaireTableau[selection.col] || [];
+      if (!isMovableSolitaireTableauStack(solitaireTableau, selection.col, selection.index)) {
+        setSolitaireMessage(t("solitaireInvalidMove"));
+        return false;
+      }
+      movingCards = sourcePile.slice(selection.index);
+    }
+
+    const movingCard = movingCards[0] || null;
+    if (!movingCard) return false;
 
     const canPlace = targetTop
       ? targetTop.faceUp && solitaireIsRed(targetTop.suit) !== solitaireIsRed(movingCard.suit) && targetTop.rank === movingCard.rank + 1
@@ -7463,24 +9943,196 @@ export default function Home() {
 
     if (!canPlace) {
       setSolitaireMessage(t("solitaireInvalidMove"));
-      return;
+      return false;
     }
 
     const nextTableau = solitaireTableau.map((pile) => [...pile]);
-    if (solitaireSelection.from === "waste") {
+    if (selection.from === "waste") {
       setSolitaireWaste(solitaireWaste.slice(0, -1));
+    } else if (selection.from === "foundation") {
+      const nextFoundations = {
+        H: [...solitaireFoundations.H],
+        D: [...solitaireFoundations.D],
+        C: [...solitaireFoundations.C],
+        S: [...solitaireFoundations.S],
+      };
+      nextFoundations[selection.suit] = nextFoundations[selection.suit].slice(0, -1);
+      setSolitaireFoundations(nextFoundations);
     } else {
-      nextTableau[solitaireSelection.col] = nextTableau[solitaireSelection.col].slice(0, -1);
-      const flipped = flipTableauTopIfNeeded(nextTableau, solitaireSelection.col);
+      nextTableau[selection.col] = nextTableau[selection.col].slice(0, selection.index);
+      const flipped = flipTableauTopIfNeeded(nextTableau, selection.col);
       for (let i = 0; i < nextTableau.length; i += 1) {
         nextTableau[i] = flipped[i];
       }
     }
 
-    nextTableau[targetCol].push({ ...movingCard, faceUp: true });
+    movingCards.forEach((card) => {
+      nextTableau[targetCol].push({ ...card, faceUp: true });
+    });
+
     setSolitaireTableau(nextTableau);
     setSolitaireSelection(null);
+    if (undoPoint) {
+      pushSolitaireUndo(undoPoint);
+    }
     setSolitaireMessage(t("solitaireHint"));
+    return true;
+  };
+
+  const tryAutoPlaceSolitaire = (selection: SolitaireSelection) => {
+    const undoPoint = makeSolitaireSnapshot();
+    let movingCard: SolitaireCard | null = null;
+    if (selection.from === "waste") {
+      movingCard = solitaireWaste[solitaireWaste.length - 1] || null;
+    } else if (selection.from === "foundation") {
+      const pile = solitaireFoundations[selection.suit] || [];
+      movingCard = pile[pile.length - 1] || null;
+    } else {
+      const sourcePile = solitaireTableau[selection.col] || [];
+      movingCard = sourcePile[selection.index] || null;
+    }
+    if (!movingCard) return false;
+
+    const suits: SolitaireSuit[] = ["H", "D", "C", "S"];
+    for (let i = 0; i < suits.length; i += 1) {
+      const suit = suits[i];
+      const foundationPile = solitaireFoundations[suit];
+      const needed = foundationPile.length + 1;
+      if (movingCard.suit === suit && movingCard.rank === needed) {
+        if (moveSolitaireSelectionToFoundation(selection, suit, { recordUndo: false })) {
+          pushSolitaireUndo(undoPoint);
+          return true;
+        }
+      }
+    }
+
+    for (let col = 0; col < solitaireTableau.length; col += 1) {
+      if (selection.from === "tableau" && selection.col === col) continue;
+      if (moveSolitaireSelectionToTableau(selection, col, { recordUndo: false })) {
+        pushSolitaireUndo(undoPoint);
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const canOfferSolitaireAutoClear = useCallback(() => {
+    if (!gameStarted.solitaire || isSolitaireOver) return false;
+    if (foundationCount(solitaireFoundations) >= 52) return false;
+    if (solitaireStock.length > 0 || solitaireWaste.length > 0) return false;
+
+    for (let col = 0; col < solitaireTableau.length; col += 1) {
+      const pile = solitaireTableau[col];
+      for (let i = 0; i < pile.length; i += 1) {
+        if (!pile[i]?.faceUp) return false;
+      }
+    }
+
+    return true;
+  }, [foundationCount, gameStarted.solitaire, isSolitaireOver, solitaireFoundations, solitaireStock.length, solitaireTableau, solitaireWaste.length]);
+
+  const autoClearSolitaire = () => {
+    if (!canOfferSolitaireAutoClear()) {
+      setSolitaireMessage(t("solitaireAutoClearUnavailable"));
+      return;
+    }
+
+    const undoPoint = makeSolitaireSnapshot();
+
+    const nextFoundations = {
+      H: [...solitaireFoundations.H],
+      D: [...solitaireFoundations.D],
+      C: [...solitaireFoundations.C],
+      S: [...solitaireFoundations.S],
+    };
+    const nextTableau = solitaireTableau.map((pile) => [...pile]);
+
+    let movedAny = false;
+    let guard = 0;
+    const flightEntries: Array<{ card: SolitaireCard; toSuit: SolitaireSuit; from: "tableau"; col: number; index: number; delayMs: number }> = [];
+
+    while (guard < 300) {
+      guard += 1;
+      let movedThisRound = false;
+
+      for (let col = 0; col < nextTableau.length; col += 1) {
+        const pile = nextTableau[col];
+        if (pile.length === 0) continue;
+
+        const top = pile[pile.length - 1];
+        if (!top || !top.faceUp) continue;
+
+        const suit = top.suit;
+        const needed = nextFoundations[suit].length + 1;
+        if (top.rank !== needed) continue;
+
+        const topIndex = pile.length - 1;
+        pile.pop();
+        const newTop = pile[pile.length - 1];
+        if (newTop && !newTop.faceUp) {
+          newTop.faceUp = true;
+        }
+        nextFoundations[suit].push({ ...top, faceUp: true });
+        flightEntries.push({
+          card: { ...top, faceUp: true },
+          toSuit: suit,
+          from: "tableau",
+          col,
+          index: topIndex,
+          delayMs: Math.min(260, flightEntries.length * 34),
+        });
+        movedThisRound = true;
+        movedAny = true;
+      }
+
+      if (!movedThisRound || foundationCount(nextFoundations) >= 52) {
+        break;
+      }
+    }
+
+    if (!movedAny) {
+      setSolitaireMessage(t("solitaireAutoClearUnavailable"));
+      return;
+    }
+
+    setSolitaireTableau(nextTableau);
+    setSolitaireFoundations(nextFoundations);
+    setSolitaireSelection(null);
+    emitSolitaireFoundationFlights(flightEntries);
+    pushSolitaireUndo(undoPoint);
+    if (!tryAutoWinSolitaire(nextFoundations)) {
+      setSolitaireMessage(t("solitaireHint"));
+    }
+  };
+
+  const onSolitaireMoveToFoundation = (suit: SolitaireSuit) => {
+    if (isSolitaireOver) return;
+    const pile = solitaireFoundations[suit] || [];
+    const top = pile[pile.length - 1] || null;
+
+    if (!solitaireSelection) {
+      if (!top) {
+        setSolitaireMessage(t("solitaireHint"));
+        return;
+      }
+      setSolitaireSelection({ from: "foundation", suit });
+      setSolitaireMessage(t("solitaireSelected"));
+      return;
+    }
+
+    if (solitaireSelection.from === "foundation" && solitaireSelection.suit === suit) {
+      setSolitaireSelection(null);
+      setSolitaireMessage(t("solitaireHint"));
+      return;
+    }
+
+    moveSolitaireSelectionToFoundation(solitaireSelection, suit);
+  };
+
+  const onSolitaireMoveToTableau = (targetCol: number) => {
+    if (isSolitaireOver || !solitaireSelection) return;
+    moveSolitaireSelectionToTableau(solitaireSelection, targetCol);
   };
 
   const createSurvivorsEnemies = useCallback((wave: number) => {
@@ -7569,14 +10221,6 @@ export default function Home() {
       setChinchiroMessage(t("chinchiroHint"));
     }
   }, [activePanel, chinchiroDealerDice, chinchiroPlayerDice, isChinchiroOver, t]);
-
-  useEffect(() => {
-    if (activePanel !== "blackjack") return;
-    if (!gameStarted.blackjack) return;
-    if (blackjackPlayerHand.length === 0 || blackjackDealerHand.length === 0) {
-      resetBlackjack();
-    }
-  }, [activePanel, blackjackDealerHand.length, blackjackPlayerHand.length, gameStarted.blackjack, resetBlackjack]);
 
   useEffect(() => {
     if (activePanel !== "sevens") return;
@@ -7700,10 +10344,10 @@ export default function Home() {
 
   useEffect(() => {
     if (activePanel !== "mahjong") return;
-    if (!isMahjongOver && mahjongRemainingCount(mahjongBoard) === MAHJONG_ROWS * MAHJONG_COLS) {
+    if (!isMahjongOver && mahjongBoard.length === MAHJONG_START_HAND_COUNT && mahjongRiver.length === 0) {
       setMahjongMessage(t("mahjongHint"));
     }
-  }, [activePanel, isMahjongOver, mahjongBoard, t]);
+  }, [activePanel, isMahjongOver, mahjongBoard.length, mahjongRiver.length, t]);
 
   useEffect(() => {
     if (activePanel !== "poker") return;
@@ -7731,15 +10375,18 @@ export default function Home() {
 
   const resetUno = useCallback(() => {
     const deck = shuffleCards(createUnoDeck());
-    if (!connectedRoomCode) {
-      const totalPlayers = 1 + unoCpuCount;
+    if (isUnoExtendedMode) {
+      const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
       const hands: UnoCard[][] = Array.from({ length: totalPlayers }, (_, i) => deck.slice(i * 7, i * 7 + 7));
       const top = deck[totalPlayers * 7] || { color: "R", value: 0 };
       const rest = deck.slice(totalPlayers * 7 + 1);
       setUnoLocalHands(hands);
+      setUnoPlayerHand(hands[0] || []);
+      setUnoCpuHand(hands[1] || []);
       setUnoLocalTurnIndex(0);
       setUnoTopCard(top);
       setUnoDeck(rest);
+      setUnoTurn("player");
       setIsUnoOver(false);
       setUnoMessage(t("unoYourTurn"));
       return;
@@ -7756,7 +10403,7 @@ export default function Home() {
     setUnoTurn("player");
     setIsUnoOver(false);
     setUnoMessage(t("unoYourTurn"));
-  }, [connectedRoomCode, t, unoCpuCount]);
+  }, [connectedRoomCode, isUnoExtendedMode, t, unoLocalTotalPlayers, unoRoomTotalPlayers]);
 
   const drawUnoCard = useCallback((): UnoCard | null => {
     if (unoDeck.length <= 0) return null;
@@ -7767,9 +10414,32 @@ export default function Home() {
 
   const playUnoCard = useCallback(
     (index: number, options?: { isRemote?: boolean; side?: "player" | "cpu" }) => {
-      if (!connectedRoomCode) {
-        if (isUnoOver || unoLocalTurnIndex !== 0 || !unoTopCard) return;
-        const currentHand = unoLocalHands[0] || [];
+      if (isUnoExtendedMode) {
+        if (isUnoOver || !unoTopCard) return;
+        const isRemote = Boolean(options?.isRemote);
+        let actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
+
+        if (connectedRoomCode && !isRemote) {
+          if (roomRole === "spectator") {
+            setUnoMessage(t("roomSpectatorReadonly"));
+            return;
+          }
+          if (!canOperateUnoNow) {
+            setUnoMessage(t("roomTurnOwnerOnly"));
+            return;
+          }
+          if (roomRole === "guest") {
+            sendRoomEvent({ type: "uno-request-action", action: "play", index });
+            setUnoMessage(t("roomWaitingHostJudge"));
+            return;
+          }
+        }
+        if (connectedRoomCode && isRemote) {
+          actorIndex = 1;
+        }
+        if (actorIndex < 0 || unoLocalTurnIndex !== actorIndex) return;
+
+        const currentHand = unoLocalHands[actorIndex] || [];
         const card = currentHand[index];
         if (!card) return;
         if (!canPlayCard(card, unoTopCard)) {
@@ -7779,18 +10449,24 @@ export default function Home() {
 
         const nextHand = currentHand.filter((_, i) => i !== index);
         const nextHands = [...unoLocalHands];
-        nextHands[0] = nextHand;
+        nextHands[actorIndex] = nextHand;
         setUnoLocalHands(nextHands);
+        setUnoPlayerHand(nextHands[0] || []);
+        setUnoCpuHand(nextHands[1] || []);
         setUnoTopCard(card);
-        setUnoMessage(tf("unoPlayedCard", { who: "YOU", card: unoCardLabel(card) }));
+        const whoLabel = actorIndex === 0 ? "YOU" : actorIndex === 1 ? "OPP" : `CPU ${actorIndex - 1}`;
+        setUnoMessage(tf("unoPlayedCard", { who: whoLabel, card: unoCardLabel(card) }));
 
         if (nextHand.length === 0) {
           setIsUnoOver(true);
-          setUnoMessage(t("unoPlayerWin"));
+          setUnoMessage(actorIndex === 0 ? t("unoPlayerWin") : t("unoCpuWin"));
           return;
         }
 
-        setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
+        const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
+        const nextTurn = (actorIndex + 1) % Math.max(2, totalPlayers);
+        setUnoLocalTurnIndex(nextTurn);
+        setUnoTurn(nextTurn === 0 ? "player" : "cpu");
         return;
       }
 
@@ -7839,25 +10515,55 @@ export default function Home() {
 
       setUnoTurn(side === "player" ? "cpu" : "player");
     },
-    [canOperateUnoNow, connectedRoomCode, isUnoOver, roomRole, sendRoomEvent, t, tf, unoCardLabel, unoCpuHand, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoPlayerHand, unoTopCard, unoTurn],
+    [canOperateUnoNow, connectedRoomCode, isUnoExtendedMode, isUnoOver, roomRole, sendRoomEvent, t, tf, unoCardLabel, unoCpuHand, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoPlayerHand, unoRoomHumanIndex, unoRoomTotalPlayers, unoTopCard, unoTurn],
   );
 
   const drawUnoForPlayer = useCallback((options?: { isRemote?: boolean; side?: "player" | "cpu" }) => {
-    if (!connectedRoomCode) {
-      if (isUnoOver || unoLocalTurnIndex !== 0) return;
+    if (isUnoExtendedMode) {
+      if (isUnoOver) return;
+      const isRemote = Boolean(options?.isRemote);
+      let actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
+
+      if (connectedRoomCode && !isRemote) {
+        if (roomRole === "spectator") {
+          setUnoMessage(t("roomSpectatorReadonly"));
+          return;
+        }
+        if (!canOperateUnoNow) {
+          setUnoMessage(t("roomTurnOwnerOnly"));
+          return;
+        }
+        if (roomRole === "guest") {
+          sendRoomEvent({ type: "uno-request-action", action: "draw" });
+          setUnoMessage(t("roomWaitingHostJudge"));
+          return;
+        }
+      }
+      if (connectedRoomCode && isRemote) {
+        actorIndex = 1;
+      }
+      if (actorIndex < 0 || unoLocalTurnIndex !== actorIndex) return;
+
       const card = drawUnoCard();
       if (!card) {
         setUnoMessage(t("unoNoPlayable"));
-        setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
+        const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
+        const nextTurn = (actorIndex + 1) % Math.max(2, totalPlayers);
+        setUnoLocalTurnIndex(nextTurn);
+        setUnoTurn(nextTurn === 0 ? "player" : "cpu");
         return;
       }
-      setUnoLocalHands((prev) => {
-        const next = [...prev];
-        next[0] = [...(next[0] || []), card];
-        return next;
-      });
-      setUnoMessage(tf("unoDrewCard", { who: "YOU" }));
-      setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
+      const nextHands = [...unoLocalHands];
+      nextHands[actorIndex] = [...(nextHands[actorIndex] || []), card];
+      setUnoLocalHands(nextHands);
+      setUnoPlayerHand(nextHands[0] || []);
+      setUnoCpuHand(nextHands[1] || []);
+      const whoLabel = actorIndex === 0 ? "YOU" : actorIndex === 1 ? "OPP" : `CPU ${actorIndex - 1}`;
+      setUnoMessage(tf("unoDrewCard", { who: whoLabel }));
+      const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
+      const nextTurn = (actorIndex + 1) % Math.max(2, totalPlayers);
+      setUnoLocalTurnIndex(nextTurn);
+      setUnoTurn(nextTurn === 0 ? "player" : "cpu");
       return;
     }
 
@@ -7894,7 +10600,7 @@ export default function Home() {
     }
     setUnoMessage(tf("unoDrewCard", { who: side === "player" ? "YOU" : "CPU" }));
     setUnoTurn(side === "player" ? "cpu" : "player");
-  }, [canOperateUnoNow, connectedRoomCode, drawUnoCard, isUnoOver, roomRole, sendRoomEvent, t, tf, unoLocalTotalPlayers, unoLocalTurnIndex, unoTurn]);
+  }, [canOperateUnoNow, connectedRoomCode, drawUnoCard, isUnoExtendedMode, isUnoOver, roomRole, sendRoomEvent, t, tf, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoRoomHumanIndex, unoRoomTotalPlayers, unoTurn]);
 
   useEffect(() => {
     if (!pendingRemoteUnoAction) return;
@@ -7920,10 +10626,12 @@ export default function Home() {
   }, [activePanel, gameStarted.uno, isUnoOver, resetUno, unoTopCard]);
 
   useEffect(() => {
-    if (connectedRoomCode) return;
+    if (!isUnoExtendedMode) return;
+    if (connectedRoomCode && roomRole !== "host") return;
     if (!gameStarted.uno) return;
     if (isUnoOver || !unoTopCard) return;
-    if (unoLocalTurnIndex <= 0) return;
+    const cpuStartIndex = connectedRoomCode ? 2 : 1;
+    if (unoLocalTurnIndex < cpuStartIndex) return;
 
     setUnoMessage(t("unoCpuTurn"));
     const timer = setTimeout(() => {
@@ -7933,11 +10641,11 @@ export default function Home() {
       if (playableIndex >= 0) {
         const card = hand[playableIndex];
         const nextHand = hand.filter((_, i) => i !== playableIndex);
-        setUnoLocalHands((prev) => {
-          const next = [...prev];
-          next[cpuIndex] = nextHand;
-          return next;
-        });
+        const nextHands = [...unoLocalHands];
+        nextHands[cpuIndex] = nextHand;
+        setUnoLocalHands(nextHands);
+        setUnoPlayerHand(nextHands[0] || []);
+        setUnoCpuHand(nextHands[1] || []);
         setUnoTopCard(card);
         if (nextHand.length === 0) {
           setIsUnoOver(true);
@@ -7945,25 +10653,31 @@ export default function Home() {
           return;
         }
         setUnoMessage(tf("unoPlayedCard", { who: `CPU ${cpuIndex}`, card: unoCardLabel(card) }));
-        setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
+        const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
+        const nextTurn = (cpuIndex + 1) % Math.max(2, totalPlayers);
+        setUnoLocalTurnIndex(nextTurn);
+        setUnoTurn(nextTurn === 0 ? "player" : "cpu");
         return;
       }
 
       const drawn = unoDeck[0];
       if (drawn) {
         setUnoDeck((prev) => prev.slice(1));
-        setUnoLocalHands((prev) => {
-          const next = [...prev];
-          next[cpuIndex] = [...(next[cpuIndex] || []), drawn];
-          return next;
-        });
+        const nextHands = [...unoLocalHands];
+        nextHands[cpuIndex] = [...(nextHands[cpuIndex] || []), drawn];
+        setUnoLocalHands(nextHands);
+        setUnoPlayerHand(nextHands[0] || []);
+        setUnoCpuHand(nextHands[1] || []);
         setUnoMessage(tf("unoDrewCard", { who: `CPU ${cpuIndex}` }));
       }
-      setUnoLocalTurnIndex((prev) => (prev + 1) % Math.max(2, unoLocalTotalPlayers));
+      const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
+      const nextTurn = (cpuIndex + 1) % Math.max(2, totalPlayers);
+      setUnoLocalTurnIndex(nextTurn);
+      setUnoTurn(nextTurn === 0 ? "player" : "cpu");
     }, 550);
 
     return () => clearTimeout(timer);
-  }, [connectedRoomCode, gameStarted.uno, isUnoOver, t, tf, unoDeck, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoTopCard, unoCardLabel]);
+  }, [connectedRoomCode, gameStarted.uno, isUnoExtendedMode, isUnoOver, roomRole, t, tf, unoCardLabel, unoDeck, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoRoomTotalPlayers, unoTopCard]);
 
   const cloudAuthPayload = useMemo(() => {
     if (authMode !== "cloud") return null;
@@ -8016,6 +10730,52 @@ export default function Home() {
     const data = await callCloudApi<CloudAuthResult & CloudApiResult>(path, payload);
     return data as CloudAuthResult;
   }, [callCloudApi]);
+
+  const requestFitPuzzleProgress = useCallback((): FitPuzzleProgress | null => {
+    if (authMode === "cloud") {
+      return fitPuzzleProgressRef.current
+        || readFitPuzzleProgressFromStorage(cloudFitPuzzleProgressStorageKey(authUserId));
+    }
+    return readFitPuzzleProgressFromStorage(STORAGE_FIT_PUZZLE_PROGRESS_KEY);
+  }, [authMode, authUserId]);
+
+  const saveFitPuzzleProgress = useCallback((rawProgress: unknown) => {
+    const normalized = normalizeFitPuzzleProgress(rawProgress);
+    if (!normalized) return;
+    fitPuzzleProgressRef.current = normalized;
+    setFitPuzzleProgress(normalized);
+
+    if (authMode === "cloud") {
+      try {
+        localStorage.setItem(cloudFitPuzzleProgressStorageKey(authUserId), JSON.stringify(normalized));
+      } catch {
+        // ignore storage write failure
+      }
+    }
+
+    if (authMode !== "cloud" || !cloudAuthPayload) {
+      try {
+        localStorage.setItem(STORAGE_FIT_PUZZLE_PROGRESS_KEY, JSON.stringify(normalized));
+      } catch {
+        // ignore storage write failure
+      }
+      return;
+    }
+
+    if (fitPuzzleProgressSaveTimerRef.current !== null) {
+      window.clearTimeout(fitPuzzleProgressSaveTimerRef.current);
+    }
+    fitPuzzleProgressSaveTimerRef.current = window.setTimeout(() => {
+      void callCloudApi<CloudApiResult>("/api/profile/save", {
+        ...cloudAuthPayload,
+        profile: {
+          fitPuzzleProgress: normalized,
+        },
+      }).catch((error) => {
+        console.warn("fitPuzzleProgress save failed", error);
+      });
+    }, 350);
+  }, [authMode, authUserId, callCloudApi, cloudAuthPayload]);
 
   const normalizeFriendIdList = useCallback((value: unknown): string[] => {
     if (!Array.isArray(value)) return [];
@@ -8638,10 +11398,14 @@ export default function Home() {
     }
     const cloudName = String(data?.profile?.playerName || "").trim();
     const cloudBio = String(data?.profile?.profileBio || "").slice(0, 180);
+    const cloudFitPuzzleProgress = normalizeFitPuzzleProgress(data?.profile?.fitPuzzleProgress)
+      || readFitPuzzleProgressFromStorage(cloudFitPuzzleProgressStorageKey(userId));
     const nextName = (cloudName || userId || "player").slice(0, 24);
     setPlayerName(nextName);
     setProfileNameDraft(nextName);
     setProfileBioDraft(cloudBio);
+    fitPuzzleProgressRef.current = cloudFitPuzzleProgress;
+    setFitPuzzleProgress(cloudFitPuzzleProgress);
     localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
     localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
     localStorage.setItem(STORAGE_CLOUD_SESSION_ID_KEY, nextSessionId);
@@ -8657,6 +11421,7 @@ export default function Home() {
   }, []);
 
   const handleCloudLogin = useCallback(async () => {
+    if (isAuthLoading) return;
     const userId = authUserId.trim();
     const password = authPassword;
     if (!userId || !password) {
@@ -8664,6 +11429,7 @@ export default function Home() {
       return;
     }
 
+    setIsAuthLoading(true);
     setEntryMessage(t("loginLoading"));
     try {
       const data = await callCloudAuthApi("/api/auth/login", {
@@ -8683,9 +11449,10 @@ export default function Home() {
     } finally {
       setIsAuthLoading(false);
     }
-  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudAuthApi, t]);
+  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudAuthApi, isAuthLoading, t]);
 
   const handleCloudRegister = useCallback(async () => {
+    if (isAuthLoading) return;
     const userId = authUserId.trim();
     const password = authPassword;
     if (!userId || !password) {
@@ -8709,44 +11476,15 @@ export default function Home() {
     } finally {
       setIsAuthLoading(false);
     }
-  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudAuthApi, t]);
+  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudAuthApi, isAuthLoading, t]);
 
   useEffect(() => {
-    if (autoLoginTriedRef.current) return;
-
-    const savedUserId = String(localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "").trim();
-    const savedPassword = String(localStorage.getItem(STORAGE_CLOUD_PASSWORD_KEY) || "");
-    const savedSessionId = String(localStorage.getItem(STORAGE_CLOUD_SESSION_ID_KEY) || "").trim();
-    if (!savedUserId || !savedPassword) return;
-
-    autoLoginTriedRef.current = true;
-    let cancelled = false;
-
-    setIsAuthLoading(true);
-    setEntryMessage(t("loginLoading"));
-
-    void (async () => {
-      try {
-        const data = await callCloudAuthApi("/api/auth/login", {
-          userId: savedUserId,
-          password: savedPassword,
-          sessionId: savedSessionId || undefined,
-        });
-        if (cancelled) return;
-        applyCloudLoginSuccess(savedUserId, savedPassword, data);
-      } catch (error) {
-        if (cancelled) return;
-        console.error(error);
-        setEntryMessage("");
-      } finally {
-        if (cancelled) return;
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [applyCloudLoginSuccess, callCloudAuthApi, t]);
+    if (!isAuthLoading) return;
+    const timer = window.setTimeout(() => {
+      setIsAuthLoading(false);
+    }, 12000);
+    return () => window.clearTimeout(timer);
+  }, [isAuthLoading]);
 
   const handleGuestStart = useCallback(() => {
     const nextName = profileNameDraft.trim().slice(0, 24) || "guest";
@@ -8758,6 +11496,12 @@ export default function Home() {
     localStorage.removeItem(STORAGE_CLOUD_SESSION_ID_KEY);
     setAuthMode("guest");
     setAuthSessionId("");
+    try {
+      const raw = localStorage.getItem(STORAGE_FIT_PUZZLE_PROGRESS_KEY);
+      setFitPuzzleProgress(raw ? normalizeFitPuzzleProgress(JSON.parse(raw)) : null);
+    } catch {
+      setFitPuzzleProgress(null);
+    }
     setEntryMessage("");
     setFriendsMessage("");
     setFriendUserIdDraft("");
@@ -9023,6 +11767,14 @@ export default function Home() {
     runWithResetGuard("othello", () => resetOthello({}, isChaosMode, { rerollRandomSide: true }));
   };
 
+  const isPanelStartCounting = useCallback((panel: PlayablePanel) => {
+    return false;
+  }, []);
+
+  const startButtonLabel = useCallback((panel: PlayablePanel) => {
+    return t("gameStart");
+  }, [t]);
+
   useEffect(() => {
     if (!connectedRoomCode) return;
     if (!gameStarted.othello) return;
@@ -9039,8 +11791,8 @@ export default function Home() {
 
   if (!isAuthenticated) {
     return (
-      <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-5 py-8 text-slate-100">
-        <div className="mx-auto flex w-full max-w-xl flex-col gap-6">
+      <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 py-6 text-slate-100 sm:px-6 sm:py-8 xl:px-8">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
           <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
             <div className="flex items-center justify-end gap-3">
               <div className="flex items-center gap-1 rounded-md border border-cyan-200/30 bg-slate-950/40 p-1 text-xs">
@@ -9070,7 +11822,6 @@ export default function Home() {
                   autoComplete="username"
                   placeholder="user123"
                   className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  disabled={isAuthLoading}
                 />
               </label>
 
@@ -9083,7 +11834,6 @@ export default function Home() {
                   autoComplete="current-password"
                   placeholder="password"
                   className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  disabled={isAuthLoading}
                 />
               </label>
 
@@ -9094,7 +11844,6 @@ export default function Home() {
                   onChange={(event) => setProfileNameDraft(event.target.value.slice(0, 24))}
                   placeholder="Player"
                   className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  disabled={isAuthLoading}
                 />
               </label>
 
@@ -9102,7 +11851,6 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => void handleCloudLogin()}
-                  disabled={isAuthLoading}
                   className="rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
                 >
                   {isAuthLoading ? t("processing") : t("loginButton")}
@@ -9110,7 +11858,6 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => void handleCloudRegister()}
-                  disabled={isAuthLoading}
                   className="rounded-md border border-cyan-200/40 px-3 py-2 text-sm disabled:opacity-60"
                 >
                   {t("registerButton")}
@@ -9118,7 +11865,6 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={handleGuestStart}
-                  disabled={isAuthLoading}
                   className="rounded-md border border-emerald-200/40 px-3 py-2 text-sm disabled:opacity-60"
                 >
                   {t("guestButton")}
@@ -9134,8 +11880,8 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-5 py-8 text-slate-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 py-6 text-slate-100 sm:px-6 sm:py-8 xl:px-8">
+      <div className="mx-auto flex w-full max-w-[92rem] flex-col gap-6">
         <div className="relative">
           {authMode === "cloud" ? (
             <div className="fixed right-3 top-3 z-40 sm:right-6 sm:top-4">
@@ -9688,7 +12434,6 @@ export default function Home() {
                           >
                             <span className="pointer-events-none absolute right-3 top-3 rounded border border-cyan-200/40 bg-slate-950/55 px-2 py-[2px] text-[10px] font-semibold tracking-wide text-cyan-100">OPEN</span>
                             <p className="text-lg font-semibold">{card.title}</p>
-                            <p className="mt-1 text-sm text-slate-300">{t("playableLead")}</p>
                           </button>
                         ))}
                       </div>
@@ -9962,9 +12707,10 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => startPanelGame("othello", () => resetOthello({}, isChaosMode, { rerollRandomSide: true }))}
+                  disabled={isPanelStartCounting("othello")}
                   className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                 >
-                  {t("gameStart")}
+                  {startButtonLabel("othello")}
                 </button>
                 <button
                   type="button"
@@ -10382,9 +13128,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("gomoku", resetGomoku)}
+                    disabled={isPanelStartCounting("gomoku")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("gomoku")}
                   </button>
                   <button
                     type="button"
@@ -10514,9 +13261,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("chess", resetChess)}
+                    disabled={isPanelStartCounting("chess")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("chess")}
                   </button>
                   <button
                     type="button"
@@ -10539,6 +13287,12 @@ export default function Home() {
 
               <p className="text-sm text-slate-300">{chessMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateChessNow)}</p> : null}
+              {!connectedRoomCode && chessMode === "cpu" ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded-md border border-cyan-300/60 bg-cyan-400/15 px-2 py-1 text-cyan-100">1P: {chessPlayerColorLabel}</span>
+                  <span className="rounded-md border border-rose-300/60 bg-rose-400/15 px-2 py-1 text-rose-100">CPU: {chessEnemyColorLabel}</span>
+                </div>
+              ) : null}
 
               {!connectedRoomCode ? (
                 <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -10601,9 +13355,15 @@ export default function Home() {
               ) : null}
 
               <div className={`mt-4 mx-auto grid w-full max-w-[min(96vw,680px)] grid-cols-8 gap-[3px] rounded-xl bg-emerald-900/70 p-1.5 sm:gap-1 sm:p-2 ${!gameStarted.chess ? "pointer-events-none opacity-60" : ""}`}>
-                {chessBoard.map((line, row) =>
-                  line.map((piece, col) => {
+                {chessDisplayRows.map((row) =>
+                  chessDisplayCols.map((col) => {
+                    const piece = chessBoard[row]?.[col] ?? null;
                     const isSelected = selectedChess?.row === row && selectedChess?.col === col;
+                    const moveTarget = chessMoveTargets.get(`${row}-${col}`);
+                    const isMoveTarget = Boolean(moveTarget);
+                    const isCaptureTarget = Boolean(moveTarget?.capture);
+                    const shouldEmphasizeTurnPiece = chessMode === "local" && !connectedRoomCode && gameStarted.chess && !isChessOver;
+                    const isTurnPiece = piece?.color === chessTurn;
                     const key = `c-${row}-${col}`;
                     const dark = (row + col) % 2 === 1;
                     return (
@@ -10612,10 +13372,22 @@ export default function Home() {
                         type="button"
                         onClick={() => onChessClick(row, col)}
                         disabled={!canOperateChessNow || isChessOver || !gameStarted.chess}
-                        className={`aspect-square rounded-sm px-1 text-2xl font-semibold leading-none sm:text-4xl ${dark ? "bg-emerald-700/95 hover:bg-emerald-600/95" : "bg-emerald-600/95 hover:bg-emerald-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} disabled:cursor-not-allowed disabled:opacity-70`}
+                        className={`relative aspect-square rounded-sm px-1 text-2xl font-semibold leading-none sm:text-4xl ${dark ? "bg-emerald-700/95 hover:bg-emerald-600/95" : "bg-emerald-600/95 hover:bg-emerald-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} ${isMoveTarget ? (isCaptureTarget ? "ring-2 ring-rose-300" : "ring-2 ring-amber-200") : ""} disabled:cursor-not-allowed disabled:opacity-70`}
                         aria-label={`chess-${row + 1}-${col + 1}`}
                       >
-                        {piece ? chessPieceLabel(piece) : ""}
+                        {isMoveTarget && !piece ? (
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <span className="h-3 w-3 rounded-full bg-amber-200/90 shadow-[0_0_0_2px_rgba(8,12,22,0.35)] sm:h-3.5 sm:w-3.5" />
+                          </span>
+                        ) : null}
+                        {piece ? (
+                          <span
+                            className={`inline-block ${piece.color === "w" ? "text-slate-100 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]" : "text-slate-950 [text-shadow:0_0_2px_rgba(241,245,249,0.9)]"} ${shouldEmphasizeTurnPiece && !isTurnPiece ? "opacity-45" : "opacity-100"} ${shouldEmphasizeTurnPiece && isTurnPiece ? "drop-shadow-[0_0_6px_rgba(125,211,252,0.75)]" : ""}`}
+                            aria-label={`${piece.color === "w" ? t("whiteStone") : t("blackStone")}${chessPieceLabel(piece)}`}
+                          >
+                            {chessPieceLabel(piece)}
+                          </span>
+                        ) : ""}
                       </button>
                     );
                   }),
@@ -10637,9 +13409,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("shogi", resetShogi)}
+                    disabled={isPanelStartCounting("shogi")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("shogi")}
                   </button>
                   <button
                     type="button"
@@ -10734,6 +13507,9 @@ export default function Home() {
                 {shogiBoard.map((line, row) =>
                   line.map((piece, col) => {
                     const isSelected = selectedShogi?.row === row && selectedShogi?.col === col;
+                    const moveTarget = shogiMoveTargets.get(`${row}-${col}`);
+                    const isMoveTarget = Boolean(moveTarget);
+                    const isCaptureTarget = Boolean(moveTarget?.capture);
                     const dark = (row + col) % 2 === 1;
                     return (
                       <button
@@ -10741,9 +13517,14 @@ export default function Home() {
                         type="button"
                         onClick={() => onShogiClick(row, col)}
                         disabled={!canOperateShogiNow || isShogiOver || !gameStarted.shogi}
-                        className={`aspect-square rounded-sm px-0.5 sm:px-1 ${dark ? "bg-amber-700/95" : "bg-amber-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} disabled:cursor-not-allowed disabled:opacity-70`}
+                        className={`relative aspect-square rounded-sm px-0.5 sm:px-1 ${dark ? "bg-amber-700/95" : "bg-amber-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} ${isMoveTarget ? (isCaptureTarget ? "ring-2 ring-rose-300" : "ring-2 ring-amber-200") : ""} disabled:cursor-not-allowed disabled:opacity-70`}
                         aria-label={`shogi-${row + 1}-${col + 1}`}
                       >
+                        {isMoveTarget && !piece ? (
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <span className="h-2.5 w-2.5 rounded-full bg-amber-100/95 shadow-[0_0_0_2px_rgba(8,12,22,0.25)] sm:h-3 sm:w-3" />
+                          </span>
+                        ) : null}
                         {piece ? (
                           <span
                             className={`mx-auto grid h-[82%] w-[76%] place-items-center border border-amber-900/80 bg-gradient-to-b from-amber-100 via-amber-200 to-amber-300 text-[clamp(10px,2.45vw,20px)] font-black leading-none text-amber-950 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_2px_4px_rgba(0,0,0,0.25)] [clip-path:polygon(18%_0%,82%_0%,100%_100%,0%_100%)] ${piece.color === "w" ? "rotate-180" : ""}`}
@@ -10768,7 +13549,7 @@ export default function Home() {
 
         {activePanel === "minesweeper" ? (
           <section className="grid gap-5">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+            <article className="mx-auto w-full max-w-[88rem] rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("minesTitle")}</h2>
               </div>
@@ -10882,17 +13663,18 @@ export default function Home() {
         ) : null}
 
         {activePanel === "numeron" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5 md:grid-cols-[1.62fr_0.82fr]">
+            <article className="min-h-[700px] rounded-2xl border border-cyan-300/25 bg-[linear-gradient(160deg,rgba(12,24,39,0.88),rgba(8,19,28,0.92))] p-6 shadow-[0_0_0_1px_rgba(24,219,255,0.12),0_14px_30px_rgba(3,8,13,0.45)]">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("numeronTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => startPanelGame("numeron", resetNumeron)}
+                    disabled={isPanelStartCounting("numeron")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("numeron")}
                   </button>
                   <button
                     type="button"
@@ -10913,70 +13695,347 @@ export default function Home() {
 
               {!gameStarted.numeron ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
               <fieldset disabled={!gameStarted.numeron} className={!gameStarted.numeron ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
-
-              <p className="text-sm text-slate-300">{numeronMessage}</p>
-              <p className="mt-2 text-xs text-slate-400">
-                {t("numeronSecretLabel")}: {isNumeronOver ? numeronSecret : "***"}
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {Array.from({ length: 10 }, (_, i) => String(i)).map((digit) => {
-                  const selected = numeronDraft.includes(digit);
-                  return (
-                    <button
-                      key={digit}
-                      type="button"
-                      onClick={() => onNumeronPickDigit(digit)}
-                      disabled={isNumeronOver || selected || numeronDraft.length >= 3}
-                      className={`h-10 w-10 rounded-md border text-sm font-semibold ${selected ? "border-amber-300/60 bg-amber-300/20" : "border-cyan-200/30 bg-cyan-400/10"}`}
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <label className="rounded-lg border border-cyan-200/25 bg-slate-950/55 px-3 py-2 text-xs text-slate-300">
+                    <span className="mb-1 block tracking-wide text-slate-400">{t("numeronDigitsLabel")}</span>
+                    <select
+                      value={numeronDigitCount}
+                      onChange={(event) => resetNumeron(normalizeNumeronDigitCount(event.target.value))}
+                      disabled={isPanelStartCounting("numeron")}
+                      className="w-full rounded-md border border-cyan-200/30 bg-slate-900/80 px-2 py-1 text-sm"
                     >
-                      {digit}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-4 flex items-center gap-3">
-                <div className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-4 py-2 text-lg tracking-[0.3em]">
-                  {numeronDraft.join("") || "---"}
+                      <option value={3}>3</option>
+                      <option value={4}>4</option>
+                    </select>
+                  </label>
+                  <div className="rounded-lg border border-cyan-200/20 bg-slate-950/50 px-3 py-2 text-xs">
+                    <p className="tracking-wide text-slate-400">{t("numeronTryLabel")}</p>
+                    <p className="mt-1 text-base font-semibold text-slate-100">{numeronHistory.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-cyan-200/20 bg-slate-950/50 px-3 py-2 text-xs">
+                    <p className="tracking-wide text-slate-400">{t("numeronLimitLabel")}</p>
+                    <p className="mt-1 text-base font-semibold text-slate-100">{numeronTryLimit}</p>
+                  </div>
+                  <div className="rounded-lg border border-cyan-200/20 bg-slate-950/50 px-3 py-2 text-xs">
+                    <p className="tracking-wide text-slate-400">{t("numeronCandidatesLabel")}</p>
+                    <p className="mt-1 text-base font-semibold text-slate-100">{numeronCandidateCount}</p>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setNumeronDraft([])}
-                  disabled={isNumeronOver || numeronDraft.length === 0}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("numeronClearDraft")}
-                </button>
-                <button
-                  type="button"
-                  onClick={onNumeronSubmit}
-                  disabled={isNumeronOver}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("numeronSubmitGuess")}
-                </button>
-              </div>
 
-              <div className="mt-5">
-                <p className="text-sm font-semibold">{t("numeronHistory")}</p>
-                <ul className="mt-2 space-y-1 text-sm text-slate-200">
-                  {numeronHistory.length === 0 ? (
-                    <li className="text-slate-400">-</li>
-                  ) : (
-                    numeronHistory.map((entry, index) => (
-                      <li key={`${entry.guess}-${entry.hits}-${entry.blows}-${index}`}>
-                        {index + 1}. {tf("numeronResult", { guess: entry.guess, hits: entry.hits, blows: entry.blows })}
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
+                {isNumeronSecretPanelOpen || !isNumeronSecretConfirmed ? (
+                  <div className="mt-4 rounded-xl border border-cyan-300/20 bg-slate-950/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs tracking-wide text-slate-400">{t("numeronSecretSetupTitle")}</p>
+                      {isNumeronSecretConfirmed ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsNumeronSecretPanelOpen(false)}
+                          className="rounded-md border border-cyan-200/35 px-2 py-1 text-xs"
+                        >
+                          {t("numeronCloseSecretEditor")}
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {Array.from({ length: numeronDigitCount }, (_, index) => {
+                        const value = numeronSecretDraft[index] ?? "-";
+                        const canBackTo = Boolean(numeronSecretDraft[index]);
+                        return (
+                          <button
+                            key={`numeron-secret-slot-${index}`}
+                            type="button"
+                            onClick={() => setNumeronSecretDraft((prev) => prev.slice(0, index))}
+                            disabled={!canBackTo || isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed}
+                            className="h-11 min-w-11 rounded-md border border-cyan-200/35 bg-slate-900/80 px-3 text-lg font-bold tracking-[0.22em] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {value}
+                          </button>
+                        );
+                      })}
+                    </div>
 
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {Array.from({ length: 10 }, (_, i) => String(i)).map((digit) => {
+                        const selected = numeronSecretDraft.includes(digit);
+                        return (
+                          <button
+                            key={`numeron-secret-digit-${digit}`}
+                            type="button"
+                            onClick={() => onNumeronPickSecretDigit(digit)}
+                            disabled={isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed || selected || numeronSecretDraft.length >= numeronDigitCount}
+                            className={`h-11 w-11 rounded-md border text-base font-semibold ${selected ? "border-amber-300/60 bg-amber-300/20" : "border-cyan-200/30 bg-cyan-400/10"}`}
+                          >
+                            {digit}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={onNumeronBackSecretDigit}
+                        disabled={isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed || numeronSecretDraft.length === 0}
+                        className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                      >
+                        {t("numeronBack")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onNumeronClearSecretDraft}
+                        disabled={isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed || numeronSecretDraft.length === 0}
+                        className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                      >
+                        {t("numeronClearDraft")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onNumeronSetSecret}
+                        disabled={isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed}
+                        className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                      >
+                        {t("numeronSecretSet")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onNumeronSetRandomSecret}
+                        disabled={isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed}
+                        className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                      >
+                        {t("numeronSecretRandom")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-cyan-300/20 bg-slate-950/35 px-3 py-2 text-xs text-cyan-100">
+                    <span>{t("numeronSecretReady")}</span>
+                  </div>
+                )}
+
+                <p className="mt-4 text-sm text-slate-200">{numeronMessage}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {t("numeronSecretLabel")}: {isNumeronOver ? numeronSecret : "*".repeat(numeronDigitCount)}
+                </p>
+
+                <div ref={numeronGuessPanelRef} className="mt-4 rounded-xl border border-cyan-300/20 bg-slate-950/40 p-3">
+                  <p className="text-xs tracking-wide text-slate-400">{t("numeronGuess")}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {Array.from({ length: numeronDigitCount }, (_, index) => {
+                      const value = numeronDraft[index] ?? "-";
+                      const canBackTo = Boolean(numeronDraft[index]);
+                      return (
+                        <button
+                          key={`numeron-slot-${index}`}
+                          type="button"
+                          onClick={() => setNumeronDraft((prev) => prev.slice(0, index))}
+                          disabled={!canBackTo || isNumeronOver || !isNumeronSecretConfirmed || Boolean(numeronPendingItem)}
+                          className="h-11 min-w-11 rounded-md border border-cyan-200/35 bg-slate-900/80 px-3 text-lg font-bold tracking-[0.22em] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {value}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {Array.from({ length: 10 }, (_, i) => String(i)).map((digit) => {
+                      const selected = numeronDraft.includes(digit);
+                      return (
+                        <button
+                          key={digit}
+                          type="button"
+                          onClick={() => onNumeronPickDigit(digit)}
+                          disabled={isNumeronOver || !isNumeronSecretConfirmed || Boolean(numeronPendingItem) || selected || numeronDraft.length >= numeronDigitCount}
+                          className={`h-11 w-11 rounded-md border text-base font-semibold ${selected ? "border-amber-300/60 bg-amber-300/20" : "border-cyan-200/30 bg-cyan-400/10"}`}
+                        >
+                          {digit}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onNumeronBackDigit}
+                    disabled={isNumeronOver || !isNumeronSecretConfirmed || Boolean(numeronPendingItem) || numeronDraft.length === 0}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("numeronBack")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNumeronDraft([])}
+                    disabled={isNumeronOver || !isNumeronSecretConfirmed || Boolean(numeronPendingItem) || numeronDraft.length === 0}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("numeronClearDraft")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onNumeronSubmit}
+                    disabled={isNumeronOver || !isNumeronSecretConfirmed || Boolean(numeronPendingItem)}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("numeronSubmitGuess")}
+                  </button>
+                </div>
+
+                <p className="mt-2 text-xs text-slate-500">0-9 / Backspace / Delete / Enter キー対応</p>
+
+                <div className="mt-5 rounded-xl border border-amber-300/20 bg-amber-300/5 p-3">
+                  <p className="text-sm font-semibold text-amber-100">{t("numeronAssistTitle")}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    <label className="flex items-center gap-2">
+                      <span className="text-xs text-amber-50/85">{t("numeronHighLowDigit")}</span>
+                      <select
+                        value={numeronHintDigit}
+                        onChange={(event) => setNumeronHintDigit(event.target.value)}
+                        disabled={isNumeronOver}
+                        className="rounded-md border border-amber-200/40 bg-slate-900/85 px-2 py-1"
+                      >
+                        {Array.from({ length: 10 }, (_, i) => String(i)).map((digit) => (
+                          <option key={`numeron-hl-${digit}`} value={digit}>{digit}</option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={onNumeronUseHighLow}
+                      disabled={isNumeronOver || numeronAssistCharges.highlow <= 0 || Boolean(numeronPendingItem)}
+                      className="rounded-md border border-amber-200/45 px-3 py-1"
+                    >
+                      {t("numeronUseHighLow")} ({numeronAssistCharges.highlow})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onNumeronUseReveal}
+                      disabled={isNumeronOver || numeronAssistCharges.reveal <= 0 || Boolean(numeronPendingItem)}
+                      className="rounded-md border border-amber-200/45 px-3 py-1"
+                    >
+                      {t("numeronUseReveal")} ({numeronAssistCharges.reveal})
+                    </button>
+                  </div>
+                  {numeronPendingItem ? (
+                    <div className="mt-3 rounded-md border border-amber-200/25 bg-amber-100/5 p-2">
+                      <p className="text-xs text-amber-50/90">
+                        {numeronPendingItem === "highlow" ? t("numeronItemConfirmHighLow") : t("numeronItemConfirmReveal")}
+                      </p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={onNumeronConfirmItemUse}
+                          className="rounded-md border border-amber-200/50 px-2.5 py-1 text-xs"
+                        >
+                          {t("numeronItemUseYes")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onNumeronCancelItemUse}
+                          className="rounded-md border border-slate-400/40 px-2.5 py-1 text-xs"
+                        >
+                          {t("numeronItemUseNo")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </fieldset>
             </article>
 
-            
+            <article className="w-full max-w-[360px] justify-self-end rounded-2xl border border-slate-300/20 bg-slate-900/40 p-4">
+              <div className="grid gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-cyan-100">{t("numeronOpponentField")}</p>
+                  <div className="mt-2 rounded-lg border border-cyan-200/20 bg-slate-950/45 p-3">
+                    <p className="text-[11px] tracking-wide text-slate-400">{t("numeronSecretLabel")}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {Array.from({ length: numeronDigitCount }, (_, index) => (
+                        <span
+                          key={`numeron-op-secret-${index}`}
+                          className="inline-grid h-9 min-w-9 place-items-center rounded-md border border-cyan-200/25 bg-slate-900/80 px-2 text-base font-bold"
+                        >
+                          {isNumeronOver ? (numeronSecret[index] ?? "-") : "?"}
+                        </span>
+                      ))}
+                    </div>
+
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold text-emerald-100">{t("numeronYourField")}</p>
+                  <div className="mt-2 rounded-lg border border-emerald-200/20 bg-slate-950/45 p-3">
+                    <p className="text-[11px] tracking-wide text-slate-400">{t("numeronYourSecret")}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {Array.from({ length: numeronDigitCount }, (_, index) => {
+                        const value = isNumeronSecretConfirmed
+                          ? (numeronSecret[index] ?? "-")
+                          : (numeronSecretDraft[index] ?? "-");
+                        return (
+                          <span
+                            key={`numeron-my-secret-${index}`}
+                            className="inline-grid h-9 min-w-9 place-items-center rounded-md border border-emerald-200/25 bg-slate-900/80 px-2 text-base font-bold"
+                          >
+                            {value}
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    <p className="mt-3 text-[11px] tracking-wide text-slate-300">{t("numeronOpponentHistory")}</p>
+                    <ul className="mt-2 max-h-[210px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/35 p-2 text-sm text-slate-200">
+                      {numeronHistory.length === 0 ? (
+                        <li className="text-slate-400">-</li>
+                      ) : (
+                        numeronHistory.map((entry, index) => (
+                          <li key={`op-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="grid grid-cols-[2rem_1fr] gap-2">
+                            <span className="text-slate-500">{index + 1}.</span>
+                            <span>{tf("numeronResult", { guess: entry.guess, hits: entry.hits, blows: entry.blows })}</span>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+
+                    <p className="mt-3 text-sm font-semibold">MEMO</p>
+                    <textarea
+                      rows={7}
+                      placeholder="候補メモ"
+                      className="mt-2 w-full max-w-[320px] rounded-lg border border-slate-500/30 bg-slate-950/55 p-3 text-sm outline-none focus:border-cyan-300/45"
+                    />
+
+                    <div className="mt-3 rounded-md border border-emerald-200/20 bg-slate-950/35 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] tracking-wide text-slate-300">{t("numeronEnemyIncomingHistory")}</p>
+                        <button
+                          type="button"
+                          onClick={() => setIsNumeronEnemyHistoryOpen((prev) => !prev)}
+                          className="rounded-md border border-emerald-200/35 px-2 py-1 text-[11px]"
+                        >
+                          {isNumeronEnemyHistoryOpen ? t("numeronEnemyHistoryClose") : t("numeronEnemyHistoryOpen")}
+                        </button>
+                      </div>
+                      {isNumeronEnemyHistoryOpen ? (
+                        <ul className="mt-2 max-h-[160px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/40 p-2 text-xs text-slate-200">
+                          {numeronEnemyHistory.length === 0 ? (
+                            <li className="text-slate-400">-</li>
+                          ) : (
+                            numeronEnemyHistory.map((entry, index) => (
+                              <li key={`enemy-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="grid grid-cols-[1.6rem_1fr] gap-2">
+                                <span className="text-slate-500">{index + 1}.</span>
+                                <span>{tf("numeronEnemyResult", { guess: entry.guess, hits: entry.hits, blows: entry.blows })}</span>
+                              </li>
+                            ))
+                          )}
+                        </ul>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
           </section>
         ) : null}
 
@@ -10989,9 +14048,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("blackjack", resetBlackjack)}
+                    disabled={isPanelStartCounting("blackjack")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("blackjack")}
                   </button>
                   <button
                     type="button"
@@ -11010,12 +14070,92 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.blackjack ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.blackjack} className={!gameStarted.blackjack ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.blackjack ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
+
+              <div className="mb-3 grid gap-2 rounded-xl border border-cyan-200/20 bg-slate-950/35 p-3">
+                <div className="grid gap-2 text-xs text-slate-200 sm:grid-cols-3">
+                  <div className="rounded-md border border-cyan-200/25 bg-slate-900/65 px-3 py-2">
+                    <p className="text-[10px] tracking-wide text-cyan-100/70">BANK</p>
+                    <p className="mt-1 text-base font-bold text-cyan-100">{formatChip(casinoBankroll)}</p>
+                  </div>
+                  <div className="rounded-md border border-cyan-200/25 bg-slate-900/65 px-3 py-2">
+                    <p className="text-[10px] tracking-wide text-cyan-100/70">BET</p>
+                    <p className="mt-1 text-base font-bold text-cyan-100">{formatChip(blackjackBet)}</p>
+                  </div>
+                  <div className="rounded-md border border-cyan-200/25 bg-slate-900/65 px-3 py-2">
+                    <p className="text-[10px] tracking-wide text-cyan-100/70">WAGER</p>
+                    <p className="mt-1 text-base font-bold text-cyan-100">{formatChip(blackjackWager)}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setBlackjackBetByRatio(0.25)}
+                    disabled={isBlackjackRoundActive}
+                    className="rounded-md border border-slate-400/40 px-2 py-1 disabled:opacity-45"
+                  >
+                    25%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBlackjackBetByRatio(0.5)}
+                    disabled={isBlackjackRoundActive}
+                    className="rounded-md border border-slate-400/40 px-2 py-1 disabled:opacity-45"
+                  >
+                    50%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBlackjackBetByRatio(0.75)}
+                    disabled={isBlackjackRoundActive}
+                    className="rounded-md border border-slate-400/40 px-2 py-1 disabled:opacity-45"
+                  >
+                    75%
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-200">
+                <button
+                  type="button"
+                  onClick={() => stepBlackjackBet(-CASINO_BET_STEP)}
+                  disabled={isBlackjackRoundActive}
+                  className="rounded-md border border-slate-400/40 px-2 py-1 disabled:opacity-45"
+                >
+                  -{CASINO_BET_STEP}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stepBlackjackBet(CASINO_BET_STEP)}
+                  disabled={isBlackjackRoundActive}
+                  className="rounded-md border border-slate-400/40 px-2 py-1 disabled:opacity-45"
+                >
+                  +{CASINO_BET_STEP}
+                </button>
+                <button
+                  type="button"
+                  onClick={allInBlackjackBet}
+                  disabled={isBlackjackRoundActive}
+                  className="rounded-md border border-amber-300/50 px-2 py-1 text-amber-100 disabled:opacity-45"
+                >
+                  ALL IN
+                </button>
+                  {isBlackjackRoundActive ? <span className="text-amber-200/85">ラウンド中はベット変更できません</span> : null}
+                </div>
+              </div>
 
               <p className="text-sm text-slate-300">{blackjackMessage}</p>
 
-              <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
+              <div className="relative mt-4 grid gap-3 overflow-hidden rounded-[2rem] border-4 border-amber-200/25 bg-[radial-gradient(circle_at_28%_24%,rgba(74,222,128,0.28),rgba(6,78,59,0.92)_60%,rgba(2,44,34,0.98))] p-5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07),0_18px_30px_rgba(2,6,23,0.45)]">
+                <p className="pointer-events-none absolute inset-0 -mt-2 flex items-center justify-center text-4xl font-black tracking-[0.32em] text-amber-100/10">BLACKJACK</p>
+                {showCasinoWinBurst ? (
+                  <div className="pointer-events-none absolute inset-0">
+                    <span className="absolute left-[18%] top-[58%] h-3 w-3 animate-ping rounded-full bg-amber-300/80" />
+                    <span className="absolute left-[43%] top-[36%] h-2.5 w-2.5 animate-ping rounded-full bg-emerald-300/80 [animation-delay:120ms]" />
+                    <span className="absolute left-[72%] top-[61%] h-3 w-3 animate-ping rounded-full bg-rose-300/80 [animation-delay:220ms]" />
+                  </div>
+                ) : null}
                 <div>
                   <p className="text-sm font-semibold">{t("blackjackDealer")} ({blackjackHandValue(blackjackDealerHand)})</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -11040,32 +14180,67 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+              <div className="mt-4 grid gap-2 rounded-xl border border-amber-200/30 bg-slate-950/45 p-3 text-xs text-amber-50/95 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
+                <p className="text-[11px] font-semibold tracking-[0.2em] text-amber-100/80">BET STATUS</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="rounded-md border border-emerald-200/35 bg-emerald-400/15 px-2 py-1.5 sm:min-w-0">
+                    <p className="text-[10px] tracking-wide text-emerald-100/80">BANK</p>
+                    <p className="text-base font-extrabold tabular-nums text-emerald-100 sm:text-sm">{formatChip(casinoBankroll)}</p>
+                  </div>
+                  <div className="rounded-md border border-amber-200/35 bg-amber-400/15 px-2 py-1.5 sm:min-w-0">
+                    <p className="text-[10px] tracking-wide text-amber-100/80">BET</p>
+                    <p className="text-base font-extrabold tabular-nums text-amber-100 sm:text-sm">{formatChip(blackjackBet)}</p>
+                  </div>
+                  <div className="rounded-md border border-cyan-200/35 bg-cyan-400/15 px-2 py-1.5 sm:min-w-0">
+                    <p className="text-[10px] tracking-wide text-cyan-100/80">WAGER</p>
+                    <p className="text-base font-extrabold tabular-nums text-cyan-100 sm:text-sm">{formatChip(blackjackWager)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <button
+                  type="button"
+                  onClick={onBlackjackDeal}
+                  disabled={isBlackjackDealerResolving || (!isBlackjackOver && blackjackPlayerHand.length > 0)}
+                  className="rounded-md border border-emerald-200/55 bg-emerald-300/85 px-3 py-1 font-semibold text-emerald-950 shadow-[0_2px_10px_rgba(16,185,129,0.35)] disabled:opacity-60"
+                >
+                  BET
+                </button>
                 <button
                   type="button"
                   onClick={onBlackjackHit}
-                  disabled={isBlackjackOver || blackjackDeck.length === 0}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
+                  disabled={isBlackjackDealerResolving || isBlackjackOver || blackjackDeck.length === 0 || blackjackPlayerHand.length === 0}
+                  className="rounded-md border border-rose-200/55 bg-rose-300/80 px-3 py-1 font-semibold text-rose-950 shadow-[0_2px_10px_rgba(244,63,94,0.28)] disabled:opacity-60"
                 >
                   {t("blackjackHit")}
                 </button>
                 <button
                   type="button"
                   onClick={onBlackjackStand}
-                  disabled={isBlackjackOver}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
+                  disabled={isBlackjackDealerResolving || isBlackjackOver || blackjackPlayerHand.length === 0}
+                  className="rounded-md border border-slate-200/45 bg-slate-800/90 px-3 py-1 font-semibold text-slate-100 shadow-[0_2px_10px_rgba(15,23,42,0.35)] disabled:opacity-60"
                 >
                   {t("blackjackStand")}
                 </button>
+                <button
+                  type="button"
+                  onClick={onBlackjackDouble}
+                  disabled={isBlackjackDealerResolving || isBlackjackOver || blackjackPlayerHand.length !== 2 || casinoBankroll < blackjackWager}
+                  className="rounded-md border border-amber-200/55 bg-amber-300/80 px-3 py-1 font-semibold text-amber-950 shadow-[0_2px_10px_rgba(245,158,11,0.28)] disabled:opacity-60"
+                >
+                  DOUBLE
+                </button>
               </div>
               </fieldset>
+              )}
             </article>
 
             
           </section>
         ) : null}
 
-        {activePanel === "chinchiro" ? (
+        {CHINCHIRO_VISIBLE && activePanel === "chinchiro" ? (
           <section className="grid gap-5">
             <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
@@ -11074,9 +14249,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("chinchiro", resetChinchiro)}
+                    disabled={isPanelStartCounting("chinchiro")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("chinchiro")}
                   </button>
                   <button
                     type="button"
@@ -11095,8 +14271,38 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.chinchiro ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.chinchiro} className={!gameStarted.chinchiro ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.chinchiro ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
+
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-200">
+                <span className="rounded-md bg-slate-800/70 px-2 py-1">BANK: {casinoBankroll}</span>
+                <span className="rounded-md bg-slate-800/70 px-2 py-1">BET: {chinchiroBet}</span>
+                <span className="rounded-md bg-slate-800/70 px-2 py-1">WAGER: {chinchiroWager}</span>
+                <button
+                  type="button"
+                  onClick={() => stepChinchiroBet(-CASINO_BET_STEP)}
+                  disabled={!isChinchiroOver && chinchiroWager > 0}
+                  className="rounded-md border border-slate-400/40 px-2 py-1 disabled:opacity-45"
+                >
+                  -{CASINO_BET_STEP}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stepChinchiroBet(CASINO_BET_STEP)}
+                  disabled={!isChinchiroOver && chinchiroWager > 0}
+                  className="rounded-md border border-slate-400/40 px-2 py-1 disabled:opacity-45"
+                >
+                  +{CASINO_BET_STEP}
+                </button>
+                <button
+                  type="button"
+                  onClick={allInChinchiroBet}
+                  disabled={!isChinchiroOver && chinchiroWager > 0}
+                  className="rounded-md border border-amber-300/50 px-2 py-1 text-amber-100 disabled:opacity-45"
+                >
+                  ALL IN
+                </button>
+              </div>
 
               <p className="text-sm text-slate-300">{chinchiroMessage}</p>
 
@@ -11120,6 +14326,7 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
+              )}
             </article>
 
             
@@ -11135,9 +14342,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("sevens", resetSevens)}
+                    disabled={isPanelStartCounting("sevens")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("sevens")}
                   </button>
                   <button
                     type="button"
@@ -11156,8 +14364,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.sevens ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.sevens} className={!gameStarted.sevens ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.sevens ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
 
               <p className="text-sm text-slate-300">{sevensMessage}</p>
 
@@ -11222,6 +14430,7 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
+              )}
             </article>
 
             
@@ -11237,9 +14446,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("daifugo", resetDaifugo)}
+                    disabled={isPanelStartCounting("daifugo")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("daifugo")}
                   </button>
                   <button
                     type="button"
@@ -11258,8 +14468,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.daifugo ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.daifugo} className={!gameStarted.daifugo ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.daifugo ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
 
               <p className="text-sm text-slate-300">{daifugoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateDaifugoNow)}</p> : null}
@@ -11308,6 +14518,7 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
+              )}
             </article>
 
             
@@ -11315,17 +14526,18 @@ export default function Home() {
         ) : null}
 
         {activePanel === "fourPanel" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-[110rem] rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("fourPanelTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => startPanelGame("fourPanel", resetFourPanel)}
+                    disabled={isPanelStartCounting("fourPanel")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("fourPanel")}
                   </button>
                   <button
                     type="button"
@@ -11344,29 +14556,134 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <label className="grid gap-1 text-sm text-slate-300">
+                  <span>{t("fourPanelStoryTitle")}</span>
+                  <input
+                    list="four-panel-title-list"
+                    value={fourPanelTitle}
+                    onChange={(event) => setFourPanelTitle(event.currentTarget.value.slice(0, 40))}
+                    onBlur={(event) => setFourPanelTitle(normalizeFourPanelTitle(event.currentTarget.value))}
+                    maxLength={40}
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-3 py-2 text-sm"
+                    placeholder="お題を入力"
+                  />
+                  <datalist id="four-panel-title-list">
+                    {FOUR_PANEL_RANDOM_TITLES.map((title) => (
+                      <option key={`four-panel-title-${title}`} value={title} />
+                    ))}
+                  </datalist>
+                </label>
+                <button
+                  type="button"
+                  onClick={randomizeFourPanelTitle}
+                  className="rounded-md border border-cyan-200/40 px-3 py-2 text-sm"
+                >
+                  ランダム
+                </button>
+              </div>
+
               {!gameStarted.fourPanel ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
               <fieldset disabled={!gameStarted.fourPanel} className={!gameStarted.fourPanel ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
 
-              <p className="text-sm text-slate-300">{t("fourPanelStoryTitle")}: {fourPanelTitle}</p>
+              <p className="mt-2 text-sm text-slate-300">{t("fourPanelStoryTitle")}: {fourPanelResolvedTitle}</p>
               <p className="mt-1 text-sm text-slate-300">{fourPanelMessage}</p>
 
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-200">
+                <label className="ml-1 inline-flex items-center gap-1 rounded-md bg-slate-800/80 px-2 py-1">
+                  <span>SIZE</span>
+                  <input
+                    type="range"
+                    min={BRUSH_SIZE_MIN}
+                    max={BRUSH_SIZE_MAX}
+                    step={1}
+                    value={fourPanelBrushSize}
+                    onChange={(event) => setFourPanelBrushSize(clampBrushSize(Number(event.currentTarget.value)))}
+                    className="h-4 w-28 accent-cyan-300"
+                  />
+                  <input
+                    type="number"
+                    min={BRUSH_SIZE_MIN}
+                    max={BRUSH_SIZE_MAX}
+                    step={1}
+                    value={fourPanelBrushSize}
+                    onChange={(event) => setFourPanelBrushSize(clampBrushSize(Number(event.currentTarget.value)))}
+                    className="w-14 rounded border border-slate-400/40 bg-slate-950/70 px-1 py-0.5 text-right text-xs text-slate-100"
+                  />
+                </label>
+                <label className="ml-1 inline-flex items-center gap-2 rounded-md bg-slate-800/80 px-2 py-1">
+                  <span>COLOR</span>
+                  <input
+                    type="color"
+                    value={fourPanelBrushColor}
+                    onChange={(event) => setFourPanelBrushColor(event.currentTarget.value)}
+                    className="h-6 w-8 cursor-pointer rounded border border-slate-300/50 bg-transparent p-0"
+                  />
+                  <span className="w-16 text-right uppercase">{fourPanelBrushColor}</span>
+                </label>
+                <label className="ml-1 inline-flex items-center gap-1 rounded-md bg-slate-800/80 px-2 py-1">
+                  <span>ALPHA</span>
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={fourPanelBrushOpacity}
+                    onChange={(event) => setFourPanelBrushOpacity(Number(event.currentTarget.value))}
+                    className="h-4 w-20 accent-cyan-300"
+                  />
+                  <span className="w-9 text-right">{fourPanelBrushOpacity}%</span>
+                </label>
+              </div>
+
               <div className="mt-4 rounded-xl border border-slate-500/40 bg-white p-2">
-                <canvas
-                  ref={fourPanelCanvasRef}
-                  width={720}
-                  height={360}
-                  onPointerDown={onFourPanelPointerDown}
-                  onPointerMove={onFourPanelPointerMove}
-                  onPointerUp={onFourPanelPointerUp}
-                  onPointerLeave={onFourPanelPointerUp}
-                  className="h-auto w-full rounded bg-white"
-                />
+                <div className="relative">
+                  <canvas
+                    ref={fourPanelCanvasRef}
+                    width={720}
+                    height={360}
+                    onPointerDown={onFourPanelPointerDown}
+                    onPointerEnter={onFourPanelPointerEnter}
+                    onPointerMove={onFourPanelPointerMove}
+                    onPointerUp={onFourPanelPointerUp}
+                    onPointerLeave={onFourPanelPointerLeave}
+                    className="h-auto w-full cursor-none rounded bg-white"
+                  />
+                  {fourPanelCursor.visible ? (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute z-10 rounded-md border border-slate-900/70 bg-slate-950/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-cyan-100"
+                      style={{
+                        left: Math.round(fourPanelCursor.x) + 10,
+                        top: Math.round(fourPanelCursor.y) - 16,
+                        boxShadow: "0 2px 6px rgba(15, 23, 42, 0.35)",
+                      }}
+                    >
+                      {fourPanelCursor.size}px
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                 <button
                   type="button"
-                  onClick={clearFourPanelCanvas}
+                  onClick={undoFourPanelStroke}
+                  className="rounded-md border border-cyan-200/40 px-3 py-1"
+                >
+                  {t("fourPanelUndoStroke")}
+                </button>
+                <button
+                  type="button"
+                  onClick={undoFourPanelPanel}
+                  disabled={fourPanelImages.length <= 0}
+                  className="rounded-md border border-cyan-200/40 px-3 py-1 disabled:opacity-45"
+                >
+                  {t("fourPanelUndoPanel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => clearFourPanelCanvas({ recordUndo: true })}
                   disabled={fourPanelIndex >= 4}
                   className="rounded-md border border-cyan-200/40 px-3 py-1"
                 >
@@ -11384,6 +14701,7 @@ export default function Home() {
                   {tf("fourPanelProgress", { current: Math.min(4, fourPanelIndex + 1) })}
                 </span>
               </div>
+              <p className="mt-1 text-xs text-slate-400">{t("fourPanelShortcutHint")}</p>
 
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {Array.from({ length: 4 }, (_, i) => {
@@ -11408,17 +14726,18 @@ export default function Home() {
         ) : null}
 
         {activePanel === "drawingRelay" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-[110rem] rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("drawingRelayTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => startPanelGame("drawingRelay", resetDrawingRelay)}
+                    disabled={isPanelStartCounting("drawingRelay")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("drawingRelay")}
                   </button>
                   <button
                     type="button"
@@ -11444,17 +14763,82 @@ export default function Home() {
               <p className="mt-1 text-sm text-slate-300">{drawingRelayMessage}</p>
 
               {drawingRelayPhase === "draw" ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-200">
+                  <label className="ml-1 inline-flex items-center gap-1 rounded-md bg-slate-800/80 px-2 py-1">
+                    <span>SIZE</span>
+                    <input
+                      type="range"
+                      min={BRUSH_SIZE_MIN}
+                      max={BRUSH_SIZE_MAX}
+                      step={1}
+                      value={drawingRelayBrushSize}
+                      onChange={(event) => setDrawingRelayBrushSize(clampBrushSize(Number(event.currentTarget.value)))}
+                      className="h-4 w-28 accent-cyan-300"
+                    />
+                    <input
+                      type="number"
+                      min={BRUSH_SIZE_MIN}
+                      max={BRUSH_SIZE_MAX}
+                      step={1}
+                      value={drawingRelayBrushSize}
+                      onChange={(event) => setDrawingRelayBrushSize(clampBrushSize(Number(event.currentTarget.value)))}
+                      className="w-14 rounded border border-slate-400/40 bg-slate-950/70 px-1 py-0.5 text-right text-xs text-slate-100"
+                    />
+                  </label>
+                  <label className="ml-1 inline-flex items-center gap-2 rounded-md bg-slate-800/80 px-2 py-1">
+                    <span>COLOR</span>
+                    <input
+                      type="color"
+                      value={drawingRelayBrushColor}
+                      onChange={(event) => setDrawingRelayBrushColor(event.currentTarget.value)}
+                      className="h-6 w-8 cursor-pointer rounded border border-slate-300/50 bg-transparent p-0"
+                    />
+                    <span className="w-16 text-right uppercase">{drawingRelayBrushColor}</span>
+                  </label>
+                  <label className="ml-1 inline-flex items-center gap-1 rounded-md bg-slate-800/80 px-2 py-1">
+                    <span>ALPHA</span>
+                    <input
+                      type="range"
+                      min={10}
+                      max={100}
+                      step={5}
+                      value={drawingRelayBrushOpacity}
+                      onChange={(event) => setDrawingRelayBrushOpacity(Number(event.currentTarget.value))}
+                      className="h-4 w-20 accent-cyan-300"
+                    />
+                    <span className="w-9 text-right">{drawingRelayBrushOpacity}%</span>
+                  </label>
+                </div>
+              ) : null}
+
+              {drawingRelayPhase === "draw" ? (
                 <div className="mt-4 rounded-xl border border-slate-500/40 bg-white p-2">
-                  <canvas
-                    ref={drawingRelayCanvasRef}
-                    width={720}
-                    height={360}
-                    onPointerDown={onDrawingRelayPointerDown}
-                    onPointerMove={onDrawingRelayPointerMove}
-                    onPointerUp={onDrawingRelayPointerUp}
-                    onPointerLeave={onDrawingRelayPointerUp}
-                    className="h-auto w-full rounded bg-white"
-                  />
+                  <div className="relative">
+                    <canvas
+                      ref={drawingRelayCanvasRef}
+                      width={720}
+                      height={360}
+                      onPointerDown={onDrawingRelayPointerDown}
+                      onPointerEnter={onDrawingRelayPointerEnter}
+                      onPointerMove={onDrawingRelayPointerMove}
+                      onPointerUp={onDrawingRelayPointerUp}
+                      onPointerLeave={onDrawingRelayPointerLeave}
+                      className="h-auto w-full cursor-none rounded bg-white"
+                    />
+                    {drawingRelayCursor.visible ? (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute z-10 rounded-md border border-slate-900/70 bg-slate-950/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-cyan-100"
+                        style={{
+                          left: Math.round(drawingRelayCursor.x) + 10,
+                          top: Math.round(drawingRelayCursor.y) - 16,
+                          boxShadow: "0 2px 6px rgba(15, 23, 42, 0.35)",
+                        }}
+                      >
+                        {drawingRelayCursor.size}px
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
 
@@ -11516,60 +14900,27 @@ export default function Home() {
         ) : null}
 
         {activePanel === "fitPuzzle" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-[110rem] rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("fitPuzzleTitle")}</h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => startPanelGame("fitPuzzle", resetFitPuzzle)}
-                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
-                  >
-                    {t("gameStart")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => runWithResetGuard("fitPuzzle", resetFitPuzzle)}
-                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                  >
-                    {t("fitPuzzleReset")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleBackToMenuClick}
-                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                  >
-                    {t("backToMenu")}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleBackToMenuClick}
+                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                >
+                  {t("backToMenu")}
+                </button>
               </div>
 
-              {!gameStarted.fitPuzzle ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.fitPuzzle} className={!gameStarted.fitPuzzle ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
-
-              <p className="text-sm text-slate-300">{fitPuzzleMessage}</p>
-              <p className="mt-1 text-sm text-slate-300">{t("fitPuzzleMoves")}: {fitPuzzleMoves}</p>
-
-              <div className="mt-4 grid max-w-[360px] grid-cols-3 gap-2">
-                {fitPuzzleTiles.map((tile, index) => {
-                  const blankIndex = fitPuzzleTiles.indexOf(0);
-                  const movable = tile !== 0 && fitPuzzleCanMove(index, blankIndex);
-                  return (
-                    <button
-                      key={`fit-${index}-${tile}`}
-                      type="button"
-                      onClick={() => onFitPuzzleTileClick(index)}
-                      disabled={tile === 0 || isFitPuzzleOver}
-                      className={`aspect-square rounded-lg border text-lg font-semibold ${tile === 0 ? "border-slate-700/30 bg-slate-950/20" : movable ? "border-cyan-300/50 bg-cyan-400/10" : "border-slate-500/40 bg-slate-800/60"}`}
-                    >
-                      {tile === 0 ? "" : tile}
-                    </button>
-                  );
-                })}
+              <div className="mt-3">
+                <LegacyFitPuzzle
+                  onBackToMenu={handleBackToMenuDirect}
+                  language={language}
+                  onFitPuzzleProgressRequest={requestFitPuzzleProgress}
+                  onFitPuzzleProgressSave={saveFitPuzzleProgress}
+                />
               </div>
-
-              </fieldset>
             </article>
 
             
@@ -11577,17 +14928,18 @@ export default function Home() {
         ) : null}
 
         {activePanel === "mahjong" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-[110rem] rounded-2xl border border-emerald-200/25 bg-gradient-to-b from-emerald-950/70 via-emerald-900/55 to-slate-900/65 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("mahjongTitle")}</h2>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => startPanelGame("mahjong", resetMahjong)}
+                    disabled={isPanelStartCounting("mahjong")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("mahjong")}
                   </button>
                   <button
                     type="button"
@@ -11617,6 +14969,13 @@ export default function Home() {
                   >
                     {t("mahjongHintButton")}
                   </button>
+                  <button
+                    type="button"
+                    onClick={onMahjongTsumo}
+                    className="rounded-md border border-emerald-200/40 px-3 py-1 text-sm"
+                  >
+                    {t("mahjongTsumo")}
+                  </button>
                 </div>
               </div>
 
@@ -11624,38 +14983,142 @@ export default function Home() {
               <fieldset disabled={!gameStarted.mahjong} className={!gameStarted.mahjong ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
 
               <p className="text-sm text-slate-300">{mahjongMessage}</p>
-              <p className="mt-1 text-sm text-slate-300">{tf("mahjongRemaining", { count: mahjongRemainingCount(mahjongBoard) })}</p>
+              <div className="mt-2 rounded-xl border border-emerald-300/25 bg-emerald-950/35 p-3">
+                <div className="grid gap-2 text-xs text-emerald-50 sm:grid-cols-2 lg:grid-cols-7">
+                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
+                    <span className="text-emerald-100/70">{t("mahjongRound")}</span>
+                    <p className="mt-0.5 text-sm font-semibold">{mahjongRoundWind}{mahjongRoundNumber}</p>
+                  </div>
+                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
+                    <span className="text-emerald-100/70">{t("mahjongSeat")}</span>
+                    <p className="mt-0.5 text-sm font-semibold">{mahjongSeatWind}</p>
+                  </div>
+                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
+                    <span className="text-emerald-100/70">{t("mahjongHonba")}</span>
+                    <p className="mt-0.5 text-sm font-semibold">{mahjongHonba}</p>
+                  </div>
+                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
+                    <span className="text-emerald-100/70">{t("mahjongKyotaku")}</span>
+                    <p className="mt-0.5 text-sm font-semibold">{mahjongKyotaku}</p>
+                  </div>
+                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
+                    <span className="text-emerald-100/70">{t("mahjongJunme")}</span>
+                    <p className="mt-0.5 text-sm font-semibold">{mahjongRiver.length + 1}</p>
+                  </div>
+                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
+                    <span className="text-emerald-100/70">{t("mahjongDora")}</span>
+                    {mahjongDoraIndicator === null ? (
+                      <p className="mt-0.5 text-sm font-semibold">-</p>
+                    ) : (
+                      <div className="relative mt-0.5 inline-flex h-12 w-8 items-center justify-center overflow-hidden rounded border border-stone-300 bg-gradient-to-b from-white via-stone-100 to-stone-200 px-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(0,0,0,0.25)]">
+                        <span className="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-stone-300/70" />
+                        <span className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/80" />
+                        <span className="relative z-10">{renderMahjongTileArt(mahjongDoraIndicator, true)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
+                    <span className="text-emerald-100/70">{t("mahjongWall")}</span>
+                    <p className="mt-0.5 text-sm font-semibold">{tf("mahjongRemaining", { count: mahjongRemainingCount(mahjongWall) })}</p>
+                  </div>
+                </div>
 
-              <div
-                className="mt-4 grid gap-2"
-                style={{ gridTemplateColumns: `repeat(${MAHJONG_COLS}, minmax(0, 1fr))` }}
-              >
-                {mahjongBoard.flatMap((row, rowIndex) =>
-                  row.map((tile, colIndex) => {
-                    if (tile === null) {
+                <p className="mt-3 text-sm text-emerald-100/85">{t("mahjongWall")}: {mahjongWall.length}</p>
+              </div>
+
+              {mahjongWinSummary ? (
+                <div className="mt-3 rounded-xl border border-emerald-300/30 bg-emerald-500/10 p-3 text-sm text-emerald-50">
+                  <p className="font-semibold">{t("mahjongResultTitle")}</p>
+                  <p className="mt-1 text-emerald-100/90">
+                    {mahjongWinSummary.isYakuman
+                      ? t("mahjongResultYakuman")
+                      : tf("mahjongResultHanFu", { han: mahjongWinSummary.han, fu: mahjongWinSummary.fu })}
+                  </p>
+                  <p className="text-emerald-100/90">{tf("mahjongResultPoint", { point: mahjongWinSummary.point })}</p>
+                  <p className="mt-1 text-xs text-emerald-100/80">
+                    {mahjongWinSummary.yakuKeys.map((key) => t(key)).join(" / ")}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onMahjongApplyScore}
+                    className="mt-3 rounded-md border border-emerald-200/50 px-3 py-1 text-xs font-semibold"
+                  >
+                    {t("mahjongApplyScore")}
+                  </button>
+                </div>
+              ) : null}
+
+              <p className="mt-4 text-xs uppercase tracking-wide text-slate-400">{t("mahjongOpponent")}</p>
+              <div className="mt-2 rounded-xl border border-emerald-200/20 bg-emerald-900/30 p-3">
+                <p className="text-lg font-semibold text-emerald-100">13</p>
+              </div>
+
+              <p className="mt-4 text-xs uppercase tracking-wide text-slate-400">{t("mahjongHand")}</p>
+              <div className="mt-2 rounded-xl border border-emerald-200/20 bg-emerald-900/35 p-3">
+              <div className="flex flex-wrap gap-2">
+                {(mahjongBoard.length >= 14 ? mahjongBoard.slice(0, 13) : mahjongBoard).map((tile, index) => {
+                  const selected = mahjongSelected === index;
+                  return (
+                    <button
+                      key={`mahjong-hand-${index}-${tile}`}
+                      type="button"
+                      onClick={() => onMahjongTileClick(index)}
+                      disabled={isMahjongOver}
+                      className={`relative h-[4.8rem] w-10 overflow-hidden rounded-md border bg-gradient-to-b from-white via-stone-100 to-stone-200 px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(0,0,0,0.3)] transition ${selected ? "-translate-y-1 border-cyan-400 ring-2 ring-cyan-300/70" : "border-stone-300 hover:-translate-y-0.5"}`}
+                    >
+                      <span className="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-stone-300/70" />
+                      <span className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/80" />
+                      <span className="relative z-10">{renderMahjongTileArt(tile)}</span>
+                    </button>
+                  );
+                })}
+                {mahjongBoard.length >= 14 ? (
+                  <>
+                    <div className="mx-1 h-[4.8rem] w-px self-center bg-emerald-100/25" />
+                    {(() => {
+                      const index = mahjongBoard.length - 1;
+                      const tile = mahjongBoard[index];
+                      const selected = mahjongSelected === index;
                       return (
-                        <div
-                          key={`mahjong-empty-${rowIndex}-${colIndex}`}
-                          className="aspect-[0.8] rounded-md border border-slate-700/30 bg-slate-950/20"
-                        />
+                        <button
+                          key={`mahjong-hand-tsumo-${index}-${tile}`}
+                          type="button"
+                          onClick={() => onMahjongTileClick(index)}
+                          disabled={isMahjongOver}
+                          className={`relative h-[4.8rem] w-10 overflow-hidden rounded-md border bg-gradient-to-b from-white via-stone-100 to-stone-200 px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(0,0,0,0.3)] transition ring-2 ring-amber-300 ${selected ? "-translate-y-1 border-cyan-400 ring-cyan-300/70" : "border-stone-300 hover:-translate-y-0.5"}`}
+                        >
+                          <span className="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-stone-300/70" />
+                          <span className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/80" />
+                          <span className="relative z-10">{renderMahjongTileArt(tile)}</span>
+                        </button>
                       );
-                    }
+                    })()}
+                  </>
+                ) : null}
+              </div>
+              </div>
 
-                    const selected = mahjongSelected?.row === rowIndex && mahjongSelected?.col === colIndex;
-
-                    return (
-                      <button
-                        key={`mahjong-${rowIndex}-${colIndex}-${tile}`}
-                        type="button"
-                        onClick={() => onMahjongTileClick(rowIndex, colIndex)}
-                        disabled={isMahjongOver}
-                        className={`aspect-[0.8] rounded-md border text-xs font-semibold sm:text-sm ${selected ? "border-cyan-200 bg-cyan-400/20" : "border-amber-200/40 bg-amber-400/10"}`}
-                      >
-                        {mahjongTileLabel(tile)}
-                      </button>
-                    );
-                  }),
+              <p className="mt-5 text-xs uppercase tracking-wide text-slate-400">{t("mahjongRiver")}</p>
+              <div className="mt-2 rounded-xl border border-emerald-200/20 bg-emerald-900/30 p-3">
+              {mahjongRiichiTileIndex !== null ? (
+                <p className="mb-2 text-[11px] font-semibold tracking-wide text-amber-200">{t("mahjongRiichi")}</p>
+              ) : null}
+              <div className="grid grid-cols-6 gap-1.5">
+                {mahjongRiver.length === 0 ? (
+                  <span className="col-span-full text-sm text-slate-400">-</span>
+                ) : (
+                  mahjongRiver.map((tile, index) => (
+                    <div
+                      key={`mahjong-river-${index}-${tile}`}
+                      className={`relative mx-auto h-14 w-9 overflow-hidden rounded border border-stone-300 bg-gradient-to-b from-white via-stone-100 to-stone-200 px-1 py-1 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(0,0,0,0.25)] transition ${index === mahjongRiichiTileIndex ? "rotate-90" : ""}`}
+                    >
+                      <span className="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-stone-300/70" />
+                      <span className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/80" />
+                      <span className="relative z-10">{renderMahjongTileArt(tile, true)}</span>
+                    </div>
+                  ))
                 )}
+              </div>
               </div>
 
               </fieldset>
@@ -11674,9 +15137,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("poker", resetPoker)}
+                    disabled={isPanelStartCounting("poker")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("poker")}
                   </button>
                   <button
                     type="button"
@@ -11695,12 +15159,87 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.poker ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.poker} className={!gameStarted.poker ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.poker ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
 
+              <div className="mb-3 grid gap-2 rounded-xl border border-cyan-200/20 bg-slate-950/35 p-3">
+                <div className="grid gap-2 text-xs text-slate-200 sm:grid-cols-3">
+                  <div className="rounded-md border border-cyan-200/25 bg-slate-900/65 px-3 py-2">
+                    <p className="text-[10px] tracking-wide text-cyan-100/70">BANK</p>
+                    <p className="mt-1 text-base font-bold text-cyan-100">{formatChip(casinoBankroll)}</p>
+                  </div>
+                  <div className="rounded-md border border-cyan-200/25 bg-slate-900/65 px-3 py-2">
+                    <p className="text-[10px] tracking-wide text-cyan-100/70">BET</p>
+                    <p className="mt-1 text-base font-bold text-cyan-100">{formatChip(pokerBet)}</p>
+                  </div>
+                  <div className="rounded-md border border-cyan-200/25 bg-slate-900/65 px-3 py-2">
+                    <p className="text-[10px] tracking-wide text-cyan-100/70">WAGER</p>
+                    <p className="mt-1 text-base font-bold text-cyan-100">{formatChip(pokerWager)}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPokerBetByRatio(0.25)}
+                    className="rounded-md border border-slate-400/40 px-2 py-1"
+                  >
+                    25%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPokerBetByRatio(0.5)}
+                    className="rounded-md border border-slate-400/40 px-2 py-1"
+                  >
+                    50%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPokerBetByRatio(0.75)}
+                    className="rounded-md border border-slate-400/40 px-2 py-1"
+                  >
+                    75%
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-200">
+                <button
+                  type="button"
+                  onClick={() => stepPokerBet(-CASINO_BET_STEP)}
+                  className="rounded-md border border-slate-400/40 px-2 py-1"
+                >
+                  -{CASINO_BET_STEP}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stepPokerBet(CASINO_BET_STEP)}
+                  className="rounded-md border border-slate-400/40 px-2 py-1"
+                >
+                  +{CASINO_BET_STEP}
+                </button>
+                <button
+                  type="button"
+                  onClick={allInPokerBet}
+                  className="rounded-md border border-amber-300/50 px-2 py-1 text-amber-100"
+                >
+                  ALL IN
+                </button>
+                  {isPokerRoundActive ? <span className="text-amber-200/85">進行中ラウンドには反映されません（次ラウンドから有効）</span> : null}
+                </div>
+              </div>
+
+              <p className="text-xs font-semibold tracking-[0.14em] text-amber-100/85">PHASE: {pokerPhaseLabel}</p>
               <p className="text-sm text-slate-300">{pokerMessage}</p>
 
-              <div className="mt-4 grid gap-4 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
+              <div className="relative mt-4 grid gap-4 overflow-hidden rounded-[2rem] border-4 border-amber-200/25 bg-[radial-gradient(circle_at_72%_22%,rgba(45,212,191,0.24),rgba(4,94,74,0.92)_58%,rgba(2,44,34,0.98))] p-5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07),0_18px_30px_rgba(2,6,23,0.45)]">
+                <p className="pointer-events-none absolute inset-0 -mt-2 flex items-center justify-center text-4xl font-black tracking-[0.32em] text-amber-100/10">POKER</p>
+                {showCasinoWinBurst ? (
+                  <div className="pointer-events-none absolute inset-0">
+                    <span className="absolute left-[23%] top-[62%] h-3 w-3 animate-ping rounded-full bg-amber-300/80" />
+                    <span className="absolute left-[52%] top-[40%] h-2.5 w-2.5 animate-ping rounded-full bg-cyan-300/80 [animation-delay:120ms]" />
+                    <span className="absolute left-[78%] top-[56%] h-3 w-3 animate-ping rounded-full bg-emerald-300/80 [animation-delay:220ms]" />
+                  </div>
+                ) : null}
                 <div>
                   <p className="text-sm font-semibold">{t("pokerPlayerHand")}</p>
                   <div className="mt-2 flex items-end overflow-x-auto pb-2 pr-2 pl-1">
@@ -11715,12 +15254,16 @@ export default function Home() {
                           <button
                             type="button"
                             aria-pressed={held}
-                            onClick={() => togglePokerHold(index)}
-                            disabled={pokerPhase !== "draw"}
+                            disabled
                             className={`origin-bottom rounded-md border p-1.5 text-sm transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 aria-pressed:-translate-y-2 ${held ? "border-cyan-200 bg-cyan-400/20" : "border-slate-400/30 bg-slate-800/40"}`}
                           >
-                            <span className="inline-flex items-center">
-                              {renderPlayingCardFace(pokerCardLabel(card))}
+                            <span className="inline-flex flex-col items-center gap-1">
+                              {pokerPhase === "betting"
+                                ? <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">🂠</span>
+                                : renderPlayingCardFace(pokerCardLabel(card))}
+                              <span className={`rounded px-1.5 py-[1px] text-[10px] ${held ? "bg-cyan-300/25 text-cyan-100" : "bg-slate-700/40 text-slate-400"}`}>
+                                {held ? t("pokerHeld") : ""}
+                              </span>
                             </span>
                           </button>
                         </span>
@@ -11737,34 +15280,72 @@ export default function Home() {
                         key={`poker-cpu-${card.suit}-${card.rank}-${index}`}
                         className="rounded-md border border-slate-400/30 bg-slate-800/40 px-3 py-2 text-sm"
                       >
-                        {pokerPhase === "result"
+                        {pokerPhase === "showdown"
                           ? renderPlayingCardFace(pokerCardLabel(card))
                           : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">??</span>}
                       </div>
                     ))}
                   </div>
                 </div>
+
+                <div>
+                  <p className="text-sm font-semibold">COMMUNITY</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {Array.from({ length: 5 }).map((_, index) => {
+                      const card = pokerCommunity[index];
+                      return (
+                        <div
+                          key={`poker-community-${index}`}
+                          className="rounded-md border border-slate-400/30 bg-slate-800/40 px-3 py-2 text-sm"
+                        >
+                          {card
+                            ? renderPlayingCardFace(pokerCardLabel(card))
+                            : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">?</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+              <div className="mt-4 grid gap-2 rounded-xl border border-amber-200/30 bg-slate-950/45 p-3 text-xs text-amber-50/95 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
+                <p className="text-[11px] font-semibold tracking-[0.2em] text-amber-100/80">BET STATUS</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="rounded-md border border-emerald-200/35 bg-emerald-400/15 px-2 py-1.5 sm:min-w-0">
+                    <p className="text-[10px] tracking-wide text-emerald-100/80">BANK</p>
+                    <p className="text-base font-extrabold tabular-nums text-emerald-100 sm:text-sm">{formatChip(casinoBankroll)}</p>
+                  </div>
+                  <div className="rounded-md border border-amber-200/35 bg-amber-400/15 px-2 py-1.5 sm:min-w-0">
+                    <p className="text-[10px] tracking-wide text-amber-100/80">BET</p>
+                    <p className="text-base font-extrabold tabular-nums text-amber-100 sm:text-sm">{formatChip(pokerBet)}</p>
+                  </div>
+                  <div className="rounded-md border border-cyan-200/35 bg-cyan-400/15 px-2 py-1.5 sm:min-w-0">
+                    <p className="text-[10px] tracking-wide text-cyan-100/80">WAGER</p>
+                    <p className="text-base font-extrabold tabular-nums text-cyan-100 sm:text-sm">{formatChip(pokerWager)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
                 <button
                   type="button"
                   onClick={onPokerDraw}
-                  disabled={pokerPhase !== "draw"}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 disabled:opacity-60"
+                  disabled={pokerPhase === "showdown"}
+                  className="rounded-md border border-emerald-200/55 bg-emerald-300/85 px-3 py-1 font-semibold text-emerald-950 shadow-[0_2px_10px_rgba(16,185,129,0.35)] disabled:opacity-60"
                 >
-                  {t("pokerDraw")}
+                  {pokerActionLabel}
                 </button>
 
               </div>
 
-              {pokerPhase === "result" && pokerPlayerEval && pokerCpuEval ? (
+              {pokerPhase === "showdown" && pokerPlayerEval && pokerCpuEval ? (
                 <div className="mt-4 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4 text-sm text-slate-200">
                   <p>{t("pokerPlayerHand")}: {pokerHandName(pokerPlayerEval.name)}</p>
                   <p>{t("pokerCpuHand")}: {pokerHandName(pokerCpuEval.name)}</p>
                 </div>
               ) : null}
               </fieldset>
+              )}
             </article>
 
             
@@ -11780,9 +15361,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("solitaire", resetSolitaire)}
+                    disabled={isPanelStartCounting("solitaire")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("solitaire")}
                   </button>
                   <button
                     type="button"
@@ -11790,6 +15372,22 @@ export default function Home() {
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("solitaireReset")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={undoSolitaireMove}
+                    disabled={solitaireUndoStack.length === 0}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm disabled:opacity-45"
+                  >
+                    {t("solitaireUndo")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={autoClearSolitaire}
+                    disabled={!canOfferSolitaireAutoClear()}
+                    className="rounded-md border border-amber-300/50 bg-amber-300/15 px-3 py-1 text-sm font-semibold text-amber-100 disabled:opacity-45"
+                  >
+                    {t("solitaireAutoClear")}
                   </button>
                   <button
                     type="button"
@@ -11807,73 +15405,194 @@ export default function Home() {
               <p className="text-sm text-slate-300">{solitaireMessage}</p>
               <p className="mt-1 text-sm text-slate-300">{tf("solitaireFoundations", { count: foundationCount(solitaireFoundations) })}</p>
 
-              <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={drawSolitaireStock}
-                    className="rounded-md border border-slate-400/40 bg-slate-800/50 px-3 py-2 text-sm"
-                  >
-                    {t("solitaireStock")}: {solitaireStock.length}
-                  </button>
+              <div className="solitaire-wrap">
+                <div className="solitaire-top-row">
+                  <div className="solitaire-piles-left">
+                    <button
+                      type="button"
+                      onClick={drawSolitaireStock}
+                      className={`solitaire-slot ${solitaireStock.length > 0 ? "card-back" : ""}`}
+                      aria-label={t("solitaireStock")}
+                    >
+                      {solitaireStock.length > 0 ? "" : "↺"}
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={onSolitaireSelectWaste}
-                    className={`rounded-md border px-3 py-2 text-sm ${solitaireSelection?.from === "waste" ? "border-cyan-200 bg-cyan-400/20" : "border-slate-400/40 bg-slate-800/50"}`}
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <span>{t("solitaireWaste")}:</span>
-                      {solitaireWaste.length > 0 ? renderPlayingCardFace(solitaireCardLabel(solitaireWaste[solitaireWaste.length - 1] as SolitaireCard)) : <span>-</span>}
-                    </span>
-                  </button>
+                    {(() => {
+                      const wasteTop = solitaireWaste[solitaireWaste.length - 1];
+                      const wasteSelected = solitaireSelection?.from === "waste";
+                      const wasteDragging = solitaireDraggingSelection?.from === "waste";
+                      const wasteClass = wasteTop
+                        ? `solitaire-slot card-face ${solitaireIsRed(wasteTop.suit) ? "red" : ""} ${wasteSelected ? "selected" : ""} ${wasteDragging ? "drag-source" : ""}`
+                        : "solitaire-slot";
+                      return (
+                        <button
+                          type="button"
+                          onClick={onSolitaireSelectWaste}
+                          onDoubleClick={() => {
+                            if (isSolitaireOver || solitaireWaste.length <= 0) return;
+                            if (!tryAutoPlaceSolitaire({ from: "waste" })) {
+                              setSolitaireMessage(t("solitaireInvalidMove"));
+                            }
+                          }}
+                          draggable={Boolean(gameStarted.solitaire && wasteTop && !isSolitaireOver)}
+                          onDragStart={(e) => onSolitaireDragStart(e, { from: "waste" })}
+                          onDragEnd={onSolitaireDragEnd}
+                          className={wasteClass}
+                          aria-label={t("solitaireWaste")}
+                        >
+                          {wasteTop ? solitaireCardLabel(wasteTop) : "W"}
+                        </button>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="solitaire-foundations">
+                    {(["H", "D", "C", "S"] as SolitaireSuit[]).map((suit) => {
+                      const pile = solitaireFoundations[suit];
+                      const top = pile[pile.length - 1];
+                      const foundationSelected = solitaireSelection?.from === "foundation" && solitaireSelection.suit === suit;
+                      const foundationDragging = solitaireDraggingSelection?.from === "foundation" && solitaireDraggingSelection.suit === suit;
+                      const foundationDragTarget = solitaireDragOverTarget?.kind === "foundation" && solitaireDragOverTarget.suit === suit;
+                      const className = top
+                        ? `solitaire-slot card-face ${solitaireIsRed(top.suit) ? "red" : ""} ${foundationSelected ? "selected" : ""} ${foundationDragging ? "drag-source" : ""} ${foundationDragTarget ? "drag-target" : ""}`
+                        : `solitaire-slot ${foundationSelected ? "selected" : ""} ${foundationDragTarget ? "drag-target" : ""}`;
+                      return (
+                        <button
+                          key={`foundation-${suit}`}
+                          type="button"
+                          onClick={() => onSolitaireMoveToFoundation(suit)}
+                          draggable={Boolean(gameStarted.solitaire && top && !isSolitaireOver)}
+                          onDragStart={(e) => onSolitaireDragStart(e, { from: "foundation", suit })}
+                          onDragEnd={onSolitaireDragEnd}
+                          onDragOver={(e) => onSolitaireDragOverFoundation(e, suit)}
+                          onDrop={(e) => onSolitaireDropToFoundation(e, suit)}
+                          className={className}
+                          aria-label={`Foundation ${suit}`}
+                        >
+                          {top ? solitaireCardLabel(top) : solitaireSuitSymbol(suit)}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {(["H", "D", "C", "S"] as SolitaireSuit[]).map((suit) => {
-                    const pile = solitaireFoundations[suit];
-                    const top = pile[pile.length - 1];
-                    return (
-                      <button
-                        key={`foundation-${suit}`}
-                        type="button"
-                        onClick={() => onSolitaireMoveToFoundation(suit)}
-                        className="rounded-md border border-emerald-200/30 bg-emerald-400/10 px-3 py-2 text-sm"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          <span>{solitaireSuitSymbol(suit)}</span>
-                          {top ? renderPlayingCardFace(solitaireCardLabel(top), { compact: true }) : <span className="text-xs">A</span>}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  {solitaireTableau.map((pile, col) => {
-                    const top = pile[pile.length - 1];
-                    const selected = solitaireSelection?.from === "tableau" && solitaireSelection.col === col;
-                    return (
-                      <div key={`tableau-${col}`} className="rounded-md border border-slate-600/40 bg-slate-900/50 p-2">
+                <div className="solitaire-tableau" aria-label="Tableau">
+                  {solitaireTableau.map((pile, col) => (
+                    <div
+                      key={`tableau-${col}`}
+                      className={`solitaire-col ${solitaireDragOverTarget?.kind === "tableau" && solitaireDragOverTarget.col === col ? "drag-target" : ""}`}
+                    >
+                      {pile.length === 0 ? (
                         <button
                           type="button"
                           onClick={() => onSolitaireMoveToTableau(col)}
-                          className="w-full rounded border border-slate-500/40 bg-slate-800/40 px-2 py-1 text-xs"
+                          onDragOver={(e) => onSolitaireDragOverTableau(e, col)}
+                          onDrop={(e) => onSolitaireDropToTableau(e, col)}
+                          className="solitaire-tableau-card empty"
                         >
-                          TABLEAU {col + 1}
+                          
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => onSolitaireSelectTableau(col)}
-                          className={`mt-2 w-full rounded border px-2 py-2 text-sm ${selected ? "border-cyan-200 bg-cyan-400/20" : "border-slate-500/40 bg-slate-800/40"}`}
-                        >
-                          {top ? renderPlayingCardFace(solitaireCardLabel(top)) : "-"}
-                        </button>
-                        <p className="mt-1 text-xs text-slate-400">{pile.length} cards</p>
-                      </div>
-                    );
-                  })}
+                      ) : (
+                        pile.map((card, idx) => {
+                          const selectable = card.faceUp && isMovableSolitaireTableauStack(solitaireTableau, col, idx);
+                          const selected =
+                            solitaireSelection?.from === "tableau"
+                            && solitaireSelection.col === col
+                            && idx >= solitaireSelection.index;
+                          const dragging =
+                            solitaireDraggingSelection?.from === "tableau"
+                            && solitaireDraggingSelection.col === col
+                            && idx >= solitaireDraggingSelection.index;
+                          const classes = ["solitaire-tableau-card"];
+                          if (!card.faceUp) {
+                            classes.push("card-back");
+                          } else {
+                            classes.push("card-face");
+                            if (solitaireIsRed(card.suit)) classes.push("red");
+                          }
+                          if (selected) classes.push("selected");
+                          if (dragging) classes.push("drag-source");
+
+                          return (
+                            <button
+                              key={`tableau-${col}-${idx}`}
+                              type="button"
+                              onClick={() => {
+                                if (!card.faceUp) return;
+                                if (solitaireSelection && !selected) {
+                                  onSolitaireMoveToTableau(col);
+                                  return;
+                                }
+                                if (!selectable) {
+                                  setSolitaireMessage(t("solitaireInvalidMove"));
+                                  return;
+                                }
+                                onSolitaireSelectTableau(col, idx);
+                              }}
+                              onDoubleClick={() => {
+                                if (!card.faceUp || isSolitaireOver) return;
+                                const ref: SolitaireSelection = { from: "tableau", col, index: idx };
+                                if (!tryAutoPlaceSolitaire(ref)) {
+                                  setSolitaireMessage(t("solitaireInvalidMove"));
+                                }
+                              }}
+                              draggable={Boolean(gameStarted.solitaire && card.faceUp && selectable && !isSolitaireOver)}
+                              onDragStart={(e) => onSolitaireDragStart(e, { from: "tableau", col, index: idx })}
+                              onDragEnd={onSolitaireDragEnd}
+                              onDragOver={(e) => onSolitaireDragOverTableau(e, col)}
+                              onDrop={(e) => onSolitaireDropToTableau(e, col)}
+                              className={classes.join(" ")}
+                              style={{ marginTop: idx === 0 ? "0" : card.faceUp ? "var(--solitaire-overlap-face)" : "var(--solitaire-overlap-back)", zIndex: idx + 1 }}
+                            >
+                              {card.faceUp ? solitaireCardLabel(card) : ""}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  ))}
                 </div>
+
+                {solitaireFoundationFlights.length > 0 ? (
+                  <div className="solitaire-flight-layer" aria-hidden="true">
+                    {solitaireFoundationFlights.map((flight) => (
+                      <span
+                        key={flight.id}
+                        className={`solitaire-flight-card ${flight.red ? "red" : ""} ${flight.phase === "end" ? "is-end" : ""}`}
+                        style={{
+                          left: `${flight.phase === "end" ? flight.endX : flight.startX}%`,
+                          top: `${flight.phase === "end" ? flight.endY : flight.startY}%`,
+                          transitionDuration: `${flight.durationMs}ms`,
+                          transitionDelay: `${flight.delayMs}ms`,
+                        }}
+                      >
+                        {flight.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {solitairePartyPieces.length > 0 ? (
+                  <div className="solitaire-party-layer" aria-hidden="true">
+                    <div className="solitaire-party-burst">CLEAR!</div>
+                    {solitairePartyPieces.map((piece) => (
+                      <span
+                        key={piece.id}
+                        className="solitaire-party-piece"
+                        style={{
+                          left: `${piece.left}%`,
+                          background: piece.color,
+                          width: `${piece.size}px`,
+                          height: `${Math.max(4, piece.size * 0.55)}px`,
+                          animationDelay: `${piece.delay}s`,
+                          animationDuration: `${piece.duration}s`,
+                          ["--party-drift" as string]: `${piece.drift}vw`,
+                          ["--party-spin" as string]: `${piece.spin}deg`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               </fieldset>
@@ -11884,17 +15603,18 @@ export default function Home() {
         ) : null}
 
         {activePanel === "survivors" ? (
-          <section className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-            <article className="rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+          <section className="grid gap-5">
+            <article className="mx-auto w-full max-w-[110rem] rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("survivorsTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => startPanelGame("survivors", resetSurvivors)}
+                    disabled={isPanelStartCounting("survivors")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("survivors")}
                   </button>
                   <button
                     type="button"
@@ -11957,9 +15677,10 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => startPanelGame("uno", resetUno)}
+                    disabled={isPanelStartCounting("uno")}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {t("gameStart")}
+                    {startButtonLabel("uno")}
                   </button>
                   <button
                     type="button"
@@ -11997,8 +15718,29 @@ export default function Home() {
                 {connectedRoomCode ? <span className="text-xs text-slate-400">ルーム対戦中は固定</span> : null}
               </div>
 
-              {!gameStarted.uno ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.uno} className={!gameStarted.uno ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+              {connectedRoomCode ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-slate-300">ルームCPU人数:</span>
+                  <select
+                    value={String(unoRoomCpuCount)}
+                    onChange={(event) => setUnoRoomCpuCount(Math.max(0, Math.min(6, Number(event.target.value))))}
+                    disabled={gameStarted.uno || roomRole !== "host"}
+                    className="rounded border border-cyan-200/40 bg-slate-950/70 px-2 py-1 disabled:opacity-60"
+                  >
+                    <option value="0">0 (2人戦)</option>
+                    <option value="1">1 (3人戦)</option>
+                    <option value="2">2 (4人戦)</option>
+                    <option value="3">3 (5人戦)</option>
+                    <option value="4">4 (6人戦)</option>
+                    <option value="5">5 (7人戦)</option>
+                    <option value="6">6 (8人戦)</option>
+                  </select>
+                  <span className="text-xs text-slate-400">{roomRole === "host" ? "開始前のみ変更可能" : "ホストが設定"}</span>
+                </div>
+              ) : null}
+
+              {!gameStarted.uno ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
 
               <p className="text-sm text-slate-300">{unoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateUnoNow)}</p> : null}
@@ -12034,7 +15776,7 @@ export default function Home() {
                 </div>
               ) : null}
 
-              {isUnoLocalTableMode ? (
+              {isUnoTableMode ? (
                 <div className="mt-4 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
                   <div className="relative min-h-[560px] rounded-xl border border-cyan-300/30 bg-slate-900/70">
                     <div className="pointer-events-none absolute inset-4 rounded-[999px] border border-cyan-300/20 bg-[radial-gradient(circle_at_center,rgba(34,211,238,0.16)_0%,rgba(8,47,73,0.22)_48%,rgba(2,6,23,0.08)_100%)]" />
@@ -12047,13 +15789,47 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {unoCpuSeatLayout.map(({ hand, cpuIdx, x, y, orientation }) => {
+                    {(isUnoRoomTableMode
+                      ? unoRoomSeatLayout.map((seat, idx) => ({
+                        hand: Array.from({ length: seat.handCount ?? 1 }),
+                        cpuIdx: idx,
+                        x: seat.x,
+                        y: seat.y,
+                        orientation: seat.orientation,
+                        label: seat.label,
+                        isTurnSeat: false,
+                        explicitCount: seat.handCount,
+                      }))
+                      : unoCpuSeatLayout.map(({ hand, cpuIdx, x, y, orientation }) => ({
+                        hand,
+                        cpuIdx,
+                        x,
+                        y,
+                        orientation,
+                        label: `CPU ${cpuIdx + 1}`,
+                        isTurnSeat: unoLocalTurnIndex === cpuIdx + 1,
+                        explicitCount: hand.length,
+                      }))
+                    ).map(({ hand, cpuIdx, x, y, orientation, label, isTurnSeat, explicitCount }) => {
                       const seatIndex = cpuIdx + 1;
-                      const isTurnSeat = unoLocalTurnIndex === seatIndex;
                       const isSideSeat = orientation !== "top";
-                      const visibleCount = isSideSeat ? Math.min(hand.length, 4) : Math.min(hand.length, 5);
-                      const hiddenCount = Math.max(0, hand.length - visibleCount);
-                      const seatWidth = orientation === "top" ? "min(62vw, 420px)" : "170px";
+                      const compactTable = isUnoRoomTableMode || unoLocalTotalPlayers >= 5;
+                      const denseTable = compactTable;
+                      const ultraDenseTable = isUnoRoomTableMode || unoLocalTotalPlayers >= 7;
+                      const visibleCount = isUnoRoomTableMode
+                        ? 1
+                        : compactTable
+                        ? Math.min(hand.length, 1)
+                        : ultraDenseTable
+                        ? (isSideSeat ? Math.min(hand.length, 2) : Math.min(hand.length, 3))
+                        : denseTable
+                          ? (isSideSeat ? Math.min(hand.length, 3) : Math.min(hand.length, 4))
+                        : (isSideSeat ? Math.min(hand.length, 4) : Math.min(hand.length, 5));
+                      const displayCount = explicitCount === null ? "?" : String(explicitCount ?? hand.length);
+                      const hiddenCount = explicitCount === null ? 0 : Math.max(0, explicitCount - visibleCount);
+                      const seatWidth = orientation === "top"
+                        ? (ultraDenseTable ? "min(42vw, 280px)" : denseTable ? "min(50vw, 330px)" : "min(62vw, 420px)")
+                        : (ultraDenseTable ? "110px" : denseTable ? "130px" : "170px");
                       const seatStyle = {
                         left: `${x.toFixed(2)}%`,
                         top: `${y.toFixed(2)}%`,
@@ -12064,18 +15840,18 @@ export default function Home() {
                       return (
                         <div key={`uno-table-cpu-${cpuIdx}`} className="absolute" style={seatStyle}>
                           <div className={`rounded-lg border px-2 py-1 ${isTurnSeat ? "border-cyan-200/70 bg-cyan-400/12" : "border-slate-400/35 bg-slate-900/45"}`}>
-                            <p className="text-center text-xs font-semibold text-slate-200">CPU {cpuIdx + 1}: {hand.length}</p>
+                            <p className={`text-center font-semibold text-slate-200 ${ultraDenseTable ? "text-[11px]" : "text-xs"}`}>{label}: {displayCount}</p>
                           </div>
                           {isSideSeat ? (
-                            <div className="mt-1 flex max-h-[210px] justify-center overflow-y-auto pb-1">
+                            <div className={`mt-1 flex justify-center overflow-y-auto pb-1 ${ultraDenseTable ? "max-h-[165px]" : "max-h-[210px]"}`}>
                               <div className="flex flex-col items-center pt-1">
                                 {Array.from({ length: visibleCount }).map((_, cardIndex) => (
                                   <span
                                     key={`uno-table-cpu-side-${cpuIdx}-${cardIndex}`}
                                     className="inline-flex"
                                     style={{
-                                      marginTop: cardIndex === 0 ? 0 : -26,
-                                      transform: `rotate(${orientation === "left" ? "-90deg" : "90deg"}) translateY(${Math.max(0, 8 - cardIndex * 0.4).toFixed(2)}px)`,
+                                      marginTop: cardIndex === 0 ? 0 : ultraDenseTable ? -16 : denseTable ? -20 : -26,
+                                      transform: `rotate(${orientation === "left" ? "-90deg" : "90deg"}) translateY(${Math.max(0, 7 - cardIndex * 0.4).toFixed(2)}px) scale(${ultraDenseTable ? 0.72 : denseTable ? 0.82 : 1})`,
                                       transformOrigin: "center",
                                       zIndex: cardIndex + 1,
                                     }}
@@ -12083,23 +15859,31 @@ export default function Home() {
                                     {renderUnoCardBack()}
                                   </span>
                                 ))}
-                                {hiddenCount > 0 ? <p className="mt-1 text-center text-[11px] font-semibold text-cyan-200/90">+{hiddenCount}</p> : null}
+                                {hiddenCount > 0 ? <p className={`mt-1 text-center font-semibold text-cyan-200/90 ${ultraDenseTable ? "text-[10px]" : "text-[11px]"}`}>+{hiddenCount}</p> : null}
                               </div>
                             </div>
                           ) : (
                             <div className="mt-1 overflow-x-auto pb-1">
-                              <div className="relative left-1/2 flex min-h-[70px] w-max -translate-x-1/2 items-end pr-2 pl-1">
+                              <div className={`relative left-1/2 flex w-max -translate-x-1/2 items-end pr-2 pl-1 ${ultraDenseTable ? "min-h-[56px]" : "min-h-[70px]"}`}>
                                 {Array.from({ length: visibleCount }).map((_, cardIndex) => (
-                                  <span
-                                    key={`uno-table-cpu-top-${cpuIdx}-${cardIndex}`}
-                                    className="inline-flex shrink-0"
-                                    style={opponentHandStackStyle(cardIndex, visibleCount)}
-                                  >
-                                    {renderUnoCardBack()}
-                                  </span>
+                                  (() => {
+                                    const topStack = opponentHandStackStyle(cardIndex, visibleCount);
+                                    return (
+                                      <span
+                                        key={`uno-table-cpu-top-${cpuIdx}-${cardIndex}`}
+                                        className="inline-flex shrink-0"
+                                        style={{
+                                          ...topStack,
+                                          transform: `${String(topStack.transform)} scale(${ultraDenseTable ? 0.72 : denseTable ? 0.82 : 1})`,
+                                        }}
+                                      >
+                                        {renderUnoCardBack()}
+                                      </span>
+                                    );
+                                  })()
                                 ))}
                               </div>
-                              {hiddenCount > 0 ? <p className="mt-1 text-center text-[11px] font-semibold text-cyan-200/90">+{hiddenCount}</p> : null}
+                              {hiddenCount > 0 ? <p className={`mt-1 text-center font-semibold text-cyan-200/90 ${ultraDenseTable ? "text-[10px]" : "text-[11px]"}`}>+{hiddenCount}</p> : null}
                             </div>
                           )}
                         </div>
@@ -12233,6 +16017,7 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
+              )}
             </article>
 
             

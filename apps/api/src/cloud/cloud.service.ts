@@ -48,6 +48,35 @@ type MatchRecord = {
   opponent: string;
 };
 
+type FitPuzzleDifficulty = 'easy' | 'normal' | 'hard';
+
+type FitPuzzleStageProfile = {
+  bias: 'balanced' | 'long' | 'blocks';
+  mutationSteps: number;
+  minComplex: number;
+  minBranch: number;
+};
+
+type FitPuzzleCustomStage = {
+  rows: number;
+  cols: number;
+  pieceCount: number;
+  title: string;
+  profile: FitPuzzleStageProfile;
+  openingRotation: 'mixed' | 'mostly-rotated';
+  assistLimit: number;
+  seed: number;
+};
+
+type FitPuzzleProgress = {
+  highestUnlockedStage: number;
+  selectedStageIndex: number;
+  difficulty: FitPuzzleDifficulty;
+  noRotateMode: boolean;
+  customStages: FitPuzzleCustomStage[];
+  updatedAt: string | null;
+};
+
 type FriendChatMessage = {
   id: number;
   senderUserId: string;
@@ -71,6 +100,7 @@ type Profile = {
   playerAvatar: string;
   matchStats: MatchStats;
   recentMatches: MatchRecord[];
+  fitPuzzleProgress: FitPuzzleProgress;
 };
 
 const MATCH_RECENT_LIMIT = 60;
@@ -96,6 +126,14 @@ const DEFAULT_PROFILE: Profile = {
     byGame: {},
   },
   recentMatches: [],
+  fitPuzzleProgress: {
+    highestUnlockedStage: 0,
+    selectedStageIndex: 0,
+    difficulty: 'normal',
+    noRotateMode: false,
+    customStages: [],
+    updatedAt: null,
+  },
 };
 
 @Injectable()
@@ -186,17 +224,18 @@ export class CloudService {
   }
 
   logout(body: Record<string, unknown>): ApiResult {
-    const auth = this.authenticate(body);
+    // Logout should succeed even when the saved sessionId is stale after refresh/reload.
+    const auth = this.authenticate(body, { requireSession: false });
     if (!auth.ok) return auth;
 
     this.db
       .prepare(
         `
         DELETE FROM auth_sessions
-        WHERE user_id = ? AND session_id = ?
+        WHERE user_id = ?
       `,
       )
-      .run(auth.user.user_id, auth.sessionId);
+      .run(auth.user.user_id);
 
     return {
       ok: true,
@@ -1471,6 +1510,10 @@ export class CloudService {
 
     const matchStats = this.sanitizeMatchStats(source.matchStats ?? baseProfile.matchStats);
     const recentMatches = this.sanitizeRecentMatches(source.recentMatches ?? baseProfile.recentMatches);
+    const fitPuzzleProgress = this.sanitizeFitPuzzleProgress(
+      source.fitPuzzleProgress ?? baseProfile.fitPuzzleProgress,
+      baseProfile.fitPuzzleProgress,
+    );
 
     return {
       bankCoins,
@@ -1482,6 +1525,79 @@ export class CloudService {
       playerAvatar: this.normalizeAvatarDataUrl(source.playerAvatar ?? baseProfile.playerAvatar),
       matchStats,
       recentMatches,
+      fitPuzzleProgress,
+    };
+  }
+
+  private sanitizeFitPuzzleProgress(raw: unknown, base: FitPuzzleProgress): FitPuzzleProgress {
+    const src = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    const baseSafe = base || DEFAULT_PROFILE.fitPuzzleProgress;
+
+    const normalizeInt = (value: unknown, fallback: number) => {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.floor(n);
+    };
+
+    const normalizeCustomStage = (stageRaw: unknown): FitPuzzleCustomStage | null => {
+      if (!stageRaw || typeof stageRaw !== 'object') return null;
+      const stage = stageRaw as Record<string, unknown>;
+      const rows = Math.max(4, Math.min(12, normalizeInt(stage.rows, 10)));
+      const cols = Math.max(4, Math.min(12, normalizeInt(stage.cols, 10)));
+      const maxCells = rows * cols;
+      const pieceCount = Math.max(
+        2,
+        Math.min(maxCells, normalizeInt(stage.pieceCount, Math.max(2, Math.floor(maxCells / 2)))),
+      );
+      const title = String(stage.title || '').trim().slice(0, 40) || 'Custom';
+      const profileRaw = stage.profile && typeof stage.profile === 'object'
+        ? (stage.profile as Record<string, unknown>)
+        : {};
+      const bias = profileRaw.bias === 'long' || profileRaw.bias === 'blocks'
+        ? profileRaw.bias
+        : 'balanced';
+      const openingRotation = stage.openingRotation === 'mostly-rotated' ? 'mostly-rotated' : 'mixed';
+
+      return {
+        rows,
+        cols,
+        pieceCount,
+        title,
+        profile: {
+          bias,
+          mutationSteps: Math.max(0, Math.min(20000, normalizeInt(profileRaw.mutationSteps, rows * cols * 6))),
+          minComplex: Math.max(0, Math.min(200, normalizeInt(profileRaw.minComplex, 0))),
+          minBranch: Math.max(0, Math.min(200, normalizeInt(profileRaw.minBranch, 0))),
+        },
+        openingRotation,
+        assistLimit: Math.max(0, Math.min(10, normalizeInt(stage.assistLimit, 0))),
+        seed: Math.max(1, normalizeInt(stage.seed, 1)),
+      };
+    };
+
+    const customStages = Array.isArray(src.customStages)
+      ? src.customStages
+          .map((stage) => normalizeCustomStage(stage))
+          .filter((stage): stage is FitPuzzleCustomStage => Boolean(stage))
+      : baseSafe.customStages;
+
+    const updatedAt = typeof src.updatedAt === 'string' && src.updatedAt.trim()
+      ? src.updatedAt.trim().slice(0, 64)
+      : baseSafe.updatedAt;
+
+    const difficulty = src.difficulty === 'easy' || src.difficulty === 'hard'
+      ? src.difficulty
+      : src.difficulty === 'normal'
+        ? 'normal'
+        : baseSafe.difficulty;
+
+    return {
+      highestUnlockedStage: Math.max(0, normalizeInt(src.highestUnlockedStage, baseSafe.highestUnlockedStage)),
+      selectedStageIndex: Math.max(0, normalizeInt(src.selectedStageIndex, baseSafe.selectedStageIndex)),
+      difficulty,
+      noRotateMode: typeof src.noRotateMode === 'boolean' ? src.noRotateMode : baseSafe.noRotateMode,
+      customStages,
+      updatedAt: updatedAt || null,
     };
   }
 
