@@ -91,6 +91,7 @@ function roomMetaOf(code) {
   if (!roomMeta.has(code)) {
     roomMeta.set(code, {
       hostPeerId: "",
+      parentRoomCode: "",
       listContext: "menu",
       isPublic: true,
       inGame: false,
@@ -722,6 +723,7 @@ function tryJoinRoom(ws, payload) {
     if (explicitCreate) {
       const sourceCode = normalizeRoomCode(payload?.sourceRoom);
       if (sourceCode && sourceCode !== code) {
+        meta.parentRoomCode = sourceCode;
         grantPrivateAccessFromSourceRoom(meta, sourceCode);
       }
     }
@@ -996,7 +998,36 @@ wss.on("connection", (ws) => {
     }
 
     if (type === "return-lobby") {
+      const meta = roomMetaOf(code);
       unlockMatchForLobby(code);
+      const parentRoomCode = normalizeRoomCode(meta.parentRoomCode);
+      if (parentRoomCode && parentRoomCode !== code && rooms.has(parentRoomCode)) {
+        removeFromRoom(ws);
+        ws.roomCode = null;
+
+        const parentMembers = roomOf(parentRoomCode);
+        const parentMeta = roomMetaOf(parentRoomCode);
+        ws.spectator = false;
+        ws.roomCode = parentRoomCode;
+        parentMembers.add(ws);
+        if (ws.peerId) {
+          parentMeta.privateAccessPeerIds.add(ws.peerId);
+        }
+        ensureHostPeerId(parentRoomCode);
+
+        const nextRole = ws.peerId && parentMeta.hostPeerId === ws.peerId ? "host" : "guest";
+        sendJson(ws, {
+          type: "room-assigned",
+          code: parentRoomCode,
+          role: nextRole,
+          roomPublic: Boolean(parentMeta.isPublic),
+          participants: roomParticipants(parentRoomCode),
+        });
+
+        broadcastRoomState(code);
+        broadcastRoomState(parentRoomCode);
+        return;
+      }
       broadcastRoomState(code);
       return;
     }

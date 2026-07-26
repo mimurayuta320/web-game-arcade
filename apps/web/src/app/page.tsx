@@ -6933,7 +6933,6 @@ export default function Home() {
     if (Array.isArray(state.survivorsEnemies)) setSurvivorsEnemies(state.survivorsEnemies as SurvivorsEnemy[]);
     if (typeof state.survivorsMessage === "string") setSurvivorsMessage(state.survivorsMessage);
     if (typeof state.isSurvivorsOver === "boolean") setIsSurvivorsOver(state.isSurvivorsOver);
-
     if (Array.isArray(state.unoDeck)) setUnoDeck(state.unoDeck as UnoCard[]);
     if (Array.isArray(state.unoPlayerHand)) setUnoPlayerHand(state.unoPlayerHand as UnoCard[]);
     if (Array.isArray(state.unoCpuHand)) setUnoCpuHand(state.unoCpuHand as UnoCard[]);
