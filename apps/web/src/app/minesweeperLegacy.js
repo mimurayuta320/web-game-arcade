@@ -1544,6 +1544,7 @@ export function initMinesweeper(options = {}) {
             targetCell.miss = true;
             if (isDuelMode()) {
               beginDuelPenaltyWait(state.currentPlayer);
+              emitRoomSnapshot();
               return;
             }
 
@@ -1559,6 +1560,7 @@ export function initMinesweeper(options = {}) {
               switchTurn();
               messageEl.textContent = `${minesweeperFormat("battleMiss", { player: playerLabel(missPlayer), count: state.battleMisses[missPlayer] })} / ${currentTurnText()}`;
               render();
+              emitRoomSnapshot();
               return;
             }
 
@@ -1577,12 +1579,14 @@ export function initMinesweeper(options = {}) {
                 clearTimer();
                 messageEl.textContent = minesweeperText("coopFailed");
                 render();
+                emitRoomSnapshot();
                 return;
               }
 
               switchTurn();
               messageEl.textContent = `${minesweeperFormat("coopLifeLost", { player: playerLabel(missPlayer), count: state.coopMisses[missPlayer] })} / ${currentTurnText()}`;
               render();
+              emitRoomSnapshot();
               return;
             }
 
@@ -1592,6 +1596,7 @@ export function initMinesweeper(options = {}) {
             clearTimer();
             messageEl.textContent = minesweeperText("gameOver");
             render();
+            emitRoomSnapshot();
             return;
           }
 

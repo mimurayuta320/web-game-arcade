@@ -27,10 +27,45 @@ const INITIAL_GAME_START_STATE: Record<PlayablePanel, boolean> = {
   survivors: false,
 };
 
+const PLAYABLE_PANELS: PlayablePanel[] = [
+  "othello",
+  "gomoku",
+  "chess",
+  "shogi",
+  "uno",
+  "minesweeper",
+  "numeron",
+  "blackjack",
+  "chinchiro",
+  "sevens",
+  "daifugo",
+  "fourPanel",
+  "drawingRelay",
+  "fitPuzzle",
+  "mahjong",
+  "poker",
+  "solitaire",
+  "survivors",
+];
+
 type RoomParticipant = {
   id: string;
   name: string;
   role: "host" | "guest" | "spectator";
+  panel?: PlayablePanel | null;
+};
+
+type PublicRoomSummary = {
+  code: string;
+  listContext: "menu" | "game";
+  isPublic: boolean;
+  inGame: boolean;
+  activePlayers: number;
+  spectatorCount: number;
+  totalParticipants: number;
+  hostName: string;
+  guestName: string;
+  panels: PlayablePanel[];
 };
 
 type ScoreEntry = {
@@ -152,6 +187,11 @@ type OthelloChaosSettings = {
   destroyLimitWhite: number;
 };
 
+function normalizeOthelloModeForRoom(mode: OthelloMode, chaosEnabled: boolean): OthelloMode {
+  if (mode === "local" || mode === "chaos") return mode;
+  return chaosEnabled ? "chaos" : "local";
+}
+
 const LOGIN_I18N = {
   ja: {
     loginTitle: "ログイン",
@@ -229,6 +269,13 @@ const LOGIN_I18N = {
     roomCodeInvalid: "6桁のルーム番号を入力してください。",
     roomPublic: "公開",
     roomPrivate: "非公開",
+    roomPasswordLabel: "パスワード",
+    roomPasswordOff: "なし",
+    roomPasswordOn: "あり",
+    roomListTitle: "公開ルーム一覧",
+    roomListRefresh: "更新",
+    roomListEmpty: "参加可能な公開ルームがありません。",
+    roomSelectRequired: "参加するルームを選んでください。",
     spectateJoin: "観戦参加",
     quickMatchMulti: "クイックマッチ（マルチ）",
     roomCreate: "ルーム作成",
@@ -240,13 +287,17 @@ const LOGIN_I18N = {
     inviteTokenIssueFailed: "招待トークンの発行に失敗しました",
     roomState: "状態",
     roomConnected: "接続ルーム",
+    roomCreatePreparing: "ルームを作成中...（パスワード: {password}）",
     roomRole: "ロール",
     roomRoleHost: "ホスト",
     roomRoleGuest: "ゲスト",
     roomRoleSpectator: "観戦",
     roomMembers: "参加者",
     roomMatchedPlayers: "マッチ人数",
+    roomOpponentLabel: "対面",
+    roomOpponentWaiting: "相手待機中",
     roomMembersEmpty: "未参加",
+    roomCapacityHint: "ルーム上限: 16人",
     profileLink: "プロフィール",
     inquiryViewerLink: "問い合わせ管理",
     inquiryFormLink: "問い合わせフォーム",
@@ -331,7 +382,7 @@ const LOGIN_I18N = {
     roomUrlInvalid: "RoomサーバーURLが不正です。",
     roomConnectFailed: "Roomサーバーへ接続できませんでした。",
     roomFull: "このルームは満員です。",
-    roomFullRejected: "ルーム {code} は満員です（8人まで）",
+    roomFullRejected: "ルーム {code} は満員です（16人まで）",
     roomInGame: "このルームはゲーム中です。観戦モードは次対応予定です。",
     roomInGameSuggestSpectate: "対戦中のため参加できません。観戦を使ってください。",
     roomInviteRequired: "この非公開ルームへの参加には招待リンクが必要です。",
@@ -340,7 +391,7 @@ const LOGIN_I18N = {
     quickMatchPrivateSkipped: "非公開ルームに当たったため、別のマッチを検索します...",
     spectatorReadOnly: "観戦モードで接続しました。操作は読み取り専用です。",
     roomErrorPrefix: "ルームエラー",
-    roomErrRoomRequired: "ルーム番号が必要です。",
+    roomErrRoomRequired: "ルーム情報の取得に失敗しました。再試行してください。",
     roomErrHostOnly: "ホストのみ実行できます。",
     roomErrTargetInvalid: "対象プレイヤーが不正です。",
     roomErrTargetRequired: "対象プレイヤーを指定してください。",
@@ -902,6 +953,13 @@ const LOGIN_I18N = {
     roomCodeInvalid: "6자리 룸 번호를 입력하세요.",
     roomPublic: "공개",
     roomPrivate: "비공개",
+    roomPasswordLabel: "비밀번호",
+    roomPasswordOff: "없음",
+    roomPasswordOn: "있음",
+    roomListTitle: "공개 룸 목록",
+    roomListRefresh: "새로고침",
+    roomListEmpty: "참가 가능한 공개 룸이 없습니다.",
+    roomSelectRequired: "참가할 룸을 선택하세요.",
     spectateJoin: "관전 참가",
     quickMatchMulti: "빠른 매치 (멀티)",
     roomCreate: "룸 생성",
@@ -913,13 +971,17 @@ const LOGIN_I18N = {
     inviteTokenIssueFailed: "초대 토큰 발급에 실패했습니다",
     roomState: "상태",
     roomConnected: "연결된 룸",
+    roomCreatePreparing: "룸 생성 중... (비밀번호: {password})",
     roomRole: "역할",
     roomRoleHost: "호스트",
     roomRoleGuest: "게스트",
     roomRoleSpectator: "관전자",
     roomMembers: "참가자",
     roomMatchedPlayers: "매치 인원",
+    roomOpponentLabel: "상대",
+    roomOpponentWaiting: "상대 대기 중",
     roomMembersEmpty: "없음",
+    roomCapacityHint: "룸 최대 인원: 16명",
     profileLink: "프로필",
     inquiryViewerLink: "문의 관리",
     inquiryFormLink: "문의 폼",
@@ -1004,7 +1066,7 @@ const LOGIN_I18N = {
     roomUrlInvalid: "룸 서버 URL이 올바르지 않습니다.",
     roomConnectFailed: "룸 서버에 연결할 수 없습니다.",
     roomFull: "이 룸은 인원이 가득 찼습니다.",
-    roomFullRejected: "룸 {code} 은(는) 가득 찼습니다 (최대 8명)",
+    roomFullRejected: "룸 {code} 은(는) 가득 찼습니다 (최대 16명)",
     roomInGame: "이 룸은 게임 중입니다. 관전 모드는 다음에 지원 예정입니다.",
     roomInGameSuggestSpectate: "경기 중이라 참가할 수 없습니다. 관전을 이용하세요.",
     roomInviteRequired: "이 비공개 룸은 초대 링크가 필요합니다.",
@@ -1013,7 +1075,7 @@ const LOGIN_I18N = {
     quickMatchPrivateSkipped: "비공개 룸이어서 다른 매치를 찾는 중...",
     spectatorReadOnly: "관전 모드로 접속했습니다. 조작은 읽기 전용입니다.",
     roomErrorPrefix: "룸 오류",
-    roomErrRoomRequired: "룸 번호가 필요합니다.",
+    roomErrRoomRequired: "룸 정보를 가져오지 못했습니다. 다시 시도해 주세요.",
     roomErrHostOnly: "호스트만 실행할 수 있습니다.",
     roomErrTargetInvalid: "대상 플레이어가 올바르지 않습니다.",
     roomErrTargetRequired: "대상 플레이어를 지정하세요.",
@@ -1575,15 +1637,26 @@ const EN_I18N: Partial<I18nMap> = {
   roomCodePlaceholder: "6 digits",
   roomPublic: "Public",
   roomPrivate: "Private",
+  roomPasswordLabel: "Password",
+  roomPasswordOff: "Off",
+  roomPasswordOn: "On",
+  roomListTitle: "Public Rooms",
+  roomListRefresh: "Refresh",
+  roomListEmpty: "No joinable public rooms right now.",
+  roomSelectRequired: "Please select a room first.",
   roomCreate: "Create Room",
   roomJoin: "Join Room",
   roomDisconnect: "Disconnect",
   copyInviteLink: "Copy Invite Link",
   roomState: "State",
   roomConnected: "Connected Room",
+  roomCreatePreparing: "Creating room... (Password: {password})",
   roomRole: "Role",
   roomMembers: "Participants",
   roomMatchedPlayers: "Matched Players",
+  roomOpponentLabel: "Opponent",
+  roomOpponentWaiting: "Waiting for opponent",
+  roomCapacityHint: "Room Capacity: 16 participants",
   profileLink: "Profile",
   friendViewProfile: "View Profile",
   friendOpenChat: "Chat",
@@ -1685,14 +1758,25 @@ const ZH_I18N: Partial<I18nMap> = {
   roomCode: "房间号",
   roomPublic: "公开",
   roomPrivate: "私密",
+  roomPasswordLabel: "密码",
+  roomPasswordOff: "无",
+  roomPasswordOn: "有",
+  roomListTitle: "公开房间列表",
+  roomListRefresh: "刷新",
+  roomListEmpty: "当前没有可加入的公开房间。",
+  roomSelectRequired: "请先选择房间。",
   roomCreate: "创建房间",
   roomJoin: "加入房间",
   roomDisconnect: "断开连接",
   roomState: "状态",
   roomConnected: "已连接房间",
+  roomCreatePreparing: "正在创建房间...（密码: {password}）",
   roomRole: "角色",
   roomMembers: "参与者",
   roomMatchedPlayers: "匹配人数",
+  roomOpponentLabel: "对手",
+  roomOpponentWaiting: "等待对手中",
+  roomCapacityHint: "房间上限: 16人",
   profileLink: "个人资料",
   friendViewProfile: "查看资料",
   friendOpenChat: "聊天",
@@ -2732,6 +2816,7 @@ const STORAGE_LANGUAGE_KEY = "neon-ui-language";
 const STORAGE_MENU_TAB_OPEN_STATE_KEY = "neon-menu-tab-open-state";
 const STORAGE_MENU_CARD_OPEN_STATE_KEY = "neon-menu-card-open-state";
 const STORAGE_FIT_PUZZLE_PROGRESS_KEY = "neon-fit-puzzle-progress-v1";
+const STORAGE_ROOM_CLIENT_ID_SESSION_KEY = "neon-room-client-id";
 const CHINCHIRO_VISIBLE = false;
 const CASINO_SHARED_BANK_STORAGE_KEY = "neon-casino-shared-bank-v1";
 const DEFAULT_CASINO_BANKROLL = 1000;
@@ -4550,6 +4635,7 @@ export default function Home() {
   const [unoMessage, setUnoMessage] = useState<string>(LOGIN_I18N.ja.unoYourTurn);
   const [isUnoOver, setIsUnoOver] = useState(false);
   const [activePanel, setActivePanel] = useState<Panel>("menu");
+  const [roomBadgePanel, setRoomBadgePanel] = useState<PlayablePanel | null>(null);
   const [menuTabOpenState, setMenuTabOpenState] = useState<Record<MenuTabCategory, boolean>>(INITIAL_MENU_TAB_OPEN_STATE);
   const [menuCardOpenState, setMenuCardOpenState] = useState<Record<MenuCategory, boolean>>(INITIAL_MENU_CARD_OPEN_STATE);
   const [gameStarted, setGameStarted] = useState<Record<PlayablePanel, boolean>>(INITIAL_GAME_START_STATE);
@@ -4562,6 +4648,14 @@ export default function Home() {
   const [connectedRoomCode, setConnectedRoomCode] = useState("");
   const [roomRole, setRoomRole] = useState("");
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
+  const [menuPublicRooms, setMenuPublicRooms] = useState<PublicRoomSummary[]>([]);
+  const [panelPublicRooms, setPanelPublicRooms] = useState<PublicRoomSummary[]>([]);
+  const [selectedMenuPublicRoomCode, setSelectedMenuPublicRoomCode] = useState("");
+  const [selectedPanelPublicRoomCode, setSelectedPanelPublicRoomCode] = useState("");
+  const [isMenuRoomListOpen, setIsMenuRoomListOpen] = useState(true);
+  const [isPanelRoomListOpen, setIsPanelRoomListOpen] = useState(true);
+  const [isMenuPublicRoomsLoading, setIsMenuPublicRoomsLoading] = useState(false);
+  const [isPanelPublicRoomsLoading, setIsPanelPublicRoomsLoading] = useState(false);
   const [othelloDrawVotes, setOthelloDrawVotes] = useState<string[]>([]);
   const [pendingRemoteOthelloMove, setPendingRemoteOthelloMove] = useState<{ row: number; col: number } | null>(null);
   const [pendingRemoteGomokuMove, setPendingRemoteGomokuMove] = useState<{ row: number; col: number } | null>(null);
@@ -4627,6 +4721,9 @@ export default function Home() {
   const inviteCopyFeedbackTimerRef = useRef<number | null>(null);
   const pendingRoomChatIdsRef = useRef<string[]>([]);
   const peerIdRef = useRef(`next-${Math.random().toString(36).slice(2, 10)}`);
+  const clientIdRef = useRef(`client-${Math.random().toString(36).slice(2, 12)}`);
+  const activePanelRef = useRef<Panel>("menu");
+  const isNumeronSessionActiveRef = useRef(false);
   const startCountdownTimerRef = useRef<number | null>(null);
   const casinoWinBurstTimerRef = useRef<number | null>(null);
   const blackjackDealerResolveTimerRef = useRef<number | null>(null);
@@ -4654,6 +4751,69 @@ export default function Home() {
   const solitaireFlightTimersRef = useRef<number[]>([]);
   const solitaireDragSelectionRef = useRef<SolitaireSelection | null>(null);
   const casinoBankHydratedRef = useRef(false);
+
+  const normalizeRoomPanel = useCallback((value: unknown): PlayablePanel | null => {
+    const panel = String(value || "").trim();
+    if (
+      panel === "othello"
+      || panel === "gomoku"
+      || panel === "chess"
+      || panel === "shogi"
+      || panel === "uno"
+      || panel === "minesweeper"
+      || panel === "numeron"
+      || panel === "blackjack"
+      || panel === "chinchiro"
+      || panel === "sevens"
+      || panel === "daifugo"
+      || panel === "fourPanel"
+      || panel === "drawingRelay"
+      || panel === "fitPuzzle"
+      || panel === "mahjong"
+      || panel === "poker"
+      || panel === "solitaire"
+      || panel === "survivors"
+    ) {
+      return panel as PlayablePanel;
+    }
+    return null;
+  }, []);
+
+  const getCurrentRoomPanel = useCallback((): PlayablePanel | "" => {
+    const current = activePanelRef.current;
+    const normalizedCurrent = normalizeRoomPanel(current);
+    if (normalizedCurrent) return normalizedCurrent;
+    return "";
+  }, [normalizeRoomPanel]);
+
+  const getCurrentRoomClientId = useCallback(() => {
+    let current = String(clientIdRef.current || "").trim();
+    try {
+      const stored = String(window.sessionStorage.getItem(STORAGE_ROOM_CLIENT_ID_SESSION_KEY) || "").trim();
+      if (stored) {
+        current = stored;
+      } else if (current) {
+        window.sessionStorage.setItem(STORAGE_ROOM_CLIENT_ID_SESSION_KEY, current);
+      }
+    } catch {
+      // ignore storage access errors
+    }
+    if (!current) {
+      current = `client-${Math.random().toString(36).slice(2, 12)}`;
+    }
+    clientIdRef.current = current;
+    return current;
+  }, []);
+
+  const getCurrentRoomUserId = useCallback(() => {
+    const cloudUserId = authMode === "cloud" ? authUserId.trim().slice(0, 24) : "";
+    return cloudUserId || "";
+  }, [authMode, authUserId]);
+
+  useEffect(() => {
+    activePanelRef.current = activePanel;
+    isNumeronSessionActiveRef.current = activePanel === "numeron" || gameStarted.numeron;
+  }, [activePanel, gameStarted.numeron]);
 
 
 
@@ -5586,9 +5746,108 @@ export default function Home() {
     return tf("roomTurnCurrent", { owner: isYourTurn ? t("roomTurnYou") : t("roomTurnOpponent") });
   }, [connectedRoomCode, roomRole, t, tf]);
 
+  const roomHostName = useMemo(() => {
+    const host = roomParticipants.find((participant) => participant.role === "host");
+    return String(host?.name || "").trim();
+  }, [roomParticipants]);
+
+  const roomGuestName = useMemo(() => {
+    const guest = roomParticipants.find((participant) => participant.role === "guest");
+    return String(guest?.name || "").trim();
+  }, [roomParticipants]);
+
+  const roomOpponentDisplay = useMemo(() => {
+    if (!connectedRoomCode) return "";
+    if (roomRole === "host") return roomGuestName;
+    if (roomRole === "guest") return roomHostName;
+    if (roomRole === "spectator") {
+      if (roomHostName && roomGuestName) {
+        return `${roomHostName} vs ${roomGuestName}`;
+      }
+      return roomHostName || roomGuestName;
+    }
+    return "";
+  }, [connectedRoomCode, roomGuestName, roomHostName, roomRole]);
+
+  const roomPanelLabel = useCallback((panel: PlayablePanel) => {
+    if (panel === "othello") return t("tabOthello");
+    if (panel === "gomoku") return t("tabGomoku");
+    if (panel === "chess") return t("tabChess");
+    if (panel === "shogi") return t("tabShogi");
+    if (panel === "uno") return t("tabUno");
+    if (panel === "minesweeper") return t("tabMinesweeper");
+    if (panel === "numeron") return t("tabNumeron");
+    if (panel === "blackjack") return t("tabBlackjack");
+    if (panel === "chinchiro") return t("tabChinchiro");
+    if (panel === "sevens") return t("tabSevens");
+    if (panel === "daifugo") return t("tabDaifugo");
+    if (panel === "fourPanel") return t("tabFourPanel");
+    if (panel === "drawingRelay") return t("tabDrawingRelay");
+    if (panel === "fitPuzzle") return t("tabFitPuzzle");
+    if (panel === "mahjong") return t("tabMahjong");
+    if (panel === "poker") return t("tabPoker");
+    if (panel === "solitaire") return t("tabSolitaire");
+    return t("tabSurvivors");
+  }, [t]);
+
   const roomMatchedPlayerCount = useMemo(() => {
+    return roomParticipants.length;
+  }, [roomParticipants]);
+
+  const roomActivePlayerCount = useMemo(() => {
     return roomParticipants.filter((participant) => participant.role === "host" || participant.role === "guest").length;
   }, [roomParticipants]);
+
+  const roomOccupancyText = useMemo(() => {
+    const count = Math.max(0, Math.min(16, roomMatchedPlayerCount));
+    return `${String(count).padStart(2, "0")}/16`;
+  }, [roomMatchedPlayerCount]);
+
+  const roomParticipantCountsByPanel = useMemo(() => {
+    const counts = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, 0])) as Record<PlayablePanel, number>;
+    for (const participant of roomParticipants) {
+      if (participant.role !== "host" && participant.role !== "guest") continue;
+      const panel = participant.panel;
+      if (!panel || !(panel in counts)) continue;
+      counts[panel] += 1;
+    }
+    return counts;
+  }, [roomParticipants]);
+
+  const roomOccupancyTextByPanel = useMemo(() => {
+    const byPanel = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, "00/16"])) as Record<PlayablePanel, string>;
+    for (const panel of PLAYABLE_PANELS) {
+      const count = Math.max(0, Math.min(16, roomParticipantCountsByPanel[panel] || 0));
+      byPanel[panel] = `${String(count).padStart(2, "0")}/16`;
+    }
+    return byPanel;
+  }, [roomParticipantCountsByPanel]);
+
+  const currentPlayablePanel = useMemo(() => {
+    return normalizeRoomPanel(activePanel);
+  }, [activePanel, normalizeRoomPanel]);
+
+  const filteredPanelPublicRooms = useMemo(() => {
+    if (!currentPlayablePanel) return panelPublicRooms;
+    return panelPublicRooms.filter((room) => room.panels.length === 0 || room.panels.includes(currentPlayablePanel));
+  }, [currentPlayablePanel, panelPublicRooms]);
+
+  const allocateClientRoomCode = useCallback(() => {
+    const mergedRooms = [...menuPublicRooms, ...panelPublicRooms];
+    const usedCodes = new Set(mergedRooms.map((room) => String(room.code || "").replace(/\D/g, "").slice(0, 6)));
+    if (connectedRoomCode) {
+      usedCodes.add(String(connectedRoomCode || "").replace(/\D/g, "").slice(0, 6));
+    }
+    for (let i = 0; i < 120; i += 1) {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      if (!usedCodes.has(code)) return code;
+    }
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }, [connectedRoomCode, menuPublicRooms, panelPublicRooms]);
+
+  const numeronMatchedPlayersCount = useMemo(() => {
+    return Math.max(0, roomActivePlayerCount);
+  }, [roomActivePlayerCount]);
 
   const resolveOthelloChaosOwners = (target: OthelloChaosTarget, playerSide: 1 | 2): Array<1 | 2> => {
     if (target === "black") return [1];
@@ -5706,9 +5965,47 @@ export default function Home() {
   }, [t]);
 
   const openPanel = (panel: Panel) => {
+    if (connectedRoomCode && roomSocketRef.current?.readyState === WebSocket.OPEN) {
+      const ws = roomSocketRef.current;
+      const clientId = getCurrentRoomClientId();
+      const userId = getCurrentRoomUserId();
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "presence",
+            room: connectedRoomCode,
+            from: peerIdRef.current,
+            clientId,
+            userId,
+            panel,
+            name: playerName,
+            roomPublic: roomVisibility === "public",
+          }),
+        );
+        ws.send(
+          JSON.stringify({
+            type: "sync-room-state",
+            room: connectedRoomCode,
+            from: peerIdRef.current,
+            clientId,
+            userId,
+            panel,
+            name: playerName,
+          }),
+        );
+      } catch {
+        // ignore send error
+      }
+      setRoomParticipants((prev) => prev.map((participant) => (
+        participant.id === peerIdRef.current
+          ? { ...participant, panel: normalizeRoomPanel(panel) }
+          : participant
+      )));
+    }
     setActivePanel(panel);
     setMenuMessage("");
     if (panel !== "menu" && panel !== "scores") {
+      setRoomBadgePanel(panel);
       setGameStarted((prev) => ({ ...prev, [panel]: false }));
     }
   };
@@ -5718,7 +6015,7 @@ export default function Home() {
       setMenuMessage(t("spectatorReadOnly"));
       return;
     }
-    if (connectedRoomCode && roomRole !== "host") {
+    if (connectedRoomCode && roomRole !== "host" && roomActivePlayerCount < 2) {
       setMenuMessage(t("roomWaitHostStart"));
       return;
     }
@@ -5949,12 +6246,13 @@ export default function Home() {
     }));
   };
 
-  const onJoinRoom = () => {
-    if (!roomCode.trim()) {
-      setMenuMessage(t("roomCodeRequired"));
-      return;
+  const onJoinRoom = (code: string) => {
+    if (!code.trim()) {
+      setMenuMessage(t("roomSelectRequired"));
+      return false;
     }
-    setMenuMessage(tf("roomJoinPreparing", { code: roomCode.trim() }));
+    setMenuMessage(tf("roomJoinPreparing", { code: code.trim() }));
+    return true;
   };
 
   const closeRoomSocket = useCallback(() => {
@@ -5976,19 +6274,170 @@ export default function Home() {
     const ws = roomSocketRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (!connectedRoomCode) return;
+    const clientId = getCurrentRoomClientId();
+    const userId = getCurrentRoomUserId();
     try {
       ws.send(
         JSON.stringify({
           ...payload,
           room: connectedRoomCode,
           from: peerIdRef.current,
+          clientId,
+          userId,
+          panel: getCurrentRoomPanel(),
           name: playerName,
         }),
       );
     } catch {
       // ignore send error
     }
-  }, [connectedRoomCode, playerName]);
+  }, [connectedRoomCode, getCurrentRoomClientId, getCurrentRoomPanel, getCurrentRoomUserId, playerName]);
+
+  const normalizePublicRoomSummary = useCallback((value: unknown): PublicRoomSummary | null => {
+    if (!value || typeof value !== "object") return null;
+    const row = value as Record<string, unknown>;
+    const code = String(row.code || "").replace(/\D/g, "").slice(0, 6);
+    if (code.length !== 6) return null;
+    const rawPanels = Array.isArray(row.panels) ? row.panels : [];
+    const panels = rawPanels
+      .map((panel) => normalizeRoomPanel(panel))
+      .filter((panel): panel is PlayablePanel => Boolean(panel));
+    const rawListContext = String(row.listContext || "").trim().toLowerCase();
+    const listContext: "menu" | "game" = rawListContext === "game" ? "game" : "menu";
+    return {
+      code,
+      listContext,
+      isPublic: Boolean(row.isPublic ?? true),
+      inGame: Boolean(row.inGame),
+      activePlayers: Math.max(0, Math.min(16, Number(row.activePlayers) || 0)),
+      spectatorCount: Math.max(0, Math.min(16, Number(row.spectatorCount) || 0)),
+      totalParticipants: Math.max(0, Math.min(16, Number(row.totalParticipants) || 0)),
+      hostName: String(row.hostName || "").trim(),
+      guestName: String(row.guestName || "").trim(),
+      panels,
+    };
+  }, [normalizeRoomPanel]);
+
+  const applyPublicRoomList = useCallback((target: "menu" | "panel", roomsRaw: unknown[]) => {
+    const normalizedRooms = roomsRaw
+      .map((row) => normalizePublicRoomSummary(row))
+      .filter((row): row is PublicRoomSummary => Boolean(row));
+    const nextRooms = target === "menu"
+      ? normalizedRooms.filter((room) => room.listContext === "menu")
+      : normalizedRooms.filter((room) => room.listContext === "game");
+    if (target === "menu") {
+      setMenuPublicRooms(nextRooms);
+      setSelectedMenuPublicRoomCode((prev) => {
+        if (prev && nextRooms.some((room) => room.code === prev)) return prev;
+        return nextRooms[0]?.code || "";
+      });
+      setIsMenuPublicRoomsLoading(false);
+      return;
+    }
+    setPanelPublicRooms(nextRooms);
+    setSelectedPanelPublicRoomCode((prev) => {
+      if (prev && nextRooms.some((room) => room.code === prev)) return prev;
+      return nextRooms[0]?.code || "";
+    });
+    setIsPanelPublicRoomsLoading(false);
+  }, [normalizePublicRoomSummary]);
+
+  const requestPublicRoomList = useCallback((target: "menu" | "panel", silent = false) => {
+    const requestPayload = {
+      type: "list-rooms",
+      listContext: target === "menu" ? "menu" : "game",
+      from: peerIdRef.current,
+      clientId: getCurrentRoomClientId(),
+      userId: getCurrentRoomUserId(),
+      panel: getCurrentRoomPanel(),
+      name: playerName,
+    };
+
+    const activeWs = roomSocketRef.current;
+    if (activeWs && activeWs.readyState === WebSocket.OPEN) {
+      if (!silent) {
+        if (target === "menu") setIsMenuPublicRoomsLoading(true);
+        else setIsPanelPublicRoomsLoading(true);
+      }
+      try {
+        activeWs.send(JSON.stringify(requestPayload));
+      } catch {
+        if (!silent) {
+          if (target === "menu") setIsMenuPublicRoomsLoading(false);
+          else setIsPanelPublicRoomsLoading(false);
+        }
+      }
+      return;
+    }
+
+    const wsUrl = getAutoRoomServerUrl();
+    let listWs: WebSocket;
+    if (!silent) {
+      if (target === "menu") setIsMenuPublicRoomsLoading(true);
+      else setIsPanelPublicRoomsLoading(true);
+    }
+    try {
+      listWs = new WebSocket(wsUrl);
+    } catch {
+      if (!silent) {
+        if (target === "menu") setIsMenuPublicRoomsLoading(false);
+        else setIsPanelPublicRoomsLoading(false);
+      }
+      return;
+    }
+
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (!silent) {
+        if (target === "menu") setIsMenuPublicRoomsLoading(false);
+        else setIsPanelPublicRoomsLoading(false);
+      }
+      try {
+        listWs.close();
+      } catch {
+        // ignore close error
+      }
+    };
+
+    const timeout = window.setTimeout(() => {
+      finish();
+    }, 4000);
+
+    listWs.onopen = () => {
+      try {
+        listWs.send(JSON.stringify(requestPayload));
+      } catch {
+        window.clearTimeout(timeout);
+        finish();
+      }
+    };
+
+    listWs.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(String(event.data || "{}"));
+        if (String(payload?.type || "") === "rooms-list" && Array.isArray(payload.rooms)) {
+          applyPublicRoomList(target, payload.rooms as unknown[]);
+        }
+      } catch {
+        // ignore parse error
+      } finally {
+        window.clearTimeout(timeout);
+        finish();
+      }
+    };
+
+    listWs.onerror = () => {
+      window.clearTimeout(timeout);
+      finish();
+    };
+
+    listWs.onclose = () => {
+      window.clearTimeout(timeout);
+      finish();
+    };
+  }, [applyPublicRoomList, getCurrentRoomClientId, getCurrentRoomPanel, getCurrentRoomUserId, playerName]);
 
   const applySurrenderToPanel = useCallback((panel: PlayablePanel, loserName: string) => {
     if (startCountdownTimerRef.current !== null) {
@@ -6118,35 +6567,39 @@ export default function Home() {
     const state = snapshot?.state as Record<string, unknown> | undefined;
     if (!state) return;
 
-    if (state.activePanel) setActivePanel(state.activePanel as Panel);
-    if (state.gameStarted && typeof state.gameStarted === "object") {
-      setGameStarted((state.gameStarted as Record<PlayablePanel, boolean>));
-    }
-    if (
-      state.startCountdownPanel === null
-      || state.startCountdownPanel === "othello"
-      || state.startCountdownPanel === "gomoku"
-      || state.startCountdownPanel === "chess"
-      || state.startCountdownPanel === "shogi"
-      || state.startCountdownPanel === "uno"
-      || state.startCountdownPanel === "minesweeper"
-      || state.startCountdownPanel === "numeron"
-      || state.startCountdownPanel === "blackjack"
-      || state.startCountdownPanel === "chinchiro"
-      || state.startCountdownPanel === "sevens"
-      || state.startCountdownPanel === "daifugo"
-      || state.startCountdownPanel === "fourPanel"
-      || state.startCountdownPanel === "drawingRelay"
-      || state.startCountdownPanel === "fitPuzzle"
-      || state.startCountdownPanel === "mahjong"
-      || state.startCountdownPanel === "poker"
-      || state.startCountdownPanel === "solitaire"
-      || state.startCountdownPanel === "survivors"
-    ) {
-      setStartCountdownPanel((state.startCountdownPanel ?? null) as PlayablePanel | null);
-    }
-    if (Number.isFinite(state.startCountdownSec)) {
-      setStartCountdownSec(Math.max(0, Math.floor(Number(state.startCountdownSec))));
+    // Keep per-client panel selection independent while connected to a room.
+    if (state.activePanel && !connectedRoomCode) setActivePanel(state.activePanel as Panel);
+    const shouldApplySharedStartState = !connectedRoomCode;
+    if (shouldApplySharedStartState) {
+      if (state.gameStarted && typeof state.gameStarted === "object") {
+        setGameStarted((state.gameStarted as Record<PlayablePanel, boolean>));
+      }
+      if (
+        state.startCountdownPanel === null
+        || state.startCountdownPanel === "othello"
+        || state.startCountdownPanel === "gomoku"
+        || state.startCountdownPanel === "chess"
+        || state.startCountdownPanel === "shogi"
+        || state.startCountdownPanel === "uno"
+        || state.startCountdownPanel === "minesweeper"
+        || state.startCountdownPanel === "numeron"
+        || state.startCountdownPanel === "blackjack"
+        || state.startCountdownPanel === "chinchiro"
+        || state.startCountdownPanel === "sevens"
+        || state.startCountdownPanel === "daifugo"
+        || state.startCountdownPanel === "fourPanel"
+        || state.startCountdownPanel === "drawingRelay"
+        || state.startCountdownPanel === "fitPuzzle"
+        || state.startCountdownPanel === "mahjong"
+        || state.startCountdownPanel === "poker"
+        || state.startCountdownPanel === "solitaire"
+        || state.startCountdownPanel === "survivors"
+      ) {
+        setStartCountdownPanel((state.startCountdownPanel ?? null) as PlayablePanel | null);
+      }
+      if (Number.isFinite(state.startCountdownSec)) {
+        setStartCountdownSec(Math.max(0, Math.floor(Number(state.startCountdownSec))));
+      }
     }
 
     if (Array.isArray(state.board)) setBoard(state.board as Cell[][]);
@@ -6286,37 +6739,40 @@ export default function Home() {
     if (typeof state.mineMessage === "string") setMineMessage(state.mineMessage);
     if (typeof state.isMineOver === "boolean") setIsMineOver(state.isMineOver);
 
-    if (typeof state.numeronSecret === "string") setNumeronSecret(state.numeronSecret);
-    setNumeronDigitCount(normalizeNumeronDigitCount(state.numeronDigitCount));
-    {
-      const count = normalizeNumeronDigitCount(state.numeronDigitCount);
-      setNumeronSecretDraft(normalizeNumeronDigitDraft(state.numeronSecretDraft ?? state.numeronSecretInput, count));
+    const shouldApplyNumeronSync = !connectedRoomCode;
+    if (shouldApplyNumeronSync) {
+      if (typeof state.numeronSecret === "string") setNumeronSecret(state.numeronSecret);
+      setNumeronDigitCount(normalizeNumeronDigitCount(state.numeronDigitCount));
+      {
+        const count = normalizeNumeronDigitCount(state.numeronDigitCount);
+        setNumeronSecretDraft(normalizeNumeronDigitDraft(state.numeronSecretDraft ?? state.numeronSecretInput, count));
+      }
+      if (typeof state.isNumeronSecretConfirmed === "boolean") {
+        setIsNumeronSecretConfirmed(state.isNumeronSecretConfirmed);
+      } else {
+        const restoredCount = normalizeNumeronDigitCount(state.numeronDigitCount);
+        const restoredSecret = typeof state.numeronSecret === "string" ? state.numeronSecret : "";
+        const restoredHistory = Array.isArray(state.numeronHistory) ? (state.numeronHistory as NumeronHistory[]) : [];
+        setIsNumeronSecretConfirmed(isValidNumeronCode(restoredSecret, restoredCount) || restoredHistory.length > 0);
+      }
+      if (typeof state.isNumeronSecretPanelOpen === "boolean") {
+        setIsNumeronSecretPanelOpen(state.isNumeronSecretPanelOpen);
+      }
+      if (Array.isArray(state.numeronDraft)) setNumeronDraft(state.numeronDraft as string[]);
+      if (Array.isArray(state.numeronHistory)) setNumeronHistory(state.numeronHistory as NumeronHistory[]);
+      if (Array.isArray(state.numeronEnemyHistory)) setNumeronEnemyHistory(state.numeronEnemyHistory as NumeronHistory[]);
+      if (typeof state.isNumeronEnemyHistoryOpen === "boolean") setIsNumeronEnemyHistoryOpen(state.isNumeronEnemyHistoryOpen);
+      if (/^\d$/.test(String(state.numeronHintDigit ?? ""))) setNumeronHintDigit(String(state.numeronHintDigit));
+      if (state.numeronAssistCharges && typeof state.numeronAssistCharges === "object") {
+        const charges = state.numeronAssistCharges as { highlow?: unknown; reveal?: unknown };
+        setNumeronAssistCharges({
+          highlow: typeof charges.highlow === "number" ? Math.max(0, Math.floor(charges.highlow)) : 1,
+          reveal: typeof charges.reveal === "number" ? Math.max(0, Math.floor(charges.reveal)) : 1,
+        });
+      }
+      if (typeof state.isNumeronOver === "boolean") setIsNumeronOver(state.isNumeronOver);
+      if (typeof state.numeronMessage === "string") setNumeronMessage(state.numeronMessage);
     }
-    if (typeof state.isNumeronSecretConfirmed === "boolean") {
-      setIsNumeronSecretConfirmed(state.isNumeronSecretConfirmed);
-    } else {
-      const restoredCount = normalizeNumeronDigitCount(state.numeronDigitCount);
-      const restoredSecret = typeof state.numeronSecret === "string" ? state.numeronSecret : "";
-      const restoredHistory = Array.isArray(state.numeronHistory) ? (state.numeronHistory as NumeronHistory[]) : [];
-      setIsNumeronSecretConfirmed(isValidNumeronCode(restoredSecret, restoredCount) || restoredHistory.length > 0);
-    }
-    if (typeof state.isNumeronSecretPanelOpen === "boolean") {
-      setIsNumeronSecretPanelOpen(state.isNumeronSecretPanelOpen);
-    }
-    if (Array.isArray(state.numeronDraft)) setNumeronDraft(state.numeronDraft as string[]);
-    if (Array.isArray(state.numeronHistory)) setNumeronHistory(state.numeronHistory as NumeronHistory[]);
-    if (Array.isArray(state.numeronEnemyHistory)) setNumeronEnemyHistory(state.numeronEnemyHistory as NumeronHistory[]);
-    if (typeof state.isNumeronEnemyHistoryOpen === "boolean") setIsNumeronEnemyHistoryOpen(state.isNumeronEnemyHistoryOpen);
-    if (/^\d$/.test(String(state.numeronHintDigit ?? ""))) setNumeronHintDigit(String(state.numeronHintDigit));
-    if (state.numeronAssistCharges && typeof state.numeronAssistCharges === "object") {
-      const charges = state.numeronAssistCharges as { highlow?: unknown; reveal?: unknown };
-      setNumeronAssistCharges({
-        highlow: typeof charges.highlow === "number" ? Math.max(0, Math.floor(charges.highlow)) : 1,
-        reveal: typeof charges.reveal === "number" ? Math.max(0, Math.floor(charges.reveal)) : 1,
-      });
-    }
-    if (typeof state.isNumeronOver === "boolean") setIsNumeronOver(state.isNumeronOver);
-    if (typeof state.numeronMessage === "string") setNumeronMessage(state.numeronMessage);
 
     if (Array.isArray(state.blackjackDeck)) setBlackjackDeck(state.blackjackDeck as BlackjackCard[]);
     if (Array.isArray(state.blackjackPlayerHand)) setBlackjackPlayerHand(state.blackjackPlayerHand as BlackjackCard[]);
@@ -6488,7 +6944,7 @@ export default function Home() {
     if (state.unoTurn === "player" || state.unoTurn === "cpu") setUnoTurn(state.unoTurn as "player" | "cpu");
     if (typeof state.unoMessage === "string") setUnoMessage(state.unoMessage);
     if (typeof state.isUnoOver === "boolean") setIsUnoOver(state.isUnoOver);
-  }, []);
+  }, [connectedRoomCode, roomRole]);
 
   const connectRoom = useCallback(
     (
@@ -6499,12 +6955,20 @@ export default function Home() {
         spectate?: boolean;
         roomPublic?: boolean;
         inviteToken?: string;
+        panelOverride?: PlayablePanel | "";
+        createRoom?: boolean;
+        sourceRoomCode?: string;
+        listContextOverride?: "menu" | "game";
+        serverAllocateCode?: boolean;
       },
     ) => {
       const quickJoin = Boolean(options?.quickJoin);
       const normalizedCode = requestedCode.replace(/[^0-9]/g, "").slice(0, 6);
-      const code = quickJoin ? normalizedCode : (normalizedCode || (createIfEmpty ? String(Math.floor(100000 + Math.random() * 900000)) : ""));
-      if (!quickJoin && !code) {
+      const shouldUseServerAllocatedCode = Boolean(options?.createRoom && options?.serverAllocateCode);
+      const code = quickJoin
+        ? normalizedCode
+        : (normalizedCode || ((createIfEmpty && !shouldUseServerAllocatedCode) ? allocateClientRoomCode() : ""));
+      if (!quickJoin && !code && !Boolean(options?.createRoom)) {
         setMenuMessage(t("roomCodeRequired"));
         return;
       }
@@ -6517,7 +6981,6 @@ export default function Home() {
       setRoomChatMessages([]);
       setSpectatorChatMessages([]);
       setRoomStatus(t("roomStateConnecting"));
-      setMenuMessage("");
 
       const wsUrl = getAutoRoomServerUrl();
       const connectFailedMessage = `${t("roomConnectFailed")} (${wsUrl})`;
@@ -6532,8 +6995,12 @@ export default function Home() {
       }
 
       roomSocketRef.current = ws;
+      const isCurrentSocket = () => roomSocketRef.current === ws;
       let hasOpened = false;
+      let retriedRoomRequiredOnCreate = false;
+      let hasQuickMatchResolved = false;
       const connectTimeout = window.setTimeout(() => {
+        if (!isCurrentSocket()) return;
         if (hasOpened) return;
         try {
           ws.close();
@@ -6546,33 +7013,82 @@ export default function Home() {
       }, 6000);
 
       ws.onopen = () => {
+        if (!isCurrentSocket()) {
+          try {
+            ws.close();
+          } catch {
+            // ignore close error
+          }
+          return;
+        }
         hasOpened = true;
         window.clearTimeout(connectTimeout);
         setRoomStatus(t("roomStateConnected"));
         if (code) {
           setRoomCode(code);
         }
-        const payload: Record<string, unknown> = {
-          type: quickJoin ? "quick-join" : "hello",
-          from: peerIdRef.current,
-          name: playerName,
-          roomPublic: Boolean(options?.roomPublic ?? (roomVisibility === "public")),
-          spectate: Boolean(options?.spectate),
-          inviteToken: String(options?.inviteToken || "").trim(),
-        };
-        if (code) {
-          payload.room = code;
+        try {
+          const payload: Record<string, unknown> = {
+            type: quickJoin ? "quick-join" : "hello",
+            from: peerIdRef.current,
+            clientId: getCurrentRoomClientId(),
+            userId: getCurrentRoomUserId(),
+            panel: options?.panelOverride ?? getCurrentRoomPanel(),
+            name: playerName,
+            roomPublic: Boolean(options?.roomPublic ?? (roomVisibility === "public")),
+            spectate: Boolean(options?.spectate),
+            create: Boolean(options?.createRoom),
+            inviteToken: String(options?.inviteToken || "").trim(),
+          };
+          if (options?.listContextOverride === "menu" || options?.listContextOverride === "game") {
+            payload.listContext = options.listContextOverride;
+          }
+          const sourceRoomCode = String(options?.sourceRoomCode || "").replace(/[^0-9]/g, "").slice(0, 6);
+          if (sourceRoomCode) {
+            payload.sourceRoom = sourceRoomCode;
+          }
+          if (code) {
+            payload.room = code;
+          }
+          ws.send(JSON.stringify(payload));
+        } catch {
+          if (quickJoin) {
+            setQuickMatchMode(false);
+            setMenuMessage(t("roomListEmpty"));
+          }
         }
-        ws.send(JSON.stringify(payload));
       };
 
       ws.onmessage = (event) => {
+        if (!isCurrentSocket()) return;
         try {
           const payload = JSON.parse(String(event.data || "{}"));
           const type = String(payload?.type || "");
 
+          if (type === "rooms-list") {
+            if (Array.isArray(payload.rooms)) {
+              const listContext = String(payload.listContext || "").trim().toLowerCase();
+              if (listContext === "menu") {
+                applyPublicRoomList("menu", payload.rooms as unknown[]);
+              } else if (listContext === "game") {
+                applyPublicRoomList("panel", payload.rooms as unknown[]);
+              } else {
+                applyPublicRoomList("menu", payload.rooms as unknown[]);
+                applyPublicRoomList("panel", payload.rooms as unknown[]);
+              }
+            } else {
+              setIsMenuPublicRoomsLoading(false);
+              setIsPanelPublicRoomsLoading(false);
+            }
+            return;
+          }
+
           if (type === "arcade-sync") {
             if (String(payload?.from || "") === peerIdRef.current) {
+              return;
+            }
+            const incomingPanel = String((payload?.snapshot as { state?: { activePanel?: unknown } } | undefined)?.state?.activePanel || "");
+            if (isNumeronSessionActiveRef.current || incomingPanel === "numeron") {
               return;
             }
             if (typeof payload?.chaos === "boolean") {
@@ -6710,14 +7226,31 @@ export default function Home() {
           }
 
           if (type === "room-assigned") {
+            hasQuickMatchResolved = true;
             const assignedCode = String(payload.code || "").replace(/\D/g, "").slice(0, 6);
             if (assignedCode) {
               setConnectedRoomCode(assignedCode);
               setRoomCode(assignedCode);
+              if (activePanel === "menu") {
+                setSelectedMenuPublicRoomCode(assignedCode);
+              } else {
+                setSelectedPanelPublicRoomCode(assignedCode);
+              }
+              requestPublicRoomList(activePanel === "menu" ? "menu" : "panel", true);
             }
             if (Array.isArray(payload.participants)) {
-              setRoomParticipants(payload.participants as RoomParticipant[]);
-              const myself = (payload.participants as RoomParticipant[]).find((p) => p.id === peerIdRef.current);
+              const incoming = (payload.participants as RoomParticipant[]).map((participant) => ({
+                ...participant,
+                panel: normalizeRoomPanel((participant as { panel?: unknown }).panel),
+              }));
+              setRoomParticipants((prev) => {
+                const prevPanels = new Map(prev.map((participant) => [participant.id, participant.panel]));
+                return incoming.map((participant) => ({
+                  ...participant,
+                  panel: participant.panel || prevPanels.get(participant.id) || null,
+                }));
+              });
+              const myself = incoming.find((p) => p.id === peerIdRef.current);
               if (myself?.role) {
                 setRoomRole(myself.role);
               }
@@ -6751,6 +7284,9 @@ export default function Home() {
                   type: "presence",
                   room: assignedCode,
                   from: peerIdRef.current,
+                  clientId: getCurrentRoomClientId(),
+                  userId: getCurrentRoomUserId(),
+                  panel: getCurrentRoomPanel(),
                   name: playerName,
                   roomPublic: Boolean(payload.roomPublic ?? (roomVisibility === "public")),
                 }),
@@ -6759,11 +7295,48 @@ export default function Home() {
             return;
           }
 
+          if (type === "quick-no-room") {
+            if (quickJoin) {
+              hasQuickMatchResolved = true;
+              setQuickMatchMode(false);
+              closeRoomSocket();
+              setMenuMessage(t("roomListEmpty"));
+            }
+            return;
+          }
+
+          if (type === "presence") {
+            const from = String(payload.from || "").trim();
+            if (!from) return;
+            const nextPanel = normalizeRoomPanel((payload as { panel?: unknown }).panel);
+            if (!nextPanel) return;
+            setRoomParticipants((prev) => prev.map((participant) => (
+              participant.id === from
+                ? { ...participant, panel: nextPanel }
+                : participant
+            )));
+            return;
+          }
+
           if (type === "room-state") {
             const nextRoomCode = String(payload.room || "");
-            const participants = Array.isArray(payload.participants) ? payload.participants : [];
+            if (quickJoin && nextRoomCode) {
+              hasQuickMatchResolved = true;
+            }
+            const participants: RoomParticipant[] = Array.isArray(payload.participants)
+              ? payload.participants.map((participant: unknown) => ({
+                ...(participant as RoomParticipant),
+                panel: normalizeRoomPanel((participant as { panel?: unknown }).panel),
+              }))
+              : [];
             setConnectedRoomCode(nextRoomCode);
-            setRoomParticipants(participants);
+            setRoomParticipants((prev) => {
+              const prevPanels = new Map(prev.map((participant) => [participant.id, participant.panel]));
+              return participants.map((participant) => ({
+                ...participant,
+                panel: participant.panel || prevPanels.get(participant.id) || null,
+              }));
+            });
             if (Array.isArray(payload.drawVotes)) {
               setOthelloDrawVotes(payload.drawVotes.map((vote: unknown) => String(vote)).filter((vote: string) => vote.length > 0));
             } else {
@@ -6888,6 +7461,25 @@ export default function Home() {
 
           if (type === "error") {
             const code = String(payload.code || "UNKNOWN");
+            const shouldRecoverRoomRequired = options?.createRoom || createIfEmpty;
+            if (code === "ROOM_REQUIRED" && shouldRecoverRoomRequired && !retriedRoomRequiredOnCreate) {
+              retriedRoomRequiredOnCreate = true;
+              connectRoom("", true, {
+                ...options,
+                createRoom: true,
+                serverAllocateCode: true,
+                panelOverride: options?.panelOverride ?? getCurrentRoomPanel(),
+              });
+              return;
+            }
+            if (code === "ROOM_REQUIRED" && shouldRecoverRoomRequired) {
+              setMenuMessage(
+                tf("roomCreatePreparing", {
+                  password: roomVisibility === "private" ? t("roomPasswordOn") : t("roomPasswordOff"),
+                }),
+              );
+              return;
+            }
             if (code === "MUTED") {
               rollbackLatestPendingRoomChat();
               setMenuMessage(t("roomChatMuted"));
@@ -6906,14 +7498,21 @@ export default function Home() {
       };
 
       ws.onerror = () => {
+        if (!isCurrentSocket()) return;
         window.clearTimeout(connectTimeout);
+        setIsMenuPublicRoomsLoading(false);
+        setIsPanelPublicRoomsLoading(false);
         setQuickMatchMode(false);
         setRoomStatus(t("roomStateError"));
         setMenuMessage(connectFailedMessage);
       };
 
       ws.onclose = () => {
+        if (!isCurrentSocket()) return;
         window.clearTimeout(connectTimeout);
+        roomSocketRef.current = null;
+        setIsMenuPublicRoomsLoading(false);
+        setIsPanelPublicRoomsLoading(false);
         setQuickMatchMode(false);
         if (!hasOpened) {
           setOthelloDrawVotes([]);
@@ -6928,21 +7527,37 @@ export default function Home() {
     [
       applyArcadeSnapshot,
       closeRoomSocket,
+      getCurrentRoomClientId,
       playerName,
+      getCurrentRoomPanel,
+      getCurrentRoomUserId,
       pushRoomChatMessage,
       rollbackLatestPendingRoomChat,
       pushSpectatorChatMessage,
+      normalizeRoomPanel,
+      allocateClientRoomCode,
       roomCode,
       roomErrorLabel,
       roomVisibility,
       stripInviteTokenFromAddressBar,
       finalizeOthelloDrawAgreement,
       applySurrenderToPanel,
+      applyPublicRoomList,
       activePanel,
       t,
       tf,
     ],
   );
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (activePanel !== "menu") return;
+    requestPublicRoomList("menu", true);
+    const timer = window.setInterval(() => {
+      requestPublicRoomList("menu", true);
+    }, 3500);
+    return () => window.clearInterval(timer);
+  }, [activePanel, connectedRoomCode, isAuthenticated, requestPublicRoomList]);
 
   const requestInviteToken = useCallback(() => {
     return new Promise<string>((resolve) => {
@@ -7018,25 +7633,84 @@ export default function Home() {
   }, [connectRoom, t]);
 
   const joinRoomAsPlayer = useCallback(() => {
-    const code = roomCode.replace(/[^0-9]/g, "").slice(0, 6);
+    const targetCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
+    const code = targetCode.replace(/[^0-9]/g, "").slice(0, 6);
     if (code.length !== 6) {
-      setMenuMessage(t("roomCodeInvalid"));
+      setMenuMessage(t("roomSelectRequired"));
       return;
     }
     setQuickMatchMode(false);
-    onJoinRoom();
+    if (!onJoinRoom(code)) return;
+    setRoomCode(code);
     connectRoom(code, false, { inviteToken: pendingInviteToken });
-  }, [connectRoom, onJoinRoom, pendingInviteToken, roomCode, t]);
+  }, [activePanel, connectRoom, onJoinRoom, pendingInviteToken, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
 
   const joinRoomAsSpectator = useCallback(() => {
-    const code = roomCode.replace(/[^0-9]/g, "").slice(0, 6);
+    const targetCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
+    const code = targetCode.replace(/[^0-9]/g, "").slice(0, 6);
     if (code.length !== 6) {
-      setMenuMessage(t("roomCodeInvalid"));
+      setMenuMessage(t("roomSelectRequired"));
       return;
     }
     setQuickMatchMode(false);
+    setRoomCode(code);
     connectRoom(code, false, { spectate: true, inviteToken: pendingInviteToken });
-  }, [connectRoom, pendingInviteToken, roomCode, t]);
+  }, [activePanel, connectRoom, pendingInviteToken, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
+
+  const createRoomFromCurrentPanel = useCallback(() => {
+    setQuickMatchMode(false);
+    setPendingInviteToken("");
+    const panelNow = normalizeRoomPanel(activePanel) || getCurrentRoomPanel();
+    const sourceRoomCode = connectedRoomCode;
+    setMenuMessage(
+      tf("roomCreatePreparing", {
+        password: roomVisibility === "private" ? t("roomPasswordOn") : t("roomPasswordOff"),
+      }),
+    );
+    connectRoom("", true, {
+      roomPublic: roomVisibility === "public",
+      panelOverride: panelNow,
+      createRoom: true,
+      sourceRoomCode,
+      listContextOverride: "game",
+      serverAllocateCode: true,
+    });
+    window.setTimeout(() => {
+      requestPublicRoomList("panel", true);
+    }, 250);
+  }, [activePanel, connectedRoomCode, connectRoom, getCurrentRoomPanel, normalizeRoomPanel, requestPublicRoomList, roomVisibility, t, tf]);
+
+  const createRoomFromMenu = useCallback(() => {
+    setQuickMatchMode(false);
+    setPendingInviteToken("");
+    setMenuMessage(
+      tf("roomCreatePreparing", {
+        password: t("roomPasswordOff"),
+      }),
+    );
+    connectRoom("", true, {
+      roomPublic: true,
+      panelOverride: "",
+      createRoom: true,
+      listContextOverride: "menu",
+      serverAllocateCode: true,
+    });
+    window.setTimeout(() => {
+      requestPublicRoomList("menu", true);
+    }, 250);
+  }, [connectRoom, requestPublicRoomList, t, tf]);
+
+  const disconnectRoomFromCurrentPanel = useCallback(() => {
+    setQuickMatchMode(false);
+    setPendingInviteToken("");
+    closeRoomSocket();
+    setConnectedRoomCode("");
+    setRoomParticipants([]);
+    setRoomRole("");
+    setRoomChatMessages([]);
+    setSpectatorChatMessages([]);
+    requestPublicRoomList(activePanel === "menu" ? "menu" : "panel", true);
+  }, [closeRoomSocket, requestPublicRoomList]);
 
   const sendRoomChat = useCallback(() => {
     if (roomRole === "spectator") return;
@@ -7064,6 +7738,71 @@ export default function Home() {
     if (roomRole !== "host") return;
     sendRoomEvent({ type: "presence", roomPublic: roomVisibility === "public" });
   }, [connectedRoomCode, roomRole, roomVisibility, sendRoomEvent]);
+
+  useEffect(() => {
+    if (!quickMatchMode) return;
+    if (connectedRoomCode) return;
+
+    const ws = roomSocketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const sendQuickJoin = () => {
+      const currentWs = roomSocketRef.current;
+      if (!currentWs || currentWs.readyState !== WebSocket.OPEN) return;
+      if (connectedRoomCode) return;
+      try {
+        currentWs.send(
+          JSON.stringify({
+            type: "quick-join",
+            from: peerIdRef.current,
+            clientId: getCurrentRoomClientId(),
+            userId: getCurrentRoomUserId(),
+            panel: getCurrentRoomPanel(),
+            name: playerName,
+            roomPublic: true,
+          }),
+        );
+      } catch {
+        // ignore send error
+      }
+    };
+
+    sendQuickJoin();
+    const retryTimer = window.setTimeout(sendQuickJoin, 700);
+    return () => {
+      window.clearTimeout(retryTimer);
+    };
+  }, [
+    connectedRoomCode,
+    getCurrentRoomClientId,
+    getCurrentRoomPanel,
+    getCurrentRoomUserId,
+    playerName,
+    quickMatchMode,
+  ]);
+
+  useEffect(() => {
+    if (!connectedRoomCode) return;
+    sendRoomEvent({ type: "presence", roomPublic: roomVisibility === "public" });
+    sendRoomEvent({ type: "sync-room-state" });
+  }, [activePanel, connectedRoomCode, roomVisibility, sendRoomEvent]);
+
+  useEffect(() => {
+    if (!connectedRoomCode) return;
+
+    const heartbeat = () => {
+      sendRoomEvent({ type: "sync-room-state" });
+    };
+
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 1500);
+    const onFocus = () => heartbeat();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [connectedRoomCode, sendRoomEvent]);
 
   useEffect(() => {
     return () => {
@@ -7248,17 +7987,50 @@ export default function Home() {
     if (roomRole !== "host") return;
 
     const push = () => {
+      if (isNumeronSessionActiveRef.current) {
+        return;
+      }
+      const roomMode = normalizeOthelloModeForRoom(othelloMode, isChaosMode);
+      const baseState = (snapshotRef.current.state || {}) as Record<string, unknown>;
+      const {
+        activePanel: _activePanel,
+        numeronSecret: _numeronSecret,
+        numeronDigitCount: _numeronDigitCount,
+        numeronSecretDraft: _numeronSecretDraft,
+        isNumeronSecretConfirmed: _isNumeronSecretConfirmed,
+        isNumeronSecretPanelOpen: _isNumeronSecretPanelOpen,
+        numeronDraft: _numeronDraft,
+        numeronHistory: _numeronHistory,
+        numeronEnemyHistory: _numeronEnemyHistory,
+        isNumeronEnemyHistoryOpen: _isNumeronEnemyHistoryOpen,
+        numeronHintDigit: _numeronHintDigit,
+        numeronAssistCharges: _numeronAssistCharges,
+        isNumeronOver: _isNumeronOver,
+        numeronMessage: _numeronMessage,
+        ...roomSafeState
+      } = baseState;
       sendRoomEvent({
         type: "arcade-sync",
         chaos: isChaosMode,
-        snapshot: snapshotRef.current,
+        snapshot: {
+          ...snapshotRef.current,
+          state: {
+            ...roomSafeState,
+            othelloMode: roomMode,
+          },
+        },
       });
     };
 
     push();
     const timer = setInterval(push, 1000);
     return () => clearInterval(timer);
-  }, [connectedRoomCode, isChaosMode, roomRole, sendRoomEvent]);
+  }, [connectedRoomCode, isChaosMode, othelloMode, roomRole, sendRoomEvent]);
+
+  useEffect(() => {
+    if (!connectedRoomCode) return;
+    setOthelloMode((prev) => normalizeOthelloModeForRoom(prev, isChaosMode));
+  }, [connectedRoomCode, isChaosMode]);
 
   const onBoardClick = (row: number, col: number, options?: { isRemote?: boolean; byCpu?: boolean }) => {
     if (isGameOver) return;
@@ -10186,6 +10958,15 @@ export default function Home() {
     setSurvivorsEnemies(nextEnemies);
   };
 
+  const onSurvivorsApplyScore = () => {
+    const nextScore = Math.max(
+      0,
+      Math.floor(survivorsTimeSec * 4 + survivorsKills * 14 + survivorsWave * 20 + survivorsLevel * 10),
+    );
+    setScore(nextScore);
+    setMessage(t("survivorsAppliedScore"));
+  };
+
   useEffect(() => {
     if (survivorsXp < survivorsLevel * 40) return;
     setSurvivorsXp((prev) => prev - survivorsLevel * 40);
@@ -12433,7 +13214,15 @@ export default function Home() {
                             className={`${card.className} relative cursor-pointer transition duration-150 hover:-translate-y-0.5 hover:border-cyan-200/75 hover:bg-cyan-300/15 hover:shadow-[0_10px_22px_rgba(56,189,248,0.18)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/90`}
                           >
                             <span className="pointer-events-none absolute right-3 top-3 rounded border border-cyan-200/40 bg-slate-950/55 px-2 py-[2px] text-[10px] font-semibold tracking-wide text-cyan-100">OPEN</span>
-                            <p className="text-lg font-semibold">{card.title}</p>
+                            <p className="flex items-center gap-2 text-lg font-semibold">
+                              <span>{card.title}</span>
+                              <span className="inline-flex items-center gap-1 rounded-md border border-cyan-200/55 bg-cyan-300/22 px-2 py-[2px] text-[11px] font-black leading-none text-cyan-50 shadow-[0_0_0_1px_rgba(34,211,238,0.18)_inset]">
+                                <span className="tracking-wide">ROOM:</span>
+                                <span className="font-mono [font-variant-numeric:tabular-nums] text-cyan-100">
+                                  {connectedRoomCode ? roomOccupancyTextByPanel[card.panel] : "00/16"}
+                                </span>
+                              </span>
+                            </p>
                           </button>
                         ))}
                       </div>
@@ -12458,33 +13247,56 @@ export default function Home() {
 
               {isRoomControlsOpen ? (
               <div className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-sm">
-                  {t("roomCode")}
-                  <input
-                    value={roomCode}
-                    onChange={(event) => setRoomCode(event.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
-                    placeholder={t("roomCodePlaceholder")}
-                    className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                  />
-                </label>
-
-                <div className="flex items-center gap-4 text-sm">
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={roomVisibility === "public"}
-                      onChange={() => setRoomVisibility("public")}
-                    />
-                    {t("roomPublic")}
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={roomVisibility === "private"}
-                      onChange={() => setRoomVisibility("private")}
-                    />
-                    {t("roomPrivate")}
-                  </label>
+                <div className="grid gap-2 rounded-lg border border-slate-400/25 bg-slate-950/35 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsMenuRoomListOpen((prev) => !prev)}
+                      className="text-left text-sm font-semibold text-slate-100"
+                      aria-expanded={isMenuRoomListOpen}
+                    >
+                      {t("roomListTitle")} {isMenuRoomListOpen ? "[-]" : "[+]"}
+                    </button>
+                    {isMenuRoomListOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => requestPublicRoomList("menu", false)}
+                        className="rounded-md border border-cyan-200/40 px-2 py-1 text-xs"
+                      >
+                        {isMenuPublicRoomsLoading ? t("loading") : t("roomListRefresh")}
+                      </button>
+                    ) : null}
+                  </div>
+                  {isMenuRoomListOpen ? (menuPublicRooms.length === 0 ? (
+                    <p className="text-sm text-slate-300">{t("roomListEmpty")}</p>
+                  ) : (
+                    <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-slate-100">
+                      {menuPublicRooms.map((room) => {
+                        const selected = room.code === selectedMenuPublicRoomCode;
+                        const host = room.hostName || "Host";
+                        const guest = room.guestName || t("roomOpponentWaiting");
+                        const panelText = room.panels.length > 0
+                          ? room.panels.map((panel) => roomPanelLabel(panel)).join(" / ")
+                          : "-";
+                        return (
+                          <li key={`room-list-menu-${room.code}`}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedMenuPublicRoomCode(room.code);
+                                setRoomCode(room.code);
+                              }}
+                              className={`w-full rounded-md border px-2 py-1.5 text-left ${selected ? "border-cyan-300/80 bg-cyan-300/20" : "border-slate-500/40 bg-slate-900/40 hover:border-cyan-200/60"}`}
+                            >
+                              <p className="font-mono text-[11px]">{room.code}{room.isPublic ? "" : " 🔒"}</p>
+                              <p className="text-[11px] text-slate-200">{host} vs {guest}</p>
+                              <p className="text-[10px] text-slate-300">{panelText} • {room.totalParticipants}/16 • +{room.spectatorCount}</p>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )) : null}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -12497,19 +13309,7 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setQuickMatchMode(false);
-                      setPendingInviteToken("");
-                      const nextCode = String(Math.floor(100000 + Math.random() * 900000));
-                      setRoomCode(nextCode);
-                      setMenuMessage(
-                        tf("roomCandidate", {
-                          code: nextCode,
-                          visibility: roomVisibility === "public" ? t("visibilityPublic") : t("visibilityPrivate"),
-                        }),
-                      );
-                      connectRoom(nextCode, true, { roomPublic: roomVisibility === "public" });
-                    }}
+                    onClick={createRoomFromMenu}
                     className="rounded-md bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950"
                   >
                     {t("roomCreate")}
@@ -12544,16 +13344,7 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setQuickMatchMode(false);
-                      setPendingInviteToken("");
-                      closeRoomSocket();
-                      setConnectedRoomCode("");
-                      setRoomParticipants([]);
-                      setRoomRole("");
-                      setRoomChatMessages([]);
-                      setSpectatorChatMessages([]);
-                    }}
+                    onClick={disconnectRoomFromCurrentPanel}
                     className="rounded-md border border-red-200/40 px-3 py-2 text-sm"
                   >
                     {t("roomDisconnect")}
@@ -12566,7 +13357,8 @@ export default function Home() {
                       <p>{t("roomState")}: {roomStatus}</p>
                       <p>{t("roomConnected")}: {connectedRoomCode || "-"}</p>
                       <p>{t("roomRole")}: {roomRole ? roomRoleLabel(roomRole) : "-"}</p>
-                      <p>{t("roomMatchedPlayers")}: {connectedRoomCode ? `${roomMatchedPlayerCount}/8` : "-"}</p>
+                      <p>{t("roomMatchedPlayers")}: {connectedRoomCode ? roomOccupancyText : "-"}</p>
+                      <p>{t("roomCapacityHint")}</p>
                       {quickMatchMode ? (
                         <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-cyan-200/30 bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100">
                           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-100/35 border-t-cyan-100" aria-hidden="true" />
@@ -12576,7 +13368,9 @@ export default function Home() {
                     </div>
 
                     <div className="rounded-lg border border-slate-400/25 bg-slate-950/40 p-3">
-                      <p className="text-sm font-semibold">{t("roomMembers")}</p>
+                      <p className="text-sm font-semibold">
+                        {t("roomMembers")}: {connectedRoomCode ? roomOccupancyText : "-"}
+                      </p>
                       {roomParticipants.length === 0 ? (
                         <p className="mt-1 text-sm text-slate-300">{t("roomMembersEmpty")}</p>
                       ) : (
@@ -12698,6 +13492,124 @@ export default function Home() {
           </section>
         ) : null}
 
+        {activePanel !== "menu" && activePanel !== "scores" ? (
+          <section className="rounded-xl border border-slate-300/20 bg-slate-900/35 p-3">
+            <div className="grid gap-2">
+              <p className="text-sm font-semibold text-slate-100">{t("roomTitle")}</p>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,12rem)_auto] sm:items-center">
+                <div className="rounded-md border border-slate-400/30 bg-slate-950/45 p-2">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsPanelRoomListOpen((prev) => !prev)}
+                      className="text-left text-xs font-semibold text-slate-100"
+                      aria-expanded={isPanelRoomListOpen}
+                    >
+                      {t("roomListTitle")} {isPanelRoomListOpen ? "[-]" : "[+]"}
+                    </button>
+                    {isPanelRoomListOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => requestPublicRoomList("panel", false)}
+                        className="rounded border border-cyan-200/40 px-2 py-[3px] text-[11px]"
+                      >
+                        {isPanelPublicRoomsLoading ? t("loading") : t("roomListRefresh")}
+                      </button>
+                    ) : null}
+                  </div>
+                  {isPanelRoomListOpen ? (filteredPanelPublicRooms.length === 0 ? (
+                    <p className="text-xs text-slate-300">{t("roomListEmpty")}</p>
+                  ) : (
+                    <ul className="max-h-28 space-y-1 overflow-y-auto text-[11px] text-slate-100">
+                      {filteredPanelPublicRooms.map((room) => {
+                        const selected = room.code === selectedPanelPublicRoomCode;
+                        const host = room.hostName || "Host";
+                        const guest = room.guestName || t("roomOpponentWaiting");
+                        return (
+                          <li key={`room-list-panel-${room.code}`}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPanelPublicRoomCode(room.code);
+                                setRoomCode(room.code);
+                              }}
+                              className={`w-full rounded border px-2 py-1 text-left ${selected ? "border-cyan-300/80 bg-cyan-300/20" : "border-slate-500/40 bg-slate-900/35 hover:border-cyan-200/60"}`}
+                            >
+                              <p>
+                                <span className="font-mono">{room.code}{room.isPublic ? "" : " 🔒"}</span>
+                                <span className="ml-2 text-slate-200">{host} vs {guest}</span>
+                              </p>
+                              <p className="text-[10px] text-slate-300">{room.totalParticipants}/16 • +{room.spectatorCount}</p>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )) : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200">
+                  <span className="font-semibold text-slate-200">{t("roomPasswordLabel")}:</span>
+                  <label className="inline-flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={roomVisibility === "public"}
+                      onChange={() => setRoomVisibility("public")}
+                    />
+                    {t("roomPasswordOff")}
+                  </label>
+                  <label className="inline-flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={roomVisibility === "private"}
+                      onChange={() => setRoomVisibility("private")}
+                    />
+                    {t("roomPasswordOn")}
+                  </label>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={createRoomFromCurrentPanel}
+                  className="rounded-md bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950"
+                >
+                  {t("roomCreate")}
+                </button>
+                <button
+                  type="button"
+                  onClick={joinRoomAsPlayer}
+                  className="rounded-md border border-cyan-200/40 px-3 py-1.5 text-xs"
+                >
+                  {t("roomJoin")}
+                </button>
+                <button
+                  type="button"
+                  onClick={joinRoomAsSpectator}
+                  className="rounded-md border border-violet-200/40 px-3 py-1.5 text-xs"
+                >
+                  {t("spectateJoin")}
+                </button>
+                <button
+                  type="button"
+                  onClick={disconnectRoomFromCurrentPanel}
+                  className="rounded-md border border-red-200/40 px-3 py-1.5 text-xs"
+                >
+                  {t("roomDisconnect")}
+                </button>
+              </div>
+              <p className="text-xs text-slate-300">{t("roomState")}: {roomStatus}</p>
+              {menuMessage ? <p className="text-xs text-cyan-200">{menuMessage}</p> : null}
+            </div>
+          </section>
+        ) : null}
+
+        {connectedRoomCode && activePanel !== "menu" && activePanel !== "scores" ? (
+          <section className="rounded-xl border border-cyan-200/30 bg-slate-900/35 px-4 py-2 text-sm text-slate-200">
+            <span className="text-slate-300">{t("roomOpponentLabel")}: </span>
+            <span className="font-semibold text-cyan-100">{roomOpponentDisplay || t("roomOpponentWaiting")}</span>
+          </section>
+        ) : null}
+
         {activePanel === "othello" ? (
           <section className="grid gap-5">
             <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
@@ -12734,25 +13646,30 @@ export default function Home() {
             <p className="text-sm text-slate-300">{othelloMessage}</p>
             {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateOthelloNow)}</p> : null}
 
-            {!connectedRoomCode ? (
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 <label className="grid gap-1 text-xs text-slate-300">
                   <span>{t("othelloModeLabel")}</span>
                   <select
                     value={othelloMode}
                     onChange={(event) => {
                       const nextMode = event.target.value as OthelloMode;
+                      if (connectedRoomCode && nextMode !== "local" && nextMode !== "chaos") return;
                       setOthelloMode(nextMode);
                       setIsChaosMode(nextMode === "chaos");
                       resetOthello({}, nextMode === "chaos");
                     }}
-                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm"
+                    disabled={Boolean(
+                      gameStarted.othello
+                      || (connectedRoomCode && (roomRole === "guest" || roomRole === "spectator"))
+                    )}
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                   >
-                    <option value="cpu">{t("othelloModeCpu")}</option>
-                    <option value="cpuvscpu">{t("othelloModeCpuVsCpu")}</option>
+                    {!connectedRoomCode ? <option value="cpu">{t("othelloModeCpu")}</option> : null}
+                    {!connectedRoomCode ? <option value="cpuvscpu">{t("othelloModeCpuVsCpu")}</option> : null}
                     <option value="local">{t("othelloModeLocal")}</option>
                     <option value="chaos">{t("othelloModeChaos")}</option>
                   </select>
+                  {connectedRoomCode ? <span className="text-[11px] text-slate-400">{roomRole === "host" ? "開始前のみ変更可能" : "ホストが設定"}</span> : null}
                 </label>
 
                 <label className="grid gap-1 text-xs text-slate-300">
@@ -12792,7 +13709,6 @@ export default function Home() {
                   </select>
                 </label>
               </div>
-            ) : null}
 
             <div className={`mt-4 grid gap-3 ${othelloShowChaosSidePanel ? "md:grid-cols-2 md:items-start" : ""}`}>
             {othelloShowChaosSidePanel ? (
@@ -13692,6 +14608,13 @@ export default function Home() {
                   </button>
                 </div>
               </div>
+
+              {connectedRoomCode && gameStarted.numeron ? (
+                <p className="mt-2 inline-flex items-center gap-2 rounded-md border border-cyan-200/35 bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100">
+                  <span>{t("roomMatchedPlayers")}:</span>
+                  <span className="font-mono font-semibold [font-variant-numeric:tabular-nums]">{numeronMatchedPlayersCount}</span>
+                </p>
+              ) : null}
 
               {!gameStarted.numeron ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
               <fieldset disabled={!gameStarted.numeron} className={!gameStarted.numeron ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
@@ -15643,6 +16566,16 @@ export default function Home() {
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsLevel", { level: survivorsLevel })}</span>
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsTime", { sec: survivorsTimeSec })}</span>
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsKills", { count: survivorsKills })}</span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={onSurvivorsApplyScore}
+                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                >
+                  {t("survivorsApplyScore")}
+                </button>
               </div>
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">

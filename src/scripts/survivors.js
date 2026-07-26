@@ -1247,6 +1247,16 @@ export function initSurvivors(options = {}) {
       .map(([id, mate]) => ({ id, ...mate }));
   }
 
+  function updateTeammatePositions(dt) {
+    if (!state.room.enabled) return;
+    const lerpRate = clamp(dt * 12, 0, 1);
+    state.room.teammates.forEach((mate) => {
+      if (!Number.isFinite(mate.targetX) || !Number.isFinite(mate.targetY)) return;
+      mate.x += (mate.targetX - mate.x) * lerpRate;
+      mate.y += (mate.targetY - mate.y) * lerpRate;
+    });
+  }
+
   function nearbyAliveTeammateCount() {
     if (!state.room.enabled) return 0;
     const rangeSq = state.player.reviveAllyRange * state.player.reviveAllyRange;
@@ -2611,6 +2621,8 @@ export function initSurvivors(options = {}) {
   }
 
   function tick(dt) {
+    updateTeammatePositions(dt);
+
     if (state.pausedForAugment) {
       return;
     }
@@ -3367,9 +3379,15 @@ export function initSurvivors(options = {}) {
         return;
       }
       if (move.kind !== "survivors-pos") return;
+      const nextX = Number.isFinite(move.x) ? move.x : state.player.x;
+      const nextY = Number.isFinite(move.y) ? move.y : state.player.y;
+      const prev = state.room.teammates.get(move.remoteId);
+
       state.room.teammates.set(move.remoteId, {
-        x: Number.isFinite(move.x) ? move.x : state.player.x,
-        y: Number.isFinite(move.y) ? move.y : state.player.y,
+        x: prev ? prev.x : nextX,
+        y: prev ? prev.y : nextY,
+        targetX: nextX,
+        targetY: nextY,
         downed: Boolean(move.downed),
         frameSrc: typeof move.frameSrc === "string" ? move.frameSrc : "",
         characterId: typeof move.characterId === "string" ? move.characterId : "",
@@ -3380,7 +3398,10 @@ export function initSurvivors(options = {}) {
         movingRight: Boolean(move.movingRight),
         seenAt: performance.now(),
       });
-      render();
+
+      if (!state.running) {
+        render();
+      }
     },
     getSnapshot: () => ({
       kind: "survivors-sync",

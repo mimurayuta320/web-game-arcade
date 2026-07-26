@@ -1530,6 +1530,7 @@ export function initMinesweeper(options = {}) {
             targetCell.miss = true;
             if (isDuelMode()) {
               beginDuelPenaltyWait(state.currentPlayer);
+              emitRoomSnapshot();
               return;
             }
 
@@ -1545,6 +1546,7 @@ export function initMinesweeper(options = {}) {
               switchTurn();
               messageEl.textContent = `${minesweeperFormat("battleMiss", { player: playerLabel(missPlayer), count: state.battleMisses[missPlayer] })} / ${currentTurnText()}`;
               render();
+              emitRoomSnapshot();
               return;
             }
 
@@ -1558,6 +1560,7 @@ export function initMinesweeper(options = {}) {
               switchTurn();
               messageEl.textContent = `${minesweeperFormat("coopLifeLost", { player: playerLabel(missPlayer), count: state.coopMisses[missPlayer] })} / ${currentTurnText()}`;
               render();
+              emitRoomSnapshot();
               return;
             }
 
@@ -1567,6 +1570,7 @@ export function initMinesweeper(options = {}) {
             clearTimer();
             messageEl.textContent = minesweeperText("gameOver");
             render();
+            emitRoomSnapshot();
             return;
           }
 
@@ -1815,9 +1819,14 @@ export function initMinesweeper(options = {}) {
   });
 
   coopLivesSelectEl?.addEventListener("change", () => {
-    if (coopLivesSelectEl) {
-      coopLivesSelectEl.disabled = true;
+    if (!coopLivesSelectEl) return;
+    if (state.playMode !== "coop") return;
+    if (isRoomMode() && state.roomRole !== "host") return;
+    state.coopMissLimit = normalizeCoopMissLimit(coopLivesSelectEl.value);
+    if (isRoomMode() && state.roomRole === "host") {
+      applyRoomModePayload({ coopMissLimit: state.coopMissLimit }, { shouldEmit: true });
     }
+    enterStandby();
   });
 
   startBtn?.addEventListener("click", () => {

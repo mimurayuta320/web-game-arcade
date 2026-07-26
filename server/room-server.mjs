@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 
 const HOST = process.env.ROOM_HOST || "0.0.0.0";
 const PORT = Number(process.env.ROOM_PORT || 8788);
-const MAX_ROOM_PLAYERS = Number(process.env.ROOM_MAX_PLAYERS || 8);
+const MAX_ROOM_PLAYERS = Number(process.env.ROOM_MAX_PLAYERS || 16);
 const CHAT_RATE_MIN_INTERVAL_MS = Number(process.env.ROOM_CHAT_MIN_INTERVAL_MS || 700);
 const CHAT_RATE_WINDOW_MS = Number(process.env.ROOM_CHAT_WINDOW_MS || 12000);
 const CHAT_RATE_MAX_IN_WINDOW = Number(process.env.ROOM_CHAT_MAX_IN_WINDOW || 8);
@@ -14,9 +14,13 @@ const HOST_MUTE_DEFAULT_MS = Number(process.env.ROOM_HOST_MUTE_DEFAULT_MS || 5 *
 const HOST_MUTE_MAX_MS = Number(process.env.ROOM_HOST_MUTE_MAX_MS || 24 * 60 * 60 * 1000);
 const MESSAGE_STATE_TTL_MS = Number(process.env.ROOM_MESSAGE_STATE_TTL_MS || 4 * 60 * 60 * 1000);
 const INVITE_TOKEN_TTL_MS = Number(process.env.ROOM_INVITE_TOKEN_TTL_MS || 5 * 60 * 1000);
+const ROOM_STALE_MEMBER_TTL_MS = Number(process.env.ROOM_STALE_MEMBER_TTL_MS || 5500);
+const ROOM_STALE_SWEEP_INTERVAL_MS = Number(process.env.ROOM_STALE_SWEEP_INTERVAL_MS || 1000);
+const ROOM_DEBUG_STATE = String(process.env.ROOM_DEBUG_STATE || "1").trim() !== "0";
 
 const rooms = new Map();
 const roomMeta = new Map();
+const roomStateDebugSignature = new Map();
 
 function normalizeRoomCode(raw) {
   const code = String(raw || "").replace(/\D/g, "").slice(0, 6);
@@ -55,10 +59,39 @@ function normalizePlayerName(raw) {
   return trimmed.slice(0, 18);
 }
 
+function normalizePlayablePanel(raw) {
+  const panel = String(raw || "").trim();
+  if (!panel || panel === "menu" || panel === "scores") return "";
+  if (
+    panel === "othello"
+    || panel === "gomoku"
+    || panel === "chess"
+    || panel === "shogi"
+    || panel === "uno"
+    || panel === "minesweeper"
+    || panel === "numeron"
+    || panel === "blackjack"
+    || panel === "chinchiro"
+    || panel === "sevens"
+    || panel === "daifugo"
+    || panel === "fourPanel"
+    || panel === "drawingRelay"
+    || panel === "fitPuzzle"
+    || panel === "mahjong"
+    || panel === "poker"
+    || panel === "solitaire"
+    || panel === "survivors"
+  ) {
+    return panel;
+  }
+  return "";
+}
+
 function roomMetaOf(code) {
   if (!roomMeta.has(code)) {
     roomMeta.set(code, {
       hostPeerId: "",
+      listContext: "menu",
       isPublic: true,
       inGame: false,
       allowedPeerIds: new Set(),
@@ -76,6 +109,10 @@ function roomMetaOf(code) {
 
 function nowTs() {
   return Date.now();
+}
+
+function markMemberSeen(ws) {
+  ws.lastSeenAt = nowTs();
 }
 
 function pruneRoomMeta(meta, now = nowTs()) {
@@ -97,6 +134,7 @@ function cleanupRoomMetaIfEmpty(code) {
   const members = rooms.get(code);
   if (members && members.size > 0) return;
   roomMeta.delete(code);
+  roomStateDebugSignature.delete(code);
 }
 
 function isChatMutatingType(type) {
@@ -181,25 +219,127 @@ function roomOf(code) {
   return rooms.get(code);
 }
 
+function normalizeRemoteAddress(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  return text.replace(/^::ffff:/, "");
+}
+
+function getRemoteNameFingerprint(member) {
+  if (!member) return "";
+  const remote = normalizeRemoteAddress(member.remoteAddr);
+  const name = normalizePlayerName(member.playerName);
+  if (!remote || !name) return "";
+  return `${remote}|${name}`;
+}
+
+function getMemberGuestFingerprint(member) {
+  if (!member) return "";
+  if (member.userId || member.clientId) return "";
+  return getRemoteNameFingerprint(member);
+}
+
+function getMemberIdentityKey(member) {
+  if (!member) return "";
+  if (member.userId) return `user:${member.userId}`;
+  if (member.peerId) return `peer:${member.peerId}`;
+  if (member.clientId) return `client:${member.clientId}`;
+  const guestFingerprint = getMemberGuestFingerprint(member);
+  if (guestFingerprint) return `guest:${guestFingerprint}`;
+  return "";
+}
+
+function buildRoomDebugIdentityRows(code) {
+  const members = rooms.get(code);
+  if (!members) return [];
+  const rows = [];
+  for (const member of members) {
+    rows.push({
+      key: getMemberIdentityKey(member),
+      peerId: String(member.peerId || ""),
+      clientId: String(member.clientId || ""),
+      userId: String(member.userId || ""),
+      remoteAddr: String(member.remoteAddr || ""),
+      name: normalizePlayerName(member.playerName),
+      spectator: Boolean(member.spectator),
+    });
+  }
+  return rows;
+}
+
+function debugRoomStateIfChanged(code) {
+  if (!ROOM_DEBUG_STATE || !code) return;
+  const rows = buildRoomDebugIdentityRows(code);
+  const signature = JSON.stringify(rows.map((row) => [
+    row.key,
+    row.peerId,
+    row.clientId,
+    row.userId,
+    row.remoteAddr,
+    row.name,
+    row.spectator,
+  ]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  if (roomStateDebugSignature.get(code) === signature) return;
+  roomStateDebugSignature.set(code, signature);
+
+  const uniqueKeys = new Set(rows.map((row) => row.key || `peer:${row.peerId}`));
+  console.log(
+    `[room-state] code=${code} sockets=${rows.length} unique=${uniqueKeys.size} identities=${[...uniqueKeys].join(",") || "(none)"}`,
+  );
+}
+
+function evictDuplicatePeerConnections(code, ws) {
+  const members = rooms.get(code);
+  if (!members || (!ws?.peerId && !ws?.userId)) return false;
+  let changed = false;
+  for (const member of [...members]) {
+    if (member === ws) continue;
+    const samePeer = Boolean(ws.peerId && member.peerId && member.peerId === ws.peerId);
+    const sameUser = Boolean(ws.userId && member.userId && member.userId === ws.userId);
+    if (!samePeer && !sameUser) continue;
+    removeFromRoom(member);
+    changed = true;
+    try {
+      member.close();
+    } catch {
+      // ignore close error
+    }
+  }
+  return changed;
+}
+
 function roomParticipants(code) {
   const members = rooms.get(code);
   if (!members) return [];
 
   const meta = roomMetaOf(code);
+  const userIdByRemoteName = new Map();
+  for (const member of members) {
+    const remoteName = getRemoteNameFingerprint(member);
+    if (!remoteName || !member.userId) continue;
+    userIdByRemoteName.set(remoteName, member.userId);
+  }
 
-  const participants = [];
+  // Deduplicate by userId when available, otherwise by peerId.
+  const participantByIdentity = new Map();
   for (const member of members) {
     if (!member.peerId) continue;
+    const remoteName = getRemoteNameFingerprint(member);
+    const mappedUserId = remoteName ? userIdByRemoteName.get(remoteName) : "";
+    const dedupeKey = mappedUserId
+      ? `user:${mappedUserId}`
+      : (getMemberIdentityKey(member) || `peer:${member.peerId}`);
     const role = meta.inGame && !meta.allowedPeerIds.has(member.peerId)
       ? "spectator"
       : (member.spectator ? "spectator" : (meta.hostPeerId === member.peerId ? "host" : "guest"));
-    participants.push({
+    participantByIdentity.set(dedupeKey, {
       id: member.peerId,
       name: normalizePlayerName(member.playerName),
       role,
+      panel: normalizePlayablePanel(member.currentPanel),
     });
   }
-  return participants;
+  return [...participantByIdentity.values()];
 }
 
 function canJoinInCurrentMatch(meta, ws) {
@@ -209,7 +349,7 @@ function canJoinInCurrentMatch(meta, ws) {
 }
 
 function pickQuickJoinRoomCode() {
-  let bestCode = "";
+  const candidates = [];
   for (const [code, members] of rooms.entries()) {
     const size = members?.size || 0;
     if (size <= 0 || size >= MAX_ROOM_PLAYERS) continue;
@@ -219,10 +359,92 @@ function pickQuickJoinRoomCode() {
     // Quick match should join rooms that already have at least one active player.
     // Skip spectator-only rooms so the first real entrant can become host in a new room.
     if (activePlayers < 1 || activePlayers >= MAX_ROOM_PLAYERS) continue;
-    bestCode = code;
-    break;
+    candidates.push(code);
   }
-  return bestCode;
+  return candidates[0] || "";
+}
+
+function listQuickJoinCandidateCodes(limit = 12) {
+  const codes = [];
+  for (const [code, members] of rooms.entries()) {
+    if (codes.length >= limit) break;
+    const size = members?.size || 0;
+    if (size <= 0 || size >= MAX_ROOM_PLAYERS) continue;
+    const meta = roomMetaOf(code);
+    if (!meta.isPublic || meta.inGame) continue;
+    const activePlayers = activePlayerCount(code);
+    if (activePlayers < 1 || activePlayers >= MAX_ROOM_PLAYERS) continue;
+    codes.push(code);
+  }
+  return codes;
+}
+
+function grantPrivateAccessFromSourceRoom(targetMeta, sourceCode) {
+  if (!targetMeta || !sourceCode) return;
+  const sourceMembers = rooms.get(sourceCode);
+  if (!sourceMembers || sourceMembers.size === 0) return;
+  for (const member of sourceMembers) {
+    const peerId = String(member?.peerId || "").trim();
+    if (!peerId) continue;
+    targetMeta.privateAccessPeerIds.add(peerId);
+  }
+}
+
+function listPublicRooms(limit = 80, listContext = "all") {
+  const summaries = [];
+  for (const [code, members] of rooms.entries()) {
+    if (summaries.length >= limit) break;
+    const size = members?.size || 0;
+    if (size <= 0) continue;
+    const meta = roomMetaOf(code);
+    const roomListContext = meta.listContext === "game" ? "game" : "menu";
+    if (listContext === "menu" && roomListContext !== "menu") continue;
+    if (listContext === "game" && roomListContext !== "game") continue;
+
+    const participants = roomParticipants(code);
+    const activePlayers = participants.filter((participant) => participant.role === "host" || participant.role === "guest");
+    const host = activePlayers.find((participant) => participant.role === "host");
+    const guest = activePlayers.find((participant) => participant.role === "guest");
+    const panelSet = new Set();
+    for (const participant of activePlayers) {
+      const panel = normalizePlayablePanel(participant.panel);
+      if (panel) panelSet.add(panel);
+    }
+
+    summaries.push({
+      code,
+      listContext: roomListContext,
+      isPublic: Boolean(meta.isPublic),
+      inGame: Boolean(meta.inGame),
+      activePlayers: activePlayers.length,
+      spectatorCount: participants.filter((participant) => participant.role === "spectator").length,
+      totalParticipants: participants.length,
+      hostName: String(host?.name || "").trim(),
+      guestName: String(guest?.name || "").trim(),
+      panels: [...panelSet],
+    });
+  }
+
+  summaries.sort((a, b) => {
+    const scoreA = a.activePlayers * 10 + a.totalParticipants;
+    const scoreB = b.activePlayers * 10 + b.totalParticipants;
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return String(a.code).localeCompare(String(b.code));
+  });
+
+  return summaries.slice(0, limit);
+}
+
+function broadcastRoomsList(limit = 80) {
+  const payload = {
+    type: "rooms-list",
+    listContext: "all",
+    rooms: listPublicRooms(limit),
+    fetchedAt: nowTs(),
+  };
+  for (const client of wss.clients) {
+    sendJson(client, payload);
+  }
 }
 
 function lockCurrentParticipantsForMatch(code) {
@@ -281,11 +503,24 @@ function consumeInviteToken(meta, token) {
 function activePlayerCount(code) {
   const members = rooms.get(code);
   if (!members) return 0;
-  let count = 0;
+  const userIdByRemoteName = new Map();
   for (const member of members) {
-    if (member.peerId && !member.spectator) count += 1;
+    const remoteName = getRemoteNameFingerprint(member);
+    if (!remoteName || !member.userId) continue;
+    userIdByRemoteName.set(remoteName, member.userId);
   }
-  return count;
+  const activeIdentityKeys = new Set();
+  for (const member of members) {
+    if (member.peerId && !member.spectator) {
+      const remoteName = getRemoteNameFingerprint(member);
+      const mappedUserId = remoteName ? userIdByRemoteName.get(remoteName) : "";
+      const dedupeKey = mappedUserId
+        ? `user:${mappedUserId}`
+        : (getMemberIdentityKey(member) || `peer:${member.peerId}`);
+      activeIdentityKeys.add(dedupeKey);
+    }
+  }
+  return activeIdentityKeys.size;
 }
 
 function canVoteRematch(meta, ws) {
@@ -324,6 +559,9 @@ function broadcastDrawVoteState(code) {
 
 function broadcastRoomState(code) {
   if (!code) return;
+  const members = rooms.get(code);
+  if (!members || members.size === 0) return;
+  debugRoomStateIfChanged(code);
   const meta = roomMetaOf(code);
   broadcastToRoom(code, {
     type: "room-state",
@@ -335,6 +573,7 @@ function broadcastRoomState(code) {
     rematchVotes: [...meta.rematchVotes],
     drawVotes: [...meta.drawVotes],
   });
+  broadcastRoomsList();
 }
 
 function removeFromRoom(ws) {
@@ -355,6 +594,30 @@ function removeFromRoom(ws) {
   if (members.size === 0) {
     rooms.delete(code);
     roomMeta.delete(code);
+    roomStateDebugSignature.delete(code);
+  }
+}
+
+function pruneStaleRoomMembers() {
+  const now = nowTs();
+  const dirtyCodes = new Set();
+
+  for (const [code, members] of rooms.entries()) {
+    for (const member of [...members]) {
+      const seenAt = Number(member.lastSeenAt || 0);
+      const stale = !Number.isFinite(seenAt) || now - seenAt > ROOM_STALE_MEMBER_TTL_MS;
+      const notOpen = member.readyState !== WebSocket.OPEN;
+      if (!stale && !notOpen) continue;
+      removeFromRoom(member);
+      dirtyCodes.add(code);
+    }
+  }
+
+  for (const code of dirtyCodes) {
+    broadcastRoomState(code);
+  }
+  if (dirtyCodes.size > 0) {
+    broadcastRoomsList();
   }
 }
 
@@ -374,24 +637,47 @@ function broadcastToRoom(code, payload, exceptWs = null) {
 }
 
 function tryJoinRoom(ws, payload) {
-  const quickJoin = String(payload?.type || "") === "quick-join";
+  const type = String(payload?.type || "");
+  const quickJoin = type === "quick-join";
+  const isJoinIntent = type === "hello" || quickJoin;
+  const requestedListContextRaw = String(payload?.listContext || "").trim().toLowerCase();
+  const requestedListContext = requestedListContextRaw === "game" || requestedListContextRaw === "menu"
+    ? requestedListContextRaw
+    : "";
   let code = quickJoin ? pickQuickJoinRoomCode() : normalizeRoomCode(payload.room);
+  const explicitCreate = asBoolean(payload?.create, false);
+
+  if (!code && ws.roomCode) {
+    code = ws.roomCode;
+  }
 
   if (quickJoin && !code) {
+    // Make quick match deterministic: if no joinable room exists, create one.
+    code = allocateRoomCode();
+  }
+
+  if (!quickJoin && !code && explicitCreate && type === "hello") {
     code = allocateRoomCode();
   }
 
   if (!code) {
-    sendJson(ws, { type: "error", code: "ROOM_REQUIRED" });
+    if (isJoinIntent) {
+      sendJson(ws, { type: "error", code: "ROOM_REQUIRED" });
+    }
     return { ok: false, joined: false };
   }
 
   if (ws.roomCode && ws.roomCode !== code) {
-    removeFromRoom(ws);
-    ws.roomCode = null;
+    if (!isJoinIntent) {
+      code = ws.roomCode;
+    } else {
+      removeFromRoom(ws);
+      ws.roomCode = null;
+    }
   }
 
   const members = roomOf(code);
+  const evicted = evictDuplicatePeerConnections(code, ws);
   const requestedSpectate = asSpectateBoolean(payload?.spectate);
   if (!ws.roomCode && members.size >= MAX_ROOM_PLAYERS) {
     sendJson(ws, { type: "room-full", code });
@@ -421,6 +707,9 @@ function tryJoinRoom(ws, payload) {
     members.add(ws);
     ws.spectator = requestedSpectate;
     joined = true;
+    if (members.size === 1) {
+      meta.listContext = requestedListContext || (ws.currentPanel ? "game" : "menu");
+    }
     if (!meta.hostPeerId && ws.peerId && !ws.spectator) {
       meta.hostPeerId = ws.peerId;
       assignedRole = "host";
@@ -429,6 +718,12 @@ function tryJoinRoom(ws, payload) {
     }
     if (quickJoin && members.size === 1) {
       meta.isPublic = true;
+    }
+    if (explicitCreate) {
+      const sourceCode = normalizeRoomCode(payload?.sourceRoom);
+      if (sourceCode && sourceCode !== code) {
+        grantPrivateAccessFromSourceRoom(meta, sourceCode);
+      }
     }
     if (ws.peerId) {
       meta.privateAccessPeerIds.add(ws.peerId);
@@ -446,11 +741,15 @@ function tryJoinRoom(ws, payload) {
   const requestedPublic = asBoolean(payload?.roomPublic, meta.isPublic);
   if (ws.peerId && meta.hostPeerId === ws.peerId) {
     meta.isPublic = requestedPublic;
+    if (asBoolean(payload?.create, false)) {
+      meta.listContext = requestedListContext || (ws.currentPanel ? "game" : "menu");
+    }
   }
 
   return {
     ok: true,
     joined,
+    evicted,
     code,
     quickJoin,
     assignedRole,
@@ -620,7 +919,12 @@ const wss = new WebSocketServer({ host: HOST, port: PORT });
 wss.on("connection", (ws) => {
   ws.roomCode = null;
   ws.peerId = null;
+  ws.clientId = null;
+  ws.userId = null;
+  ws.currentPanel = "";
+  ws.remoteAddr = normalizeRemoteAddress(ws?._socket?.remoteAddress);
   ws.spectator = false;
+  markMemberSeen(ws);
   ws.chatRateState = {
     timestamps: [],
     lastText: "",
@@ -628,6 +932,7 @@ wss.on("connection", (ws) => {
   };
 
   ws.on("message", (raw) => {
+    markMemberSeen(ws);
     let payload = null;
     try {
       payload = JSON.parse(String(raw || "{}"));
@@ -637,18 +942,37 @@ wss.on("connection", (ws) => {
 
     if (!payload || typeof payload !== "object") return;
     ws.peerId = String(payload.from || ws.peerId || "").trim() || ws.peerId;
+    ws.clientId = String(payload.clientId || ws.clientId || "").trim() || ws.clientId;
+    ws.userId = String(payload.userId || ws.userId || "").trim() || ws.userId;
+    if (Object.prototype.hasOwnProperty.call(payload, "panel")) {
+      ws.currentPanel = normalizePlayablePanel(payload.panel);
+    }
+    if (typeof payload.name === "string") {
+      ws.playerName = normalizePlayerName(payload.name);
+    }
     ws.spectator = asSpectateBoolean(payload?.spectate ?? ws.spectator);
+
+    const type = String(payload.type || "");
+    if (type === "list-rooms") {
+      const requestedListContextRaw = String(payload?.listContext || "").trim().toLowerCase();
+      const requestedListContext = requestedListContextRaw === "menu" || requestedListContextRaw === "game"
+        ? requestedListContextRaw
+        : "all";
+      sendJson(ws, {
+        type: "rooms-list",
+        listContext: requestedListContext,
+        rooms: listPublicRooms(80, requestedListContext),
+        fetchedAt: nowTs(),
+      });
+      return;
+    }
+
     const joinResult = tryJoinRoom(ws, payload);
     if (!joinResult.ok) return;
 
     const code = ws.roomCode;
     if (!code) return;
 
-    if (typeof payload.name === "string") {
-      ws.playerName = normalizePlayerName(payload.name);
-    }
-
-    const type = String(payload.type || "");
     if (type === "quick-join") {
       sendJson(ws, {
         type: "room-assigned",
@@ -661,8 +985,23 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    if (type === "hello") {
+      sendJson(ws, {
+        type: "room-assigned",
+        code,
+        role: joinResult.assignedRole,
+        roomPublic: joinResult.isPublic,
+        participants: roomParticipants(code),
+      });
+    }
+
     if (type === "return-lobby") {
       unlockMatchForLobby(code);
+      broadcastRoomState(code);
+      return;
+    }
+
+    if (type === "sync-room-state") {
       broadcastRoomState(code);
       return;
     }
@@ -803,7 +1142,7 @@ wss.on("connection", (ws) => {
       lockCurrentParticipantsForMatch(code);
     }
 
-    if (joinResult.joined || payload.type === "hello" || payload.type === "presence") {
+    if (joinResult.joined || joinResult.evicted || payload.type === "hello" || payload.type === "presence") {
       broadcastRoomState(code);
     }
 
@@ -848,10 +1187,13 @@ wss.on("connection", (ws) => {
     const from = ws.peerId;
     removeFromRoom(ws);
     broadcastRoomState(code);
+    broadcastRoomsList();
     if (code && from) {
       broadcastToRoom(code, { type: "leave", from, room: code });
     }
   });
 });
+
+setInterval(pruneStaleRoomMembers, ROOM_STALE_SWEEP_INTERVAL_MS);
 
 console.log(`Room server running at ws://${HOST}:${PORT}`);
