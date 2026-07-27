@@ -4646,6 +4646,9 @@ export default function Home() {
   const [isRoomControlsOpen, setIsRoomControlsOpen] = useState(true);
   const [roomStatus, setRoomStatus] = useState("未接続");
   const [connectedRoomCode, setConnectedRoomCode] = useState("");
+  const [menuRootRoomCode, setMenuRootRoomCode] = useState("");
+  const [currentRoomParentCode, setCurrentRoomParentCode] = useState("");
+  const [roomReadyById, setRoomReadyById] = useState<Record<string, boolean>>({});
   const [roomRole, setRoomRole] = useState("");
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
   const [menuPublicRooms, setMenuPublicRooms] = useState<PublicRoomSummary[]>([]);
@@ -4809,6 +4812,29 @@ export default function Home() {
     const cloudUserId = authMode === "cloud" ? authUserId.trim().slice(0, 24) : "";
     return cloudUserId || "";
   }, [authMode, authUserId]);
+
+  const sendRoomEvent = useCallback((payload: Record<string, unknown>) => {
+    const ws = roomSocketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!connectedRoomCode) return;
+    const clientId = getCurrentRoomClientId();
+    const userId = getCurrentRoomUserId();
+    try {
+      ws.send(
+        JSON.stringify({
+          ...payload,
+          room: connectedRoomCode,
+          from: peerIdRef.current,
+          clientId,
+          userId,
+          panel: getCurrentRoomPanel(),
+          name: playerName,
+        }),
+      );
+    } catch {
+      // ignore send error
+    }
+  }, [connectedRoomCode, getCurrentRoomClientId, getCurrentRoomPanel, getCurrentRoomUserId, playerName]);
 
   useEffect(() => {
     activePanelRef.current = activePanel;
@@ -5110,19 +5136,6 @@ export default function Home() {
       }
     };
   }, [clearBlackjackDealerResolveTimer]);
-
-  const handleBackToMenuClick = useCallback(() => {
-    if (activePanel === "fitPuzzle") {
-      setActivePanel("menu");
-      return;
-    }
-    if (!window.confirm(t("backToMenuConfirm"))) return;
-    setActivePanel("menu");
-  }, [activePanel, t]);
-
-  const handleBackToMenuDirect = useCallback(() => {
-    setActivePanel("menu");
-  }, []);
 
   const stripInviteTokenFromAddressBar = useCallback(() => {
     try {
@@ -5798,6 +5811,23 @@ export default function Home() {
     return roomParticipants.filter((participant) => participant.role === "host" || participant.role === "guest").length;
   }, [roomParticipants]);
 
+  const roomReadyCount = useMemo(() => {
+    return roomParticipants.filter((participant) => (
+      (participant.role === "host" || participant.role === "guest")
+      && Boolean(roomReadyById[participant.id])
+    )).length;
+  }, [roomParticipants, roomReadyById]);
+
+  const roomAllReady = useMemo(() => {
+    const active = roomParticipants.filter((participant) => participant.role === "host" || participant.role === "guest");
+    if (active.length < 2) return false;
+    return active.every((participant) => Boolean(roomReadyById[participant.id]));
+  }, [roomParticipants, roomReadyById]);
+
+  const myRoomReady = useMemo(() => {
+    return Boolean(roomReadyById[peerIdRef.current]);
+  }, [roomReadyById]);
+
   const roomOccupancyText = useMemo(() => {
     const count = Math.max(0, Math.min(16, roomMatchedPlayerCount));
     return `${String(count).padStart(2, "0")}/16`;
@@ -6015,8 +6045,12 @@ export default function Home() {
       setMenuMessage(t("spectatorReadOnly"));
       return;
     }
-    if (connectedRoomCode && roomRole !== "host" && roomActivePlayerCount < 2) {
+    if (connectedRoomCode && roomRole !== "host") {
       setMenuMessage(t("roomWaitHostStart"));
+      return;
+    }
+    if (connectedRoomCode && roomRole === "host" && !roomAllReady) {
+      setMenuMessage("参加者全員の準備完了後に開始できます。");
       return;
     }
 
@@ -6025,11 +6059,34 @@ export default function Home() {
       startCountdownTimerRef.current = null;
     }
 
+    if (connectedRoomCode && roomRole === "host") {
+      sendRoomEvent({ type: "room-ready-reset" });
+      setRoomReadyById((prev) => {
+        const next: Record<string, boolean> = {};
+        Object.keys(prev).forEach((id) => {
+          next[id] = false;
+        });
+        return next;
+      });
+    }
+
     setStartCountdownPanel(null);
     setStartCountdownSec(0);
     reset();
     setGameStarted((prev) => ({ ...prev, [panel]: true }));
   };
+
+  const toggleRoomReady = useCallback(() => {
+    if (!connectedRoomCode) return;
+    if (roomRole === "spectator") {
+      setMenuMessage(t("spectatorReadOnly"));
+      return;
+    }
+    const nextReady = !Boolean(roomReadyById[peerIdRef.current]);
+    setRoomReadyById((prev) => ({ ...prev, [peerIdRef.current]: nextReady }));
+    sendRoomEvent({ type: "room-ready", ready: nextReady });
+    setMenuMessage(nextReady ? "準備完了にしました。" : "準備を解除しました。");
+  }, [connectedRoomCode, roomReadyById, roomRole, sendRoomEvent, t]);
 
   const openOthello = () => {
     openPanel("othello");
@@ -6270,28 +6327,27 @@ export default function Home() {
     }
   }, []);
 
-  const sendRoomEvent = useCallback((payload: Record<string, unknown>) => {
-    const ws = roomSocketRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    if (!connectedRoomCode) return;
-    const clientId = getCurrentRoomClientId();
-    const userId = getCurrentRoomUserId();
-    try {
-      ws.send(
-        JSON.stringify({
-          ...payload,
-          room: connectedRoomCode,
-          from: peerIdRef.current,
-          clientId,
-          userId,
-          panel: getCurrentRoomPanel(),
-          name: playerName,
-        }),
-      );
-    } catch {
-      // ignore send error
+  const handleBackToMenuClick = useCallback(() => {
+    if (activePanel === "fitPuzzle") {
+      if (currentRoomParentCode) {
+        sendRoomEvent({ type: "return-lobby" });
+      }
+      setActivePanel("menu");
+      return;
     }
-  }, [connectedRoomCode, getCurrentRoomClientId, getCurrentRoomPanel, getCurrentRoomUserId, playerName]);
+    if (!window.confirm(t("backToMenuConfirm"))) return;
+    if (currentRoomParentCode) {
+      sendRoomEvent({ type: "return-lobby" });
+    }
+    setActivePanel("menu");
+  }, [activePanel, currentRoomParentCode, sendRoomEvent, t]);
+
+  const handleBackToMenuDirect = useCallback(() => {
+    if (currentRoomParentCode) {
+      sendRoomEvent({ type: "return-lobby" });
+    }
+    setActivePanel("menu");
+  }, [currentRoomParentCode, sendRoomEvent]);
 
   const normalizePublicRoomSummary = useCallback((value: unknown): PublicRoomSummary | null => {
     if (!value || typeof value !== "object") return null;
@@ -6974,6 +7030,7 @@ export default function Home() {
 
       closeRoomSocket();
       setConnectedRoomCode("");
+      setRoomReadyById({});
       setRoomParticipants([]);
       setRoomRole("");
       setOthelloDrawVotes([]);
@@ -7230,8 +7287,25 @@ export default function Home() {
             if (assignedCode) {
               setConnectedRoomCode(assignedCode);
               setRoomCode(assignedCode);
-              if (activePanel === "menu") {
+              const assignedContext = options?.listContextOverride;
+              if (assignedContext === "menu") {
                 setSelectedMenuPublicRoomCode(assignedCode);
+                setMenuRootRoomCode(assignedCode);
+                setCurrentRoomParentCode("");
+              } else if (assignedContext === "game") {
+                setSelectedPanelPublicRoomCode(assignedCode);
+                const parentCode = String(options?.sourceRoomCode || "").replace(/\D/g, "").slice(0, 6);
+                if (parentCode && parentCode !== assignedCode) {
+                  setCurrentRoomParentCode(parentCode);
+                }
+              } else if (activePanel === "menu") {
+                setSelectedMenuPublicRoomCode(assignedCode);
+                if (!menuRootRoomCode) {
+                  setMenuRootRoomCode(assignedCode);
+                }
+                if (menuRootRoomCode && assignedCode === menuRootRoomCode) {
+                  setCurrentRoomParentCode("");
+                }
               } else {
                 setSelectedPanelPublicRoomCode(assignedCode);
               }
@@ -7360,6 +7434,25 @@ export default function Home() {
             return;
           }
 
+          if (type === "room-ready") {
+            const from = String(payload?.from || "").trim();
+            if (!from) return;
+            const ready = Boolean(payload?.ready);
+            setRoomReadyById((prev) => ({ ...prev, [from]: ready }));
+            return;
+          }
+
+          if (type === "room-ready-reset") {
+            setRoomReadyById((prev) => {
+              const next: Record<string, boolean> = {};
+              Object.keys(prev).forEach((id) => {
+                next[id] = false;
+              });
+              return next;
+            });
+            return;
+          }
+
           if (type === "draw-vote-state") {
             const votes = Array.isArray(payload.votes)
               ? payload.votes.map((vote: unknown) => String(vote)).filter((vote: string) => vote.length > 0)
@@ -7413,6 +7506,7 @@ export default function Home() {
             }
             closeRoomSocket();
             setConnectedRoomCode("");
+            setRoomReadyById({});
             setRoomParticipants([]);
             setRoomRole("");
             setOthelloDrawVotes([]);
@@ -7434,6 +7528,7 @@ export default function Home() {
             }
             closeRoomSocket();
             setConnectedRoomCode("");
+            setRoomReadyById({});
             setRoomParticipants([]);
             setRoomRole("");
             setOthelloDrawVotes([]);
@@ -7447,6 +7542,7 @@ export default function Home() {
           if (type === "invite-token-required") {
             closeRoomSocket();
             setConnectedRoomCode("");
+            setRoomReadyById({});
             setRoomParticipants([]);
             setRoomRole("");
             setOthelloDrawVotes([]);
@@ -7543,6 +7639,7 @@ export default function Home() {
       applySurrenderToPanel,
       applyPublicRoomList,
       activePanel,
+      menuRootRoomCode,
       t,
       tf,
     ],
@@ -7660,7 +7757,8 @@ export default function Home() {
     setQuickMatchMode(false);
     setPendingInviteToken("");
     const panelNow = normalizeRoomPanel(activePanel) || getCurrentRoomPanel();
-    const sourceRoomCode = connectedRoomCode;
+    const sourceRoomCode = menuRootRoomCode || connectedRoomCode;
+
     setMenuMessage(
       tf("roomCreatePreparing", {
         password: roomVisibility === "private" ? t("roomPasswordOn") : t("roomPasswordOff"),
@@ -7677,11 +7775,12 @@ export default function Home() {
     window.setTimeout(() => {
       requestPublicRoomList("panel", true);
     }, 250);
-  }, [activePanel, connectedRoomCode, connectRoom, getCurrentRoomPanel, normalizeRoomPanel, requestPublicRoomList, roomVisibility, t, tf]);
+  }, [activePanel, connectedRoomCode, connectRoom, getCurrentRoomPanel, menuRootRoomCode, normalizeRoomPanel, requestPublicRoomList, roomVisibility, t, tf]);
 
   const createRoomFromMenu = useCallback(() => {
     setQuickMatchMode(false);
     setPendingInviteToken("");
+
     setMenuMessage(
       tf("roomCreatePreparing", {
         password: t("roomPasswordOff"),
@@ -7704,6 +7803,7 @@ export default function Home() {
     setPendingInviteToken("");
     closeRoomSocket();
     setConnectedRoomCode("");
+    setRoomReadyById({});
     setRoomParticipants([]);
     setRoomRole("");
     setRoomChatMessages([]);
@@ -7737,6 +7837,29 @@ export default function Home() {
     if (roomRole !== "host") return;
     sendRoomEvent({ type: "presence", roomPublic: roomVisibility === "public" });
   }, [connectedRoomCode, roomRole, roomVisibility, sendRoomEvent]);
+
+  useEffect(() => {
+    if (!connectedRoomCode) {
+      setRoomReadyById({});
+      return;
+    }
+    setRoomReadyById((prev) => {
+      const activeIds = roomParticipants
+        .filter((participant) => participant.role === "host" || participant.role === "guest")
+        .map((participant) => participant.id)
+        .filter((id) => id.length > 0);
+      const next: Record<string, boolean> = {};
+      activeIds.forEach((id) => {
+        next[id] = Boolean(prev[id]);
+      });
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length === nextKeys.length && prevKeys.every((key) => next[key] === prev[key])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [connectedRoomCode, roomParticipants]);
 
   useEffect(() => {
     if (!quickMatchMode) return;
@@ -13569,6 +13692,14 @@ export default function Home() {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
+                  onClick={toggleRoomReady}
+                  disabled={!connectedRoomCode || roomRole === "spectator"}
+                  className="rounded-md border border-emerald-200/50 px-3 py-1.5 text-xs disabled:opacity-60"
+                >
+                  {myRoomReady ? "準備解除" : "準備完了"}
+                </button>
+                <button
+                  type="button"
                   onClick={createRoomFromCurrentPanel}
                   className="rounded-md bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950"
                 >
@@ -13597,6 +13728,9 @@ export default function Home() {
                 </button>
               </div>
               <p className="text-xs text-slate-300">{t("roomState")}: {roomStatus}</p>
+              {connectedRoomCode ? (
+                <p className="text-xs text-emerald-200">準備状況: {roomReadyCount}/{roomActivePlayerCount} {roomAllReady ? "(開始可能)" : "(全員準備で開始可能)"}</p>
+              ) : null}
               {menuMessage ? <p className="text-xs text-cyan-200">{menuMessage}</p> : null}
             </div>
           </section>
