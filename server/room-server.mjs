@@ -92,6 +92,8 @@ function roomMetaOf(code) {
     roomMeta.set(code, {
       hostPeerId: "",
       parentRoomCode: "",
+      childPanelKey: "",
+      childRoomByPanel: new Map(),
       listContext: "menu",
       isPublic: true,
       inGame: false,
@@ -242,9 +244,9 @@ function getMemberGuestFingerprint(member) {
 
 function getMemberIdentityKey(member) {
   if (!member) return "";
-  if (member.userId) return `user:${member.userId}`;
   if (member.peerId) return `peer:${member.peerId}`;
   if (member.clientId) return `client:${member.clientId}`;
+  if (member.userId) return `user:${member.userId}`;
   const guestFingerprint = getMemberGuestFingerprint(member);
   if (guestFingerprint) return `guest:${guestFingerprint}`;
   return "";
@@ -291,13 +293,12 @@ function debugRoomStateIfChanged(code) {
 
 function evictDuplicatePeerConnections(code, ws) {
   const members = rooms.get(code);
-  if (!members || (!ws?.peerId && !ws?.userId)) return false;
+  if (!members || !ws?.peerId) return false;
   let changed = false;
   for (const member of [...members]) {
     if (member === ws) continue;
     const samePeer = Boolean(ws.peerId && member.peerId && member.peerId === ws.peerId);
-    const sameUser = Boolean(ws.userId && member.userId && member.userId === ws.userId);
-    if (!samePeer && !sameUser) continue;
+    if (!samePeer) continue;
     removeFromRoom(member);
     changed = true;
     try {
@@ -314,22 +315,11 @@ function roomParticipants(code) {
   if (!members) return [];
 
   const meta = roomMetaOf(code);
-  const userIdByRemoteName = new Map();
-  for (const member of members) {
-    const remoteName = getRemoteNameFingerprint(member);
-    if (!remoteName || !member.userId) continue;
-    userIdByRemoteName.set(remoteName, member.userId);
-  }
-
-  // Deduplicate by userId when available, otherwise by peerId.
+  // Keep one participant per live connection identity.
   const participantByIdentity = new Map();
   for (const member of members) {
     if (!member.peerId) continue;
-    const remoteName = getRemoteNameFingerprint(member);
-    const mappedUserId = remoteName ? userIdByRemoteName.get(remoteName) : "";
-    const dedupeKey = mappedUserId
-      ? `user:${mappedUserId}`
-      : (getMemberIdentityKey(member) || `peer:${member.peerId}`);
+    const dedupeKey = getMemberIdentityKey(member) || `peer:${member.peerId}`;
     const role = meta.inGame && !meta.allowedPeerIds.has(member.peerId)
       ? "spectator"
       : (member.spectator ? "spectator" : (meta.hostPeerId === member.peerId ? "host" : "guest"));
@@ -391,12 +381,87 @@ function grantPrivateAccessFromSourceRoom(targetMeta, sourceCode) {
   }
 }
 
+function listLiveChildRoomCodes(parentCode) {
+  const codes = [];
+  if (!parentCode) return codes;
+  for (const [code, members] of rooms.entries()) {
+    if (code === parentCode) continue;
+    if (!members || members.size <= 0) continue;
+    const meta = roomMeta.get(code);
+    if (!meta) continue;
+    if (meta.listContext !== "game") continue;
+    if (normalizeRoomCode(meta.parentRoomCode) !== parentCode) continue;
+    codes.push(code);
+  }
+  return codes;
+}
+
+function hasLiveChildRoomForParent(parentCode) {
+  return listLiveChildRoomCodes(parentCode).length > 0;
+}
+
+function normalizeChildPanelKey(rawPanel) {
+  const panel = normalizePlayablePanel(rawPanel);
+  return panel || "__any";
+}
+
+function registerChildRoomOnSource(sourceCode, panelKey, childCode) {
+  if (!sourceCode || !childCode) return;
+  const sourceMeta = roomMetaOf(sourceCode);
+  sourceMeta.childRoomByPanel.set(panelKey, childCode);
+}
+
+function unregisterChildRoomOnSource(sourceCode, childCode) {
+  if (!sourceCode || !childCode) return;
+  const sourceMeta = roomMeta.get(sourceCode);
+  if (!sourceMeta?.childRoomByPanel) return;
+  for (const [panelKey, mappedCode] of sourceMeta.childRoomByPanel.entries()) {
+    if (mappedCode !== childCode) continue;
+    sourceMeta.childRoomByPanel.delete(panelKey);
+  }
+}
+
+function canReuseChildRoomCode(code, sourceCode, panelKey) {
+  if (!code || !rooms.has(code)) return false;
+  const members = rooms.get(code);
+  if (!members || members.size <= 0 || members.size >= MAX_ROOM_PLAYERS) return false;
+  const meta = roomMetaOf(code);
+  if (!meta.isPublic || meta.inGame) return false;
+  if (normalizeRoomCode(meta.parentRoomCode) !== sourceCode) return false;
+  // Reuse only while child room is still in "waiting" state.
+  // Once 2+ active players are already inside, allow creating another child room.
+  if (activePlayerCount(code) >= 2) return false;
+  const childPanelKey = String(meta.childPanelKey || "").trim();
+  if (panelKey !== "__any" && childPanelKey && childPanelKey !== panelKey) return false;
+  return true;
+}
+
+function findReusableChildRoomCode(sourceCode, panelKey) {
+  if (!sourceCode) return "";
+  const sourceMeta = roomMetaOf(sourceCode);
+  const mapped = String(sourceMeta.childRoomByPanel.get(panelKey) || "").trim();
+  if (mapped && canReuseChildRoomCode(mapped, sourceCode, panelKey)) {
+    return mapped;
+  }
+  if (mapped) {
+    sourceMeta.childRoomByPanel.delete(panelKey);
+  }
+
+  for (const [code] of rooms.entries()) {
+    if (!canReuseChildRoomCode(code, sourceCode, panelKey)) continue;
+    sourceMeta.childRoomByPanel.set(panelKey, code);
+    return code;
+  }
+  return "";
+}
+
 function listPublicRooms(limit = 80, listContext = "all") {
   const summaries = [];
   for (const [code, members] of rooms.entries()) {
     if (summaries.length >= limit) break;
     const size = members?.size || 0;
-    if (size <= 0) continue;
+    const hasLiveChildren = hasLiveChildRoomForParent(code);
+    if (size <= 0 && !hasLiveChildren) continue;
     const meta = roomMetaOf(code);
     const roomListContext = meta.listContext === "game" ? "game" : "menu";
     if (listContext === "menu" && roomListContext !== "menu") continue;
@@ -406,10 +471,28 @@ function listPublicRooms(limit = 80, listContext = "all") {
     const activePlayers = participants.filter((participant) => participant.role === "host" || participant.role === "guest");
     const host = activePlayers.find((participant) => participant.role === "host");
     const guest = activePlayers.find((participant) => participant.role === "guest");
+    let mergedActivePlayers = activePlayers.length;
+    let mergedSpectatorCount = participants.filter((participant) => participant.role === "spectator").length;
+    let mergedTotalParticipants = participants.length;
     const panelSet = new Set();
     for (const participant of activePlayers) {
       const panel = normalizePlayablePanel(participant.panel);
       if (panel) panelSet.add(panel);
+    }
+
+    if (roomListContext === "menu" && hasLiveChildren) {
+      const childCodes = listLiveChildRoomCodes(code);
+      for (const childCode of childCodes) {
+        const childParticipants = roomParticipants(childCode);
+        const childActivePlayers = childParticipants.filter((participant) => participant.role === "host" || participant.role === "guest");
+        mergedActivePlayers += childActivePlayers.length;
+        mergedSpectatorCount += childParticipants.filter((participant) => participant.role === "spectator").length;
+        mergedTotalParticipants += childParticipants.length;
+        for (const participant of childActivePlayers) {
+          const panel = normalizePlayablePanel(participant.panel);
+          if (panel) panelSet.add(panel);
+        }
+      }
     }
 
     summaries.push({
@@ -417,9 +500,9 @@ function listPublicRooms(limit = 80, listContext = "all") {
       listContext: roomListContext,
       isPublic: Boolean(meta.isPublic),
       inGame: Boolean(meta.inGame),
-      activePlayers: activePlayers.length,
-      spectatorCount: participants.filter((participant) => participant.role === "spectator").length,
-      totalParticipants: participants.length,
+      activePlayers: mergedActivePlayers,
+      spectatorCount: mergedSpectatorCount,
+      totalParticipants: mergedTotalParticipants,
       hostName: String(host?.name || "").trim(),
       guestName: String(guest?.name || "").trim(),
       panels: [...panelSet],
@@ -504,20 +587,10 @@ function consumeInviteToken(meta, token) {
 function activePlayerCount(code) {
   const members = rooms.get(code);
   if (!members) return 0;
-  const userIdByRemoteName = new Map();
-  for (const member of members) {
-    const remoteName = getRemoteNameFingerprint(member);
-    if (!remoteName || !member.userId) continue;
-    userIdByRemoteName.set(remoteName, member.userId);
-  }
   const activeIdentityKeys = new Set();
   for (const member of members) {
     if (member.peerId && !member.spectator) {
-      const remoteName = getRemoteNameFingerprint(member);
-      const mappedUserId = remoteName ? userIdByRemoteName.get(remoteName) : "";
-      const dedupeKey = mappedUserId
-        ? `user:${mappedUserId}`
-        : (getMemberIdentityKey(member) || `peer:${member.peerId}`);
+      const dedupeKey = getMemberIdentityKey(member) || `peer:${member.peerId}`;
       activeIdentityKeys.add(dedupeKey);
     }
   }
@@ -593,6 +666,14 @@ function removeFromRoom(ws) {
     meta.hostPeerId = pickNextHostPeerId(code);
   }
   if (members.size === 0) {
+    if (hasLiveChildRoomForParent(code)) {
+      meta.hostPeerId = "";
+      return;
+    }
+    const parentCode = normalizeRoomCode(meta?.parentRoomCode);
+    if (parentCode) {
+      unregisterChildRoomOnSource(parentCode, code);
+    }
     rooms.delete(code);
     roomMeta.delete(code);
     roomStateDebugSignature.delete(code);
@@ -647,6 +728,9 @@ function tryJoinRoom(ws, payload) {
     : "";
   let code = quickJoin ? pickQuickJoinRoomCode() : normalizeRoomCode(payload.room);
   const explicitCreate = asBoolean(payload?.create, false);
+  const requestedSourceCode = normalizeRoomCode(payload?.sourceRoom);
+  const childPanelKey = normalizeChildPanelKey(ws.currentPanel);
+  const forceNewChildRoom = asBoolean(payload?.forceNewChild, false);
 
   if (!code && ws.roomCode) {
     code = ws.roomCode;
@@ -658,7 +742,12 @@ function tryJoinRoom(ws, payload) {
   }
 
   if (!quickJoin && !code && explicitCreate && type === "hello") {
-    code = allocateRoomCode();
+    if (requestedSourceCode && !forceNewChildRoom) {
+      code = findReusableChildRoomCode(requestedSourceCode, childPanelKey);
+    }
+    if (!code) {
+      code = allocateRoomCode();
+    }
   }
 
   if (!code) {
@@ -721,10 +810,12 @@ function tryJoinRoom(ws, payload) {
       meta.isPublic = true;
     }
     if (explicitCreate) {
-      const sourceCode = normalizeRoomCode(payload?.sourceRoom);
+      const sourceCode = requestedSourceCode;
       if (sourceCode && sourceCode !== code) {
         meta.parentRoomCode = sourceCode;
+        meta.childPanelKey = childPanelKey;
         grantPrivateAccessFromSourceRoom(meta, sourceCode);
+        registerChildRoomOnSource(sourceCode, childPanelKey, code);
       }
     }
     if (ws.peerId) {
@@ -976,11 +1067,16 @@ wss.on("connection", (ws) => {
     if (!code) return;
 
     if (type === "quick-join") {
+      const meta = roomMetaOf(code);
+      const roomListContext = meta.listContext === "game" ? "game" : "menu";
+      const parentRoomCode = normalizeRoomCode(meta.parentRoomCode);
       sendJson(ws, {
         type: "room-assigned",
         code: joinResult.code,
         role: joinResult.assignedRole,
         roomPublic: joinResult.isPublic,
+        listContext: roomListContext,
+        parentRoomCode,
         participants: roomParticipants(code),
       });
       broadcastRoomState(code);
@@ -988,11 +1084,16 @@ wss.on("connection", (ws) => {
     }
 
     if (type === "hello") {
+      const meta = roomMetaOf(code);
+      const roomListContext = meta.listContext === "game" ? "game" : "menu";
+      const parentRoomCode = normalizeRoomCode(meta.parentRoomCode);
       sendJson(ws, {
         type: "room-assigned",
         code,
         role: joinResult.assignedRole,
         roomPublic: joinResult.isPublic,
+        listContext: roomListContext,
+        parentRoomCode,
         participants: roomParticipants(code),
       });
     }
@@ -1016,11 +1117,15 @@ wss.on("connection", (ws) => {
         ensureHostPeerId(parentRoomCode);
 
         const nextRole = ws.peerId && parentMeta.hostPeerId === ws.peerId ? "host" : "guest";
+        const parentListContext = parentMeta.listContext === "game" ? "game" : "menu";
+        const parentParentRoomCode = normalizeRoomCode(parentMeta.parentRoomCode);
         sendJson(ws, {
           type: "room-assigned",
           code: parentRoomCode,
           role: nextRole,
           roomPublic: Boolean(parentMeta.isPublic),
+          listContext: parentListContext,
+          parentRoomCode: parentParentRoomCode,
           participants: roomParticipants(parentRoomCode),
         });
 

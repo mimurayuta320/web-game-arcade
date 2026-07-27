@@ -4648,6 +4648,7 @@ export default function Home() {
   const [connectedRoomCode, setConnectedRoomCode] = useState("");
   const [menuRootRoomCode, setMenuRootRoomCode] = useState("");
   const [currentRoomParentCode, setCurrentRoomParentCode] = useState("");
+  const [pendingLobbyReturnCode, setPendingLobbyReturnCode] = useState("");
   const [roomReadyById, setRoomReadyById] = useState<Record<string, boolean>>({});
   const [roomRole, setRoomRole] = useState("");
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
@@ -5018,7 +5019,13 @@ export default function Home() {
       if (disposed) return;
       minesweeperLegacyControllerRef.current?.stop();
       minesweeperLegacyControllerRef.current = initMinesweeper({
-        onBackToMenu: () => setActivePanel("menu"),
+        onBackToMenu: () => {
+          if (connectedRoomCode && menuRootRoomCode && menuRootRoomCode !== connectedRoomCode) {
+            setPendingLobbyReturnCode(currentRoomParentCode || menuRootRoomCode);
+            sendRoomEvent({ type: "return-lobby" });
+          }
+          setActivePanel("menu");
+        },
       });
     });
 
@@ -5027,7 +5034,7 @@ export default function Home() {
       minesweeperLegacyControllerRef.current?.stop();
       minesweeperLegacyControllerRef.current = null;
     };
-  }, [activePanel, language]);
+  }, [activePanel, connectedRoomCode, currentRoomParentCode, language, menuRootRoomCode, sendRoomEvent]);
 
   const tf = useCallback(
     (key: keyof typeof LOGIN_I18N.ja, values: Record<string, string | number>) => {
@@ -5803,13 +5810,39 @@ export default function Home() {
     return t("tabSurvivors");
   }, [t]);
 
+  const connectedRoomSummary = useMemo(() => {
+    const code = String(connectedRoomCode || "").replace(/\D/g, "").slice(0, 6);
+    if (code.length !== 6) return null;
+    const mergedRooms = [...menuPublicRooms, ...panelPublicRooms];
+    let summary: { totalParticipants: number; activePlayers: number } | null = null;
+    for (const room of mergedRooms) {
+      const roomCode = String(room.code || "").replace(/\D/g, "").slice(0, 6);
+      if (roomCode !== code) continue;
+      const totalParticipants = Math.max(0, Math.min(16, Number(room.totalParticipants) || 0));
+      const activePlayers = Math.max(0, Math.min(16, Number(room.activePlayers) || 0));
+      if (!summary) {
+        summary = { totalParticipants, activePlayers };
+      } else {
+        summary.totalParticipants = Math.max(summary.totalParticipants, totalParticipants);
+        summary.activePlayers = Math.max(summary.activePlayers, activePlayers);
+      }
+    }
+    return summary;
+  }, [connectedRoomCode, menuPublicRooms, panelPublicRooms]);
+
   const roomMatchedPlayerCount = useMemo(() => {
+    if (activePanel === "menu" && connectedRoomSummary) {
+      return connectedRoomSummary.totalParticipants;
+    }
     return roomParticipants.length;
-  }, [roomParticipants]);
+  }, [activePanel, connectedRoomSummary, roomParticipants]);
 
   const roomActivePlayerCount = useMemo(() => {
+    if (activePanel === "menu" && connectedRoomSummary) {
+      return connectedRoomSummary.activePlayers;
+    }
     return roomParticipants.filter((participant) => participant.role === "host" || participant.role === "guest").length;
-  }, [roomParticipants]);
+  }, [activePanel, connectedRoomSummary, roomParticipants]);
 
   const roomReadyCount = useMemo(() => {
     return roomParticipants.filter((participant) => (
@@ -5835,14 +5868,45 @@ export default function Home() {
 
   const roomParticipantCountsByPanel = useMemo(() => {
     const counts = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, 0])) as Record<PlayablePanel, number>;
-    for (const participant of roomParticipants) {
-      if (participant.role !== "host" && participant.role !== "guest") continue;
-      const panel = participant.panel;
-      if (!panel || !(panel in counts)) continue;
-      counts[panel] += 1;
+    const mergedRooms = [...menuPublicRooms, ...panelPublicRooms];
+    const mergedByCode = new Map<string, { activePlayers: number; panels: Set<PlayablePanel> }>();
+
+    for (const room of mergedRooms) {
+      const code = String(room.code || "").replace(/\D/g, "").slice(0, 6);
+      if (code.length !== 6) continue;
+      const activePlayers = Math.max(0, Math.min(16, Number(room.activePlayers) || 0));
+      const entry = mergedByCode.get(code) || { activePlayers: 0, panels: new Set<PlayablePanel>() };
+      entry.activePlayers = Math.max(entry.activePlayers, activePlayers);
+      for (const panel of room.panels) {
+        if (!(panel in counts)) continue;
+        entry.panels.add(panel);
+      }
+      mergedByCode.set(code, entry);
     }
+
+    const seenCodes = new Set<string>();
+    for (const [code, entry] of mergedByCode.entries()) {
+      seenCodes.add(code);
+      const activePlayers = entry.activePlayers;
+      if (activePlayers <= 0) continue;
+      for (const panel of entry.panels) {
+        counts[panel] += activePlayers;
+      }
+    }
+
+    // Fallback: include the current room snapshot when list updates are delayed.
+    const currentCode = String(connectedRoomCode || "").replace(/\D/g, "").slice(0, 6);
+    if (currentCode.length === 6 && !seenCodes.has(currentCode)) {
+      for (const participant of roomParticipants) {
+        if (participant.role !== "host" && participant.role !== "guest") continue;
+        const panel = participant.panel;
+        if (!panel || !(panel in counts)) continue;
+        counts[panel] += 1;
+      }
+    }
+
     return counts;
-  }, [roomParticipants]);
+  }, [connectedRoomCode, menuPublicRooms, panelPublicRooms, roomParticipants]);
 
   const roomOccupancyTextByPanel = useMemo(() => {
     const byPanel = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, "00/16"])) as Record<PlayablePanel, string>;
@@ -6328,26 +6392,37 @@ export default function Home() {
   }, []);
 
   const handleBackToMenuClick = useCallback(() => {
+    const fallbackLobbyCode = menuRootRoomCode && connectedRoomCode && menuRootRoomCode !== connectedRoomCode
+      ? menuRootRoomCode
+      : "";
+    const returnTargetCode = currentRoomParentCode || fallbackLobbyCode;
     if (activePanel === "fitPuzzle") {
-      if (currentRoomParentCode) {
+      if (returnTargetCode) {
+        setPendingLobbyReturnCode(returnTargetCode);
         sendRoomEvent({ type: "return-lobby" });
       }
       setActivePanel("menu");
       return;
     }
     if (!window.confirm(t("backToMenuConfirm"))) return;
-    if (currentRoomParentCode) {
+    if (returnTargetCode) {
+      setPendingLobbyReturnCode(returnTargetCode);
       sendRoomEvent({ type: "return-lobby" });
     }
     setActivePanel("menu");
-  }, [activePanel, currentRoomParentCode, sendRoomEvent, t]);
+  }, [activePanel, connectedRoomCode, currentRoomParentCode, menuRootRoomCode, sendRoomEvent, t]);
 
   const handleBackToMenuDirect = useCallback(() => {
-    if (currentRoomParentCode) {
+    const fallbackLobbyCode = menuRootRoomCode && connectedRoomCode && menuRootRoomCode !== connectedRoomCode
+      ? menuRootRoomCode
+      : "";
+    const returnTargetCode = currentRoomParentCode || fallbackLobbyCode;
+    if (returnTargetCode) {
+      setPendingLobbyReturnCode(returnTargetCode);
       sendRoomEvent({ type: "return-lobby" });
     }
     setActivePanel("menu");
-  }, [currentRoomParentCode, sendRoomEvent]);
+  }, [connectedRoomCode, currentRoomParentCode, menuRootRoomCode, sendRoomEvent]);
 
   const normalizePublicRoomSummary = useCallback((value: unknown): PublicRoomSummary | null => {
     if (!value || typeof value !== "object") return null;
@@ -7013,6 +7088,7 @@ export default function Home() {
         panelOverride?: PlayablePanel | "";
         createRoom?: boolean;
         sourceRoomCode?: string;
+        forceNewChildRoom?: boolean;
         listContextOverride?: "menu" | "game";
         serverAllocateCode?: boolean;
       },
@@ -7103,6 +7179,9 @@ export default function Home() {
           if (sourceRoomCode) {
             payload.sourceRoom = sourceRoomCode;
           }
+          if (options?.forceNewChildRoom) {
+            payload.forceNewChild = true;
+          }
           if (code) {
             payload.room = code;
           }
@@ -7152,7 +7231,9 @@ export default function Home() {
             }
             if (payload?.snapshot && typeof payload.snapshot === "object") {
               applyArcadeSnapshot(payload.snapshot as Record<string, unknown>);
-              setMenuMessage(t("syncApplied"));
+              if (!quickJoin) {
+                setMenuMessage(t("syncApplied"));
+              }
             }
             return;
           }
@@ -7287,16 +7368,25 @@ export default function Home() {
             if (assignedCode) {
               setConnectedRoomCode(assignedCode);
               setRoomCode(assignedCode);
-              const assignedContext = options?.listContextOverride;
+              const payloadListContextRaw = String(payload.listContext || "").trim().toLowerCase();
+              const payloadAssignedContext = payloadListContextRaw === "menu" || payloadListContextRaw === "game"
+                ? payloadListContextRaw
+                : "";
+              const fallbackContext = activePanel === "menu" ? "menu" : "game";
+              const assignedContext = payloadAssignedContext || options?.listContextOverride || fallbackContext;
               if (assignedContext === "menu") {
                 setSelectedMenuPublicRoomCode(assignedCode);
                 setMenuRootRoomCode(assignedCode);
                 setCurrentRoomParentCode("");
               } else if (assignedContext === "game") {
                 setSelectedPanelPublicRoomCode(assignedCode);
-                const parentCode = String(options?.sourceRoomCode || "").replace(/\D/g, "").slice(0, 6);
+                const parentCodeFromPayload = String(payload.parentRoomCode || "").replace(/\D/g, "").slice(0, 6);
+                const parentCodeFromOptions = String(options?.sourceRoomCode || "").replace(/\D/g, "").slice(0, 6);
+                const parentCode = parentCodeFromPayload || parentCodeFromOptions;
                 if (parentCode && parentCode !== assignedCode) {
                   setCurrentRoomParentCode(parentCode);
+                } else {
+                  setCurrentRoomParentCode("");
                 }
               } else if (activePanel === "menu") {
                 setSelectedMenuPublicRoomCode(assignedCode);
@@ -7646,14 +7736,56 @@ export default function Home() {
   );
 
   useEffect(() => {
+    if (!pendingLobbyReturnCode) return;
+    if (activePanel !== "menu") return;
+    const targetCode = pendingLobbyReturnCode.replace(/\D/g, "").slice(0, 6);
+    if (targetCode.length !== 6) {
+      setPendingLobbyReturnCode("");
+      return;
+    }
+    if (connectedRoomCode === targetCode) {
+      setCurrentRoomParentCode("");
+      setPendingLobbyReturnCode("");
+      return;
+    }
+    setPendingLobbyReturnCode("");
+    setRoomCode(targetCode);
+    connectRoom(targetCode, false, { panelOverride: "", listContextOverride: "menu" });
+  }, [activePanel, connectedRoomCode, connectRoom, pendingLobbyReturnCode]);
+
+  useEffect(() => {
+    if (activePanel !== "menu") return;
+    if (pendingLobbyReturnCode) return;
+    if (quickMatchMode) return;
+    const rootCode = menuRootRoomCode.replace(/\D/g, "").slice(0, 6);
+    const currentCode = connectedRoomCode.replace(/\D/g, "").slice(0, 6);
+    if (rootCode.length !== 6 || currentCode.length !== 6) return;
+    if (rootCode === currentCode) return;
+    setRoomCode(rootCode);
+    connectRoom(rootCode, false, { panelOverride: "", listContextOverride: "menu" });
+  }, [activePanel, connectedRoomCode, connectRoom, menuRootRoomCode, pendingLobbyReturnCode, quickMatchMode]);
+
+  useEffect(() => {
     if (!isAuthenticated) return;
     if (activePanel !== "menu") return;
     requestPublicRoomList("menu", true);
+    requestPublicRoomList("panel", true);
     const timer = window.setInterval(() => {
       requestPublicRoomList("menu", true);
+      requestPublicRoomList("panel", true);
     }, 3500);
     return () => window.clearInterval(timer);
   }, [activePanel, connectedRoomCode, isAuthenticated, requestPublicRoomList]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (activePanel === "menu" || activePanel === "scores") return;
+    requestPublicRoomList("panel", true);
+    const timer = window.setInterval(() => {
+      requestPublicRoomList("panel", true);
+    }, 2200);
+    return () => window.clearInterval(timer);
+  }, [activePanel, isAuthenticated, requestPublicRoomList]);
 
   const requestInviteToken = useCallback(() => {
     return new Promise<string>((resolve) => {
@@ -7758,6 +7890,7 @@ export default function Home() {
     setPendingInviteToken("");
     const panelNow = normalizeRoomPanel(activePanel) || getCurrentRoomPanel();
     const sourceRoomCode = menuRootRoomCode || connectedRoomCode;
+    const forceNewChildRoom = true;
 
     setMenuMessage(
       tf("roomCreatePreparing", {
@@ -7769,6 +7902,7 @@ export default function Home() {
       panelOverride: panelNow,
       createRoom: true,
       sourceRoomCode,
+      forceNewChildRoom,
       listContextOverride: "game",
       serverAllocateCode: true,
     });
@@ -13341,7 +13475,7 @@ export default function Home() {
                               <span className="inline-flex items-center gap-1 rounded-md border border-cyan-200/55 bg-cyan-300/22 px-2 py-[2px] text-[11px] font-black leading-none text-cyan-50 shadow-[0_0_0_1px_rgba(34,211,238,0.18)_inset]">
                                 <span className="tracking-wide">ROOM:</span>
                                 <span className="font-mono [font-variant-numeric:tabular-nums] text-cyan-100">
-                                  {connectedRoomCode ? roomOccupancyTextByPanel[card.panel] : "00/16"}
+                                  {roomOccupancyTextByPanel[card.panel]}
                                 </span>
                               </span>
                             </p>

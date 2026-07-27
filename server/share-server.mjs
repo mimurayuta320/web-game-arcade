@@ -67,6 +67,8 @@ function roomMetaOf(code) {
   if (!roomMeta.has(code)) {
     roomMeta.set(code, {
       hostPeerId: "",
+      parentRoomCode: "",
+      listContext: "menu",
       isPublic: true,
       inGame: false,
       allowedPeerIds: new Set(),
@@ -172,6 +174,34 @@ function normalizePlayerName(raw) {
   const trimmed = String(raw || "").trim().replace(/\s+/g, " ");
   if (!trimmed) return "Player";
   return trimmed.slice(0, 18);
+}
+
+function normalizePlayablePanel(raw) {
+  const panel = String(raw || "").trim();
+  if (!panel || panel === "menu" || panel === "scores") return "";
+  if (
+    panel === "othello"
+    || panel === "gomoku"
+    || panel === "chess"
+    || panel === "shogi"
+    || panel === "uno"
+    || panel === "minesweeper"
+    || panel === "numeron"
+    || panel === "blackjack"
+    || panel === "chinchiro"
+    || panel === "sevens"
+    || panel === "daifugo"
+    || panel === "fourPanel"
+    || panel === "drawingRelay"
+    || panel === "fitPuzzle"
+    || panel === "mahjong"
+    || panel === "poker"
+    || panel === "solitaire"
+    || panel === "survivors"
+  ) {
+    return panel;
+  }
+  return "";
 }
 
 function normalizeRoomCode(raw) {
@@ -465,6 +495,99 @@ function roomOf(code) {
   return rooms.get(code);
 }
 
+function pickNextHostPeerId(code) {
+  const members = rooms.get(code);
+  if (!members) return "";
+  for (const member of members) {
+    if (member.peerId && !member.spectator) return member.peerId;
+  }
+  return "";
+}
+
+function ensureHostPeerId(code) {
+  const meta = roomMetaOf(code);
+  const members = rooms.get(code);
+  if (!members || members.size === 0) {
+    meta.hostPeerId = "";
+    return;
+  }
+  const hasActiveHost = [...members].some(
+    (member) => member.peerId && member.peerId === meta.hostPeerId && !member.spectator,
+  );
+  if (!hasActiveHost) {
+    meta.hostPeerId = pickNextHostPeerId(code);
+  }
+}
+
+function grantPrivateAccessFromSourceRoom(targetMeta, sourceCode) {
+  if (!targetMeta || !sourceCode) return;
+  const sourceMembers = rooms.get(sourceCode);
+  if (!sourceMembers || sourceMembers.size === 0) return;
+  for (const member of sourceMembers) {
+    const peerId = String(member?.peerId || "").trim();
+    if (!peerId) continue;
+    targetMeta.privateAccessPeerIds.add(peerId);
+  }
+}
+
+function listPublicRooms(limit = 80, listContext = "all") {
+  const summaries = [];
+  for (const [code, members] of rooms.entries()) {
+    if (summaries.length >= limit) break;
+    const size = members?.size || 0;
+    if (size <= 0) continue;
+
+    const meta = roomMetaOf(code);
+    const roomListContext = meta.listContext === "game" ? "game" : "menu";
+    if (listContext === "menu" && roomListContext !== "menu") continue;
+    if (listContext === "game" && roomListContext !== "game") continue;
+
+    const participants = roomParticipants(code);
+    const activePlayers = participants.filter((participant) => participant.role === "host" || participant.role === "guest");
+    const host = activePlayers.find((participant) => participant.role === "host");
+    const guest = activePlayers.find((participant) => participant.role === "guest");
+    const panelSet = new Set();
+    for (const participant of activePlayers) {
+      const panel = normalizePlayablePanel(participant.panel);
+      if (panel) panelSet.add(panel);
+    }
+
+    summaries.push({
+      code,
+      listContext: roomListContext,
+      isPublic: Boolean(meta.isPublic),
+      inGame: Boolean(meta.inGame),
+      activePlayers: activePlayers.length,
+      spectatorCount: participants.filter((participant) => participant.role === "spectator").length,
+      totalParticipants: participants.length,
+      hostName: String(host?.name || "").trim(),
+      guestName: String(guest?.name || "").trim(),
+      panels: [...panelSet],
+    });
+  }
+
+  summaries.sort((a, b) => {
+    const scoreA = a.activePlayers * 10 + a.totalParticipants;
+    const scoreB = b.activePlayers * 10 + b.totalParticipants;
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return String(a.code).localeCompare(String(b.code));
+  });
+
+  return summaries.slice(0, limit);
+}
+
+function broadcastRoomsList(limit = 80) {
+  const payload = {
+    type: "rooms-list",
+    listContext: "all",
+    rooms: listPublicRooms(limit),
+    fetchedAt: nowTs(),
+  };
+  for (const client of wss.clients) {
+    sendJson(client, payload);
+  }
+}
+
 function removeFromRoom(ws) {
   const code = ws.roomCode;
   if (!code) return;
@@ -495,6 +618,8 @@ function removeFromRoom(ws) {
   if (members.size === 0) {
     rooms.delete(code);
     roomMeta.delete(code);
+  } else {
+    ensureHostPeerId(code);
   }
 }
 
@@ -513,21 +638,42 @@ function broadcastRoom(code, payload, exceptWs = null) {
 }
 
 function joinRoom(ws, payload) {
-  const quickJoin = String(payload?.type || "") === "quick-join";
+  const type = String(payload?.type || "");
+  const quickJoin = type === "quick-join";
+  const isJoinIntent = type === "hello" || quickJoin;
+  const requestedListContextRaw = String(payload?.listContext || "").trim().toLowerCase();
+  const requestedListContext = requestedListContextRaw === "game" || requestedListContextRaw === "menu"
+    ? requestedListContextRaw
+    : "";
   let code = quickJoin ? pickQuickJoinRoomCode() : normalizeRoomCode(payload.room);
+  const explicitCreate = asBoolean(payload?.create, false);
+
+  if (!code && ws.roomCode) {
+    code = ws.roomCode;
+  }
 
   if (quickJoin && !code) {
     code = allocateRoomCode();
   }
 
+  if (!quickJoin && !code && explicitCreate && type === "hello") {
+    code = allocateRoomCode();
+  }
+
   if (!code) {
-    sendJson(ws, { type: "error", code: "ROOM_REQUIRED" });
+    if (isJoinIntent) {
+      sendJson(ws, { type: "error", code: "ROOM_REQUIRED" });
+    }
     return { ok: false, joined: false };
   }
 
   if (ws.roomCode && ws.roomCode !== code) {
-    removeFromRoom(ws);
-    ws.roomCode = null;
+    if (!isJoinIntent) {
+      code = ws.roomCode;
+    } else {
+      removeFromRoom(ws);
+      ws.roomCode = null;
+    }
   }
 
   const members = roomOf(code);
@@ -559,6 +705,9 @@ function joinRoom(ws, payload) {
     members.add(ws);
     ws.spectator = requestedSpectate;
     joined = true;
+    if (members.size === 1) {
+      meta.listContext = requestedListContext || (ws.currentPanel ? "game" : "menu");
+    }
     if (!meta.hostPeerId && ws.peerId && !ws.spectator) {
       meta.hostPeerId = ws.peerId;
       assignedRole = "host";
@@ -568,10 +717,19 @@ function joinRoom(ws, payload) {
     if (quickJoin && members.size === 1) {
       meta.isPublic = true;
     }
+    if (explicitCreate) {
+      const sourceCode = normalizeRoomCode(payload?.sourceRoom);
+      if (sourceCode && sourceCode !== code) {
+        meta.parentRoomCode = sourceCode;
+        grantPrivateAccessFromSourceRoom(meta, sourceCode);
+      }
+    }
     if (ws.peerId) {
       meta.privateAccessPeerIds.add(ws.peerId);
     }
   }
+
+  ensureHostPeerId(code);
 
   if (ws.spectator) {
     assignedRole = "spectator";
@@ -582,6 +740,9 @@ function joinRoom(ws, payload) {
   const requestedPublic = asBoolean(payload?.roomPublic, meta.isPublic);
   if (ws.peerId && meta.hostPeerId === ws.peerId) {
     meta.isPublic = requestedPublic;
+    if (explicitCreate) {
+      meta.listContext = requestedListContext || (ws.currentPanel ? "game" : "menu");
+    }
   }
 
   return {
@@ -609,6 +770,7 @@ function roomParticipants(code) {
       name: normalizePlayerName(member.playerName || "Player"),
       avatar: normalizeAvatarDataUrl(member.playerAvatar),
       role,
+      panel: normalizePlayablePanel(member.currentPanel),
     });
   }
   return participants;
@@ -939,6 +1101,7 @@ const wss = new WebSocketServer({ noServer: true });
 wss.on("connection", (ws) => {
   ws.roomCode = null;
   ws.peerId = null;
+  ws.currentPanel = "";
   ws.spectator = false;
   ws.playerName = "Player";
   ws.playerAvatar = "";
@@ -958,7 +1121,25 @@ wss.on("connection", (ws) => {
 
     if (!payload || typeof payload !== "object") return;
     ws.peerId = String(payload.from || ws.peerId || "").trim() || ws.peerId;
+    if (Object.prototype.hasOwnProperty.call(payload, "panel")) {
+      ws.currentPanel = normalizePlayablePanel(payload.panel);
+    }
     ws.spectator = asSpectateBoolean(payload?.spectate || ws.spectator);
+    const type = String(payload.type || "");
+    if (type === "list-rooms") {
+      const requestedListContextRaw = String(payload?.listContext || "").trim().toLowerCase();
+      const requestedListContext = requestedListContextRaw === "menu" || requestedListContextRaw === "game"
+        ? requestedListContextRaw
+        : "all";
+      sendJson(ws, {
+        type: "rooms-list",
+        listContext: requestedListContext,
+        rooms: listPublicRooms(80, requestedListContext),
+        fetchedAt: nowTs(),
+      });
+      return;
+    }
+
     const joinResult = joinRoom(ws, payload);
     if (!joinResult.ok) return;
 
@@ -972,17 +1153,38 @@ wss.on("connection", (ws) => {
       ws.playerAvatar = normalizeAvatarDataUrl(payload.avatar);
     }
 
-    const type = String(payload.type || "");
     if (type === "quick-join") {
+      const meta = roomMetaOf(code);
+      const roomListContext = meta.listContext === "game" ? "game" : "menu";
+      const parentRoomCode = normalizeRoomCode(meta.parentRoomCode);
       sendJson(ws, {
         type: "room-assigned",
         code: joinResult.code,
         role: joinResult.assignedRole,
         roomPublic: joinResult.isPublic,
+        listContext: roomListContext,
+        parentRoomCode,
         participants: roomParticipants(code),
       });
       broadcastRoomState(code);
+      broadcastRoomsList();
       return;
+    }
+
+    if (type === "hello") {
+      const meta = roomMetaOf(code);
+      const roomListContext = meta.listContext === "game" ? "game" : "menu";
+      const parentRoomCode = normalizeRoomCode(meta.parentRoomCode);
+      sendJson(ws, {
+        type: "room-assigned",
+        code,
+        role: joinResult.assignedRole,
+        roomPublic: joinResult.isPublic,
+        listContext: roomListContext,
+        parentRoomCode,
+        participants: roomParticipants(code),
+      });
+      broadcastRoomsList();
     }
 
     if (type === "host-mute") {
@@ -1008,8 +1210,43 @@ wss.on("connection", (ws) => {
       return;
     }
     if (type === "return-lobby") {
+      const meta = roomMetaOf(code);
       unlockMatchForLobby(code);
+      const parentRoomCode = normalizeRoomCode(meta.parentRoomCode);
+      if (parentRoomCode && parentRoomCode !== code && rooms.has(parentRoomCode)) {
+        removeFromRoom(ws);
+        ws.roomCode = null;
+
+        const parentMembers = roomOf(parentRoomCode);
+        const parentMeta = roomMetaOf(parentRoomCode);
+        ws.spectator = false;
+        ws.roomCode = parentRoomCode;
+        parentMembers.add(ws);
+        if (ws.peerId) {
+          parentMeta.privateAccessPeerIds.add(ws.peerId);
+        }
+        ensureHostPeerId(parentRoomCode);
+
+        const nextRole = ws.peerId && parentMeta.hostPeerId === ws.peerId ? "host" : "guest";
+        const parentListContext = parentMeta.listContext === "game" ? "game" : "menu";
+        const parentParentRoomCode = normalizeRoomCode(parentMeta.parentRoomCode);
+        sendJson(ws, {
+          type: "room-assigned",
+          code: parentRoomCode,
+          role: nextRole,
+          roomPublic: Boolean(parentMeta.isPublic),
+          listContext: parentListContext,
+          parentRoomCode: parentParentRoomCode,
+          participants: roomParticipants(parentRoomCode),
+        });
+
+        broadcastRoomState(code);
+        broadcastRoomState(parentRoomCode);
+        broadcastRoomsList();
+        return;
+      }
       broadcastRoomState(code);
+      broadcastRoomsList();
       return;
     }
     if (type === "chat-report") {
@@ -1089,10 +1326,14 @@ wss.on("connection", (ws) => {
       const meta = roomMetaOf(code);
       meta.rematchVotes = new Set();
       lockCurrentParticipantsForMatch(code);
+      broadcastRoomsList();
     }
 
     if (joinResult.joined || payload.type === "hello" || payload.type === "presence") {
       broadcastRoomState(code);
+      if (joinResult.joined) {
+        broadcastRoomsList();
+      }
     }
 
     const envelope = {
@@ -1132,6 +1373,7 @@ wss.on("connection", (ws) => {
     const from = ws.peerId;
     removeFromRoom(ws);
     broadcastRoomState(code);
+    broadcastRoomsList();
     if (code && from) {
       broadcastRoom(code, { type: "leave", from, room: code });
     }
