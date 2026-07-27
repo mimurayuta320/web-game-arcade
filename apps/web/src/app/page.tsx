@@ -59,6 +59,7 @@ type PublicRoomSummary = {
   code: string;
   listContext: "menu" | "game";
   isPublic: boolean;
+  hasPassword: boolean;
   inGame: boolean;
   activePlayers: number;
   spectatorCount: number;
@@ -267,9 +268,13 @@ const LOGIN_I18N = {
     roomCode: "ルーム番号",
     roomCodePlaceholder: "6桁",
     roomCodeInvalid: "6桁のルーム番号を入力してください。",
+    roomVisibilityLabel: "公開設定",
     roomPublic: "公開",
     roomPrivate: "非公開",
     roomPasswordLabel: "パスワード",
+    roomPasswordPlaceholder: "必要な場合のみ入力",
+    roomPasswordShow: "表示",
+    roomPasswordHide: "非表示",
     roomPasswordOff: "なし",
     roomPasswordOn: "あり",
     roomListTitle: "公開ルーム一覧",
@@ -403,6 +408,8 @@ const LOGIN_I18N = {
     roomErrMessageAlreadyRetracted: "このメッセージは既に撤回済みです。",
     roomErrEditRetractExpired: "編集・撤回可能時間を過ぎています。",
     roomErrInvitePrivateOnly: "招待トークンは非公開ルームのみ発行できます。",
+    roomErrPasswordRequired: "このルームはパスワードが必要です。",
+    roomErrPasswordInvalid: "ルームパスワードが違います。",
     roomErrSpectatorOnly: "観戦者のみ利用できる機能です。",
     roomErrRematchVoteForbidden: "現在は再戦投票できません。",
     roomErrDrawVoteForbidden: "現在はドロー申請できません。",
@@ -951,9 +958,13 @@ const LOGIN_I18N = {
     roomCode: "룸 번호",
     roomCodePlaceholder: "6자리",
     roomCodeInvalid: "6자리 룸 번호를 입력하세요.",
+    roomVisibilityLabel: "공개 설정",
     roomPublic: "공개",
     roomPrivate: "비공개",
     roomPasswordLabel: "비밀번호",
+    roomPasswordPlaceholder: "필요한 경우에만 입력",
+    roomPasswordShow: "표시",
+    roomPasswordHide: "숨기기",
     roomPasswordOff: "없음",
     roomPasswordOn: "있음",
     roomListTitle: "공개 룸 목록",
@@ -1087,6 +1098,8 @@ const LOGIN_I18N = {
     roomErrMessageAlreadyRetracted: "이 메시지는 이미 회수되었습니다.",
     roomErrEditRetractExpired: "수정/회수 가능 시간이 지났습니다.",
     roomErrInvitePrivateOnly: "초대 토큰은 비공개 룸에서만 발급할 수 있습니다.",
+    roomErrPasswordRequired: "이 룸은 비밀번호가 필요합니다.",
+    roomErrPasswordInvalid: "룸 비밀번호가 올바르지 않습니다.",
     roomErrSpectatorOnly: "관전자 전용 기능입니다.",
     roomErrRematchVoteForbidden: "지금은 재대결 투표를 할 수 없습니다.",
     roomErrDrawVoteForbidden: "지금은 무승부 신청을 할 수 없습니다.",
@@ -1635,9 +1648,14 @@ const EN_I18N: Partial<I18nMap> = {
   roomServerUrl: "Room Server URL",
   roomCode: "Room Code",
   roomCodePlaceholder: "6 digits",
+  roomCodeInvalid: "Please enter a 6-digit room code.",
+  roomVisibilityLabel: "Visibility",
   roomPublic: "Public",
   roomPrivate: "Private",
   roomPasswordLabel: "Password",
+  roomPasswordPlaceholder: "Enter only if needed",
+  roomPasswordShow: "Show",
+  roomPasswordHide: "Hide",
   roomPasswordOff: "Off",
   roomPasswordOn: "On",
   roomListTitle: "Public Rooms",
@@ -1756,9 +1774,14 @@ const ZH_I18N: Partial<I18nMap> = {
   roomWaitHostStart: "参与方请等待房主开始游戏。",
   roomTitle: "房间操作",
   roomCode: "房间号",
+  roomCodeInvalid: "请输入6位房间号。",
+  roomVisibilityLabel: "公开设置",
   roomPublic: "公开",
   roomPrivate: "私密",
   roomPasswordLabel: "密码",
+  roomPasswordPlaceholder: "仅在需要时输入",
+  roomPasswordShow: "显示",
+  roomPasswordHide: "隐藏",
   roomPasswordOff: "无",
   roomPasswordOn: "有",
   roomListTitle: "公开房间列表",
@@ -4643,6 +4666,8 @@ export default function Home() {
   const [startCountdownSec, setStartCountdownSec] = useState(0);
   const [roomCode, setRoomCode] = useState("");
   const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
+  const [roomPassword, setRoomPassword] = useState("");
+  const [isRoomPasswordVisible, setIsRoomPasswordVisible] = useState(false);
   const [isRoomControlsOpen, setIsRoomControlsOpen] = useState(true);
   const [roomStatus, setRoomStatus] = useState("未接続");
   const [connectedRoomCode, setConnectedRoomCode] = useState("");
@@ -5251,6 +5276,8 @@ export default function Home() {
       if (code === "MESSAGE_ALREADY_RETRACTED") return t("roomErrMessageAlreadyRetracted");
       if (code === "EDIT_RETRACT_WINDOW_EXPIRED") return t("roomErrEditRetractExpired");
       if (code === "INVITE_TOKEN_PRIVATE_ONLY") return t("roomErrInvitePrivateOnly");
+      if (code === "ROOM_PASSWORD_REQUIRED") return t("roomErrPasswordRequired");
+      if (code === "ROOM_PASSWORD_INVALID") return t("roomErrPasswordInvalid");
       if (code === "SPECTATOR_ONLY") return t("roomErrSpectatorOnly");
       if (code === "REMATCH_VOTE_FORBIDDEN") return t("roomErrRematchVoteForbidden");
       if (code === "DRAW_VOTE_FORBIDDEN") return t("roomErrDrawVoteForbidden");
@@ -5844,6 +5871,10 @@ export default function Home() {
     return roomParticipants.filter((participant) => participant.role === "host" || participant.role === "guest").length;
   }, [activePanel, connectedRoomSummary, roomParticipants]);
 
+  const isRoomWaitingSoloPractice = useMemo(() => {
+    return Boolean(connectedRoomCode) && roomRole === "host" && roomActivePlayerCount < 2;
+  }, [connectedRoomCode, roomActivePlayerCount, roomRole]);
+
   const roomReadyCount = useMemo(() => {
     return roomParticipants.filter((participant) => (
       (participant.role === "host" || participant.role === "guest")
@@ -6113,7 +6144,7 @@ export default function Home() {
       setMenuMessage(t("roomWaitHostStart"));
       return;
     }
-    if (connectedRoomCode && roomRole === "host" && !roomAllReady) {
+    if (connectedRoomCode && roomRole === "host" && !isRoomWaitingSoloPractice && !roomAllReady) {
       setMenuMessage("参加者全員の準備完了後に開始できます。");
       return;
     }
@@ -6368,11 +6399,12 @@ export default function Home() {
   };
 
   const onJoinRoom = (code: string) => {
-    if (!code.trim()) {
-      setMenuMessage(t("roomSelectRequired"));
+    const normalized = String(code || "").replace(/[^0-9]/g, "").slice(0, 6);
+    if (normalized.length !== 6) {
+      setMenuMessage(t("roomCodeInvalid"));
       return false;
     }
-    setMenuMessage(tf("roomJoinPreparing", { code: code.trim() }));
+    setMenuMessage(tf("roomJoinPreparing", { code: normalized }));
     return true;
   };
 
@@ -6439,6 +6471,7 @@ export default function Home() {
       code,
       listContext,
       isPublic: Boolean(row.isPublic ?? true),
+      hasPassword: Boolean(row.hasPassword),
       inGame: Boolean(row.inGame),
       activePlayers: Math.max(0, Math.min(16, Number(row.activePlayers) || 0)),
       spectatorCount: Math.max(0, Math.min(16, Number(row.spectatorCount) || 0)),
@@ -7084,6 +7117,7 @@ export default function Home() {
         quickJoin?: boolean;
         spectate?: boolean;
         roomPublic?: boolean;
+        roomPassword?: string;
         inviteToken?: string;
         panelOverride?: PlayablePanel | "";
         createRoom?: boolean;
@@ -7172,6 +7206,10 @@ export default function Home() {
             create: Boolean(options?.createRoom),
             inviteToken: String(options?.inviteToken || "").trim(),
           };
+          const normalizedRoomPassword = String(options?.roomPassword || "").trim().slice(0, 32);
+          if (normalizedRoomPassword) {
+            payload.roomPassword = normalizedRoomPassword;
+          }
           if (options?.listContextOverride === "menu" || options?.listContextOverride === "game") {
             payload.listContext = options.listContextOverride;
           }
@@ -7660,7 +7698,7 @@ export default function Home() {
             if (code === "ROOM_REQUIRED" && shouldRecoverRoomRequired) {
               setMenuMessage(
                 tf("roomCreatePreparing", {
-                  password: roomVisibility === "private" ? t("roomPasswordOn") : t("roomPasswordOff"),
+                  password: roomPassword.trim() ? t("roomPasswordOn") : t("roomPasswordOff"),
                 }),
               );
               return;
@@ -7723,6 +7761,7 @@ export default function Home() {
       allocateClientRoomCode,
       roomCode,
       roomErrorLabel,
+      roomPassword,
       roomVisibility,
       stripInviteTokenFromAddressBar,
       finalizeOthelloDrawAgreement,
@@ -7861,29 +7900,40 @@ export default function Home() {
   }, [connectRoom, t]);
 
   const joinRoomAsPlayer = useCallback(() => {
-    const targetCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
+    const typedCode = String(roomCode || "").replace(/[^0-9]/g, "").slice(0, 6);
+    const selectedCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
+    const targetCode = typedCode.length === 6 ? typedCode : selectedCode;
     const code = targetCode.replace(/[^0-9]/g, "").slice(0, 6);
     if (code.length !== 6) {
-      setMenuMessage(t("roomSelectRequired"));
+      setMenuMessage(activePanel === "menu" ? t("roomCodeInvalid") : t("roomSelectRequired"));
       return;
     }
     setQuickMatchMode(false);
     if (!onJoinRoom(code)) return;
     setRoomCode(code);
-    connectRoom(code, false, { inviteToken: pendingInviteToken });
-  }, [activePanel, connectRoom, onJoinRoom, pendingInviteToken, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
+    connectRoom(code, false, {
+      inviteToken: pendingInviteToken,
+      roomPassword,
+    });
+  }, [activePanel, connectRoom, onJoinRoom, pendingInviteToken, roomCode, roomPassword, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
 
   const joinRoomAsSpectator = useCallback(() => {
-    const targetCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
+    const typedCode = String(roomCode || "").replace(/[^0-9]/g, "").slice(0, 6);
+    const selectedCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
+    const targetCode = typedCode.length === 6 ? typedCode : selectedCode;
     const code = targetCode.replace(/[^0-9]/g, "").slice(0, 6);
     if (code.length !== 6) {
-      setMenuMessage(t("roomSelectRequired"));
+      setMenuMessage(activePanel === "menu" ? t("roomCodeInvalid") : t("roomSelectRequired"));
       return;
     }
     setQuickMatchMode(false);
     setRoomCode(code);
-    connectRoom(code, false, { spectate: true, inviteToken: pendingInviteToken });
-  }, [activePanel, connectRoom, pendingInviteToken, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
+    connectRoom(code, false, {
+      spectate: true,
+      inviteToken: pendingInviteToken,
+      roomPassword,
+    });
+  }, [activePanel, connectRoom, pendingInviteToken, roomCode, roomPassword, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
 
   const createRoomFromCurrentPanel = useCallback(() => {
     setQuickMatchMode(false);
@@ -7894,11 +7944,12 @@ export default function Home() {
 
     setMenuMessage(
       tf("roomCreatePreparing", {
-        password: roomVisibility === "private" ? t("roomPasswordOn") : t("roomPasswordOff"),
+        password: roomPassword.trim() ? t("roomPasswordOn") : t("roomPasswordOff"),
       }),
     );
     connectRoom("", true, {
       roomPublic: roomVisibility === "public",
+      roomPassword,
       panelOverride: panelNow,
       createRoom: true,
       sourceRoomCode,
@@ -7909,7 +7960,7 @@ export default function Home() {
     window.setTimeout(() => {
       requestPublicRoomList("panel", true);
     }, 250);
-  }, [activePanel, connectedRoomCode, connectRoom, getCurrentRoomPanel, menuRootRoomCode, normalizeRoomPanel, requestPublicRoomList, roomVisibility, t, tf]);
+  }, [activePanel, connectedRoomCode, connectRoom, getCurrentRoomPanel, menuRootRoomCode, normalizeRoomPanel, requestPublicRoomList, roomPassword, roomVisibility, t, tf]);
 
   const createRoomFromMenu = useCallback(() => {
     setQuickMatchMode(false);
@@ -7917,11 +7968,12 @@ export default function Home() {
 
     setMenuMessage(
       tf("roomCreatePreparing", {
-        password: t("roomPasswordOff"),
+        password: roomPassword.trim() ? t("roomPasswordOn") : t("roomPasswordOff"),
       }),
     );
     connectRoom("", true, {
-      roomPublic: true,
+      roomPublic: roomVisibility === "public",
+      roomPassword,
       panelOverride: "",
       createRoom: true,
       listContextOverride: "menu",
@@ -7930,7 +7982,7 @@ export default function Home() {
     window.setTimeout(() => {
       requestPublicRoomList("menu", true);
     }, 250);
-  }, [connectRoom, requestPublicRoomList, t, tf]);
+  }, [connectRoom, requestPublicRoomList, roomPassword, roomVisibility, t, tf]);
 
   const disconnectRoomFromCurrentPanel = useCallback(() => {
     setQuickMatchMode(false);
@@ -8301,7 +8353,7 @@ export default function Home() {
       }
     }
 
-    if (connectedRoomCode && !isRemote) {
+    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
       if (roomRole === "spectator") {
         setOthelloMessage(t("roomSpectatorReadonly"));
         return;
@@ -8716,7 +8768,7 @@ export default function Home() {
       return;
     }
 
-    if (connectedRoomCode && !isRemote) {
+    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
       if (roomRole === "spectator") {
         setGomokuMessage(t("roomSpectatorReadonly"));
         return;
@@ -8846,7 +8898,7 @@ export default function Home() {
       return;
     }
 
-    if (connectedRoomCode && !isRemote) {
+    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
       if (roomRole === "spectator") {
         setChessMessage(t("roomSpectatorReadonly"));
         return;
@@ -9014,7 +9066,7 @@ export default function Home() {
       return;
     }
 
-    if (connectedRoomCode && !isRemote) {
+    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
       if (roomRole === "spectator") {
         setShogiMessage(t("roomSpectatorReadonly"));
         return;
@@ -9707,7 +9759,7 @@ export default function Home() {
     const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
     if (isDaifugoOver || daifugoTurn !== side) return;
 
-    if (connectedRoomCode && !isRemote) {
+    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
       if (roomRole === "spectator") {
         setDaifugoMessage(t("roomSpectatorReadonly"));
         return;
@@ -9761,7 +9813,7 @@ export default function Home() {
     const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
     if (isDaifugoOver || daifugoTurn !== side) return;
 
-    if (connectedRoomCode && !isRemote) {
+    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
       if (roomRole === "spectator") {
         setDaifugoMessage(t("roomSpectatorReadonly"));
         return;
@@ -11456,7 +11508,7 @@ export default function Home() {
         const isRemote = Boolean(options?.isRemote);
         let actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
 
-        if (connectedRoomCode && !isRemote) {
+        if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
           if (roomRole === "spectator") {
             setUnoMessage(t("roomSpectatorReadonly"));
             return;
@@ -11511,7 +11563,7 @@ export default function Home() {
       const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
       if (isUnoOver || unoTurn !== side || !unoTopCard) return;
 
-      if (connectedRoomCode && !isRemote) {
+      if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
         if (roomRole === "spectator") {
           setUnoMessage(t("roomSpectatorReadonly"));
           return;
@@ -11561,7 +11613,7 @@ export default function Home() {
       const isRemote = Boolean(options?.isRemote);
       let actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
 
-      if (connectedRoomCode && !isRemote) {
+      if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
         if (roomRole === "spectator") {
           setUnoMessage(t("roomSpectatorReadonly"));
           return;
@@ -11608,7 +11660,7 @@ export default function Home() {
     const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
     if (isUnoOver || unoTurn !== side) return;
 
-    if (connectedRoomCode && !isRemote) {
+    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
       if (roomRole === "spectator") {
         setUnoMessage(t("roomSpectatorReadonly"));
         return;
@@ -13544,7 +13596,7 @@ export default function Home() {
                               }}
                               className={`w-full rounded-md border px-2 py-1.5 text-left ${selected ? "border-cyan-300/80 bg-cyan-300/20" : "border-slate-500/40 bg-slate-900/40 hover:border-cyan-200/60"}`}
                             >
-                              <p className="font-mono text-[11px]">{room.code}{room.isPublic ? "" : " 🔒"}</p>
+                              <p className="font-mono text-[11px]">{room.code}{room.isPublic ? "" : " 🔒"}{room.hasPassword ? " 🔑" : ""}</p>
                               <p className="text-[11px] text-slate-200">{host} vs {guest}</p>
                               <p className="text-[10px] text-slate-300">{panelText} • {room.totalParticipants}/16 • +{room.spectatorCount}</p>
                             </button>
@@ -13553,6 +13605,63 @@ export default function Home() {
                       })}
                     </ul>
                   )) : null}
+                </div>
+
+                <div className="grid gap-2 rounded-lg border border-slate-400/25 bg-slate-950/35 p-3">
+                  <label className="text-xs font-semibold text-slate-100" htmlFor="menu-room-code-input">
+                    {t("roomCode")}
+                  </label>
+                  <input
+                    id="menu-room-code-input"
+                    value={roomCode}
+                    onChange={(event) => setRoomCode(event.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                    placeholder={t("roomCodePlaceholder")}
+                    inputMode="numeric"
+                    maxLength={6}
+                    className="rounded-md border border-slate-400/35 bg-slate-950/60 px-3 py-2 text-sm font-mono tracking-widest text-slate-100 outline-none focus:border-cyan-200/75"
+                  />
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200">
+                    <span className="font-semibold text-slate-200">{t("roomVisibilityLabel")}:</span>
+                    <label className="inline-flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        checked={roomVisibility === "public"}
+                        onChange={() => setRoomVisibility("public")}
+                      />
+                      {t("roomPublic")}
+                    </label>
+                    <label className="inline-flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        checked={roomVisibility === "private"}
+                        onChange={() => setRoomVisibility("private")}
+                      />
+                      {t("roomPrivate")}
+                    </label>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-semibold text-slate-100" htmlFor="menu-room-password-input">
+                      {t("roomPasswordLabel")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsRoomPasswordVisible((prev) => !prev)}
+                      className="rounded border border-slate-400/40 px-2 py-[3px] text-[11px] text-slate-100 transition-colors hover:border-cyan-200/70 hover:text-cyan-100"
+                    >
+                      <span aria-hidden="true">{isRoomPasswordVisible ? "🙈" : "👁"}</span>
+                      <span className="sr-only">{isRoomPasswordVisible ? t("roomPasswordHide") : t("roomPasswordShow")}</span>
+                    </button>
+                  </div>
+                  <input
+                    id="menu-room-password-input"
+                    type={isRoomPasswordVisible ? "text" : "password"}
+                    value={roomPassword}
+                    onChange={(event) => setRoomPassword(event.target.value.slice(0, 32))}
+                    placeholder={t("roomPasswordPlaceholder")}
+                    maxLength={32}
+                    autoComplete="new-password"
+                    className="rounded-md border border-slate-400/35 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-200/75"
+                  />
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -13792,7 +13901,7 @@ export default function Home() {
                               className={`w-full rounded border px-2 py-1 text-left ${selected ? "border-cyan-300/80 bg-cyan-300/20" : "border-slate-500/40 bg-slate-900/35 hover:border-cyan-200/60"}`}
                             >
                               <p>
-                                <span className="font-mono">{room.code}{room.isPublic ? "" : " 🔒"}</span>
+                                <span className="font-mono">{room.code}{room.isPublic ? "" : " 🔒"}{room.hasPassword ? " 🔑" : ""}</span>
                                 <span className="ml-2 text-slate-200">{host} vs {guest}</span>
                               </p>
                               <p className="text-[10px] text-slate-300">{room.totalParticipants}/16 • +{room.spectatorCount}</p>
@@ -13804,14 +13913,14 @@ export default function Home() {
                   )) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200">
-                  <span className="font-semibold text-slate-200">{t("roomPasswordLabel")}:</span>
+                  <span className="font-semibold text-slate-200">{t("roomVisibilityLabel")}:</span>
                   <label className="inline-flex items-center gap-1.5">
                     <input
                       type="radio"
                       checked={roomVisibility === "public"}
                       onChange={() => setRoomVisibility("public")}
                     />
-                    {t("roomPasswordOff")}
+                    {t("roomPublic")}
                   </label>
                   <label className="inline-flex items-center gap-1.5">
                     <input
@@ -13819,8 +13928,31 @@ export default function Home() {
                       checked={roomVisibility === "private"}
                       onChange={() => setRoomVisibility("private")}
                     />
-                    {t("roomPasswordOn")}
+                    {t("roomPrivate")}
                   </label>
+                </div>
+                <div className="grid gap-1.5 text-xs text-slate-200">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="font-semibold text-slate-200" htmlFor="panel-room-password-input">{t("roomPasswordLabel")}</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsRoomPasswordVisible((prev) => !prev)}
+                      className="rounded border border-slate-400/40 px-2 py-[3px] text-[11px] text-slate-100 transition-colors hover:border-cyan-200/70 hover:text-cyan-100"
+                    >
+                      <span aria-hidden="true">{isRoomPasswordVisible ? "🙈" : "👁"}</span>
+                      <span className="sr-only">{isRoomPasswordVisible ? t("roomPasswordHide") : t("roomPasswordShow")}</span>
+                    </button>
+                  </div>
+                  <input
+                    id="panel-room-password-input"
+                    type={isRoomPasswordVisible ? "text" : "password"}
+                    value={roomPassword}
+                    onChange={(event) => setRoomPassword(event.target.value.slice(0, 32))}
+                    placeholder={t("roomPasswordPlaceholder")}
+                    maxLength={32}
+                    autoComplete="new-password"
+                    className="rounded border border-slate-400/35 bg-slate-950/55 px-2 py-1 text-xs text-slate-100 outline-none focus:border-cyan-200/75"
+                  />
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">

@@ -59,6 +59,10 @@ function normalizePlayerName(raw) {
   return trimmed.slice(0, 18);
 }
 
+function normalizeRoomPassword(raw) {
+  return String(raw || "").trim().slice(0, 32);
+}
+
 function normalizePlayablePanel(raw) {
   const panel = String(raw || "").trim();
   if (!panel || panel === "menu" || panel === "scores") return "";
@@ -96,6 +100,7 @@ function roomMetaOf(code) {
       childRoomByPanel: new Map(),
       listContext: "menu",
       isPublic: true,
+      accessPassword: "",
       inGame: false,
       allowedPeerIds: new Set(),
       mutedPeers: new Map(),
@@ -499,6 +504,7 @@ function listPublicRooms(limit = 80, listContext = "all") {
       code,
       listContext: roomListContext,
       isPublic: Boolean(meta.isPublic),
+      hasPassword: Boolean(meta.accessPassword),
       inGame: Boolean(meta.inGame),
       activePlayers: mergedActivePlayers,
       spectatorCount: mergedSpectatorCount,
@@ -775,9 +781,21 @@ function tryJoinRoom(ws, payload) {
   }
 
   const meta = roomMetaOf(code);
+  const requestedRoomPassword = normalizeRoomPassword(payload?.roomPassword);
   ensureHostPeerId(code);
   const inviteToken = String(payload?.inviteToken || "").trim();
-  if (!ws.roomCode && !meta.isPublic && ws.peerId !== meta.hostPeerId) {
+  if (!ws.roomCode && meta.accessPassword && ws.peerId !== meta.hostPeerId) {
+    if (!requestedRoomPassword) {
+      sendError(ws, "ROOM_PASSWORD_REQUIRED");
+      return { ok: false, joined: false };
+    }
+    if (requestedRoomPassword !== meta.accessPassword) {
+      sendError(ws, "ROOM_PASSWORD_INVALID");
+      return { ok: false, joined: false };
+    }
+  }
+  const requiresInviteToken = !meta.isPublic && !meta.accessPassword;
+  if (!ws.roomCode && requiresInviteToken && ws.peerId !== meta.hostPeerId) {
     const alreadyAllowed = ws.peerId && meta.privateAccessPeerIds.has(ws.peerId);
     const consumed = alreadyAllowed ? true : consumeInviteToken(meta, inviteToken);
     if (!consumed) {
@@ -836,6 +854,7 @@ function tryJoinRoom(ws, payload) {
     meta.isPublic = requestedPublic;
     if (asBoolean(payload?.create, false)) {
       meta.listContext = requestedListContext || (ws.currentPanel ? "game" : "menu");
+      meta.accessPassword = requestedRoomPassword;
     }
   }
 
