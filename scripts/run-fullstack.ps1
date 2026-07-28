@@ -75,5 +75,10 @@ try {
 }
 
 Start-Process chrome "http://localhost:3000/"
-$nextCli = Join-Path $workspace "apps\web\node_modules\next\dist\bin\next"
-& "$nodeDir\node.exe" $nextCli dev --hostname 0.0.0.0 --port 3000
+Push-Location (Join-Path $workspace "apps\web")
+try {
+  $nextCli = Join-Path $workspace "apps\web\node_modules\next\dist\bin\next"
+  & "$nodeDir\node.exe" $nextCli dev --hostname 0.0.0.0 --port 3000
+} finally {
+  Pop-Location
+}

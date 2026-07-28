@@ -5899,7 +5899,7 @@ export default function Home() {
 
   const roomParticipantCountsByPanel = useMemo(() => {
     const counts = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, 0])) as Record<PlayablePanel, number>;
-    const mergedRooms = [...menuPublicRooms, ...panelPublicRooms];
+    const mergedRooms = [...panelPublicRooms];
     const mergedByCode = new Map<string, { activePlayers: number; panels: Set<PlayablePanel> }>();
 
     for (const room of mergedRooms) {
@@ -5937,7 +5937,7 @@ export default function Home() {
     }
 
     return counts;
-  }, [connectedRoomCode, menuPublicRooms, panelPublicRooms, roomParticipants]);
+  }, [connectedRoomCode, panelPublicRooms, roomParticipants]);
 
   const roomOccupancyTextByPanel = useMemo(() => {
     const byPanel = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, "00/16"])) as Record<PlayablePanel, string>;

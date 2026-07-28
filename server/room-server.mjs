@@ -16,6 +16,7 @@ const MESSAGE_STATE_TTL_MS = Number(process.env.ROOM_MESSAGE_STATE_TTL_MS || 4 *
 const INVITE_TOKEN_TTL_MS = Number(process.env.ROOM_INVITE_TOKEN_TTL_MS || 5 * 60 * 1000);
 const ROOM_STALE_MEMBER_TTL_MS = Number(process.env.ROOM_STALE_MEMBER_TTL_MS || 5500);
 const ROOM_STALE_SWEEP_INTERVAL_MS = Number(process.env.ROOM_STALE_SWEEP_INTERVAL_MS || 1000);
+const ROOM_HOST_REASSIGN_GRACE_MS = Number(process.env.ROOM_HOST_REASSIGN_GRACE_MS || 5000);
 const ROOM_DEBUG_STATE = String(process.env.ROOM_DEBUG_STATE || "1").trim() !== "0";
 
 const rooms = new Map();
@@ -95,6 +96,10 @@ function roomMetaOf(code) {
   if (!roomMeta.has(code)) {
     roomMeta.set(code, {
       hostPeerId: "",
+      hostNameSnapshot: "",
+      hostReassignGraceUntil: 0,
+      pendingTransitionCount: 0,
+      pendingTransitionUntil: 0,
       parentRoomCode: "",
       childPanelKey: "",
       childRoomByPanel: new Map(),
@@ -205,14 +210,44 @@ function ensureHostPeerId(code) {
   const members = rooms.get(code);
   if (!members || members.size === 0) {
     meta.hostPeerId = "";
+    meta.hostNameSnapshot = "";
+    meta.hostReassignGraceUntil = 0;
+    meta.pendingTransitionCount = 0;
+    meta.pendingTransitionUntil = 0;
     return;
   }
 
   const hasActiveHost = [...members].some(
     (member) => member.peerId && member.peerId === meta.hostPeerId && !member.spectator,
   );
+  if (hasActiveHost) {
+    const activeHost = [...members].find(
+      (member) => member.peerId && member.peerId === meta.hostPeerId && !member.spectator,
+    );
+    if (activeHost) {
+      meta.hostNameSnapshot = normalizePlayerName(activeHost.playerName || "Player");
+    }
+    meta.hostReassignGraceUntil = 0;
+    return;
+  }
+
   if (!hasActiveHost) {
+    if (meta.hostPeerId && Number(meta.hostReassignGraceUntil || 0) > nowTs()) {
+      return;
+    }
+    if (meta.hostPeerId && hasLiveChildRoomForParent(code)) {
+      return;
+    }
+    meta.hostReassignGraceUntil = 0;
     meta.hostPeerId = pickNextHostPeerId(code);
+    if (meta.hostPeerId) {
+      const nextHost = [...members].find((member) => member.peerId === meta.hostPeerId);
+      if (nextHost) {
+        meta.hostNameSnapshot = normalizePlayerName(nextHost.playerName || "Player");
+      }
+    } else {
+      meta.hostNameSnapshot = "";
+    }
   }
 }
 
@@ -479,6 +514,19 @@ function listPublicRooms(limit = 80, listContext = "all") {
     let mergedActivePlayers = activePlayers.length;
     let mergedSpectatorCount = participants.filter((participant) => participant.role === "spectator").length;
     let mergedTotalParticipants = participants.length;
+    const pendingTransitionActive = Boolean(
+      roomListContext === "menu"
+      && !hasLiveChildren
+      && Number(meta.pendingTransitionUntil || 0) > nowTs(),
+    );
+    if (pendingTransitionActive) {
+      const pending = Math.max(0, Math.min(MAX_ROOM_PLAYERS, Number(meta.pendingTransitionCount) || 0));
+      mergedActivePlayers += pending;
+      mergedTotalParticipants += pending;
+    } else if ((Number(meta.pendingTransitionCount) || 0) > 0) {
+      meta.pendingTransitionCount = 0;
+      meta.pendingTransitionUntil = 0;
+    }
     const panelSet = new Set();
     for (const participant of activePlayers) {
       const panel = normalizePlayablePanel(participant.panel);
@@ -506,10 +554,10 @@ function listPublicRooms(limit = 80, listContext = "all") {
       isPublic: Boolean(meta.isPublic),
       hasPassword: Boolean(meta.accessPassword),
       inGame: Boolean(meta.inGame),
-      activePlayers: mergedActivePlayers,
+      activePlayers: Math.max(0, Math.min(MAX_ROOM_PLAYERS, mergedActivePlayers)),
       spectatorCount: mergedSpectatorCount,
-      totalParticipants: mergedTotalParticipants,
-      hostName: String(host?.name || "").trim(),
+      totalParticipants: Math.max(0, Math.min(MAX_ROOM_PLAYERS, mergedTotalParticipants)),
+      hostName: String(host?.name || meta.hostNameSnapshot || "").trim(),
       guestName: String(guest?.name || "").trim(),
       panels: [...panelSet],
     });
@@ -656,24 +704,67 @@ function broadcastRoomState(code) {
   broadcastRoomsList();
 }
 
-function removeFromRoom(ws) {
+function removeFromRoom(ws, options = {}) {
   const code = ws.roomCode;
   if (!code) return;
   const members = rooms.get(code);
   if (!members) return;
 
-  members.delete(ws);
   const meta = roomMeta.get(code);
+  const preserveEmptyRoom = Boolean(options?.preserveEmptyRoom);
+  const preserveHostPeerId = Boolean(options?.preserveHostPeerId);
+  const isLikelyLobbyToGameTransition = Boolean(
+    meta
+    && meta.listContext === "menu"
+    && normalizePlayablePanel(ws.currentPanel),
+  );
+
+  members.delete(ws);
   if (meta && ws.peerId) {
     meta.rematchVotes.delete(ws.peerId);
     meta.drawVotes.delete(ws.peerId);
   }
-  if (meta && ws.peerId && meta.hostPeerId === ws.peerId) {
-    meta.hostPeerId = pickNextHostPeerId(code);
+  if (
+    meta
+    && ws.peerId
+    && meta.hostPeerId === ws.peerId
+    && !preserveHostPeerId
+    && !isLikelyLobbyToGameTransition
+  ) {
+    const shouldGraceHoldHost = meta.listContext === "menu" && members.size > 0;
+    if (shouldGraceHoldHost) {
+      meta.hostReassignGraceUntil = nowTs() + ROOM_HOST_REASSIGN_GRACE_MS;
+    } else {
+      meta.hostReassignGraceUntil = 0;
+      meta.hostPeerId = pickNextHostPeerId(code);
+    }
+  }
+  if (
+    meta
+    && ws.peerId
+    && meta.hostPeerId === ws.peerId
+    && !preserveHostPeerId
+    && isLikelyLobbyToGameTransition
+    && meta.listContext === "menu"
+    && members.size > 0
+  ) {
+    meta.hostReassignGraceUntil = nowTs() + ROOM_HOST_REASSIGN_GRACE_MS;
+  }
+  if (
+    meta
+    && isLikelyLobbyToGameTransition
+    && meta.listContext === "menu"
+    && members.size > 0
+  ) {
+    const currentPending = Math.max(0, Number(meta.pendingTransitionCount) || 0);
+    meta.pendingTransitionCount = Math.min(MAX_ROOM_PLAYERS, currentPending + 1);
+    meta.pendingTransitionUntil = nowTs() + ROOM_HOST_REASSIGN_GRACE_MS;
   }
   if (members.size === 0) {
+    if (preserveEmptyRoom) {
+      return;
+    }
     if (hasLiveChildRoomForParent(code)) {
-      meta.hostPeerId = "";
       return;
     }
     const parentCode = normalizeRoomCode(meta?.parentRoomCode);
@@ -767,7 +858,19 @@ function tryJoinRoom(ws, payload) {
     if (!isJoinIntent) {
       code = ws.roomCode;
     } else {
-      removeFromRoom(ws);
+      const currentCode = normalizeRoomCode(ws.roomCode);
+      const preserveSourceRoom = Boolean(
+        explicitCreate
+        && requestedSourceCode
+        && currentCode
+        && currentCode === requestedSourceCode
+        && requestedSourceCode !== code,
+      );
+      if (preserveSourceRoom) {
+        removeFromRoom(ws, { preserveEmptyRoom: true, preserveHostPeerId: true });
+      } else {
+        removeFromRoom(ws);
+      }
       ws.roomCode = null;
     }
   }
@@ -820,9 +923,15 @@ function tryJoinRoom(ws, payload) {
     }
     if (!meta.hostPeerId && ws.peerId && !ws.spectator) {
       meta.hostPeerId = ws.peerId;
+      meta.hostNameSnapshot = normalizePlayerName(ws.playerName || "Player");
       assignedRole = "host";
     } else if (ws.spectator) {
       assignedRole = "spectator";
+    }
+    if (explicitCreate && requestedListContext === "game" && ws.peerId && !ws.spectator) {
+      meta.hostPeerId = ws.peerId;
+      meta.hostNameSnapshot = normalizePlayerName(ws.playerName || "Player");
+      assignedRole = "host";
     }
     if (quickJoin && members.size === 1) {
       meta.isPublic = true;
@@ -830,6 +939,14 @@ function tryJoinRoom(ws, payload) {
     if (explicitCreate) {
       const sourceCode = requestedSourceCode;
       if (sourceCode && sourceCode !== code) {
+        // Recreate/keep parent lobby entry so child-room creation does not orphan return target.
+        roomOf(sourceCode);
+        const sourceMeta = roomMetaOf(sourceCode);
+        if (sourceMeta.listContext !== "menu") {
+          sourceMeta.listContext = "menu";
+        }
+        sourceMeta.pendingTransitionCount = 0;
+        sourceMeta.pendingTransitionUntil = 0;
         meta.parentRoomCode = sourceCode;
         meta.childPanelKey = childPanelKey;
         grantPrivateAccessFromSourceRoom(meta, sourceCode);
@@ -846,6 +963,7 @@ function tryJoinRoom(ws, payload) {
   if (ws.spectator) {
     assignedRole = "spectator";
   } else if (ws.peerId && meta.hostPeerId === ws.peerId) {
+    meta.hostNameSnapshot = normalizePlayerName(ws.playerName || "Player");
     assignedRole = "host";
   }
 

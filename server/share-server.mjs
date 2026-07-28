@@ -24,6 +24,7 @@ const CHAT_EDIT_RETRACT_WINDOW_MS = Number(process.env.ROOM_CHAT_EDIT_RETRACT_WI
 const REPORT_AUTO_MUTE_THRESHOLD = Number(process.env.ROOM_REPORT_AUTO_MUTE_THRESHOLD || 2);
 const HOST_MUTE_DEFAULT_MS = Number(process.env.ROOM_HOST_MUTE_DEFAULT_MS || 5 * 60 * 1000);
 const HOST_MUTE_MAX_MS = Number(process.env.ROOM_HOST_MUTE_MAX_MS || 24 * 60 * 60 * 1000);
+const ROOM_HOST_REASSIGN_GRACE_MS = Number(process.env.ROOM_HOST_REASSIGN_GRACE_MS || 5000);
 const MESSAGE_STATE_TTL_MS = Number(process.env.ROOM_MESSAGE_STATE_TTL_MS || 4 * 60 * 60 * 1000);
 const INVITE_TOKEN_TTL_MS = Number(process.env.ROOM_INVITE_TOKEN_TTL_MS || 5 * 60 * 1000);
 const DATA_DIR = path.join(__dirname, "data");
@@ -67,6 +68,10 @@ function roomMetaOf(code) {
   if (!roomMeta.has(code)) {
     roomMeta.set(code, {
       hostPeerId: "",
+      hostNameSnapshot: "",
+      hostReassignGraceUntil: 0,
+      pendingTransitionCount: 0,
+      pendingTransitionUntil: 0,
       parentRoomCode: "",
       listContext: "menu",
       isPublic: true,
@@ -233,7 +238,7 @@ function pickQuickJoinRoomCode() {
     const meta = roomMetaOf(code);
     if (!meta.isPublic || meta.inGame) continue;
     const activePlayers = activePlayerCount(code);
-    if (activePlayers < 1 || activePlayers >= 2) continue;
+    if (activePlayers < 1 || activePlayers >= MAX_ROOM_PLAYERS) continue;
     bestCode = code;
     break;
   }
@@ -514,13 +519,42 @@ function ensureHostPeerId(code) {
   const members = rooms.get(code);
   if (!members || members.size === 0) {
     meta.hostPeerId = "";
+    meta.hostNameSnapshot = "";
+    meta.hostReassignGraceUntil = 0;
+    meta.pendingTransitionCount = 0;
+    meta.pendingTransitionUntil = 0;
     return;
   }
   const hasActiveHost = [...members].some(
     (member) => member.peerId && member.peerId === meta.hostPeerId && !member.spectator,
   );
+  if (hasActiveHost) {
+    const activeHost = [...members].find(
+      (member) => member.peerId && member.peerId === meta.hostPeerId && !member.spectator,
+    );
+    if (activeHost) {
+      meta.hostNameSnapshot = normalizePlayerName(activeHost.playerName || "Player");
+    }
+    meta.hostReassignGraceUntil = 0;
+    return;
+  }
   if (!hasActiveHost) {
+    if (meta.hostPeerId && Number(meta.hostReassignGraceUntil || 0) > nowTs()) {
+      return;
+    }
+    if (meta.hostPeerId && hasLiveChildRoomForParent(code)) {
+      return;
+    }
+    meta.hostReassignGraceUntil = 0;
     meta.hostPeerId = pickNextHostPeerId(code);
+    if (meta.hostPeerId) {
+      const nextHost = [...members].find((member) => member.peerId === meta.hostPeerId);
+      if (nextHost) {
+        meta.hostNameSnapshot = normalizePlayerName(nextHost.playerName || "Player");
+      }
+    } else {
+      meta.hostNameSnapshot = "";
+    }
   }
 }
 
@@ -535,12 +569,32 @@ function grantPrivateAccessFromSourceRoom(targetMeta, sourceCode) {
   }
 }
 
+function listLiveChildRoomCodes(parentCode) {
+  const codes = [];
+  if (!parentCode) return codes;
+  for (const [code, members] of rooms.entries()) {
+    if (code === parentCode) continue;
+    if (!members || members.size <= 0) continue;
+    const meta = roomMeta.get(code);
+    if (!meta) continue;
+    if (meta.listContext !== "game") continue;
+    if (normalizeRoomCode(meta.parentRoomCode) !== parentCode) continue;
+    codes.push(code);
+  }
+  return codes;
+}
+
+function hasLiveChildRoomForParent(parentCode) {
+  return listLiveChildRoomCodes(parentCode).length > 0;
+}
+
 function listPublicRooms(limit = 80, listContext = "all") {
   const summaries = [];
   for (const [code, members] of rooms.entries()) {
     if (summaries.length >= limit) break;
     const size = members?.size || 0;
-    if (size <= 0) continue;
+    const hasLiveChildren = hasLiveChildRoomForParent(code);
+    if (size <= 0 && !hasLiveChildren) continue;
 
     const meta = roomMetaOf(code);
     const roomListContext = meta.listContext === "game" ? "game" : "menu";
@@ -551,10 +605,41 @@ function listPublicRooms(limit = 80, listContext = "all") {
     const activePlayers = participants.filter((participant) => participant.role === "host" || participant.role === "guest");
     const host = activePlayers.find((participant) => participant.role === "host");
     const guest = activePlayers.find((participant) => participant.role === "guest");
+    let mergedActivePlayers = activePlayers.length;
+    let mergedSpectatorCount = participants.filter((participant) => participant.role === "spectator").length;
+    let mergedTotalParticipants = participants.length;
+    const pendingTransitionActive = Boolean(
+      roomListContext === "menu"
+      && !hasLiveChildren
+      && Number(meta.pendingTransitionUntil || 0) > nowTs(),
+    );
+    if (pendingTransitionActive) {
+      const pending = Math.max(0, Math.min(MAX_ROOM_PLAYERS, Number(meta.pendingTransitionCount) || 0));
+      mergedActivePlayers += pending;
+      mergedTotalParticipants += pending;
+    } else if ((Number(meta.pendingTransitionCount) || 0) > 0) {
+      meta.pendingTransitionCount = 0;
+      meta.pendingTransitionUntil = 0;
+    }
     const panelSet = new Set();
     for (const participant of activePlayers) {
       const panel = normalizePlayablePanel(participant.panel);
       if (panel) panelSet.add(panel);
+    }
+
+    if (roomListContext === "menu" && hasLiveChildren) {
+      const childCodes = listLiveChildRoomCodes(code);
+      for (const childCode of childCodes) {
+        const childParticipants = roomParticipants(childCode);
+        const childActivePlayers = childParticipants.filter((participant) => participant.role === "host" || participant.role === "guest");
+        mergedActivePlayers += childActivePlayers.length;
+        mergedSpectatorCount += childParticipants.filter((participant) => participant.role === "spectator").length;
+        mergedTotalParticipants += childParticipants.length;
+        for (const participant of childActivePlayers) {
+          const panel = normalizePlayablePanel(participant.panel);
+          if (panel) panelSet.add(panel);
+        }
+      }
     }
 
     summaries.push({
@@ -563,10 +648,10 @@ function listPublicRooms(limit = 80, listContext = "all") {
       isPublic: Boolean(meta.isPublic),
       hasPassword: Boolean(meta.accessPassword),
       inGame: Boolean(meta.inGame),
-      activePlayers: activePlayers.length,
-      spectatorCount: participants.filter((participant) => participant.role === "spectator").length,
-      totalParticipants: participants.length,
-      hostName: String(host?.name || "").trim(),
+      activePlayers: Math.max(0, Math.min(MAX_ROOM_PLAYERS, mergedActivePlayers)),
+      spectatorCount: mergedSpectatorCount,
+      totalParticipants: Math.max(0, Math.min(MAX_ROOM_PLAYERS, mergedTotalParticipants)),
+      hostName: String(host?.name || meta.hostNameSnapshot || "").trim(),
       guestName: String(guest?.name || "").trim(),
       panels: [...panelSet],
     });
@@ -594,34 +679,80 @@ function broadcastRoomsList(limit = 80) {
   }
 }
 
-function removeFromRoom(ws) {
+function removeFromRoom(ws, options = {}) {
   const code = ws.roomCode;
   if (!code) return;
   const members = rooms.get(code);
   if (!members) return;
-  members.delete(ws);
   const meta = roomMeta.get(code);
+  const preserveEmptyRoom = Boolean(options?.preserveEmptyRoom);
+  const preserveHostPeerId = Boolean(options?.preserveHostPeerId);
+  const isLikelyLobbyToGameTransition = Boolean(
+    meta
+    && meta.listContext === "menu"
+    && normalizePlayablePanel(ws.currentPanel),
+  );
+  members.delete(ws);
   if (meta && ws.peerId) {
     meta.rematchVotes.delete(ws.peerId);
   }
-  if (meta && ws.peerId && meta.hostPeerId === ws.peerId) {
-    meta.hostPeerId = "";
-    for (const member of members) {
-      if (member.peerId && !member.spectator) {
-        meta.hostPeerId = member.peerId;
-        break;
-      }
-    }
-    if (!meta.hostPeerId) {
+  if (
+    meta
+    && ws.peerId
+    && meta.hostPeerId === ws.peerId
+    && !preserveHostPeerId
+    && !isLikelyLobbyToGameTransition
+  ) {
+    const shouldGraceHoldHost = meta.listContext === "menu" && members.size > 0;
+    if (shouldGraceHoldHost) {
+      meta.hostReassignGraceUntil = nowTs() + ROOM_HOST_REASSIGN_GRACE_MS;
+    } else {
+      meta.hostReassignGraceUntil = 0;
+      meta.hostPeerId = "";
       for (const member of members) {
-        if (member.peerId) {
+        if (member.peerId && !member.spectator) {
           meta.hostPeerId = member.peerId;
           break;
         }
       }
+      if (!meta.hostPeerId) {
+        for (const member of members) {
+          if (member.peerId) {
+            meta.hostPeerId = member.peerId;
+            break;
+          }
+        }
+      }
     }
   }
+  if (
+    meta
+    && ws.peerId
+    && meta.hostPeerId === ws.peerId
+    && !preserveHostPeerId
+    && isLikelyLobbyToGameTransition
+    && meta.listContext === "menu"
+    && members.size > 0
+  ) {
+    meta.hostReassignGraceUntil = nowTs() + ROOM_HOST_REASSIGN_GRACE_MS;
+  }
+  if (
+    meta
+    && isLikelyLobbyToGameTransition
+    && meta.listContext === "menu"
+    && members.size > 0
+  ) {
+    const currentPending = Math.max(0, Number(meta.pendingTransitionCount) || 0);
+    meta.pendingTransitionCount = Math.min(MAX_ROOM_PLAYERS, currentPending + 1);
+    meta.pendingTransitionUntil = nowTs() + ROOM_HOST_REASSIGN_GRACE_MS;
+  }
   if (members.size === 0) {
+    if (preserveEmptyRoom) {
+      return;
+    }
+    if (hasLiveChildRoomForParent(code)) {
+      return;
+    }
     rooms.delete(code);
     roomMeta.delete(code);
   } else {
@@ -653,6 +784,7 @@ function joinRoom(ws, payload) {
     : "";
   let code = quickJoin ? pickQuickJoinRoomCode() : normalizeRoomCode(payload.room);
   const explicitCreate = asBoolean(payload?.create, false);
+  const requestedSourceCode = normalizeRoomCode(payload?.sourceRoom);
 
   if (!code && ws.roomCode) {
     code = ws.roomCode;
@@ -677,7 +809,20 @@ function joinRoom(ws, payload) {
     if (!isJoinIntent) {
       code = ws.roomCode;
     } else {
-      removeFromRoom(ws);
+      const currentCode = normalizeRoomCode(ws.roomCode);
+      const sourceCode = requestedSourceCode;
+      const preserveSourceRoom = Boolean(
+        explicitCreate
+        && sourceCode
+        && currentCode
+        && currentCode === sourceCode
+        && sourceCode !== code,
+      );
+      if (preserveSourceRoom) {
+        removeFromRoom(ws, { preserveEmptyRoom: true, preserveHostPeerId: true });
+      } else {
+        removeFromRoom(ws);
+      }
       ws.roomCode = null;
     }
   }
@@ -728,16 +873,29 @@ function joinRoom(ws, payload) {
     }
     if (!meta.hostPeerId && ws.peerId && !ws.spectator) {
       meta.hostPeerId = ws.peerId;
+      meta.hostNameSnapshot = normalizePlayerName(ws.playerName || "Player");
       assignedRole = "host";
     } else if (ws.spectator) {
       assignedRole = "spectator";
+    }
+    if (explicitCreate && requestedListContext === "game" && ws.peerId && !ws.spectator) {
+      meta.hostPeerId = ws.peerId;
+      meta.hostNameSnapshot = normalizePlayerName(ws.playerName || "Player");
+      assignedRole = "host";
     }
     if (quickJoin && members.size === 1) {
       meta.isPublic = true;
     }
     if (explicitCreate) {
-      const sourceCode = normalizeRoomCode(payload?.sourceRoom);
+      const sourceCode = requestedSourceCode;
       if (sourceCode && sourceCode !== code) {
+        roomOf(sourceCode);
+        const sourceMeta = roomMetaOf(sourceCode);
+        if (sourceMeta.listContext !== "menu") {
+          sourceMeta.listContext = "menu";
+        }
+        sourceMeta.pendingTransitionCount = 0;
+        sourceMeta.pendingTransitionUntil = 0;
         meta.parentRoomCode = sourceCode;
         grantPrivateAccessFromSourceRoom(meta, sourceCode);
       }
@@ -752,6 +910,7 @@ function joinRoom(ws, payload) {
   if (ws.spectator) {
     assignedRole = "spectator";
   } else if (ws.peerId && meta.hostPeerId === ws.peerId) {
+    meta.hostNameSnapshot = normalizePlayerName(ws.playerName || "Player");
     assignedRole = "host";
   }
 
