@@ -331,20 +331,22 @@ function debugRoomStateIfChanged(code) {
   );
 }
 
-function evictDuplicatePeerConnections(code, ws) {
-  const members = rooms.get(code);
-  if (!members || !ws?.peerId) return false;
+function evictDuplicatePeerConnections(ws) {
+  if (!ws?.peerId) return false;
   let changed = false;
-  for (const member of [...members]) {
-    if (member === ws) continue;
-    const samePeer = Boolean(ws.peerId && member.peerId && member.peerId === ws.peerId);
-    if (!samePeer) continue;
-    removeFromRoom(member);
-    changed = true;
-    try {
-      member.close();
-    } catch {
-      // ignore close error
+  for (const members of rooms.values()) {
+    if (!members || members.size === 0) continue;
+    for (const member of [...members]) {
+      if (member === ws) continue;
+      const samePeer = Boolean(ws.peerId && member.peerId && member.peerId === ws.peerId);
+      if (!samePeer) continue;
+      removeFromRoom(member);
+      changed = true;
+      try {
+        member.close();
+      } catch {
+        // ignore close error
+      }
     }
   }
   return changed;
@@ -514,16 +516,7 @@ function listPublicRooms(limit = 80, listContext = "all") {
     let mergedActivePlayers = activePlayers.length;
     let mergedSpectatorCount = participants.filter((participant) => participant.role === "spectator").length;
     let mergedTotalParticipants = participants.length;
-    const pendingTransitionActive = Boolean(
-      roomListContext === "menu"
-      && !hasLiveChildren
-      && Number(meta.pendingTransitionUntil || 0) > nowTs(),
-    );
-    if (pendingTransitionActive) {
-      const pending = Math.max(0, Math.min(MAX_ROOM_PLAYERS, Number(meta.pendingTransitionCount) || 0));
-      mergedActivePlayers += pending;
-      mergedTotalParticipants += pending;
-    } else if ((Number(meta.pendingTransitionCount) || 0) > 0) {
+    if ((Number(meta.pendingTransitionCount) || 0) > 0) {
       meta.pendingTransitionCount = 0;
       meta.pendingTransitionUntil = 0;
     }
@@ -756,9 +749,8 @@ function removeFromRoom(ws, options = {}) {
     && meta.listContext === "menu"
     && members.size > 0
   ) {
-    const currentPending = Math.max(0, Number(meta.pendingTransitionCount) || 0);
-    meta.pendingTransitionCount = Math.min(MAX_ROOM_PLAYERS, currentPending + 1);
-    meta.pendingTransitionUntil = nowTs() + ROOM_HOST_REASSIGN_GRACE_MS;
+    meta.pendingTransitionCount = 0;
+    meta.pendingTransitionUntil = 0;
   }
   if (members.size === 0) {
     if (preserveEmptyRoom) {
@@ -875,8 +867,8 @@ function tryJoinRoom(ws, payload) {
     }
   }
 
+  const evicted = evictDuplicatePeerConnections(ws);
   const members = roomOf(code);
-  const evicted = evictDuplicatePeerConnections(code, ws);
   const requestedSpectate = asSpectateBoolean(payload?.spectate);
   if (!ws.roomCode && members.size >= MAX_ROOM_PLAYERS) {
     sendJson(ws, { type: "room-full", code });

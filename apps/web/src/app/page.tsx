@@ -263,7 +263,7 @@ const LOGIN_I18N = {
     migrationPlanned: "移行予定",
     shogiLater: "将棋の移行は次フェーズで対応します。",
     chessLater: "チェスの移行は次フェーズで対応します。",
-    roomTitle: "ルーム操作（移行中）",
+    roomTitle: "ルーム操作",
     roomServerUrl: "RoomサーバーURL",
     roomCode: "ルーム番号",
     roomCodePlaceholder: "6桁",
@@ -953,7 +953,7 @@ const LOGIN_I18N = {
     migrationPlanned: "이전 예정",
     shogiLater: "장기 마이그레이션은 다음 단계에서 대응합니다.",
     chessLater: "체스 마이그레이션은 다음 단계에서 대응합니다.",
-    roomTitle: "룸 조작 (이전 중)",
+    roomTitle: "룸 조작",
     roomServerUrl: "룸 서버 URL",
     roomCode: "룸 번호",
     roomCodePlaceholder: "6자리",
@@ -1644,7 +1644,7 @@ const EN_I18N: Partial<I18nMap> = {
   menuTitle: "Game Select (Next Migration Menu)",
   menuLead: "The legacy HTML menu is being migrated in phases. You can move to Othello, Gomoku, Chess, and UNO first.",
   playableLead: "Playable in Next migration",
-  roomTitle: "Room Controls (Migrating)",
+  roomTitle: "Room Controls",
   roomServerUrl: "Room Server URL",
   roomCode: "Room Code",
   roomCodePlaceholder: "6 digits",
@@ -12670,6 +12670,12 @@ export default function Home() {
     || (othelloChaosTarget === "opponent" && othelloPlayerSide === 1);
   const othelloChaosUsesBothSideSettings = othelloChaosTarget === "both";
   const othelloShowChaosSidePanel = isChaosMode && !gameStarted.othello;
+  const othelloShowChaosSkillPanel = isChaosMode && gameStarted.othello;
+  const othelloBoardMaxWidthClass = othelloShowChaosSkillPanel
+    ? "max-w-[min(96vw,820px)]"
+    : othelloShowChaosSidePanel
+      ? "max-w-[min(96vw,760px)]"
+      : "max-w-[min(96vw,680px)]";
   const othelloCurrentPlayerIndex = othelloPlayerIndex(currentPlayer);
   const othelloSelfDrawVoted = othelloDrawVotes.includes(peerIdRef.current);
   const othelloCanUseChaosSkills =
@@ -12882,6 +12888,13 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 py-6 text-slate-100 sm:px-6 sm:py-8 xl:px-8">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+          <div className="overflow-hidden">
+            <img
+              src="/motionPng/Title/header.png"
+              alt="Neon Board Arcade"
+              className="h-auto w-full object-cover"
+            />
+          </div>
           <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
             <div className="flex items-center justify-end gap-3">
               <div className="flex items-center gap-1 rounded-md border border-cyan-200/30 bg-slate-950/40 p-1 text-xs">
@@ -12979,6 +12992,13 @@ export default function Home() {
               </p>
             </div>
           ) : null}
+          <div className="mb-2 overflow-hidden">
+            <img
+              src="/motionPng/Title/header.png"
+              alt="Neon Board Arcade"
+              className="h-auto w-full object-cover"
+            />
+          </div>
           <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex flex-col items-end gap-1">
@@ -13409,7 +13429,6 @@ export default function Home() {
                 ) : null}
               </div>
             </div>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">{t("appTitle")}</h1>
             {authMode === "cloud" ? (
               <div className="mt-2 flex justify-end gap-2">
                 {canAccessInquiryViewer ? (
@@ -13857,6 +13876,12 @@ export default function Home() {
           </section>
         ) : null}
 
+        {connectedRoomCode && activePanel !== "menu" && activePanel !== "scores" ? (
+          <section className="rounded-xl border border-emerald-200/30 bg-emerald-300/10 px-4 py-2 text-sm text-emerald-100">
+            準備状況: {roomReadyCount}/{roomActivePlayerCount} {roomAllReady ? "(開始可能)" : "(全員準備で開始可能)"}
+          </section>
+        ) : null}
+
         {activePanel !== "menu" && activePanel !== "scores" ? (
           <section className="rounded-xl border border-slate-300/20 bg-slate-900/35 p-3">
             <div className="grid gap-2">
@@ -13994,9 +14019,6 @@ export default function Home() {
                 </button>
               </div>
               <p className="text-xs text-slate-300">{t("roomState")}: {roomStatus}</p>
-              {connectedRoomCode ? (
-                <p className="text-xs text-emerald-200">準備状況: {roomReadyCount}/{roomActivePlayerCount} {roomAllReady ? "(開始可能)" : "(全員準備で開始可能)"}</p>
-              ) : null}
               {menuMessage ? <p className="text-xs text-cyan-200">{menuMessage}</p> : null}
             </div>
           </section>
@@ -14109,9 +14131,9 @@ export default function Home() {
                 </label>
               </div>
 
-            <div className={`mt-4 grid gap-3 ${othelloShowChaosSidePanel ? "md:grid-cols-2 md:items-start" : ""}`}>
+            <div className={`mt-4 grid gap-3 ${othelloShowChaosSidePanel ? "md:grid-cols-[minmax(0,1fr)_320px] md:items-start" : othelloShowChaosSkillPanel ? "md:grid-cols-[minmax(0,1fr)_220px] md:items-start" : ""}`}>
             {othelloShowChaosSidePanel ? (
-              <div className="rounded-lg border border-cyan-200/25 bg-slate-950/35 p-3 text-xs text-slate-200 md:order-2">
+              <div className="rounded-lg border border-cyan-200/25 bg-slate-950/35 p-4 text-sm text-slate-200 md:order-2">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <label className="grid gap-1">
                     <span>{t("othelloChaosTargetLabel")}</span>
@@ -14292,9 +14314,10 @@ export default function Home() {
               </div>
             ) : null}
 
-            <div className={othelloShowChaosSidePanel ? "md:order-1" : ""}>
-              {isChaosMode ? (
-                <div className="mb-2 flex flex-wrap items-center gap-2">
+            {othelloShowChaosSkillPanel ? (
+              <div className="rounded-lg border border-cyan-200/25 bg-slate-950/35 p-3 text-xs text-slate-200 md:order-2">
+                <p className="font-semibold text-cyan-100">SKILL</p>
+                <div className="mt-2 grid gap-2">
                   <button
                     type="button"
                     onClick={onToggleOthelloImmutableSkill}
@@ -14320,7 +14343,10 @@ export default function Home() {
                     {t("othelloChaosDoubleButton")} ({othelloDoubleActionCharges[othelloCurrentPlayerIndex] ?? 0})
                   </button>
                 </div>
-              ) : null}
+              </div>
+            ) : null}
+
+            <div className={(othelloShowChaosSidePanel || othelloShowChaosSkillPanel) ? "md:order-1" : ""}>
 
               {othelloShowImmutableGuide ? (
                 <p className="mb-2 text-xs text-amber-200">{t("othelloChaosImmutableGuide")}</p>
@@ -14329,7 +14355,7 @@ export default function Home() {
                 <p className="mb-2 text-xs text-rose-200">{othelloDestroyGuideText}</p>
               ) : null}
 
-              <div className={`grid w-full max-w-[min(96vw,680px)] grid-cols-8 gap-[3px] rounded-xl bg-emerald-900/70 p-1.5 sm:gap-1 sm:p-2 ${othelloShowChaosSidePanel ? "mx-auto md:mx-0" : "mx-auto"} ${!gameStarted.othello ? "pointer-events-none opacity-60" : ""}`}>
+              <div className={`grid w-full ${othelloBoardMaxWidthClass} grid-cols-8 gap-[3px] rounded-xl bg-emerald-900/70 p-1.5 sm:gap-1 sm:p-2 ${(othelloShowChaosSidePanel || othelloShowChaosSkillPanel) ? "mx-auto md:mx-0" : "mx-auto"} ${!gameStarted.othello ? "pointer-events-none opacity-60" : ""}`}>
                 {board.map((line, row) =>
                   line.map((cell, col) => {
                     const key = `${row}-${col}`;
