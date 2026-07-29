@@ -16,3 +16,13 @@ export const MatchResult = {
 } as const
 
 export type MatchResult = (typeof MatchResult)[keyof typeof MatchResult]
+
+
+export const ScoreRank = {
+  S: 'S',
+  A: 'A',
+  B: 'B',
+  C: 'C'
+} as const
+
+export type ScoreRank = (typeof ScoreRank)[keyof typeof ScoreRank]

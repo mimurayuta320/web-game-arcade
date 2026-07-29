@@ -45,6 +45,9 @@ CREATE TABLE `scores` (
     `player_name` VARCHAR(18) NOT NULL,
     `score` INTEGER NOT NULL,
     `game` VARCHAR(24) NULL,
+    `max_score` INTEGER NULL,
+    `score_ratio` INTEGER NULL,
+    `rank` ENUM('S', 'A', 'B', 'C') NULL,
     `created_at` BIGINT NOT NULL,
 
     INDEX `idx_scores_created`(`created_at` DESC),

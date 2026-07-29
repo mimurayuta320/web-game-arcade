@@ -123,6 +123,9 @@ export const ScoreScalarFieldEnum = {
   playerName: 'playerName',
   score: 'score',
   game: 'game',
+  maxScore: 'maxScore',
+  scoreRatio: 'scoreRatio',
+  rank: 'rank',
   createdAt: 'createdAt'
 } as const
 

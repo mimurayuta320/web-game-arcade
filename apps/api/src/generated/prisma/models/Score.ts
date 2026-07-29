@@ -29,12 +29,16 @@ export type AggregateScore = {
 export type ScoreAvgAggregateOutputType = {
   id: number | null
   score: number | null
+  maxScore: number | null
+  scoreRatio: number | null
   createdAt: number | null
 }
 
 export type ScoreSumAggregateOutputType = {
   id: bigint | null
   score: number | null
+  maxScore: number | null
+  scoreRatio: number | null
   createdAt: bigint | null
 }
 
@@ -44,6 +48,9 @@ export type ScoreMinAggregateOutputType = {
   playerName: string | null
   score: number | null
   game: string | null
+  maxScore: number | null
+  scoreRatio: number | null
+  rank: $Enums.ScoreRank | null
   createdAt: bigint | null
 }
 
@@ -53,6 +60,9 @@ export type ScoreMaxAggregateOutputType = {
   playerName: string | null
   score: number | null
   game: string | null
+  maxScore: number | null
+  scoreRatio: number | null
+  rank: $Enums.ScoreRank | null
   createdAt: bigint | null
 }
 
@@ -62,6 +72,9 @@ export type ScoreCountAggregateOutputType = {
   playerName: number
   score: number
   game: number
+  maxScore: number
+  scoreRatio: number
+  rank: number
   createdAt: number
   _all: number
 }
@@ -70,12 +83,16 @@ export type ScoreCountAggregateOutputType = {
 export type ScoreAvgAggregateInputType = {
   id?: true
   score?: true
+  maxScore?: true
+  scoreRatio?: true
   createdAt?: true
 }
 
 export type ScoreSumAggregateInputType = {
   id?: true
   score?: true
+  maxScore?: true
+  scoreRatio?: true
   createdAt?: true
 }
 
@@ -85,6 +102,9 @@ export type ScoreMinAggregateInputType = {
   playerName?: true
   score?: true
   game?: true
+  maxScore?: true
+  scoreRatio?: true
+  rank?: true
   createdAt?: true
 }
 
@@ -94,6 +114,9 @@ export type ScoreMaxAggregateInputType = {
   playerName?: true
   score?: true
   game?: true
+  maxScore?: true
+  scoreRatio?: true
+  rank?: true
   createdAt?: true
 }
 
@@ -103,6 +126,9 @@ export type ScoreCountAggregateInputType = {
   playerName?: true
   score?: true
   game?: true
+  maxScore?: true
+  scoreRatio?: true
+  rank?: true
   createdAt?: true
   _all?: true
 }
@@ -199,6 +225,9 @@ export type ScoreGroupByOutputType = {
   playerName: string
   score: number
   game: string | null
+  maxScore: number | null
+  scoreRatio: number | null
+  rank: $Enums.ScoreRank | null
   createdAt: bigint
   _count: ScoreCountAggregateOutputType | null
   _avg: ScoreAvgAggregateOutputType | null
@@ -231,6 +260,9 @@ export type ScoreWhereInput = {
   playerName?: Prisma.StringFilter<"Score"> | string
   score?: Prisma.IntFilter<"Score"> | number
   game?: Prisma.StringNullableFilter<"Score"> | string | null
+  maxScore?: Prisma.IntNullableFilter<"Score"> | number | null
+  scoreRatio?: Prisma.IntNullableFilter<"Score"> | number | null
+  rank?: Prisma.EnumScoreRankNullableFilter<"Score"> | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFilter<"Score"> | bigint | number
   user?: Prisma.XOR<Prisma.UserNullableScalarRelationFilter, Prisma.UserWhereInput> | null
 }
@@ -241,6 +273,9 @@ export type ScoreOrderByWithRelationInput = {
   playerName?: Prisma.SortOrder
   score?: Prisma.SortOrder
   game?: Prisma.SortOrderInput | Prisma.SortOrder
+  maxScore?: Prisma.SortOrderInput | Prisma.SortOrder
+  scoreRatio?: Prisma.SortOrderInput | Prisma.SortOrder
+  rank?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   user?: Prisma.UserOrderByWithRelationInput
   _relevance?: Prisma.ScoreOrderByRelevanceInput
@@ -255,6 +290,9 @@ export type ScoreWhereUniqueInput = Prisma.AtLeast<{
   playerName?: Prisma.StringFilter<"Score"> | string
   score?: Prisma.IntFilter<"Score"> | number
   game?: Prisma.StringNullableFilter<"Score"> | string | null
+  maxScore?: Prisma.IntNullableFilter<"Score"> | number | null
+  scoreRatio?: Prisma.IntNullableFilter<"Score"> | number | null
+  rank?: Prisma.EnumScoreRankNullableFilter<"Score"> | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFilter<"Score"> | bigint | number
   user?: Prisma.XOR<Prisma.UserNullableScalarRelationFilter, Prisma.UserWhereInput> | null
 }, "id">
@@ -265,6 +303,9 @@ export type ScoreOrderByWithAggregationInput = {
   playerName?: Prisma.SortOrder
   score?: Prisma.SortOrder
   game?: Prisma.SortOrderInput | Prisma.SortOrder
+  maxScore?: Prisma.SortOrderInput | Prisma.SortOrder
+  scoreRatio?: Prisma.SortOrderInput | Prisma.SortOrder
+  rank?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.ScoreCountOrderByAggregateInput
   _avg?: Prisma.ScoreAvgOrderByAggregateInput
@@ -282,6 +323,9 @@ export type ScoreScalarWhereWithAggregatesInput = {
   playerName?: Prisma.StringWithAggregatesFilter<"Score"> | string
   score?: Prisma.IntWithAggregatesFilter<"Score"> | number
   game?: Prisma.StringNullableWithAggregatesFilter<"Score"> | string | null
+  maxScore?: Prisma.IntNullableWithAggregatesFilter<"Score"> | number | null
+  scoreRatio?: Prisma.IntNullableWithAggregatesFilter<"Score"> | number | null
+  rank?: Prisma.EnumScoreRankNullableWithAggregatesFilter<"Score"> | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntWithAggregatesFilter<"Score"> | bigint | number
 }
 
@@ -290,6 +334,9 @@ export type ScoreCreateInput = {
   playerName: string
   score: number
   game?: string | null
+  maxScore?: number | null
+  scoreRatio?: number | null
+  rank?: $Enums.ScoreRank | null
   createdAt: bigint | number
   user?: Prisma.UserCreateNestedOneWithoutScoresInput
 }
@@ -300,6 +347,9 @@ export type ScoreUncheckedCreateInput = {
   playerName: string
   score: number
   game?: string | null
+  maxScore?: number | null
+  scoreRatio?: number | null
+  rank?: $Enums.ScoreRank | null
   createdAt: bigint | number
 }
 
@@ -308,6 +358,9 @@ export type ScoreUpdateInput = {
   playerName?: Prisma.StringFieldUpdateOperationsInput | string
   score?: Prisma.IntFieldUpdateOperationsInput | number
   game?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  maxScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  scoreRatio?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  rank?: Prisma.NullableEnumScoreRankFieldUpdateOperationsInput | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   user?: Prisma.UserUpdateOneWithoutScoresNestedInput
 }
@@ -318,6 +371,9 @@ export type ScoreUncheckedUpdateInput = {
   playerName?: Prisma.StringFieldUpdateOperationsInput | string
   score?: Prisma.IntFieldUpdateOperationsInput | number
   game?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  maxScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  scoreRatio?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  rank?: Prisma.NullableEnumScoreRankFieldUpdateOperationsInput | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
 }
 
@@ -327,6 +383,9 @@ export type ScoreCreateManyInput = {
   playerName: string
   score: number
   game?: string | null
+  maxScore?: number | null
+  scoreRatio?: number | null
+  rank?: $Enums.ScoreRank | null
   createdAt: bigint | number
 }
 
@@ -335,6 +394,9 @@ export type ScoreUpdateManyMutationInput = {
   playerName?: Prisma.StringFieldUpdateOperationsInput | string
   score?: Prisma.IntFieldUpdateOperationsInput | number
   game?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  maxScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  scoreRatio?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  rank?: Prisma.NullableEnumScoreRankFieldUpdateOperationsInput | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
 }
 
@@ -344,6 +406,9 @@ export type ScoreUncheckedUpdateManyInput = {
   playerName?: Prisma.StringFieldUpdateOperationsInput | string
   score?: Prisma.IntFieldUpdateOperationsInput | number
   game?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  maxScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  scoreRatio?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  rank?: Prisma.NullableEnumScoreRankFieldUpdateOperationsInput | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
 }
 
@@ -369,12 +434,17 @@ export type ScoreCountOrderByAggregateInput = {
   playerName?: Prisma.SortOrder
   score?: Prisma.SortOrder
   game?: Prisma.SortOrder
+  maxScore?: Prisma.SortOrder
+  scoreRatio?: Prisma.SortOrder
+  rank?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
 export type ScoreAvgOrderByAggregateInput = {
   id?: Prisma.SortOrder
   score?: Prisma.SortOrder
+  maxScore?: Prisma.SortOrder
+  scoreRatio?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -384,6 +454,9 @@ export type ScoreMaxOrderByAggregateInput = {
   playerName?: Prisma.SortOrder
   score?: Prisma.SortOrder
   game?: Prisma.SortOrder
+  maxScore?: Prisma.SortOrder
+  scoreRatio?: Prisma.SortOrder
+  rank?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -393,12 +466,17 @@ export type ScoreMinOrderByAggregateInput = {
   playerName?: Prisma.SortOrder
   score?: Prisma.SortOrder
   game?: Prisma.SortOrder
+  maxScore?: Prisma.SortOrder
+  scoreRatio?: Prisma.SortOrder
+  rank?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
 export type ScoreSumOrderByAggregateInput = {
   id?: Prisma.SortOrder
   score?: Prisma.SortOrder
+  maxScore?: Prisma.SortOrder
+  scoreRatio?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -448,11 +526,26 @@ export type NullableStringFieldUpdateOperationsInput = {
   set?: string | null
 }
 
+export type NullableIntFieldUpdateOperationsInput = {
+  set?: number | null
+  increment?: number
+  decrement?: number
+  multiply?: number
+  divide?: number
+}
+
+export type NullableEnumScoreRankFieldUpdateOperationsInput = {
+  set?: $Enums.ScoreRank | null
+}
+
 export type ScoreCreateWithoutUserInput = {
   id?: bigint | number
   playerName: string
   score: number
   game?: string | null
+  maxScore?: number | null
+  scoreRatio?: number | null
+  rank?: $Enums.ScoreRank | null
   createdAt: bigint | number
 }
 
@@ -461,6 +554,9 @@ export type ScoreUncheckedCreateWithoutUserInput = {
   playerName: string
   score: number
   game?: string | null
+  maxScore?: number | null
+  scoreRatio?: number | null
+  rank?: $Enums.ScoreRank | null
   createdAt: bigint | number
 }
 
@@ -499,6 +595,9 @@ export type ScoreScalarWhereInput = {
   playerName?: Prisma.StringFilter<"Score"> | string
   score?: Prisma.IntFilter<"Score"> | number
   game?: Prisma.StringNullableFilter<"Score"> | string | null
+  maxScore?: Prisma.IntNullableFilter<"Score"> | number | null
+  scoreRatio?: Prisma.IntNullableFilter<"Score"> | number | null
+  rank?: Prisma.EnumScoreRankNullableFilter<"Score"> | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFilter<"Score"> | bigint | number
 }
 
@@ -507,6 +606,9 @@ export type ScoreCreateManyUserInput = {
   playerName: string
   score: number
   game?: string | null
+  maxScore?: number | null
+  scoreRatio?: number | null
+  rank?: $Enums.ScoreRank | null
   createdAt: bigint | number
 }
 
@@ -515,6 +617,9 @@ export type ScoreUpdateWithoutUserInput = {
   playerName?: Prisma.StringFieldUpdateOperationsInput | string
   score?: Prisma.IntFieldUpdateOperationsInput | number
   game?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  maxScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  scoreRatio?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  rank?: Prisma.NullableEnumScoreRankFieldUpdateOperationsInput | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
 }
 
@@ -523,6 +628,9 @@ export type ScoreUncheckedUpdateWithoutUserInput = {
   playerName?: Prisma.StringFieldUpdateOperationsInput | string
   score?: Prisma.IntFieldUpdateOperationsInput | number
   game?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  maxScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  scoreRatio?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  rank?: Prisma.NullableEnumScoreRankFieldUpdateOperationsInput | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
 }
 
@@ -531,6 +639,9 @@ export type ScoreUncheckedUpdateManyWithoutUserInput = {
   playerName?: Prisma.StringFieldUpdateOperationsInput | string
   score?: Prisma.IntFieldUpdateOperationsInput | number
   game?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  maxScore?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  scoreRatio?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  rank?: Prisma.NullableEnumScoreRankFieldUpdateOperationsInput | $Enums.ScoreRank | null
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
 }
 
@@ -542,6 +653,9 @@ export type ScoreSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   playerName?: boolean
   score?: boolean
   game?: boolean
+  maxScore?: boolean
+  scoreRatio?: boolean
+  rank?: boolean
   createdAt?: boolean
   user?: boolean | Prisma.Score$userArgs<ExtArgs>
 }, ExtArgs["result"]["score"]>
@@ -554,10 +668,13 @@ export type ScoreSelectScalar = {
   playerName?: boolean
   score?: boolean
   game?: boolean
+  maxScore?: boolean
+  scoreRatio?: boolean
+  rank?: boolean
   createdAt?: boolean
 }
 
-export type ScoreOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "playerName" | "score" | "game" | "createdAt", ExtArgs["result"]["score"]>
+export type ScoreOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "playerName" | "score" | "game" | "maxScore" | "scoreRatio" | "rank" | "createdAt", ExtArgs["result"]["score"]>
 export type ScoreInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   user?: boolean | Prisma.Score$userArgs<ExtArgs>
 }
@@ -573,6 +690,9 @@ export type $ScorePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     playerName: string
     score: number
     game: string | null
+    maxScore: number | null
+    scoreRatio: number | null
+    rank: $Enums.ScoreRank | null
     createdAt: bigint
   }, ExtArgs["result"]["score"]>
   composites: {}
@@ -949,6 +1069,9 @@ export interface ScoreFieldRefs {
   readonly playerName: Prisma.FieldRef<"Score", 'String'>
   readonly score: Prisma.FieldRef<"Score", 'Int'>
   readonly game: Prisma.FieldRef<"Score", 'String'>
+  readonly maxScore: Prisma.FieldRef<"Score", 'Int'>
+  readonly scoreRatio: Prisma.FieldRef<"Score", 'Int'>
+  readonly rank: Prisma.FieldRef<"Score", 'ScoreRank'>
   readonly createdAt: Prisma.FieldRef<"Score", 'BigInt'>
 }
     

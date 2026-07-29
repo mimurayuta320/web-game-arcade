@@ -1372,7 +1372,7 @@ export function initFitPuzzle(options = {}) {
   function canLocalControl() {
     if (state.roomLocked) return false;
     if (!isRoomMode()) return true;
-    return state.roomRole === "host";
+    return state.roomRole !== "spectator";
   }
 
   function composeRoomSnapshot() {
@@ -1460,7 +1460,6 @@ export function initFitPuzzle(options = {}) {
   }
 
   function emitRoomSnapshot() {
-    if (!isRoomHost()) return;
     options.onRoomSnapshot?.();
   }
 

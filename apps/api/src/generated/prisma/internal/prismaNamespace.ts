@@ -1169,6 +1169,9 @@ export const ScoreScalarFieldEnum = {
   playerName: 'playerName',
   score: 'score',
   game: 'game',
+  maxScore: 'maxScore',
+  scoreRatio: 'scoreRatio',
+  rank: 'rank',
   createdAt: 'createdAt'
 } as const
 
@@ -1408,6 +1411,13 @@ export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'J
  * Reference to a field of type 'QueryMode'
  */
 export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+    
+
+
+/**
+ * Reference to a field of type 'ScoreRank'
+ */
+export type EnumScoreRankFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ScoreRank'>
     
 
 

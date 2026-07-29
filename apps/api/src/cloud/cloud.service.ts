@@ -90,6 +90,8 @@ type FriendChatPeerReadState = {
   lastReadAt: number;
 };
 
+type ScoreRank = 'S' | 'A' | 'B' | 'C';
+
 type Profile = {
   bankCoins: number;
   pityCounter: number;
@@ -976,7 +978,9 @@ export class CloudService {
     return this.db
       .prepare(
         `
-        SELECT id, player_name AS playerName, score, game, created_at AS createdAt
+        SELECT id, player_name AS playerName, score, game,
+               max_score AS maxScore, score_ratio AS scoreRatio, rank,
+               created_at AS createdAt
         FROM scores
         ORDER BY created_at DESC
         LIMIT ?
@@ -985,26 +989,43 @@ export class CloudService {
       .all(safeLimit);
   }
 
-  createScore(input: { playerName: string; score: number; game?: string }) {
+  createScore(input: {
+    playerName: string;
+    score: number;
+    game?: string;
+    maxScore?: number;
+    rank?: ScoreRank;
+  }) {
     const playerName = this.normalizePlayerName(input.playerName);
     const score = Number.isFinite(input.score) ? Math.floor(input.score) : 0;
     const game = this.normalizeGameKey(input.game || '');
+    const maxScore = Number.isFinite(input.maxScore)
+      ? Math.max(0, Math.floor(Number(input.maxScore)))
+      : null;
+    const scoreRatio = maxScore && maxScore > 0
+      ? Math.max(0, Math.min(1000, Math.floor((score / maxScore) * 1000)))
+      : null;
+    const rank = this.normalizeScoreRank(input.rank)
+      || this.resolveScoreRankByRatio(scoreRatio);
     const createdAt = Date.now();
 
     const result = this.db
       .prepare(
         `
-        INSERT INTO scores (player_name, score, game, created_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO scores (player_name, score, game, max_score, score_ratio, rank, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `,
       )
-      .run(playerName, score, game || null, createdAt);
+      .run(playerName, score, game || null, maxScore, scoreRatio, rank, createdAt);
 
     return {
       id: result.lastInsertRowid,
       playerName,
       score,
       game,
+      maxScore,
+      scoreRatio,
+      rank,
       createdAt,
     };
   }
@@ -1084,6 +1105,9 @@ export class CloudService {
         player_name TEXT NOT NULL,
         score INTEGER NOT NULL,
         game TEXT,
+        max_score INTEGER,
+        score_ratio INTEGER,
+        rank TEXT,
         created_at INTEGER NOT NULL
       );
 
@@ -1102,6 +1126,7 @@ export class CloudService {
     `);
 
     this.ensureUserColumns();
+    this.ensureScoreColumns();
   }
 
   private ensureUserColumns() {
@@ -1118,6 +1143,23 @@ export class CloudService {
     }
     if (!names.has('pass_hash_bcrypt')) {
       this.db.exec(`ALTER TABLE users ADD COLUMN pass_hash_bcrypt TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+
+  private ensureScoreColumns() {
+    const columns = this.db
+      .prepare(`PRAGMA table_info(scores)`)
+      .all() as Array<{ name: string }>;
+    const names = new Set(columns.map((column) => String(column.name || '')));
+
+    if (!names.has('max_score')) {
+      this.db.exec(`ALTER TABLE scores ADD COLUMN max_score INTEGER`);
+    }
+    if (!names.has('score_ratio')) {
+      this.db.exec(`ALTER TABLE scores ADD COLUMN score_ratio INTEGER`);
+    }
+    if (!names.has('rank')) {
+      this.db.exec(`ALTER TABLE scores ADD COLUMN rank TEXT`);
     }
   }
 
@@ -1457,6 +1499,22 @@ export class CloudService {
 
   private normalizeGameKey(raw: unknown) {
     return String(raw || '').trim().slice(0, 24).toLowerCase();
+  }
+
+  private normalizeScoreRank(raw: unknown): ScoreRank | null {
+    const value = String(raw || '').trim().toUpperCase();
+    if (value === 'S' || value === 'A' || value === 'B' || value === 'C') {
+      return value;
+    }
+    return null;
+  }
+
+  private resolveScoreRankByRatio(scoreRatio: number | null): ScoreRank | null {
+    if (!Number.isFinite(scoreRatio) || scoreRatio === null) return null;
+    if (scoreRatio >= 850) return 'S';
+    if (scoreRatio >= 700) return 'A';
+    if (scoreRatio >= 500) return 'B';
+    return 'C';
   }
 
   private normalizeResult(raw: unknown): 'win' | 'lose' | 'draw' | '' {

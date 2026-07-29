@@ -3,6 +3,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --card-back-image-url: url("/cardPng/カード裏面.png");
 }
 
 @theme inline {
@@ -124,6 +125,14 @@ body {
   padding: 0;
 }
 
+.game-table-preview {
+  filter: saturate(0.82) brightness(0.9);
+}
+
+.game-table-preview [class*="shadow-"] {
+  box-shadow: none !important;
+}
+
 .solitaire-wrap {
   margin-top: 0.9rem;
   position: relative;
@@ -179,13 +188,11 @@ body {
 
 .solitaire-slot.card-back,
 .solitaire-tableau-card.card-back {
-  background: repeating-linear-gradient(
-    -45deg,
-    #2546a4,
-    #2546a4 6px,
-    #182f70 6px,
-    #182f70 12px
-  );
+  background-color: #14233f;
+  background-image: var(--card-back-image-url);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
   color: transparent;
 }
 
@@ -252,6 +259,31 @@ body {
 
 .solitaire-tableau-card.empty {
   background: rgba(255, 255, 255, 0.04);
+}
+
+.solitaire-wrap.table-only .solitaire-slot,
+.solitaire-wrap.table-only .solitaire-tableau-card {
+  background: rgba(148, 236, 255, 0.06) !important;
+  background-image: none !important;
+  color: transparent !important;
+  border-color: rgba(148, 236, 255, 0.2) !important;
+  border-style: dashed !important;
+  box-shadow: none !important;
+}
+
+.solitaire-wrap.table-only .solitaire-slot.selected,
+.solitaire-wrap.table-only .solitaire-tableau-card.selected,
+.solitaire-wrap.table-only .solitaire-slot.drag-source,
+.solitaire-wrap.table-only .solitaire-tableau-card.drag-source,
+.solitaire-wrap.table-only .solitaire-slot.drag-target,
+.solitaire-wrap.table-only .solitaire-tableau-card.drag-target,
+.solitaire-wrap.table-only .solitaire-col.drag-target {
+  box-shadow: 0 0 0 1px rgba(84, 240, 164, 0.5) !important;
+}
+
+.solitaire-wrap.table-only .solitaire-flight-layer,
+.solitaire-wrap.table-only .solitaire-flight-card {
+  display: none !important;
 }
 
 .solitaire-flight-layer {

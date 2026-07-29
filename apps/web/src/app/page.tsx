@@ -2886,6 +2886,7 @@ const INQUIRY_ADMIN_USER_IDS = String(process.env.NEXT_PUBLIC_INQUIRY_ADMIN_USER
   .map((id) => id.trim().slice(0, 24))
   .filter(Boolean);
 const APP_URL_TAG = "NeonBoardArcade";
+const HIDE_TRUMP_CARD_VISUALS = true;
 const BLACKJACK_DEALER_REVEAL_DELAY_MS = 700;
 const DIRECTIONS = [
   [-1, -1],
@@ -5605,6 +5606,16 @@ export default function Home() {
 
   const renderPlayingCardFace = useCallback(
     (label: string, options?: { compact?: boolean; muted?: boolean }) => {
+      const compact = Boolean(options?.compact);
+      if (HIDE_TRUMP_CARD_VISUALS) {
+        return (
+          <span
+            aria-hidden="true"
+            className={`inline-flex shrink-0 items-center justify-center rounded-md border border-slate-500/45 bg-slate-800/70 ${compact ? "h-10 w-8 sm:h-11 sm:w-9" : "h-12 w-9 sm:h-14 sm:w-10 lg:h-16 lg:w-12"}`}
+          />
+        );
+      }
+
       const text = String(label || "").trim();
       const suit = text.slice(-1);
       const rank = text.slice(0, -1);
@@ -5618,7 +5629,6 @@ export default function Home() {
         );
       }
 
-      const compact = Boolean(options?.compact);
       const muted = Boolean(options?.muted);
       const redSuit = suit === "♥" || suit === "♦";
       const suitTone = redSuit ? "text-rose-600" : "text-slate-900";
@@ -5672,6 +5682,13 @@ export default function Home() {
       </span>
     );
   }, []);
+
+  const shouldHideSolitaireCardVisuals = HIDE_TRUMP_CARD_VISUALS && !gameStarted.solitaire;
+
+  const renderSolitaireCardText = useCallback((card: SolitaireCard) => {
+    if (shouldHideSolitaireCardVisuals) return "";
+    return solitaireCardLabel(card);
+  }, [shouldHideSolitaireCardVisuals]);
 
   const playerHandFanStyle = useCallback((
     index: number,
@@ -11080,7 +11097,7 @@ export default function Home() {
       const delayMs = entry.delayMs ?? index * 40;
       return {
         id: `sf-${now}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-        label: solitaireCardLabel(entry.card),
+        label: HIDE_TRUMP_CARD_VISUALS ? "" : solitaireCardLabel(entry.card),
         red: solitaireIsRed(entry.card.suit),
         startX: fromX,
         startY: fromY,
@@ -12631,12 +12648,18 @@ export default function Home() {
   }, [friendTab, t]);
 
   const loginStatusText = useMemo(() => {
+    if (authMode === "guest") {
+      if (language === "ko") return "게스트로 플레이 중입니다.";
+      if (language === "en") return "Playing as guest.";
+      if (language === "zh") return "正在以游客模式游玩。";
+      return "ゲストでプレイ中です。";
+    }
     const safeName = (playerName.trim() || authUserId.trim() || "player").slice(0, 24);
     if (language === "ko") return `${safeName}(사용자명)으로 로그인 중입니다.`;
     if (language === "en") return `Logged in as ${safeName} (username).`;
     if (language === "zh") return `正在以${safeName}（用户名）登录。`;
     return `${safeName}（ユーザー名）でログイン中です。`;
-  }, [authUserId, language, playerName]);
+  }, [authMode, authUserId, language, playerName]);
 
   const canUseFriends = isAuthenticated && authMode === "cloud" && Boolean(cloudAuthPayload);
 
@@ -12956,6 +12979,7 @@ export default function Home() {
     setAuthMode("cloud");
     setAuthSessionId(nextSessionId);
     setEntryMessage("");
+    setMenuMessage("");
     setFriendsMessage("");
     setQuickMatchMode(false);
     setPendingInviteToken("");
@@ -13053,9 +13077,9 @@ export default function Home() {
     setPendingInviteToken("");
     setRoomChatMessages([]);
     setSpectatorChatMessages([]);
-    setMenuMessage(t("guestStarted"));
+    setMenuMessage("");
     setIsAuthenticated(true);
-  }, [profileNameDraft, t]);
+  }, [profileNameDraft]);
 
   useEffect(() => {
     if (activePanel === "scores") {
@@ -13440,7 +13464,7 @@ export default function Home() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 py-6 text-slate-100 sm:px-6 sm:py-8 xl:px-8">
       <div className="mx-auto flex w-full max-w-[92rem] flex-col gap-6">
         <div className="relative">
-          {authMode === "cloud" ? (
+          {isAuthenticated ? (
             <div className="fixed right-3 top-3 z-40 sm:right-6 sm:top-4">
               <p className="rounded-md border border-cyan-200/25 bg-slate-950/70 px-3 py-1 text-xs text-cyan-100/95 backdrop-blur">
                 {loginStatusText}
@@ -14337,7 +14361,12 @@ export default function Home() {
           </section>
         ) : null}
 
-        {activePanel !== "menu" && activePanel !== "scores" ? (
+        {connectedRoomCode
+        && roomSocketRef.current?.readyState === WebSocket.OPEN
+        && !isRoomWaitingSoloPractice
+        && roomStatus === t("roomStateConnected")
+        && activePanel !== "menu"
+        && activePanel !== "scores" ? (
           <section className="rounded-xl border border-slate-300/20 bg-slate-900/35 p-3">
             <div className="grid gap-2">
               <p className="text-sm font-semibold text-slate-100">{t("roomTitle")}</p>
@@ -15926,8 +15955,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.blackjack ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
-              <fieldset className="mt-2">
+              {!gameStarted.blackjack ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.blackjack} className={!gameStarted.blackjack ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
 
               <div className="mb-3 grid gap-2 rounded-xl border border-cyan-200/20 bg-slate-950/35 p-3">
                 <div className="grid gap-2 text-xs text-slate-200 sm:grid-cols-3">
@@ -16089,7 +16118,6 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
-              )}
             </article>
 
             
@@ -16220,8 +16248,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.sevens ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
-              <fieldset className="mt-2">
+              {!gameStarted.sevens ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.sevens} className={!gameStarted.sevens ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
 
               <p className="text-sm text-slate-300">{sevensMessage}</p>
 
@@ -16286,7 +16314,6 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
-              )}
             </article>
 
             
@@ -16324,8 +16351,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.daifugo ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
-              <fieldset className="mt-2">
+              {!gameStarted.daifugo ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.daifugo} className={!gameStarted.daifugo ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
 
               <p className="text-sm text-slate-300">{daifugoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateDaifugoNow)}</p> : null}
@@ -16333,7 +16360,11 @@ export default function Home() {
               <div className="mt-4 grid gap-2 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4 text-sm">
                 <p className="flex items-center gap-2">
                   <span>{t("daifugoTable")}:</span>
-                  {daifugoTableCard ? renderPlayingCardFace(daifugoCardLabel(daifugoTableCard)) : <span>-</span>}
+                  {daifugoTableCard ? (
+                    renderPlayingCardFace(daifugoCardLabel(daifugoTableCard))
+                  ) : (
+                    <span className="inline-flex h-12 w-9 shrink-0 items-center justify-center rounded-md border border-slate-500/45 bg-slate-800/60 text-xs text-slate-500">-</span>
+                  )}
                 </p>
                 <p>{t("daifugoCpuHand")}: {daifugoLocalSide === "player" ? daifugoHands[1].length : daifugoHands[0].length}</p>
               </div>
@@ -16374,7 +16405,6 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
-              )}
             </article>
 
             
@@ -17015,8 +17045,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.poker ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
-              <fieldset className="mt-2">
+              {!gameStarted.poker ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.poker} className={!gameStarted.poker ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
 
               <div className="mb-3 grid gap-2 rounded-xl border border-cyan-200/20 bg-slate-950/35 p-3">
                 <div className="grid gap-2 text-xs text-slate-200 sm:grid-cols-3">
@@ -17115,7 +17145,7 @@ export default function Home() {
                           >
                             <span className="inline-flex flex-col items-center gap-1">
                               {pokerPhase === "betting"
-                                ? <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">🂠</span>
+                                ? <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200" />
                                 : renderPlayingCardFace(pokerCardLabel(card))}
                               <span className={`rounded px-1.5 py-[1px] text-[10px] ${held ? "bg-cyan-300/25 text-cyan-100" : "bg-slate-700/40 text-slate-400"}`}>
                                 {held ? t("pokerHeld") : ""}
@@ -17138,7 +17168,7 @@ export default function Home() {
                       >
                         {pokerPhase === "showdown"
                           ? renderPlayingCardFace(pokerCardLabel(card))
-                          : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">??</span>}
+                          : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200" />}
                       </div>
                     ))}
                   </div>
@@ -17156,7 +17186,7 @@ export default function Home() {
                         >
                           {card
                             ? renderPlayingCardFace(pokerCardLabel(card))
-                            : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">?</span>}
+                            : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200" />}
                         </div>
                       );
                     })}
@@ -17201,7 +17231,6 @@ export default function Home() {
                 </div>
               ) : null}
               </fieldset>
-              )}
             </article>
 
             
@@ -17261,7 +17290,7 @@ export default function Home() {
               <p className="text-sm text-slate-300">{solitaireMessage}</p>
               <p className="mt-1 text-sm text-slate-300">{tf("solitaireFoundations", { count: foundationCount(solitaireFoundations) })}</p>
 
-              <div className="solitaire-wrap">
+              <div className={`solitaire-wrap ${shouldHideSolitaireCardVisuals ? "table-only" : ""}`}>
                 <div className="solitaire-top-row">
                   <div className="solitaire-piles-left">
                     <button
@@ -17270,7 +17299,7 @@ export default function Home() {
                       className={`solitaire-slot ${solitaireStock.length > 0 ? "card-back" : ""}`}
                       aria-label={t("solitaireStock")}
                     >
-                      {solitaireStock.length > 0 ? "" : "↺"}
+                      {shouldHideSolitaireCardVisuals ? "" : solitaireStock.length > 0 ? "" : "↺"}
                     </button>
 
                     {(() => {
@@ -17296,7 +17325,7 @@ export default function Home() {
                           className={wasteClass}
                           aria-label={t("solitaireWaste")}
                         >
-                          {wasteTop ? solitaireCardLabel(wasteTop) : "W"}
+                          {wasteTop ? renderSolitaireCardText(wasteTop) : ""}
                         </button>
                       );
                     })()}
@@ -17325,7 +17354,7 @@ export default function Home() {
                           className={className}
                           aria-label={`Foundation ${suit}`}
                         >
-                          {top ? solitaireCardLabel(top) : solitaireSuitSymbol(suit)}
+                          {top ? renderSolitaireCardText(top) : ""}
                         </button>
                       );
                     })}
@@ -17400,7 +17429,7 @@ export default function Home() {
                               className={classes.join(" ")}
                               style={{ marginTop: idx === 0 ? "0" : card.faceUp ? "var(--solitaire-overlap-face)" : "var(--solitaire-overlap-back)", zIndex: idx + 1 }}
                             >
-                              {card.faceUp ? solitaireCardLabel(card) : ""}
+                              {card.faceUp ? renderSolitaireCardText(card) : ""}
                             </button>
                           );
                         })
@@ -17605,8 +17634,8 @@ export default function Home() {
                 </div>
               ) : null}
 
-              {!gameStarted.uno ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
-              <fieldset className="mt-2">
+              {!gameStarted.uno ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
+              <fieldset disabled={!gameStarted.uno} className={!gameStarted.uno ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
 
               <p className="text-sm text-slate-300">{unoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateUnoNow)}</p> : null}
@@ -17883,7 +17912,6 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
-              )}
             </article>
 
             

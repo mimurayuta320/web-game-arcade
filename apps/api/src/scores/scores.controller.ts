@@ -5,6 +5,8 @@ type CreateScoreBody = {
   playerName: string;
   score: number;
   game?: string;
+  maxScore?: number;
+  rank?: 'S' | 'A' | 'B' | 'C';
 };
 
 @Controller('scores')
@@ -24,6 +26,8 @@ export class ScoresController {
       playerName: body.playerName,
       score: body.score,
       game: body.game,
+      maxScore: body.maxScore,
+      rank: body.rank,
     });
   }
 }

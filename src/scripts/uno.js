@@ -586,6 +586,15 @@ export function initUno(options = {}) {
       btn.addEventListener("click", () => {
         if (!(playable || chainSelectable)) return;
 
+        const inMultiChain = state.multiPlayValue !== null && state.currentPlayer === state.multiPlayPlayer;
+
+        // During same-value chain turns, commit card play directly on tap/click.
+        if (playable && inMultiChain) {
+          clearSelectedCard();
+          playCard(index);
+          return;
+        }
+
         // Current HTML has no explicit play button, so playable cards are committed on click.
         if (!playBtn && playable) {
           clearSelectedCard();

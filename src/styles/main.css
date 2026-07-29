@@ -8,6 +8,7 @@
   --accent-2: #16db93;
   --panel-bg: rgba(6, 12, 20, 0.56);
   --panel-border: rgba(255, 255, 255, 0.3);
+  --card-back-image-url: url("../cardPng/カード裏面.png");
 }
 
 * {
@@ -1759,13 +1760,11 @@ body {
 
 .solitaire-slot.card-back,
 .solitaire-tableau-card.card-back {
-  background: repeating-linear-gradient(
-    -45deg,
-    #2546a4,
-    #2546a4 6px,
-    #182f70 6px,
-    #182f70 12px
-  );
+  background-color: #14233f;
+  background-image: var(--card-back-image-url);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
   color: transparent;
 }
 
@@ -2816,16 +2815,23 @@ body {
 }
 
 .uno-card-mini.back {
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3), transparent 45%),
-    repeating-linear-gradient(
-      -45deg,
-      #1936d8,
-      #1936d8 6px,
-      #0f1f7e 6px,
-      #0f1f7e 12px
-    );
+  background-color: #14233f;
+  background-image: var(--card-back-image-url);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  color: transparent;
   font-size: 0.7rem;
+}
+
+.blackjack-card.back,
+.poker-card.back {
+  background-color: #14233f;
+  background-image: var(--card-back-image-url);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  color: transparent;
 }
 
 .uno-card-display.red,
