@@ -51,7 +51,16 @@ export const AnyNull = runtime.AnyNull
 
 
 export const ModelName = {
-  Score: 'Score'
+  User: 'User',
+  UserProfile: 'UserProfile',
+  AuthSession: 'AuthSession',
+  Score: 'Score',
+  MatchRecord: 'MatchRecord',
+  Friend: 'Friend',
+  FriendRequest: 'FriendRequest',
+  FriendMessage: 'FriendMessage',
+  FriendChatRead: 'FriendChatRead',
+  Inquiry: 'Inquiry'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -70,8 +79,47 @@ export const TransactionIsolationLevel = runtime.makeStrictEnum({
 export type TransactionIsolationLevel = (typeof TransactionIsolationLevel)[keyof typeof TransactionIsolationLevel]
 
 
+export const UserScalarFieldEnum = {
+  userId: 'userId',
+  passHashBcrypt: 'passHashBcrypt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const UserProfileScalarFieldEnum = {
+  userId: 'userId',
+  playerName: 'playerName',
+  profileBio: 'profileBio',
+  playerAvatar: 'playerAvatar',
+  bankCoins: 'bankCoins',
+  pityCounter: 'pityCounter',
+  selectedSkin: 'selectedSkin',
+  unlockedSkinsJson: 'unlockedSkinsJson',
+  matchStatsJson: 'matchStatsJson',
+  fitPuzzleProgressJson: 'fitPuzzleProgressJson',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type UserProfileScalarFieldEnum = (typeof UserProfileScalarFieldEnum)[keyof typeof UserProfileScalarFieldEnum]
+
+
+export const AuthSessionScalarFieldEnum = {
+  sessionId: 'sessionId',
+  userId: 'userId',
+  createdAt: 'createdAt',
+  lastSeenAt: 'lastSeenAt'
+} as const
+
+export type AuthSessionScalarFieldEnum = (typeof AuthSessionScalarFieldEnum)[keyof typeof AuthSessionScalarFieldEnum]
+
+
 export const ScoreScalarFieldEnum = {
   id: 'id',
+  userId: 'userId',
   playerName: 'playerName',
   score: 'score',
   game: 'game',
@@ -81,12 +129,128 @@ export const ScoreScalarFieldEnum = {
 export type ScoreScalarFieldEnum = (typeof ScoreScalarFieldEnum)[keyof typeof ScoreScalarFieldEnum]
 
 
+export const MatchRecordScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  game: 'game',
+  result: 'result',
+  roomCode: 'roomCode',
+  opponent: 'opponent',
+  playedAt: 'playedAt'
+} as const
+
+export type MatchRecordScalarFieldEnum = (typeof MatchRecordScalarFieldEnum)[keyof typeof MatchRecordScalarFieldEnum]
+
+
+export const FriendScalarFieldEnum = {
+  userId: 'userId',
+  friendUserId: 'friendUserId',
+  createdAt: 'createdAt'
+} as const
+
+export type FriendScalarFieldEnum = (typeof FriendScalarFieldEnum)[keyof typeof FriendScalarFieldEnum]
+
+
+export const FriendRequestScalarFieldEnum = {
+  requesterUserId: 'requesterUserId',
+  targetUserId: 'targetUserId',
+  createdAt: 'createdAt'
+} as const
+
+export type FriendRequestScalarFieldEnum = (typeof FriendRequestScalarFieldEnum)[keyof typeof FriendRequestScalarFieldEnum]
+
+
+export const FriendMessageScalarFieldEnum = {
+  id: 'id',
+  senderUserId: 'senderUserId',
+  receiverUserId: 'receiverUserId',
+  message: 'message',
+  createdAt: 'createdAt'
+} as const
+
+export type FriendMessageScalarFieldEnum = (typeof FriendMessageScalarFieldEnum)[keyof typeof FriendMessageScalarFieldEnum]
+
+
+export const FriendChatReadScalarFieldEnum = {
+  userId: 'userId',
+  friendUserId: 'friendUserId',
+  lastReadMessageId: 'lastReadMessageId',
+  updatedAt: 'updatedAt'
+} as const
+
+export type FriendChatReadScalarFieldEnum = (typeof FriendChatReadScalarFieldEnum)[keyof typeof FriendChatReadScalarFieldEnum]
+
+
+export const InquiryScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  name: 'name',
+  message: 'message',
+  url: 'url',
+  lang: 'lang',
+  submittedAt: 'submittedAt'
+} as const
+
+export type InquiryScalarFieldEnum = (typeof InquiryScalarFieldEnum)[keyof typeof InquiryScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
 } as const
 
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+export const JsonNullValueInput = {
+  JsonNull: JsonNull
+} as const
+
+export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
+
+
+export const UserOrderByRelevanceFieldEnum = {
+  userId: 'userId',
+  passHashBcrypt: 'passHashBcrypt'
+} as const
+
+export type UserOrderByRelevanceFieldEnum = (typeof UserOrderByRelevanceFieldEnum)[keyof typeof UserOrderByRelevanceFieldEnum]
+
+
+export const JsonNullValueFilter = {
+  DbNull: DbNull,
+  JsonNull: JsonNull,
+  AnyNull: AnyNull
+} as const
+
+export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
+
+
+export const QueryMode = {
+  default: 'default',
+  insensitive: 'insensitive'
+} as const
+
+export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode]
+
+
+export const UserProfileOrderByRelevanceFieldEnum = {
+  userId: 'userId',
+  playerName: 'playerName',
+  profileBio: 'profileBio',
+  playerAvatar: 'playerAvatar',
+  selectedSkin: 'selectedSkin'
+} as const
+
+export type UserProfileOrderByRelevanceFieldEnum = (typeof UserProfileOrderByRelevanceFieldEnum)[keyof typeof UserProfileOrderByRelevanceFieldEnum]
+
+
+export const AuthSessionOrderByRelevanceFieldEnum = {
+  sessionId: 'sessionId',
+  userId: 'userId'
+} as const
+
+export type AuthSessionOrderByRelevanceFieldEnum = (typeof AuthSessionOrderByRelevanceFieldEnum)[keyof typeof AuthSessionOrderByRelevanceFieldEnum]
 
 
 export const NullsOrder = {
@@ -98,9 +262,64 @@ export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
 
 
 export const ScoreOrderByRelevanceFieldEnum = {
+  userId: 'userId',
   playerName: 'playerName',
   game: 'game'
 } as const
 
 export type ScoreOrderByRelevanceFieldEnum = (typeof ScoreOrderByRelevanceFieldEnum)[keyof typeof ScoreOrderByRelevanceFieldEnum]
+
+
+export const MatchRecordOrderByRelevanceFieldEnum = {
+  userId: 'userId',
+  game: 'game',
+  roomCode: 'roomCode',
+  opponent: 'opponent'
+} as const
+
+export type MatchRecordOrderByRelevanceFieldEnum = (typeof MatchRecordOrderByRelevanceFieldEnum)[keyof typeof MatchRecordOrderByRelevanceFieldEnum]
+
+
+export const FriendOrderByRelevanceFieldEnum = {
+  userId: 'userId',
+  friendUserId: 'friendUserId'
+} as const
+
+export type FriendOrderByRelevanceFieldEnum = (typeof FriendOrderByRelevanceFieldEnum)[keyof typeof FriendOrderByRelevanceFieldEnum]
+
+
+export const FriendRequestOrderByRelevanceFieldEnum = {
+  requesterUserId: 'requesterUserId',
+  targetUserId: 'targetUserId'
+} as const
+
+export type FriendRequestOrderByRelevanceFieldEnum = (typeof FriendRequestOrderByRelevanceFieldEnum)[keyof typeof FriendRequestOrderByRelevanceFieldEnum]
+
+
+export const FriendMessageOrderByRelevanceFieldEnum = {
+  senderUserId: 'senderUserId',
+  receiverUserId: 'receiverUserId',
+  message: 'message'
+} as const
+
+export type FriendMessageOrderByRelevanceFieldEnum = (typeof FriendMessageOrderByRelevanceFieldEnum)[keyof typeof FriendMessageOrderByRelevanceFieldEnum]
+
+
+export const FriendChatReadOrderByRelevanceFieldEnum = {
+  userId: 'userId',
+  friendUserId: 'friendUserId'
+} as const
+
+export type FriendChatReadOrderByRelevanceFieldEnum = (typeof FriendChatReadOrderByRelevanceFieldEnum)[keyof typeof FriendChatReadOrderByRelevanceFieldEnum]
+
+
+export const InquiryOrderByRelevanceFieldEnum = {
+  userId: 'userId',
+  name: 'name',
+  message: 'message',
+  url: 'url',
+  lang: 'lang'
+} as const
+
+export type InquiryOrderByRelevanceFieldEnum = (typeof InquiryOrderByRelevanceFieldEnum)[keyof typeof InquiryOrderByRelevanceFieldEnum]
 

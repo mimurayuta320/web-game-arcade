@@ -29,8 +29,8 @@ export * from "./enums.js"
  * const prisma = new PrismaClient({
  *   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
  * })
- * // Fetch zero or more Scores
- * const scores = await prisma.score.findMany()
+ * // Fetch zero or more Users
+ * const users = await prisma.user.findMany()
  * ```
  * 
  * Read more in our [docs](https://pris.ly/d/client).
@@ -40,7 +40,52 @@ export type PrismaClient<LogOpts extends Prisma.LogLevel = never, OmitOpts exten
 export { Prisma }
 
 /**
+ * Model User
+ * 
+ */
+export type User = Prisma.UserModel
+/**
+ * Model UserProfile
+ * 
+ */
+export type UserProfile = Prisma.UserProfileModel
+/**
+ * Model AuthSession
+ * 
+ */
+export type AuthSession = Prisma.AuthSessionModel
+/**
  * Model Score
  * 
  */
 export type Score = Prisma.ScoreModel
+/**
+ * Model MatchRecord
+ * 
+ */
+export type MatchRecord = Prisma.MatchRecordModel
+/**
+ * Model Friend
+ * 
+ */
+export type Friend = Prisma.FriendModel
+/**
+ * Model FriendRequest
+ * 
+ */
+export type FriendRequest = Prisma.FriendRequestModel
+/**
+ * Model FriendMessage
+ * 
+ */
+export type FriendMessage = Prisma.FriendMessageModel
+/**
+ * Model FriendChatRead
+ * 
+ */
+export type FriendChatRead = Prisma.FriendChatReadModel
+/**
+ * Model Inquiry
+ * 
+ */
+export type Inquiry = Prisma.InquiryModel

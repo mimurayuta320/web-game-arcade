@@ -18,7 +18,52 @@ export { Prisma }
 export * as $Enums from './enums.js'
 export * from './enums.js';
 /**
+ * Model User
+ * 
+ */
+export type User = Prisma.UserModel
+/**
+ * Model UserProfile
+ * 
+ */
+export type UserProfile = Prisma.UserProfileModel
+/**
+ * Model AuthSession
+ * 
+ */
+export type AuthSession = Prisma.AuthSessionModel
+/**
  * Model Score
  * 
  */
 export type Score = Prisma.ScoreModel
+/**
+ * Model MatchRecord
+ * 
+ */
+export type MatchRecord = Prisma.MatchRecordModel
+/**
+ * Model Friend
+ * 
+ */
+export type Friend = Prisma.FriendModel
+/**
+ * Model FriendRequest
+ * 
+ */
+export type FriendRequest = Prisma.FriendRequestModel
+/**
+ * Model FriendMessage
+ * 
+ */
+export type FriendMessage = Prisma.FriendMessageModel
+/**
+ * Model FriendChatRead
+ * 
+ */
+export type FriendChatRead = Prisma.FriendChatReadModel
+/**
+ * Model Inquiry
+ * 
+ */
+export type Inquiry = Prisma.InquiryModel

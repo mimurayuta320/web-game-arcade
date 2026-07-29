@@ -8,10 +8,151 @@ datasource db {
   provider = "mysql"
 }
 
+enum MatchResult {
+  win
+  lose
+  draw
+}
+
+model User {
+  userId          String           @id @map("user_id") @db.VarChar(24)
+  passHashBcrypt  String           @map("pass_hash_bcrypt") @db.VarChar(255)
+  createdAt       BigInt           @map("created_at")
+  updatedAt       BigInt           @map("updated_at")
+  profile         UserProfile?
+  session         AuthSession?
+  scores          Score[]
+  matchRecords    MatchRecord[]
+  friends         Friend[]         @relation("UserFriends")
+  friendOf        Friend[]         @relation("FriendOfUser")
+  sentRequests    FriendRequest[]  @relation("FriendRequestRequester")
+  recvRequests    FriendRequest[]  @relation("FriendRequestTarget")
+  sentMessages    FriendMessage[]  @relation("FriendMessageSender")
+  recvMessages    FriendMessage[]  @relation("FriendMessageReceiver")
+  readStates      FriendChatRead[] @relation("FriendReadUser")
+  readByFriend    FriendChatRead[] @relation("FriendReadFriend")
+  inquiries       Inquiry[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  userId                String @id @map("user_id") @db.VarChar(24)
+  playerName            String @map("player_name") @db.VarChar(18)
+  profileBio            String @default("") @map("profile_bio") @db.VarChar(180)
+  playerAvatar          String @default("") @map("player_avatar") @db.MediumText
+  bankCoins             Int    @default(0) @map("bank_coins")
+  pityCounter           Int    @default(0) @map("pity_counter")
+  selectedSkin          String @default("classic") @map("selected_skin") @db.VarChar(64)
+  unlockedSkinsJson     Json   @map("unlocked_skins_json")
+  matchStatsJson        Json   @map("match_stats_json")
+  fitPuzzleProgressJson Json   @map("fit_puzzle_progress_json")
+  createdAt             BigInt @map("created_at")
+  updatedAt             BigInt @map("updated_at")
+  user                  User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model AuthSession {
+  sessionId  String @id @map("session_id") @db.Char(36)
+  userId     String @unique @map("user_id") @db.VarChar(24)
+  createdAt  BigInt @map("created_at")
+  lastSeenAt BigInt @map("last_seen_at")
+  user       User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([lastSeenAt(sort: Desc)], map: "idx_auth_sessions_last_seen")
+  @@map("auth_sessions")
+}
+
 model Score {
-  id         Int      @id @default(autoincrement())
-  playerName String
+  id         BigInt  @id @default(autoincrement())
+  userId     String? @map("user_id") @db.VarChar(24)
+  playerName String  @map("player_name") @db.VarChar(18)
   score      Int
-  game       String?
-  createdAt  DateTime @default(now())
+  game       String? @db.VarChar(24)
+  createdAt  BigInt  @map("created_at")
+  user       User?   @relation(fields: [userId], references: [userId], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)], map: "idx_scores_created")
+  @@index([game, createdAt(sort: Desc)], map: "idx_scores_game_created")
+  @@map("scores")
+}
+
+model MatchRecord {
+  id       BigInt      @id @default(autoincrement())
+  userId   String      @map("user_id") @db.VarChar(24)
+  game     String      @db.VarChar(24)
+  result   MatchResult
+  roomCode String      @default("") @map("room_code") @db.VarChar(6)
+  opponent String      @default("Player") @db.VarChar(18)
+  playedAt BigInt      @map("played_at")
+  user     User        @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, playedAt(sort: Desc)], map: "idx_match_records_user_time")
+  @@index([game, playedAt(sort: Desc)], map: "idx_match_records_game_time")
+  @@map("match_records")
+}
+
+model Friend {
+  userId       String @map("user_id") @db.VarChar(24)
+  friendUserId String @map("friend_user_id") @db.VarChar(24)
+  createdAt    BigInt @map("created_at")
+  user         User   @relation("UserFriends", fields: [userId], references: [userId], onDelete: Cascade)
+  friendUser   User   @relation("FriendOfUser", fields: [friendUserId], references: [userId], onDelete: Cascade)
+
+  @@id([userId, friendUserId])
+  @@map("friends")
+}
+
+model FriendRequest {
+  requesterUserId String @map("requester_user_id") @db.VarChar(24)
+  targetUserId    String @map("target_user_id") @db.VarChar(24)
+  createdAt       BigInt @map("created_at")
+  requester       User   @relation("FriendRequestRequester", fields: [requesterUserId], references: [userId], onDelete: Cascade)
+  target          User   @relation("FriendRequestTarget", fields: [targetUserId], references: [userId], onDelete: Cascade)
+
+  @@id([requesterUserId, targetUserId])
+  @@index([targetUserId, createdAt(sort: Desc)], map: "idx_friend_requests_target")
+  @@map("friend_requests")
+}
+
+model FriendMessage {
+  id             BigInt @id @default(autoincrement())
+  senderUserId   String @map("sender_user_id") @db.VarChar(24)
+  receiverUserId String @map("receiver_user_id") @db.VarChar(24)
+  message        String @db.VarChar(400)
+  createdAt      BigInt @map("created_at")
+  sender         User   @relation("FriendMessageSender", fields: [senderUserId], references: [userId], onDelete: Cascade)
+  receiver       User   @relation("FriendMessageReceiver", fields: [receiverUserId], references: [userId], onDelete: Cascade)
+
+  @@index([senderUserId, receiverUserId, createdAt(sort: Desc)], map: "idx_friend_messages_pair_time")
+  @@map("friend_messages")
+}
+
+model FriendChatRead {
+  userId            String @map("user_id") @db.VarChar(24)
+  friendUserId      String @map("friend_user_id") @db.VarChar(24)
+  lastReadMessageId BigInt @map("last_read_message_id")
+  updatedAt         BigInt @map("updated_at")
+  user              User   @relation("FriendReadUser", fields: [userId], references: [userId], onDelete: Cascade)
+  friendUser        User   @relation("FriendReadFriend", fields: [friendUserId], references: [userId], onDelete: Cascade)
+
+  @@id([userId, friendUserId])
+  @@map("friend_chat_reads")
+}
+
+model Inquiry {
+  id          BigInt  @id @default(autoincrement())
+  userId      String? @map("user_id") @db.VarChar(24)
+  name        String  @db.VarChar(36)
+  message     String  @db.VarChar(200)
+  url         String  @default("") @db.VarChar(240)
+  lang        String  @db.VarChar(2)
+  submittedAt BigInt  @map("submitted_at")
+  user        User?   @relation(fields: [userId], references: [userId], onDelete: SetNull)
+
+  @@index([submittedAt(sort: Desc)], map: "idx_inquiries_submitted")
+  @@index([userId, submittedAt(sort: Desc)], map: "idx_inquiries_user_time")
+  @@map("inquiries")
 }

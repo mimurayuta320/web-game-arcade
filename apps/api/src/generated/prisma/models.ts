@@ -8,5 +8,14 @@
  *
  * 🟢 You can import this file directly.
  */
+export type * from './models/User.js'
+export type * from './models/UserProfile.js'
+export type * from './models/AuthSession.js'
 export type * from './models/Score.js'
+export type * from './models/MatchRecord.js'
+export type * from './models/Friend.js'
+export type * from './models/FriendRequest.js'
+export type * from './models/FriendMessage.js'
+export type * from './models/FriendChatRead.js'
+export type * from './models/Inquiry.js'
 export type * from './commonInputTypes.js'
