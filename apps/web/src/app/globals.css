@@ -30,7 +30,7 @@ body {
   margin-top: 0.85rem;
   display: grid;
   gap: 0.8rem;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
 }
 
@@ -106,6 +106,9 @@ body {
   background: rgba(8, 20, 32, 0.72);
   display: grid;
   gap: 0.45rem;
+  width: fit-content;
+  max-width: min(100%, 220px);
+  justify-self: start;
 }
 
 .minesweeper-side-panel.hidden {
@@ -401,7 +404,12 @@ body {
 
 @media (max-width: 960px) {
   .minesweeper-play-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .minesweeper-side-panel {
+    padding: 0.5rem;
+    max-width: min(100%, 200px);
   }
 }
 

@@ -59,7 +59,6 @@ type PublicRoomSummary = {
   code: string;
   listContext: "menu" | "game";
   isPublic: boolean;
-  hasPassword: boolean;
   inGame: boolean;
   activePlayers: number;
   spectatorCount: number;
@@ -111,6 +110,7 @@ type CloudAuthResult = {
   code?: string;
   message?: string;
   sessionId?: string;
+  friendId?: string;
   profile?: {
     playerName?: string;
     profileBio?: string;
@@ -139,7 +139,12 @@ type FriendChatPeerReadState = {
   lastReadAt: number;
 };
 
-type FriendTab = "friends" | "incoming" | "outgoing";
+type FriendListEntry = {
+  friendId: string;
+  playerName: string;
+};
+
+type FriendTab = "friends" | "incoming" | "outgoing" | "search";
 type LanguageLabelKey = "langJa" | "langKo" | "langEn" | "langZh";
 type MenuCategory = "board" | "card" | "casino" | "party";
 type MenuTabCategory = "menu" | MenuCategory;
@@ -217,6 +222,12 @@ const LOGIN_I18N = {
     loginButton: "ログインして遊ぶ",
     registerButton: "新規登録",
     guestButton: "ゲストで遊ぶ",
+    credentialSaveLead: "IDとパスワードを手元に保存できます（端末内のみ処理）。",
+    credentialSaveTxtButton: "ID/パスをTXT保存",
+    credentialSavePdfButton: "ID/パスをPDF保存",
+    credentialSaveTxtDone: "認証メモ(TXT)を保存しました。",
+    credentialSavePdfDone: "印刷画面を開きました。保存先で「PDFに保存」を選んでください。",
+    credentialSavePopupBlocked: "印刷ウィンドウを開けませんでした。ポップアップを許可してください。",
     processing: "処理中...",
     requireAuthFields: "ユーザーIDとパスワードを入力してください。",
     loginLoading: "ログイン中...",
@@ -263,18 +274,14 @@ const LOGIN_I18N = {
     migrationPlanned: "移行予定",
     shogiLater: "将棋の移行は次フェーズで対応します。",
     chessLater: "チェスの移行は次フェーズで対応します。",
-    roomTitle: "ルーム操作",
+    roomTitle: "ルーム操作（移行中）",
     roomServerUrl: "RoomサーバーURL",
     roomCode: "ルーム番号",
     roomCodePlaceholder: "6桁",
     roomCodeInvalid: "6桁のルーム番号を入力してください。",
-    roomVisibilityLabel: "公開設定",
     roomPublic: "公開",
     roomPrivate: "非公開",
     roomPasswordLabel: "パスワード",
-    roomPasswordPlaceholder: "必要な場合のみ入力",
-    roomPasswordShow: "表示",
-    roomPasswordHide: "非表示",
     roomPasswordOff: "なし",
     roomPasswordOn: "あり",
     roomListTitle: "公開ルーム一覧",
@@ -310,11 +317,15 @@ const LOGIN_I18N = {
     friendsTabFriends: "フレンド",
     friendsTabIncoming: "承認待ち",
     friendsTabOutgoing: "申請中",
+    friendsTabSearch: "検索",
     friendsHintNoAuth: "ログインするとフレンド一覧を読み込みます",
-    friendsHintReady: "フレンドIDで追加/削除できます",
+    friendsHintReady: "フレンドタブでは名前/IDで絞り込み検索できます",
     friendsHintIncoming: "承認待ちタブでは申請者IDを承認/拒否できます",
     friendsHintOutgoing: "申請中タブでは送信済みIDを取り消せます",
-    friendIdPlaceholder: "フレンドID",
+    friendsHintSearch: "検索タブで名前/IDを検索して申請できます",
+    friendIdPlaceholder: "名前 or フレンドID",
+    friendSearchPlaceholder: "フレンドを検索（名前 or フレンドID）",
+    friendSearchAction: "検索",
     friendRequestSend: "申請",
     friendApprove: "承認",
     friendReject: "拒否",
@@ -323,16 +334,21 @@ const LOGIN_I18N = {
     friendReload: "再読込",
     friendsLoading: "フレンド一覧を読み込み中...",
     friendsListEmpty: "フレンドはまだいません",
+    friendsSearchEmpty: "検索結果がありません",
+    friendsSearchPrompt: "名前またはフレンドIDを入力して検索してください",
     friendsIncomingEmpty: "承認待ちの申請はありません",
     friendsOutgoingEmpty: "申請中のユーザーはいません",
     friendsLoadFailed: "フレンド取得に失敗しました",
-    friendIdRequired: "フレンドIDを入力してください",
+    friendIdRequired: "名前またはフレンドIDを入力してください",
+    friendIdCopy: "Friend IDをコピー",
+    friendIdCopied: "Friend IDをコピーしました",
+    friendIdCopyFailed: "Friend IDのコピーに失敗しました",
     friendRequestSent: "フレンド申請を送信しました",
     friendApproveSuccess: "フレンド申請を承認しました",
     friendRejectSuccess: "フレンド申請を拒否しました",
     friendCancelSuccess: "フレンド申請を取り消しました",
     friendRemoveSuccess: "フレンドを削除しました",
-    friendNotFound: "指定したIDのユーザーが見つかりません",
+    friendNotFound: "指定した名前/IDのユーザーが見つかりません",
     friendSelfForbidden: "自分自身は追加できません",
     friendRequestAlreadySent: "すでに申請済みです",
     friendRequestAlreadyReceived: "相手からの申請が届いています。承認待ちタブで承認してください",
@@ -408,8 +424,6 @@ const LOGIN_I18N = {
     roomErrMessageAlreadyRetracted: "このメッセージは既に撤回済みです。",
     roomErrEditRetractExpired: "編集・撤回可能時間を過ぎています。",
     roomErrInvitePrivateOnly: "招待トークンは非公開ルームのみ発行できます。",
-    roomErrPasswordRequired: "このルームはパスワードが必要です。",
-    roomErrPasswordInvalid: "ルームパスワードが違います。",
     roomErrSpectatorOnly: "観戦者のみ利用できる機能です。",
     roomErrRematchVoteForbidden: "現在は再戦投票できません。",
     roomErrDrawVoteForbidden: "現在はドロー申請できません。",
@@ -569,20 +583,6 @@ const LOGIN_I18N = {
     shogiSelectOwn: "自分の駒を選択してください。",
     shogiIllegalMove: "その駒はそこへ移動できません。",
     shogiWin: "{winner}の勝ちです（王を取りました）",
-    shogiCheck: "王手です。",
-    shogiMate: "{winner}の勝ちです（詰み）",
-    shogiStalemate: "合法手がありません。引き分けです。",
-    shogiChaosMineLabel: "地雷数(各陣営)",
-    shogiChaosMineNone: "なし",
-    shogiChaosKingAbsorbLabel: "王の味方吸収",
-    shogiMineTriggered: "地雷が爆発しました。",
-    shogiMineKingLost: "王が地雷で失われました。{winner}の勝ちです。",
-    shogiResultTitle: "勝敗",
-    shogiResultWin: "勝ち",
-    shogiResultLose: "負け",
-    shogiResultDraw: "引き分け",
-    shogiResultBlackWin: "先手勝ち",
-    shogiResultWhiteWin: "後手勝ち",
     shogiApplyScore: "残り駒差をスコアに反映",
     shogiAppliedScore: "将棋の残り駒差をスコア欄へ反映しました。",
     minesTitle: "マインスイーパー",
@@ -921,6 +921,12 @@ const LOGIN_I18N = {
     loginButton: "로그인하고 플레이",
     registerButton: "회원가입",
     guestButton: "게스트로 플레이",
+    credentialSaveLead: "ID와 비밀번호를 기기에 저장할 수 있습니다 (로컬 처리).",
+    credentialSaveTxtButton: "ID/비밀번호 TXT 저장",
+    credentialSavePdfButton: "ID/비밀번호 PDF 저장",
+    credentialSaveTxtDone: "인증 메모(TXT)를 저장했습니다.",
+    credentialSavePdfDone: "인쇄 화면을 열었습니다. 저장 대상에서 PDF 저장을 선택하세요.",
+    credentialSavePopupBlocked: "인쇄 창을 열 수 없습니다. 팝업 허용을 확인하세요.",
     processing: "처리 중...",
     requireAuthFields: "사용자 ID와 비밀번호를 입력하세요.",
     loginLoading: "로그인 중...",
@@ -967,18 +973,14 @@ const LOGIN_I18N = {
     migrationPlanned: "이전 예정",
     shogiLater: "장기 마이그레이션은 다음 단계에서 대응합니다.",
     chessLater: "체스 마이그레이션은 다음 단계에서 대응합니다.",
-    roomTitle: "룸 조작",
+    roomTitle: "룸 조작 (이전 중)",
     roomServerUrl: "룸 서버 URL",
     roomCode: "룸 번호",
     roomCodePlaceholder: "6자리",
     roomCodeInvalid: "6자리 룸 번호를 입력하세요.",
-    roomVisibilityLabel: "공개 설정",
     roomPublic: "공개",
     roomPrivate: "비공개",
     roomPasswordLabel: "비밀번호",
-    roomPasswordPlaceholder: "필요한 경우에만 입력",
-    roomPasswordShow: "표시",
-    roomPasswordHide: "숨기기",
     roomPasswordOff: "없음",
     roomPasswordOn: "있음",
     roomListTitle: "공개 룸 목록",
@@ -1014,11 +1016,15 @@ const LOGIN_I18N = {
     friendsTabFriends: "친구",
     friendsTabIncoming: "승인 대기",
     friendsTabOutgoing: "요청 중",
+    friendsTabSearch: "검색",
     friendsHintNoAuth: "로그인하면 친구 목록을 불러옵니다",
-    friendsHintReady: "친구 ID로 추가/삭제할 수 있습니다",
+    friendsHintReady: "친구 탭에서는 이름/ID로 필터 검색할 수 있습니다",
     friendsHintIncoming: "대기 탭에서 신청자 ID를 승인/거절할 수 있습니다",
     friendsHintOutgoing: "요청 중 탭에서 보낸 요청을 취소할 수 있습니다",
-    friendIdPlaceholder: "친구 ID",
+    friendsHintSearch: "검색 탭에서 이름/ID를 검색해 친구 요청을 보낼 수 있습니다",
+    friendIdPlaceholder: "이름 또는 친구 ID",
+    friendSearchPlaceholder: "친구 검색 (이름 또는 친구 ID)",
+    friendSearchAction: "검색",
     friendRequestSend: "요청",
     friendApprove: "승인",
     friendReject: "거절",
@@ -1027,16 +1033,21 @@ const LOGIN_I18N = {
     friendReload: "새로고침",
     friendsLoading: "친구 목록을 불러오는 중...",
     friendsListEmpty: "친구가 아직 없습니다",
+    friendsSearchEmpty: "검색 결과가 없습니다",
+    friendsSearchPrompt: "이름 또는 친구 ID를 입력해 검색하세요",
     friendsIncomingEmpty: "승인 대기 요청이 없습니다",
     friendsOutgoingEmpty: "요청 중인 사용자가 없습니다",
     friendsLoadFailed: "친구 목록을 불러오지 못했습니다",
-    friendIdRequired: "친구 ID를 입력하세요",
+    friendIdRequired: "이름 또는 친구 ID를 입력하세요",
+    friendIdCopy: "Friend ID 복사",
+    friendIdCopied: "Friend ID를 복사했습니다",
+    friendIdCopyFailed: "Friend ID 복사에 실패했습니다",
     friendRequestSent: "친구 요청을 보냈습니다",
     friendApproveSuccess: "친구 요청을 승인했습니다",
     friendRejectSuccess: "친구 요청을 거절했습니다",
     friendCancelSuccess: "친구 요청을 취소했습니다",
     friendRemoveSuccess: "친구를 삭제했습니다",
-    friendNotFound: "해당 ID의 사용자를 찾을 수 없습니다",
+    friendNotFound: "해당 이름/ID의 사용자를 찾을 수 없습니다",
     friendSelfForbidden: "자기 자신은 추가할 수 없습니다",
     friendRequestAlreadySent: "이미 요청을 보냈습니다",
     friendRequestAlreadyReceived: "상대 요청이 도착했습니다. 승인 대기 탭에서 승인해 주세요",
@@ -1112,8 +1123,6 @@ const LOGIN_I18N = {
     roomErrMessageAlreadyRetracted: "이 메시지는 이미 회수되었습니다.",
     roomErrEditRetractExpired: "수정/회수 가능 시간이 지났습니다.",
     roomErrInvitePrivateOnly: "초대 토큰은 비공개 룸에서만 발급할 수 있습니다.",
-    roomErrPasswordRequired: "이 룸은 비밀번호가 필요합니다.",
-    roomErrPasswordInvalid: "룸 비밀번호가 올바르지 않습니다.",
     roomErrSpectatorOnly: "관전자 전용 기능입니다.",
     roomErrRematchVoteForbidden: "지금은 재대결 투표를 할 수 없습니다.",
     roomErrDrawVoteForbidden: "지금은 무승부 신청을 할 수 없습니다.",
@@ -1273,20 +1282,6 @@ const LOGIN_I18N = {
     shogiSelectOwn: "자신의 말을 선택하세요.",
     shogiIllegalMove: "해당 말은 그 칸으로 이동할 수 없습니다.",
     shogiWin: "{winner} 승리 (왕을 잡았습니다)",
-    shogiCheck: "체크입니다.",
-    shogiMate: "{winner} 승리 (체크메이트)",
-    shogiStalemate: "합법적인 수가 없습니다. 무승부입니다.",
-    shogiChaosMineLabel: "지뢰 수(각 진영)",
-    shogiChaosMineNone: "없음",
-    shogiChaosKingAbsorbLabel: "왕 아군 흡수",
-    shogiMineTriggered: "지뢰가 폭발했습니다.",
-    shogiMineKingLost: "왕이 지뢰로 사라졌습니다. {winner} 승리입니다.",
-    shogiResultTitle: "승패",
-    shogiResultWin: "승리",
-    shogiResultLose: "패배",
-    shogiResultDraw: "무승부",
-    shogiResultBlackWin: "선수 승리",
-    shogiResultWhiteWin: "후수 승리",
     shogiApplyScore: "남은 말 수 차이를 점수에 반영",
     shogiAppliedScore: "장기 남은 말 수 차이를 점수 입력란에 반영했습니다.",
     minesTitle: "지뢰찾기",
@@ -1629,6 +1624,12 @@ const EN_I18N: Partial<I18nMap> = {
   loginButton: "Login and Play",
   registerButton: "Register",
   guestButton: "Play as Guest",
+  credentialSaveLead: "You can save your ID and password locally on this device.",
+  credentialSaveTxtButton: "Save ID/Password as TXT",
+  credentialSavePdfButton: "Save ID/Password as PDF",
+  credentialSaveTxtDone: "Credential memo (TXT) has been downloaded.",
+  credentialSavePdfDone: "Print view opened. Choose Save as PDF in the print dialog.",
+  credentialSavePopupBlocked: "Could not open print window. Please allow pop-ups.",
   processing: "Processing...",
   requireAuthFields: "Please enter both user ID and password.",
   loginLoading: "Logging in...",
@@ -1672,18 +1673,13 @@ const EN_I18N: Partial<I18nMap> = {
   menuTitle: "Game Select (Next Migration Menu)",
   menuLead: "The legacy HTML menu is being migrated in phases. You can move to Othello, Gomoku, Chess, and UNO first.",
   playableLead: "Playable in Next migration",
-  roomTitle: "Room Controls",
+  roomTitle: "Room Controls (Migrating)",
   roomServerUrl: "Room Server URL",
   roomCode: "Room Code",
   roomCodePlaceholder: "6 digits",
-  roomCodeInvalid: "Please enter a 6-digit room code.",
-  roomVisibilityLabel: "Visibility",
   roomPublic: "Public",
   roomPrivate: "Private",
   roomPasswordLabel: "Password",
-  roomPasswordPlaceholder: "Enter only if needed",
-  roomPasswordShow: "Show",
-  roomPasswordHide: "Hide",
   roomPasswordOff: "Off",
   roomPasswordOn: "On",
   roomListTitle: "Public Rooms",
@@ -1707,15 +1703,28 @@ const EN_I18N: Partial<I18nMap> = {
   friendViewProfile: "View Profile",
   friendOpenChat: "Chat",
   friendChatWith: "Chat: {userId}",
+  friendsTabSearch: "Search",
+  friendsHintSearch: "Search by name/Friend ID and send requests.",
+  friendsHintReady: "Filter friends by name or Friend ID in the Friends tab.",
+  friendIdPlaceholder: "Name or Friend ID",
+  friendSearchPlaceholder: "Search friends (name or Friend ID)",
+  friendSearchAction: "Search",
+  friendIdRequired: "Please enter a name or Friend ID.",
   friendChatPlaceholder: "Type a message",
   friendChatSend: "Send",
   friendChatLoading: "Loading chat...",
   friendChatEmpty: "No messages yet",
+  friendsSearchEmpty: "No matching friends found.",
+  friendsSearchPrompt: "Enter a name or Friend ID to search.",
   friendChatMessageRequired: "Please enter a message.",
   friendChatForbidden: "Only friends can chat.",
   friendChatSendFailed: "Failed to send message.",
   friendChatLoadFailed: "Failed to load chat.",
   friendChatRateLimited: "You are sending too quickly. Please wait.",
+  friendIdCopy: "Copy Friend ID",
+  friendIdCopied: "Friend ID copied.",
+  friendIdCopyFailed: "Failed to copy Friend ID.",
+  friendNotFound: "No user found for that name/ID.",
   friendChatRead: "Read",
   friendChatReadAt: "Read {time}",
   profileViewerTitle: "Profile",
@@ -1789,6 +1798,12 @@ const ZH_I18N: Partial<I18nMap> = {
   loginButton: "登录并开始",
   registerButton: "注册",
   guestButton: "游客模式",
+  credentialSaveLead: "可将 ID 和密码仅在本设备本地保存。",
+  credentialSaveTxtButton: "将 ID/密码保存为 TXT",
+  credentialSavePdfButton: "将 ID/密码保存为 PDF",
+  credentialSaveTxtDone: "认证备忘录（TXT）已下载。",
+  credentialSavePdfDone: "已打开打印页面，请在打印对话框中选择“保存为 PDF”。",
+  credentialSavePopupBlocked: "无法打开打印窗口，请允许弹窗。",
   processing: "处理中...",
   loginAlreadyLoggedIn: "此账号已在其他设备登录，请先在其他设备退出。",
   localResetConfirm: "要重置这个游戏吗？",
@@ -1802,16 +1817,24 @@ const ZH_I18N: Partial<I18nMap> = {
   roomWaitHostStart: "参与方请等待房主开始游戏。",
   roomTitle: "房间操作",
   roomCode: "房间号",
-  roomCodeInvalid: "请输入6位房间号。",
-  roomVisibilityLabel: "公开设置",
   roomPublic: "公开",
   roomPrivate: "私密",
   roomPasswordLabel: "密码",
-  roomPasswordPlaceholder: "仅在需要时输入",
-  roomPasswordShow: "显示",
-  roomPasswordHide: "隐藏",
   roomPasswordOff: "无",
   roomPasswordOn: "有",
+  friendsHintReady: "在好友标签可按名称或 Friend ID 进行筛选",
+  friendsTabSearch: "搜索",
+  friendsHintSearch: "可在搜索标签按名称/Friend ID查找并发送申请",
+  friendIdPlaceholder: "名称或 Friend ID",
+  friendSearchPlaceholder: "搜索好友（名称或 Friend ID）",
+  friendSearchAction: "搜索",
+  friendIdRequired: "请输入名称或 Friend ID",
+  friendNotFound: "找不到该名称/ID的用户",
+  friendsSearchEmpty: "没有匹配的好友",
+  friendsSearchPrompt: "请输入名称或 Friend ID 进行搜索",
+  friendIdCopy: "复制 Friend ID",
+  friendIdCopied: "已复制 Friend ID",
+  friendIdCopyFailed: "复制 Friend ID 失败",
   roomListTitle: "公开房间列表",
   roomListRefresh: "刷新",
   roomListEmpty: "当前没有可加入的公开房间。",
@@ -1872,13 +1895,9 @@ type ChessPiece = {
 };
 type ShogiColor = "b" | "w";
 type ShogiPieceType = "K" | "R" | "B" | "G" | "S" | "N" | "L" | "P";
-type ShogiKingAbsorbedType = Exclude<ShogiPieceType, "K">;
-type ShogiResult = ShogiColor | "draw" | null;
 type ShogiPiece = {
   color: ShogiColor;
   type: ShogiPieceType;
-  absorbedAbilities?: ShogiKingAbsorbedType[];
-  isMine?: boolean;
 };
 type MineCell = {
   mine: boolean;
@@ -2826,7 +2845,6 @@ const SHOGI_CPU_THINK_MS: Record<ShogiCpuLevel, number> = {
   normal: 380,
   hard: 520,
 };
-const SHOGI_CHAOS_MINE_COUNT_MAX = 3;
 const OTHELLO_OPENING_BOOK_PRIORITY = [
   [
     [2, 3],
@@ -2868,6 +2886,7 @@ const OTHELLO_OPENING_BOOK_PRIORITY = [
 const STORAGE_CLOUD_USER_ID_KEY = "neon-cloud-user-id";
 const STORAGE_CLOUD_PASSWORD_KEY = "neon-cloud-password";
 const STORAGE_CLOUD_SESSION_ID_KEY = "neon-cloud-session-id";
+const STORAGE_CLOUD_FRIEND_ID_KEY = "neon-cloud-friend-id";
 const STORAGE_LANGUAGE_KEY = "neon-ui-language";
 const STORAGE_MENU_TAB_OPEN_STATE_KEY = "neon-menu-tab-open-state";
 const STORAGE_MENU_CARD_OPEN_STATE_KEY = "neon-menu-card-open-state";
@@ -2886,7 +2905,6 @@ const INQUIRY_ADMIN_USER_IDS = String(process.env.NEXT_PUBLIC_INQUIRY_ADMIN_USER
   .map((id) => id.trim().slice(0, 24))
   .filter(Boolean);
 const APP_URL_TAG = "NeonBoardArcade";
-const HIDE_TRUMP_CARD_VISUALS = true;
 const BLACKJACK_DEALER_REVEAL_DELAY_MS = 700;
 const DIRECTIONS = [
   [-1, -1],
@@ -3788,183 +3806,6 @@ function isShogiPathClear(
   return true;
 }
 
-function isShogiKingAbsorbedType(type: ShogiPieceType): type is ShogiKingAbsorbedType {
-  return type === "R" || type === "B" || type === "G" || type === "S" || type === "N" || type === "L" || type === "P";
-}
-
-function getShogiKingAbsorbedTypes(piece: ShogiPiece): ShogiKingAbsorbedType[] {
-  if (piece.type !== "K" || !Array.isArray(piece.absorbedAbilities)) return [];
-  const next: ShogiKingAbsorbedType[] = [];
-  for (const raw of piece.absorbedAbilities) {
-    if (!isShogiKingAbsorbedType(raw)) continue;
-    if (!next.includes(raw)) next.push(raw);
-  }
-  return next;
-}
-
-function getShogiKingAbsorbedDirectionCounts(piece: ShogiPiece): Map<string, number> {
-  const counts = new Map<string, number>();
-  if (piece.type !== "K") return counts;
-
-  const dir = piece.color === "b" ? -1 : 1;
-  const push = (rawDr: number, rawDc: number) => {
-    const dr = Math.sign(rawDr);
-    const dc = Math.sign(rawDc);
-    if (dr === 0 && dc === 0) return;
-    const key = `${dr}:${dc}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  };
-
-  for (const absorbed of getShogiKingAbsorbedTypes(piece)) {
-    if (absorbed === "R") {
-      push(-1, 0); push(1, 0); push(0, -1); push(0, 1);
-    } else if (absorbed === "B") {
-      push(-1, -1); push(-1, 1); push(1, -1); push(1, 1);
-    } else if (absorbed === "G") {
-      push(dir, -1); push(dir, 0); push(dir, 1); push(0, -1); push(0, 1); push(-dir, 0);
-    } else if (absorbed === "S") {
-      push(dir, -1); push(dir, 0); push(dir, 1); push(-dir, -1); push(-dir, 1);
-    } else if (absorbed === "N") {
-      push(dir * 2, -1); push(dir * 2, 1);
-    } else if (absorbed === "L" || absorbed === "P") {
-      push(dir, 0);
-    }
-  }
-
-  return counts;
-}
-
-function applyShogiChaosMines(board: Array<Array<ShogiPiece | null>>, mineCountPerSide: number): Array<Array<ShogiPiece | null>> {
-  const next = board.map((line) => line.map((piece) => (piece ? { ...piece, isMine: false } : null)));
-  const normalizedCount = Math.max(0, Math.min(SHOGI_CHAOS_MINE_COUNT_MAX, Math.floor(mineCountPerSide)));
-  if (normalizedCount <= 0) return next;
-
-  const placeForColor = (color: ShogiColor) => {
-    const candidates: Array<{ row: number; col: number }> = [];
-    for (let row = 0; row < 9; row += 1) {
-      for (let col = 0; col < 9; col += 1) {
-        const piece = next[row][col];
-        if (!piece || piece.color !== color || piece.type === "K" || piece.type === "P") continue;
-        candidates.push({ row, col });
-      }
-    }
-    for (let i = candidates.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-    }
-    const placeCount = Math.min(normalizedCount, candidates.length);
-    for (let i = 0; i < placeCount; i += 1) {
-      const spot = candidates[i];
-      const piece = next[spot.row][spot.col];
-      if (!piece) continue;
-      next[spot.row][spot.col] = { ...piece, isMine: true };
-    }
-  };
-
-  placeForColor("b");
-  placeForColor("w");
-  return next;
-}
-
-function simulateShogiMove(
-  board: Array<Array<ShogiPiece | null>>,
-  fromRow: number,
-  fromCol: number,
-  toRow: number,
-  toCol: number,
-  turn: ShogiColor,
-  kingAllyAbsorbEnabled = false,
-): Array<Array<ShogiPiece | null>> | null {
-  const moving = board[fromRow]?.[fromCol];
-  if (!moving || moving.color !== turn) return null;
-
-  const next = board.map((line) => [...line]);
-  const captured = next[toRow][toCol];
-  const capturesEnemyKing = Boolean(captured?.type === "K" && captured.color !== turn);
-  const hitsMine = Boolean(captured?.isMine);
-  const isAllyAbsorb =
-    kingAllyAbsorbEnabled
-    && moving.type === "K"
-    && Boolean(captured)
-    && captured?.color === moving.color
-    && captured?.type !== "K";
-
-  let placed: ShogiPiece | null = moving;
-  if (isAllyAbsorb && captured && isShogiKingAbsorbedType(captured.type)) {
-    const current = getShogiKingAbsorbedTypes(moving);
-    if (!current.includes(captured.type)) {
-      placed = { ...moving, absorbedAbilities: [...current, captured.type] };
-    }
-  }
-
-  if (hitsMine && !capturesEnemyKing && !isAllyAbsorb) {
-    next[toRow][toCol] = null;
-  } else {
-    next[toRow][toCol] = placed;
-  }
-  next[fromRow][fromCol] = null;
-  return next;
-}
-
-function isShogiKingInCheck(
-  board: Array<Array<ShogiPiece | null>>,
-  kingColor: ShogiColor,
-  kingAllyAbsorbEnabled = false,
-): boolean {
-  let kingRow = -1;
-  let kingCol = -1;
-
-  for (let row = 0; row < 9; row += 1) {
-    for (let col = 0; col < 9; col += 1) {
-      const piece = board[row][col];
-      if (piece?.type === "K" && piece.color === kingColor) {
-        kingRow = row;
-        kingCol = col;
-        break;
-      }
-    }
-    if (kingRow >= 0) break;
-  }
-
-  if (kingRow < 0 || kingCol < 0) return true;
-  const enemy: ShogiColor = kingColor === "b" ? "w" : "b";
-
-  for (let row = 0; row < 9; row += 1) {
-    for (let col = 0; col < 9; col += 1) {
-      const attacker = board[row][col];
-      if (!attacker || attacker.color !== enemy) continue;
-      if (isLegalShogiMove(board, row, col, kingRow, kingCol, enemy, kingAllyAbsorbEnabled)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function isLegalShogiMoveSafe(
-  board: Array<Array<ShogiPiece | null>>,
-  fromRow: number,
-  fromCol: number,
-  toRow: number,
-  toCol: number,
-  turn: ShogiColor,
-  kingAllyAbsorbEnabled = false,
-): boolean {
-  if (!isLegalShogiMove(board, fromRow, fromCol, toRow, toCol, turn, kingAllyAbsorbEnabled)) return false;
-  const simulated = simulateShogiMove(board, fromRow, fromCol, toRow, toCol, turn, kingAllyAbsorbEnabled);
-  if (!simulated) return false;
-  return !isShogiKingInCheck(simulated, turn, kingAllyAbsorbEnabled);
-}
-
-function isShogiCheckmate(
-  board: Array<Array<ShogiPiece | null>>,
-  turn: ShogiColor,
-  kingAllyAbsorbEnabled = false,
-): boolean {
-  if (!isShogiKingInCheck(board, turn, kingAllyAbsorbEnabled)) return false;
-  return collectLegalShogiMoves(board, turn, kingAllyAbsorbEnabled).length === 0;
-}
-
 function isLegalShogiMove(
   board: Array<Array<ShogiPiece | null>>,
   fromRow: number,
@@ -3972,7 +3813,6 @@ function isLegalShogiMove(
   toRow: number,
   toCol: number,
   turn: ShogiColor,
-  kingAllyAbsorbEnabled = false,
 ): boolean {
   if (!inShogiBounds(fromRow, fromCol) || !inShogiBounds(toRow, toCol)) return false;
   if (fromRow === toRow && fromCol === toCol) return false;
@@ -3980,15 +3820,7 @@ function isLegalShogiMove(
   const piece = board[fromRow][fromCol];
   if (!piece || piece.color !== turn) return false;
   const target = board[toRow][toCol];
-  if (target && target.color === piece.color) {
-    const canAbsorbAlly =
-      kingAllyAbsorbEnabled
-      && piece.type === "K"
-      && target.type !== "K"
-      && isShogiKingAbsorbedType(target.type)
-      && !getShogiKingAbsorbedTypes(piece).includes(target.type);
-    if (!canAbsorbAlly) return false;
-  }
+  if (target && target.color === piece.color) return false;
 
   const dr = toRow - fromRow;
   const dc = toCol - fromCol;
@@ -3997,22 +3829,7 @@ function isLegalShogiMove(
   const dir = piece.color === "b" ? -1 : 1;
   const fdr = dr * dir;
 
-  if (piece.type === "K") {
-    if (!kingAllyAbsorbEnabled) {
-      return absDr <= 1 && absDc <= 1;
-    }
-    const isDiagonal = absDr === absDc && absDr > 0;
-    const isStraight = (dr === 0 && dc !== 0) || (dc === 0 && dr !== 0);
-    if (!isDiagonal && !isStraight) return false;
-    const dirDr = Math.sign(dr);
-    const dirDc = Math.sign(dc);
-    const distance = Math.max(absDr, absDc);
-    const bonus = getShogiKingAbsorbedDirectionCounts(piece).get(`${dirDr}:${dirDc}`) ?? 0;
-    const maxDistance = 1 + bonus;
-    if (distance > maxDistance) return false;
-    if (distance > 1 && !isShogiPathClear(board, fromRow, fromCol, toRow, toCol)) return false;
-    return true;
-  }
+  if (piece.type === "K") return absDr <= 1 && absDc <= 1;
 
   if (piece.type === "G") {
     return (
@@ -4052,11 +3869,7 @@ function isLegalShogiMove(
   return false;
 }
 
-function collectLegalShogiMoves(
-  board: Array<Array<ShogiPiece | null>>,
-  turn: ShogiColor,
-  kingAllyAbsorbEnabled = false,
-) {
+function collectLegalShogiMoves(board: Array<Array<ShogiPiece | null>>, turn: ShogiColor) {
   const moves: Array<{ fromRow: number; fromCol: number; toRow: number; toCol: number; capture: ShogiPiece | null }> = [];
   for (let fromRow = 0; fromRow < 9; fromRow += 1) {
     for (let fromCol = 0; fromCol < 9; fromCol += 1) {
@@ -4065,7 +3878,7 @@ function collectLegalShogiMoves(
 
       for (let toRow = 0; toRow < 9; toRow += 1) {
         for (let toCol = 0; toCol < 9; toCol += 1) {
-          if (!isLegalShogiMoveSafe(board, fromRow, fromCol, toRow, toCol, turn, kingAllyAbsorbEnabled)) continue;
+          if (!isLegalShogiMove(board, fromRow, fromCol, toRow, toCol, turn)) continue;
           moves.push({
             fromRow,
             fromCol,
@@ -4084,9 +3897,8 @@ function pickShogiCpuMove(
   board: Array<Array<ShogiPiece | null>>,
   turn: ShogiColor,
   level: ShogiCpuLevel,
-  kingAllyAbsorbEnabled = false,
 ) {
-  const legal = collectLegalShogiMoves(board, turn, kingAllyAbsorbEnabled);
+  const legal = collectLegalShogiMoves(board, turn);
   if (legal.length === 0) return null;
 
   if (level === "easy") {
@@ -4744,8 +4556,6 @@ export default function Home() {
   const [shogiMode, setShogiMode] = useState<ShogiMode>("local");
   const [shogiCpuLevel, setShogiCpuLevel] = useState<ShogiCpuLevel>("normal");
   const [shogiTurnOrder, setShogiTurnOrder] = useState<ShogiTurnOrder>("black");
-  const [shogiChaosMineCount, setShogiChaosMineCount] = useState(1);
-  const [shogiChaosKingAbsorbEnabled, setShogiChaosKingAbsorbEnabled] = useState(true);
   const [shogiPlayerSide, setShogiPlayerSide] = useState<ShogiColor>("b");
   const [shogiTurn, setShogiTurn] = useState<ShogiColor>("b");
   const [selectedShogi, setSelectedShogi] = useState<{ row: number; col: number } | null>(null);
@@ -4758,15 +4568,7 @@ export default function Home() {
 
     for (let row = 0; row < 9; row += 1) {
       for (let col = 0; col < 9; col += 1) {
-        if (!isLegalShogiMoveSafe(
-          shogiBoard,
-          selectedShogi.row,
-          selectedShogi.col,
-          row,
-          col,
-          shogiTurn,
-          shogiMode === "chaos" && shogiChaosKingAbsorbEnabled,
-        )) continue;
+        if (!isLegalShogiMove(shogiBoard, selectedShogi.row, selectedShogi.col, row, col, shogiTurn)) continue;
         const targetPiece = shogiBoard[row][col];
         targets.set(`${row}-${col}`, {
           capture: Boolean(targetPiece && targetPiece.color !== selectedPiece.color),
@@ -4775,11 +4577,9 @@ export default function Home() {
     }
 
     return targets;
-  }, [selectedShogi, shogiBoard, shogiTurn, shogiMode, shogiChaosKingAbsorbEnabled]);
+  }, [selectedShogi, shogiBoard, shogiTurn]);
   const [shogiMessage, setShogiMessage] = useState<string>(LOGIN_I18N.ja.shogiTurnBlack);
   const [isShogiOver, setIsShogiOver] = useState(false);
-  const [shogiResult, setShogiResult] = useState<ShogiResult>(null);
-  const isShogiCheckMessage = useMemo(() => /王手です。|체크입니다\./.test(shogiMessage), [shogiMessage]);
   const [mineBoard, setMineBoard] = useState<MineCell[][]>(() => createMinesweeperBoard());
   const [mineMessage, setMineMessage] = useState<string>(LOGIN_I18N.ja.minesHint);
   const [isMineOver, setIsMineOver] = useState(false);
@@ -4918,8 +4718,6 @@ export default function Home() {
   const [startCountdownSec, setStartCountdownSec] = useState(0);
   const [roomCode, setRoomCode] = useState("");
   const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
-  const [roomPassword, setRoomPassword] = useState("");
-  const [isRoomPasswordVisible, setIsRoomPasswordVisible] = useState(false);
   const [isRoomControlsOpen, setIsRoomControlsOpen] = useState(true);
   const [roomStatus, setRoomStatus] = useState("未接続");
   const [connectedRoomCode, setConnectedRoomCode] = useState("");
@@ -4950,6 +4748,7 @@ export default function Home() {
   const [authUserId, setAuthUserId] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authSessionId, setAuthSessionId] = useState("");
+  const [cloudFriendId, setCloudFriendId] = useState("");
   const [profileNameDraft, setProfileNameDraft] = useState("");
   const [profileBioDraft, setProfileBioDraft] = useState("");
   const [fitPuzzleProgress, setFitPuzzleProgress] = useState<FitPuzzleProgress | null>(null);
@@ -4965,9 +4764,12 @@ export default function Home() {
   const [isFriendPanelOpen, setIsFriendPanelOpen] = useState(false);
   const [friendTab, setFriendTab] = useState<FriendTab>("friends");
   const [friendUserIdDraft, setFriendUserIdDraft] = useState("");
+  const [friendSearchQuery, setFriendSearchQuery] = useState("");
+  const [friendSearchResults, setFriendSearchResults] = useState<string[]>([]);
   const [friendIds, setFriendIds] = useState<string[]>([]);
   const [incomingFriendIds, setIncomingFriendIds] = useState<string[]>([]);
   const [outgoingFriendIds, setOutgoingFriendIds] = useState<string[]>([]);
+  const [friendDisplayNames, setFriendDisplayNames] = useState<Record<string, string>>({});
   const [friendActionUserId, setFriendActionUserId] = useState("");
   const [activeFriendChatUserId, setActiveFriendChatUserId] = useState("");
   const [friendChatMessages, setFriendChatMessages] = useState<FriendChatMessage[]>([]);
@@ -4983,9 +4785,11 @@ export default function Home() {
   const [friendsMessage, setFriendsMessage] = useState("");
   const [isFriendsLoading, setIsFriendsLoading] = useState(false);
   const [isFriendsActionLoading, setIsFriendsActionLoading] = useState(false);
+  const [isFriendSearchLoading, setIsFriendSearchLoading] = useState(false);
   const [isPublicProfileLoading, setIsPublicProfileLoading] = useState(false);
   const [publicProfile, setPublicProfile] = useState<{
     userId: string;
+    friendId: string;
     playerName: string;
     profileBio: string;
     playerAvatar: string;
@@ -5125,12 +4929,14 @@ export default function Home() {
     const savedUserId = localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "";
     const savedPassword = localStorage.getItem(STORAGE_CLOUD_PASSWORD_KEY) || "";
     const savedSessionId = localStorage.getItem(STORAGE_CLOUD_SESSION_ID_KEY) || "";
+    const savedFriendId = localStorage.getItem(STORAGE_CLOUD_FRIEND_ID_KEY) || "";
     const savedLanguage = localStorage.getItem(STORAGE_LANGUAGE_KEY);
     const savedMenuTabOpenState = localStorage.getItem(STORAGE_MENU_TAB_OPEN_STATE_KEY);
     const savedMenuCardOpenState = localStorage.getItem(STORAGE_MENU_CARD_OPEN_STATE_KEY);
     setAuthUserId(savedUserId);
     setAuthPassword(savedPassword);
     setAuthSessionId(savedSessionId);
+    setCloudFriendId(savedFriendId);
     if (savedLanguage === "ja" || savedLanguage === "ko" || savedLanguage === "en" || savedLanguage === "zh") {
       setLanguage(savedLanguage);
     }
@@ -5501,11 +5307,7 @@ export default function Home() {
       L: "香",
       P: "歩",
     };
-    const base = map[piece.type];
-    if (piece.type !== "K") return base;
-    const absorbed = getShogiKingAbsorbedTypes(piece);
-    if (absorbed.length === 0) return base;
-    return `${base}+${absorbed.map((type) => map[type]).join("")}`;
+    return map[piece.type];
   }, []);
 
   const roomRoleLabel = useCallback(
@@ -5532,8 +5334,6 @@ export default function Home() {
       if (code === "MESSAGE_ALREADY_RETRACTED") return t("roomErrMessageAlreadyRetracted");
       if (code === "EDIT_RETRACT_WINDOW_EXPIRED") return t("roomErrEditRetractExpired");
       if (code === "INVITE_TOKEN_PRIVATE_ONLY") return t("roomErrInvitePrivateOnly");
-      if (code === "ROOM_PASSWORD_REQUIRED") return t("roomErrPasswordRequired");
-      if (code === "ROOM_PASSWORD_INVALID") return t("roomErrPasswordInvalid");
       if (code === "SPECTATOR_ONLY") return t("roomErrSpectatorOnly");
       if (code === "REMATCH_VOTE_FORBIDDEN") return t("roomErrRematchVoteForbidden");
       if (code === "DRAW_VOTE_FORBIDDEN") return t("roomErrDrawVoteForbidden");
@@ -5606,16 +5406,6 @@ export default function Home() {
 
   const renderPlayingCardFace = useCallback(
     (label: string, options?: { compact?: boolean; muted?: boolean }) => {
-      const compact = Boolean(options?.compact);
-      if (HIDE_TRUMP_CARD_VISUALS) {
-        return (
-          <span
-            aria-hidden="true"
-            className={`inline-flex shrink-0 items-center justify-center rounded-md border border-slate-500/45 bg-slate-800/70 ${compact ? "h-10 w-8 sm:h-11 sm:w-9" : "h-12 w-9 sm:h-14 sm:w-10 lg:h-16 lg:w-12"}`}
-          />
-        );
-      }
-
       const text = String(label || "").trim();
       const suit = text.slice(-1);
       const rank = text.slice(0, -1);
@@ -5629,6 +5419,7 @@ export default function Home() {
         );
       }
 
+      const compact = Boolean(options?.compact);
       const muted = Boolean(options?.muted);
       const redSuit = suit === "♥" || suit === "♦";
       const suitTone = redSuit ? "text-rose-600" : "text-slate-900";
@@ -5682,13 +5473,6 @@ export default function Home() {
       </span>
     );
   }, []);
-
-  const shouldHideSolitaireCardVisuals = HIDE_TRUMP_CARD_VISUALS && !gameStarted.solitaire;
-
-  const renderSolitaireCardText = useCallback((card: SolitaireCard) => {
-    if (shouldHideSolitaireCardVisuals) return "";
-    return solitaireCardLabel(card);
-  }, [shouldHideSolitaireCardVisuals]);
 
   const playerHandFanStyle = useCallback((
     index: number,
@@ -5853,44 +5637,6 @@ export default function Home() {
     if (!shogiRoomPlayer) return false;
     return shogiTurn === shogiRoomPlayer;
   }, [connectedRoomCode, shogiMode, shogiPlayerSide, shogiRoomPlayer, shogiTurn]);
-
-  const shogiMineVisibleColor = useMemo<ShogiColor | null>(() => {
-    if (connectedRoomCode) {
-      if (roomRole === "host") return "b";
-      if (roomRole === "guest") return "w";
-      return null;
-    }
-    if (shogiMode === "cpu") return shogiPlayerSide;
-    if (shogiMode === "chaos") return shogiTurn;
-    return null;
-  }, [connectedRoomCode, roomRole, shogiMode, shogiPlayerSide, shogiTurn]);
-
-  const shogiResultText = useMemo(() => {
-    if (!isShogiOver) return "";
-
-    let effectiveResult: ShogiResult = shogiResult;
-    if (!effectiveResult) {
-      if (shogiMessage.includes(t("shogiStalemate"))) {
-        effectiveResult = "draw";
-      } else if (shogiMessage.includes(t("blackStone"))) {
-        effectiveResult = "b";
-      } else if (shogiMessage.includes(t("whiteStone"))) {
-        effectiveResult = "w";
-      }
-    }
-
-    if (!effectiveResult) return "";
-    if (effectiveResult === "draw") return t("shogiResultDraw");
-
-    const viewerColor: ShogiColor | null = connectedRoomCode
-      ? (roomRole === "host" ? "b" : roomRole === "guest" ? "w" : null)
-      : (shogiMode === "cpu" ? shogiPlayerSide : null);
-
-    if (viewerColor) {
-      return effectiveResult === viewerColor ? t("shogiResultWin") : t("shogiResultLose");
-    }
-    return effectiveResult === "b" ? t("shogiResultBlackWin") : t("shogiResultWhiteWin");
-  }, [connectedRoomCode, isShogiOver, roomRole, shogiMessage, shogiMode, shogiPlayerSide, shogiResult, t]);
 
   const unoRoomPlayer = useMemo<"player" | "cpu" | null>(() => {
     if (!connectedRoomCode) return null;
@@ -6147,43 +5893,13 @@ export default function Home() {
     return t("tabSurvivors");
   }, [t]);
 
-  const connectedRoomSummary = useMemo(() => {
-    const code = String(connectedRoomCode || "").replace(/\D/g, "").slice(0, 6);
-    if (code.length !== 6) return null;
-    const mergedRooms = [...menuPublicRooms, ...panelPublicRooms];
-    let summary: { totalParticipants: number; activePlayers: number } | null = null;
-    for (const room of mergedRooms) {
-      const roomCode = String(room.code || "").replace(/\D/g, "").slice(0, 6);
-      if (roomCode !== code) continue;
-      const totalParticipants = Math.max(0, Math.min(16, Number(room.totalParticipants) || 0));
-      const activePlayers = Math.max(0, Math.min(16, Number(room.activePlayers) || 0));
-      if (!summary) {
-        summary = { totalParticipants, activePlayers };
-      } else {
-        summary.totalParticipants = Math.max(summary.totalParticipants, totalParticipants);
-        summary.activePlayers = Math.max(summary.activePlayers, activePlayers);
-      }
-    }
-    return summary;
-  }, [connectedRoomCode, menuPublicRooms, panelPublicRooms]);
-
   const roomMatchedPlayerCount = useMemo(() => {
-    if (activePanel === "menu" && connectedRoomSummary) {
-      return connectedRoomSummary.totalParticipants;
-    }
     return roomParticipants.length;
-  }, [activePanel, connectedRoomSummary, roomParticipants]);
+  }, [roomParticipants]);
 
   const roomActivePlayerCount = useMemo(() => {
-    if (activePanel === "menu" && connectedRoomSummary) {
-      return connectedRoomSummary.activePlayers;
-    }
     return roomParticipants.filter((participant) => participant.role === "host" || participant.role === "guest").length;
-  }, [activePanel, connectedRoomSummary, roomParticipants]);
-
-  const isRoomWaitingSoloPractice = useMemo(() => {
-    return Boolean(connectedRoomCode) && roomRole === "host" && roomActivePlayerCount < 2;
-  }, [connectedRoomCode, roomActivePlayerCount, roomRole]);
+  }, [roomParticipants]);
 
   const roomReadyCount = useMemo(() => {
     return roomParticipants.filter((participant) => (
@@ -6209,28 +5925,18 @@ export default function Home() {
 
   const roomParticipantCountsByPanel = useMemo(() => {
     const counts = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, 0])) as Record<PlayablePanel, number>;
-    const mergedRooms = [...panelPublicRooms];
-    const mergedByCode = new Map<string, { activePlayers: number; panels: Set<PlayablePanel> }>();
+    const seenCodes = new Set<string>();
 
-    for (const room of mergedRooms) {
+    for (const room of panelPublicRooms) {
       const code = String(room.code || "").replace(/\D/g, "").slice(0, 6);
-      if (code.length !== 6) continue;
+      if (code.length === 6) {
+        if (seenCodes.has(code)) continue;
+        seenCodes.add(code);
+      }
       const activePlayers = Math.max(0, Math.min(16, Number(room.activePlayers) || 0));
-      const entry = mergedByCode.get(code) || { activePlayers: 0, panels: new Set<PlayablePanel>() };
-      entry.activePlayers = Math.max(entry.activePlayers, activePlayers);
+      if (activePlayers <= 0) continue;
       for (const panel of room.panels) {
         if (!(panel in counts)) continue;
-        entry.panels.add(panel);
-      }
-      mergedByCode.set(code, entry);
-    }
-
-    const seenCodes = new Set<string>();
-    for (const [code, entry] of mergedByCode.entries()) {
-      seenCodes.add(code);
-      const activePlayers = entry.activePlayers;
-      if (activePlayers <= 0) continue;
-      for (const panel of entry.panels) {
         counts[panel] += activePlayers;
       }
     }
@@ -6454,7 +6160,7 @@ export default function Home() {
       setMenuMessage(t("roomWaitHostStart"));
       return;
     }
-    if (connectedRoomCode && roomRole === "host" && !isRoomWaitingSoloPractice && !roomAllReady) {
+    if (connectedRoomCode && roomRole === "host" && !roomAllReady) {
       setMenuMessage("参加者全員の準備完了後に開始できます。");
       return;
     }
@@ -6709,12 +6415,11 @@ export default function Home() {
   };
 
   const onJoinRoom = (code: string) => {
-    const normalized = String(code || "").replace(/[^0-9]/g, "").slice(0, 6);
-    if (normalized.length !== 6) {
-      setMenuMessage(t("roomCodeInvalid"));
+    if (!code.trim()) {
+      setMenuMessage(t("roomSelectRequired"));
       return false;
     }
-    setMenuMessage(tf("roomJoinPreparing", { code: normalized }));
+    setMenuMessage(tf("roomJoinPreparing", { code: code.trim() }));
     return true;
   };
 
@@ -6781,7 +6486,6 @@ export default function Home() {
       code,
       listContext,
       isPublic: Boolean(row.isPublic ?? true),
-      hasPassword: Boolean(row.hasPassword),
       inGame: Boolean(row.inGame),
       activePlayers: Math.max(0, Math.min(16, Number(row.activePlayers) || 0)),
       spectatorCount: Math.max(0, Math.min(16, Number(row.spectatorCount) || 0)),
@@ -6939,7 +6643,6 @@ export default function Home() {
     }
     if (panel === "shogi") {
       setIsShogiOver(true);
-      setShogiResult(null);
       setShogiMessage(message);
       return;
     }
@@ -7200,12 +6903,6 @@ export default function Home() {
     if (state.shogiTurnOrder === "black" || state.shogiTurnOrder === "white" || state.shogiTurnOrder === "random") {
       setShogiTurnOrder(state.shogiTurnOrder as ShogiTurnOrder);
     }
-    if (Number.isFinite(state.shogiChaosMineCount)) {
-      setShogiChaosMineCount(Math.max(0, Math.min(SHOGI_CHAOS_MINE_COUNT_MAX, Math.floor(Number(state.shogiChaosMineCount)))));
-    }
-    if (typeof state.shogiChaosKingAbsorbEnabled === "boolean") {
-      setShogiChaosKingAbsorbEnabled(state.shogiChaosKingAbsorbEnabled);
-    }
     if (state.shogiPlayerSide === "b" || state.shogiPlayerSide === "w") {
       setShogiPlayerSide(state.shogiPlayerSide as ShogiColor);
     }
@@ -7215,9 +6912,6 @@ export default function Home() {
     }
     if (typeof state.shogiMessage === "string") setShogiMessage(state.shogiMessage);
     if (typeof state.isShogiOver === "boolean") setIsShogiOver(state.isShogiOver);
-    if (state.shogiResult === "b" || state.shogiResult === "w" || state.shogiResult === "draw" || state.shogiResult === null) {
-      setShogiResult(state.shogiResult as ShogiResult);
-    }
 
     if (Array.isArray(state.mineBoard)) setMineBoard(state.mineBoard as MineCell[][]);
     if (typeof state.mineMessage === "string") setMineMessage(state.mineMessage);
@@ -7437,12 +7131,10 @@ export default function Home() {
         quickJoin?: boolean;
         spectate?: boolean;
         roomPublic?: boolean;
-        roomPassword?: string;
         inviteToken?: string;
         panelOverride?: PlayablePanel | "";
         createRoom?: boolean;
         sourceRoomCode?: string;
-        forceNewChildRoom?: boolean;
         listContextOverride?: "menu" | "game";
         serverAllocateCode?: boolean;
       },
@@ -7526,19 +7218,12 @@ export default function Home() {
             create: Boolean(options?.createRoom),
             inviteToken: String(options?.inviteToken || "").trim(),
           };
-          const normalizedRoomPassword = String(options?.roomPassword || "").trim().slice(0, 32);
-          if (normalizedRoomPassword) {
-            payload.roomPassword = normalizedRoomPassword;
-          }
           if (options?.listContextOverride === "menu" || options?.listContextOverride === "game") {
             payload.listContext = options.listContextOverride;
           }
           const sourceRoomCode = String(options?.sourceRoomCode || "").replace(/[^0-9]/g, "").slice(0, 6);
           if (sourceRoomCode) {
             payload.sourceRoom = sourceRoomCode;
-          }
-          if (options?.forceNewChildRoom) {
-            payload.forceNewChild = true;
           }
           if (code) {
             payload.room = code;
@@ -7589,9 +7274,7 @@ export default function Home() {
             }
             if (payload?.snapshot && typeof payload.snapshot === "object") {
               applyArcadeSnapshot(payload.snapshot as Record<string, unknown>);
-              if (!quickJoin) {
-                setMenuMessage(t("syncApplied"));
-              }
+              setMenuMessage(t("syncApplied"));
             }
             return;
           }
@@ -8018,7 +7701,7 @@ export default function Home() {
             if (code === "ROOM_REQUIRED" && shouldRecoverRoomRequired) {
               setMenuMessage(
                 tf("roomCreatePreparing", {
-                  password: roomPassword.trim() ? t("roomPasswordOn") : t("roomPasswordOff"),
+                  password: roomVisibility === "private" ? t("roomPasswordOn") : t("roomPasswordOff"),
                 }),
               );
               return;
@@ -8081,7 +7764,6 @@ export default function Home() {
       allocateClientRoomCode,
       roomCode,
       roomErrorLabel,
-      roomPassword,
       roomVisibility,
       stripInviteTokenFromAddressBar,
       finalizeOthelloDrawAgreement,
@@ -8135,16 +7817,6 @@ export default function Home() {
     }, 3500);
     return () => window.clearInterval(timer);
   }, [activePanel, connectedRoomCode, isAuthenticated, requestPublicRoomList]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (activePanel === "menu" || activePanel === "scores") return;
-    requestPublicRoomList("panel", true);
-    const timer = window.setInterval(() => {
-      requestPublicRoomList("panel", true);
-    }, 2200);
-    return () => window.clearInterval(timer);
-  }, [activePanel, isAuthenticated, requestPublicRoomList]);
 
   const requestInviteToken = useCallback(() => {
     return new Promise<string>((resolve) => {
@@ -8213,6 +7885,27 @@ export default function Home() {
     setMenuMessage(copied ? t("inviteLinkCopied") : t("inviteLinkCopyFailed"));
   }, [buildInviteUrl, connectedRoomCode, pendingInviteToken, requestInviteToken, roomCode, roomRole, roomVisibility, showInviteCopyFeedback, t]);
 
+  const copyFriendId = useCallback(async () => {
+    const value = cloudFriendId.trim();
+    if (!value) {
+      setMenuMessage(t("friendIdRequired"));
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        setMenuMessage(t("friendIdCopied"));
+        return;
+      }
+    } catch {
+      // fallthrough to prompt
+    }
+
+    const copied = Boolean(window.prompt("Copy Friend ID", value));
+    setMenuMessage(copied ? t("friendIdCopied") : t("friendIdCopyFailed"));
+  }, [cloudFriendId, t]);
+
   const startQuickMatch = useCallback(() => {
     setQuickMatchMode(true);
     setMenuMessage(t("quickMatchSearching"));
@@ -8220,67 +7913,53 @@ export default function Home() {
   }, [connectRoom, t]);
 
   const joinRoomAsPlayer = useCallback(() => {
-    const typedCode = String(roomCode || "").replace(/[^0-9]/g, "").slice(0, 6);
-    const selectedCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
-    const targetCode = typedCode.length === 6 ? typedCode : selectedCode;
+    const targetCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
     const code = targetCode.replace(/[^0-9]/g, "").slice(0, 6);
     if (code.length !== 6) {
-      setMenuMessage(activePanel === "menu" ? t("roomCodeInvalid") : t("roomSelectRequired"));
+      setMenuMessage(t("roomSelectRequired"));
       return;
     }
     setQuickMatchMode(false);
     if (!onJoinRoom(code)) return;
     setRoomCode(code);
-    connectRoom(code, false, {
-      inviteToken: pendingInviteToken,
-      roomPassword,
-    });
-  }, [activePanel, connectRoom, onJoinRoom, pendingInviteToken, roomCode, roomPassword, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
+    connectRoom(code, false, { inviteToken: pendingInviteToken });
+  }, [activePanel, connectRoom, onJoinRoom, pendingInviteToken, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
 
   const joinRoomAsSpectator = useCallback(() => {
-    const typedCode = String(roomCode || "").replace(/[^0-9]/g, "").slice(0, 6);
-    const selectedCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
-    const targetCode = typedCode.length === 6 ? typedCode : selectedCode;
+    const targetCode = activePanel === "menu" ? selectedMenuPublicRoomCode : selectedPanelPublicRoomCode;
     const code = targetCode.replace(/[^0-9]/g, "").slice(0, 6);
     if (code.length !== 6) {
-      setMenuMessage(activePanel === "menu" ? t("roomCodeInvalid") : t("roomSelectRequired"));
+      setMenuMessage(t("roomSelectRequired"));
       return;
     }
     setQuickMatchMode(false);
     setRoomCode(code);
-    connectRoom(code, false, {
-      spectate: true,
-      inviteToken: pendingInviteToken,
-      roomPassword,
-    });
-  }, [activePanel, connectRoom, pendingInviteToken, roomCode, roomPassword, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
+    connectRoom(code, false, { spectate: true, inviteToken: pendingInviteToken });
+  }, [activePanel, connectRoom, pendingInviteToken, selectedMenuPublicRoomCode, selectedPanelPublicRoomCode, t]);
 
   const createRoomFromCurrentPanel = useCallback(() => {
     setQuickMatchMode(false);
     setPendingInviteToken("");
     const panelNow = normalizeRoomPanel(activePanel) || getCurrentRoomPanel();
     const sourceRoomCode = menuRootRoomCode || connectedRoomCode;
-    const forceNewChildRoom = true;
 
     setMenuMessage(
       tf("roomCreatePreparing", {
-        password: roomPassword.trim() ? t("roomPasswordOn") : t("roomPasswordOff"),
+        password: roomVisibility === "private" ? t("roomPasswordOn") : t("roomPasswordOff"),
       }),
     );
     connectRoom("", true, {
       roomPublic: roomVisibility === "public",
-      roomPassword,
       panelOverride: panelNow,
       createRoom: true,
       sourceRoomCode,
-      forceNewChildRoom,
       listContextOverride: "game",
       serverAllocateCode: true,
     });
     window.setTimeout(() => {
       requestPublicRoomList("panel", true);
     }, 250);
-  }, [activePanel, connectedRoomCode, connectRoom, getCurrentRoomPanel, menuRootRoomCode, normalizeRoomPanel, requestPublicRoomList, roomPassword, roomVisibility, t, tf]);
+  }, [activePanel, connectedRoomCode, connectRoom, getCurrentRoomPanel, menuRootRoomCode, normalizeRoomPanel, requestPublicRoomList, roomVisibility, t, tf]);
 
   const createRoomFromMenu = useCallback(() => {
     setQuickMatchMode(false);
@@ -8288,12 +7967,11 @@ export default function Home() {
 
     setMenuMessage(
       tf("roomCreatePreparing", {
-        password: roomPassword.trim() ? t("roomPasswordOn") : t("roomPasswordOff"),
+        password: t("roomPasswordOff"),
       }),
     );
     connectRoom("", true, {
-      roomPublic: roomVisibility === "public",
-      roomPassword,
+      roomPublic: true,
       panelOverride: "",
       createRoom: true,
       listContextOverride: "menu",
@@ -8302,7 +7980,7 @@ export default function Home() {
     window.setTimeout(() => {
       requestPublicRoomList("menu", true);
     }, 250);
-  }, [connectRoom, requestPublicRoomList, roomPassword, roomVisibility, t, tf]);
+  }, [connectRoom, requestPublicRoomList, t, tf]);
 
   const disconnectRoomFromCurrentPanel = useCallback(() => {
     setQuickMatchMode(false);
@@ -8492,14 +8170,11 @@ export default function Home() {
         shogiMode,
         shogiCpuLevel,
         shogiTurnOrder,
-        shogiChaosMineCount,
-        shogiChaosKingAbsorbEnabled,
         shogiPlayerSide,
         shogiTurn,
         selectedShogi,
         shogiMessage,
         isShogiOver,
-        shogiResult,
         mineBoard,
         mineMessage,
         isMineOver,
@@ -8676,7 +8351,7 @@ export default function Home() {
       }
     }
 
-    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+    if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
         setOthelloMessage(t("roomSpectatorReadonly"));
         return;
@@ -9091,7 +8766,7 @@ export default function Home() {
       return;
     }
 
-    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+    if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
         setGomokuMessage(t("roomSpectatorReadonly"));
         return;
@@ -9221,7 +8896,7 @@ export default function Home() {
       return;
     }
 
-    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+    if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
         setChessMessage(t("roomSpectatorReadonly"));
         return;
@@ -9365,32 +9040,15 @@ export default function Home() {
     return order === "white" ? "w" : "b";
   };
 
-  const resetShogiWith = (nextMode: ShogiMode, nextOrder: ShogiTurnOrder, options?: { chaosMineCount?: number }) => {
+  const resetShogiWith = (nextMode: ShogiMode, nextOrder: ShogiTurnOrder) => {
     const nextPlayerSide = resolveShogiPlayerSide(nextOrder);
     const nextTurn: ShogiColor = nextOrder === "random" ? (Math.random() < 0.5 ? "b" : "w") : (nextOrder === "white" ? "w" : "b");
-    const mineCount = Number.isFinite(options?.chaosMineCount)
-      ? Math.max(0, Math.min(SHOGI_CHAOS_MINE_COUNT_MAX, Math.floor(Number(options?.chaosMineCount))))
-      : shogiChaosMineCount;
-    const resetBoard = nextMode === "chaos"
-      ? applyShogiChaosMines(createShogiBoard(), mineCount)
-      : createShogiBoard();
     setShogiPlayerSide(nextMode === "cpu" ? nextPlayerSide : "b");
-    setShogiBoard(resetBoard);
+    setShogiBoard(createShogiBoard());
     setShogiTurn(nextTurn);
     setSelectedShogi(null);
     setIsShogiOver(false);
-    setShogiResult(null);
     setShogiMessage(nextTurn === "b" ? t("shogiTurnBlack") : t("shogiTurnWhite"));
-  };
-
-  const shogiTurnMessageWithCheck = (
-    board: Array<Array<ShogiPiece | null>>,
-    turn: ShogiColor,
-    kingAllyAbsorbEnabled: boolean,
-  ) => {
-    const base = turn === "b" ? t("shogiTurnBlack") : t("shogiTurnWhite");
-    if (!isShogiKingInCheck(board, turn, kingAllyAbsorbEnabled)) return base;
-    return `${base} / ${t("shogiCheck")}`;
   };
 
   const resetShogi = () => {
@@ -9406,7 +9064,7 @@ export default function Home() {
       return;
     }
 
-    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+    if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
         setShogiMessage(t("roomSpectatorReadonly"));
         return;
@@ -9445,29 +9103,13 @@ export default function Home() {
     if (
       piece
       && piece.color === shogiTurn
-      && !isLegalShogiMoveSafe(
-        shogiBoard,
-        selectedShogi.row,
-        selectedShogi.col,
-        row,
-        col,
-        shogiTurn,
-        shogiMode === "chaos" && shogiChaosKingAbsorbEnabled,
-      )
+      && !isLegalShogiMove(shogiBoard, selectedShogi.row, selectedShogi.col, row, col, shogiTurn)
     ) {
       setSelectedShogi({ row, col });
       return;
     }
 
-    const legal = isLegalShogiMoveSafe(
-      shogiBoard,
-      selectedShogi.row,
-      selectedShogi.col,
-      row,
-      col,
-      shogiTurn,
-      shogiMode === "chaos" && shogiChaosKingAbsorbEnabled,
-    );
+    const legal = isLegalShogiMove(shogiBoard, selectedShogi.row, selectedShogi.col, row, col, shogiTurn);
     if (!legal) {
       setShogiMessage(t("shogiIllegalMove"));
       return;
@@ -9476,77 +9118,22 @@ export default function Home() {
     const next = shogiBoard.map((line) => [...line]);
     const moving = next[selectedShogi.row][selectedShogi.col];
     const captured = next[row][col];
-    const capturesEnemyKing = Boolean(captured?.type === "K" && captured.color !== shogiTurn);
-    const hitsMine = Boolean(captured?.isMine);
-    const isAllyAbsorb =
-      Boolean(moving)
-      && moving?.type === "K"
-      && Boolean(captured)
-      && captured?.color === moving?.color
-      && captured?.type !== "K"
-      && shogiMode === "chaos"
-      && shogiChaosKingAbsorbEnabled;
-
-    let placed: ShogiPiece | null = moving;
-    if (isAllyAbsorb && moving && captured && isShogiKingAbsorbedType(captured.type)) {
-      const current = getShogiKingAbsorbedTypes(moving);
-      if (!current.includes(captured.type)) {
-        placed = { ...moving, absorbedAbilities: [...current, captured.type] };
-      }
-    }
-
-    if (hitsMine && !capturesEnemyKing && !isAllyAbsorb) {
-      next[row][col] = null;
-    } else {
-      next[row][col] = placed;
-    }
+    next[row][col] = moving;
     next[selectedShogi.row][selectedShogi.col] = null;
 
     setShogiBoard(next);
     setSelectedShogi(null);
 
-    if (capturesEnemyKing) {
+    if (captured?.type === "K") {
       const winner = shogiTurn === "b" ? t("blackStone") : t("whiteStone");
       setShogiMessage(tf("shogiWin", { winner }));
       setIsShogiOver(true);
-      setShogiResult(shogiTurn);
-      return;
-    }
-
-    if (hitsMine && !isAllyAbsorb) {
-      if (moving?.type === "K") {
-        const winner = shogiTurn === "b" ? t("whiteStone") : t("blackStone");
-        setShogiMessage(tf("shogiMineKingLost", { winner }));
-        setIsShogiOver(true);
-        setShogiResult(shogiTurn === "b" ? "w" : "b");
-        return;
-      }
-      const nextTurnWithMine: ShogiColor = shogiTurn === "b" ? "w" : "b";
-      const kingAllyAbsorbEnabled = shogiMode === "chaos" && shogiChaosKingAbsorbEnabled;
-      if (isShogiCheckmate(next, nextTurnWithMine, kingAllyAbsorbEnabled)) {
-        const winner = shogiTurn === "b" ? t("blackStone") : t("whiteStone");
-        setShogiMessage(tf("shogiMate", { winner }));
-        setIsShogiOver(true);
-        setShogiResult(shogiTurn);
-        return;
-      }
-      setShogiTurn(nextTurnWithMine);
-      const turnMessage = shogiTurnMessageWithCheck(next, nextTurnWithMine, kingAllyAbsorbEnabled);
-      setShogiMessage(`${t("shogiMineTriggered")} / ${turnMessage}`);
       return;
     }
 
     const nextTurn: ShogiColor = shogiTurn === "b" ? "w" : "b";
-    const kingAllyAbsorbEnabled = shogiMode === "chaos" && shogiChaosKingAbsorbEnabled;
-    if (isShogiCheckmate(next, nextTurn, kingAllyAbsorbEnabled)) {
-      const winner = shogiTurn === "b" ? t("blackStone") : t("whiteStone");
-      setShogiMessage(tf("shogiMate", { winner }));
-      setIsShogiOver(true);
-      setShogiResult(shogiTurn);
-      return;
-    }
     setShogiTurn(nextTurn);
-    setShogiMessage(shogiTurnMessageWithCheck(next, nextTurn, kingAllyAbsorbEnabled));
+    setShogiMessage(nextTurn === "b" ? t("shogiTurnBlack") : t("shogiTurnWhite"));
   };
 
   useEffect(() => {
@@ -9562,91 +9149,30 @@ export default function Home() {
     setShogiMessage(t("shogiCpuThinking"));
 
     const timer = setTimeout(() => {
-      const move = pickShogiCpuMove(
-        shogiBoard,
-        cpuColor,
-        shogiCpuLevel,
-        false,
-      );
+      const move = pickShogiCpuMove(shogiBoard, cpuColor, shogiCpuLevel);
       if (!move) {
-        if (isShogiCheckmate(shogiBoard, cpuColor, false)) {
-          const winner = cpuColor === "b" ? t("whiteStone") : t("blackStone");
-          setShogiMessage(tf("shogiMate", { winner }));
-          setIsShogiOver(true);
-          setShogiResult(cpuColor === "b" ? "w" : "b");
-          return;
-        }
-        setShogiMessage(t("shogiStalemate"));
-        setIsShogiOver(true);
-        setShogiResult("draw");
         return;
       }
 
       const next = shogiBoard.map((line) => [...line]);
       const moving = next[move.fromRow][move.fromCol];
       const captured = next[move.toRow][move.toCol];
-      const capturesEnemyKing = Boolean(captured?.type === "K" && captured.color !== cpuColor);
-      const hitsMine = Boolean(captured?.isMine);
-      const isAllyAbsorb = false;
-
-      let placed: ShogiPiece | null = moving;
-      if (isAllyAbsorb && moving && captured && isShogiKingAbsorbedType(captured.type)) {
-        const current = getShogiKingAbsorbedTypes(moving);
-        if (!current.includes(captured.type)) {
-          placed = { ...moving, absorbedAbilities: [...current, captured.type] };
-        }
-      }
-
-      if (hitsMine && !capturesEnemyKing && !isAllyAbsorb) {
-        next[move.toRow][move.toCol] = null;
-      } else {
-        next[move.toRow][move.toCol] = placed;
-      }
+      next[move.toRow][move.toCol] = moving;
       next[move.fromRow][move.fromCol] = null;
 
       setShogiBoard(next);
       setSelectedShogi(null);
 
-      if (capturesEnemyKing) {
+      if (captured?.type === "K") {
         const winner = cpuColor === "b" ? t("blackStone") : t("whiteStone");
         setShogiMessage(tf("shogiWin", { winner }));
         setIsShogiOver(true);
-        setShogiResult(cpuColor);
-        return;
-      }
-
-      if (hitsMine && !isAllyAbsorb) {
-        if (moving?.type === "K") {
-          const winner = cpuColor === "b" ? t("whiteStone") : t("blackStone");
-          setShogiMessage(tf("shogiMineKingLost", { winner }));
-          setIsShogiOver(true);
-          setShogiResult(cpuColor === "b" ? "w" : "b");
-          return;
-        }
-        const nextTurnWithMine: ShogiColor = cpuColor === "b" ? "w" : "b";
-        if (isShogiCheckmate(next, nextTurnWithMine, false)) {
-          const winner = cpuColor === "b" ? t("blackStone") : t("whiteStone");
-          setShogiMessage(tf("shogiMate", { winner }));
-          setIsShogiOver(true);
-          setShogiResult(cpuColor);
-          return;
-        }
-        setShogiTurn(nextTurnWithMine);
-        const turnMessage = shogiTurnMessageWithCheck(next, nextTurnWithMine, false);
-        setShogiMessage(`${t("shogiMineTriggered")} / ${turnMessage}`);
         return;
       }
 
       const nextTurn: ShogiColor = cpuColor === "b" ? "w" : "b";
-      if (isShogiCheckmate(next, nextTurn, false)) {
-        const winner = cpuColor === "b" ? t("blackStone") : t("whiteStone");
-        setShogiMessage(tf("shogiMate", { winner }));
-        setIsShogiOver(true);
-        setShogiResult(cpuColor);
-        return;
-      }
       setShogiTurn(nextTurn);
-      setShogiMessage(shogiTurnMessageWithCheck(next, nextTurn, false));
+      setShogiMessage(nextTurn === "b" ? t("shogiTurnBlack") : t("shogiTurnWhite"));
     }, SHOGI_CPU_THINK_MS[shogiCpuLevel]);
 
     return () => clearTimeout(timer);
@@ -10231,7 +9757,7 @@ export default function Home() {
     const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
     if (isDaifugoOver || daifugoTurn !== side) return;
 
-    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+    if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
         setDaifugoMessage(t("roomSpectatorReadonly"));
         return;
@@ -10285,7 +9811,7 @@ export default function Home() {
     const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
     if (isDaifugoOver || daifugoTurn !== side) return;
 
-    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+    if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
         setDaifugoMessage(t("roomSpectatorReadonly"));
         return;
@@ -11097,7 +10623,7 @@ export default function Home() {
       const delayMs = entry.delayMs ?? index * 40;
       return {
         id: `sf-${now}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-        label: HIDE_TRUMP_CARD_VISUALS ? "" : solitaireCardLabel(entry.card),
+        label: solitaireCardLabel(entry.card),
         red: solitaireIsRed(entry.card.suit),
         startX: fromX,
         startY: fromY,
@@ -11980,7 +11506,7 @@ export default function Home() {
         const isRemote = Boolean(options?.isRemote);
         let actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
 
-        if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+        if (connectedRoomCode && !isRemote) {
           if (roomRole === "spectator") {
             setUnoMessage(t("roomSpectatorReadonly"));
             return;
@@ -12035,7 +11561,7 @@ export default function Home() {
       const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
       if (isUnoOver || unoTurn !== side || !unoTopCard) return;
 
-      if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+      if (connectedRoomCode && !isRemote) {
         if (roomRole === "spectator") {
           setUnoMessage(t("roomSpectatorReadonly"));
           return;
@@ -12085,7 +11611,7 @@ export default function Home() {
       const isRemote = Boolean(options?.isRemote);
       let actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
 
-      if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+      if (connectedRoomCode && !isRemote) {
         if (roomRole === "spectator") {
           setUnoMessage(t("roomSpectatorReadonly"));
           return;
@@ -12132,7 +11658,7 @@ export default function Home() {
     const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
     if (isUnoOver || unoTurn !== side) return;
 
-    if (connectedRoomCode && !isRoomWaitingSoloPractice && !isRemote) {
+    if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
         setUnoMessage(t("roomSpectatorReadonly"));
         return;
@@ -12338,29 +11864,59 @@ export default function Home() {
     }, 350);
   }, [authMode, authUserId, callCloudApi, cloudAuthPayload]);
 
-  const normalizeFriendIdList = useCallback((value: unknown): string[] => {
-    if (!Array.isArray(value)) return [];
+  const normalizeFriendList = useCallback((value: unknown): { ids: string[]; names: Record<string, string> } => {
+    if (!Array.isArray(value)) {
+      return {
+        ids: [],
+        names: {},
+      };
+    }
     const unique = new Set<string>();
+    const names: Record<string, string> = {};
     value.forEach((item) => {
-      const normalized = String(item || "").trim();
+      const source = item && typeof item === "object" ? (item as Record<string, unknown>) : null;
+      const rawFriendId = source ? source.friendId ?? source.userId : item;
+      const normalized = String(rawFriendId || "").trim();
       if (normalized) {
         unique.add(normalized);
+        if (source) {
+          const playerName = String(source.playerName || "").trim();
+          if (playerName) {
+            names[normalized] = playerName;
+          }
+        }
       }
     });
-    return Array.from(unique);
+    return {
+      ids: Array.from(unique),
+      names,
+    };
   }, []);
 
   const applyFriendPayload = useCallback((payload: Record<string, unknown>) => {
+    const nextNames: Record<string, string> = {};
     if ("friends" in payload) {
-      setFriendIds(normalizeFriendIdList(payload.friends));
+      const normalized = normalizeFriendList(payload.friends);
+      setFriendIds(normalized.ids);
+      Object.assign(nextNames, normalized.names);
     }
     if ("incoming" in payload) {
-      setIncomingFriendIds(normalizeFriendIdList(payload.incoming));
+      const normalized = normalizeFriendList(payload.incoming);
+      setIncomingFriendIds(normalized.ids);
+      Object.assign(nextNames, normalized.names);
     }
     if ("outgoing" in payload) {
-      setOutgoingFriendIds(normalizeFriendIdList(payload.outgoing));
+      const normalized = normalizeFriendList(payload.outgoing);
+      setOutgoingFriendIds(normalized.ids);
+      Object.assign(nextNames, normalized.names);
     }
-  }, [normalizeFriendIdList]);
+    if (Object.keys(nextNames).length > 0) {
+      setFriendDisplayNames((prev) => ({
+        ...prev,
+        ...nextNames,
+      }));
+    }
+  }, [normalizeFriendList]);
 
   const mapFriendErrorMessage = useCallback((code: string) => {
     if (code === "FRIEND_ID_REQUIRED" || code === "REQUESTER_ID_REQUIRED") return t("friendIdRequired");
@@ -12573,6 +12129,7 @@ export default function Home() {
       setFriendIds([]);
       setIncomingFriendIds([]);
       setOutgoingFriendIds([]);
+      setFriendDisplayNames({});
       return;
     }
 
@@ -12629,37 +12186,52 @@ export default function Home() {
   }, [applyFriendPayload, callCloudApi, cloudAuthPayload, mapFriendErrorMessage, refreshFriends, t]);
 
   const activeFriendRows = useMemo(() => {
+    if (friendTab === "search") return friendSearchResults;
     if (friendTab === "incoming") return incomingFriendIds;
     if (friendTab === "outgoing") return outgoingFriendIds;
     return friendIds;
-  }, [friendIds, friendTab, incomingFriendIds, outgoingFriendIds]);
+  }, [friendIds, friendSearchResults, friendTab, incomingFriendIds, outgoingFriendIds]);
+
+  const visibleFriendRows = useMemo(() => {
+    if (friendTab !== "friends") {
+      return activeFriendRows;
+    }
+    const query = friendSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return activeFriendRows;
+    }
+    return activeFriendRows.filter((id) => {
+      const friendIdText = id.toLowerCase();
+      const displayNameText = String(friendDisplayNames[id] || "").toLowerCase();
+      return friendIdText.includes(query) || displayNameText.includes(query);
+    });
+  }, [activeFriendRows, friendDisplayNames, friendSearchQuery, friendTab]);
 
   const friendsHintText = useMemo(() => {
     if (authMode !== "cloud") return t("friendsHintNoAuth");
+    if (friendTab === "search") return t("friendsHintSearch");
     if (friendTab === "incoming") return t("friendsHintIncoming");
     if (friendTab === "outgoing") return t("friendsHintOutgoing");
     return t("friendsHintReady");
   }, [authMode, friendTab, t]);
 
   const activeFriendsEmptyText = useMemo(() => {
+    if (friendTab === "search") {
+      return friendUserIdDraft.trim() ? t("friendsSearchEmpty") : t("friendsSearchPrompt");
+    }
     if (friendTab === "incoming") return t("friendsIncomingEmpty");
     if (friendTab === "outgoing") return t("friendsOutgoingEmpty");
+    if (friendSearchQuery.trim()) return t("friendsSearchEmpty");
     return t("friendsListEmpty");
-  }, [friendTab, t]);
+  }, [friendSearchQuery, friendTab, friendUserIdDraft, t]);
 
   const loginStatusText = useMemo(() => {
-    if (authMode === "guest") {
-      if (language === "ko") return "게스트로 플레이 중입니다.";
-      if (language === "en") return "Playing as guest.";
-      if (language === "zh") return "正在以游客模式游玩。";
-      return "ゲストでプレイ中です。";
-    }
     const safeName = (playerName.trim() || authUserId.trim() || "player").slice(0, 24);
     if (language === "ko") return `${safeName}(사용자명)으로 로그인 중입니다.`;
     if (language === "en") return `Logged in as ${safeName} (username).`;
     if (language === "zh") return `正在以${safeName}（用户名）登录。`;
     return `${safeName}（ユーザー名）でログイン中です。`;
-  }, [authMode, authUserId, language, playerName]);
+  }, [authUserId, language, playerName]);
 
   const canUseFriends = isAuthenticated && authMode === "cloud" && Boolean(cloudAuthPayload);
 
@@ -12669,6 +12241,8 @@ export default function Home() {
       setFriendIds([]);
       setIncomingFriendIds([]);
       setOutgoingFriendIds([]);
+      setFriendSearchResults([]);
+      setFriendDisplayNames({});
       setFriendUnreadCounts({});
       prevUnreadTotalRef.current = 0;
       setActiveFriendChatUserId("");
@@ -12679,6 +12253,19 @@ export default function Home() {
     }
     void refreshFriends(true);
   }, [authMode, isAuthenticated, refreshFriends]);
+
+  useEffect(() => {
+    if (activePanel !== "menu") return;
+    if (!isFriendPanelOpen) return;
+    if (!canUseFriends) return;
+
+    void refreshFriends(false);
+    const timer = window.setInterval(() => {
+      if (isFriendsActionLoading || isFriendSearchLoading) return;
+      void refreshFriends(false);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [activePanel, canUseFriends, isFriendPanelOpen, isFriendSearchLoading, isFriendsActionLoading, refreshFriends]);
 
   useEffect(() => {
     if (!isFriendPanelOpen || friendTab !== "friends" || !activeFriendChatUserId) return;
@@ -12700,7 +12287,6 @@ export default function Home() {
   }, [activePanel, activeFriendChatUserId, friendChatMessages, friendTab, isFriendPanelOpen]);
 
   useEffect(() => {
-    if (!activeFriendChatUserId) return;
     if (friendTab !== "friends") return;
     if (friendIds.includes(activeFriendChatUserId)) return;
     setActiveFriendChatUserId("");
@@ -12715,6 +12301,7 @@ export default function Home() {
       setIsProfileNameEditOpen(false);
       setIsProfileBioEditOpen(false);
       setIsFriendPanelOpen(false);
+      setFriendSearchResults([]);
       setFriendActionUserId("");
       setFriendUnreadCounts({});
       prevUnreadTotalRef.current = 0;
@@ -12791,8 +12378,17 @@ export default function Home() {
     setIsProfileBioEditOpen(false);
   }, [authMode, callCloudApi, cloudAuthPayload, profileBioDraft, t]);
 
-  const handleFriendRequestSend = useCallback(() => {
-    const targetUserId = friendUserIdDraft.trim();
+  const handleFriendRemove = useCallback((targetFriendId?: string) => {
+    const friendUserId = (targetFriendId ?? friendUserIdDraft).trim();
+    if (!friendUserId) {
+      setFriendsMessage(t("friendIdRequired"));
+      return;
+    }
+    void runFriendAction("/api/friends/remove", { friendUserId }, "friendRemoveSuccess");
+  }, [friendUserIdDraft, runFriendAction, t]);
+
+  const handleFriendRequestSend = useCallback((target?: string) => {
+    const targetUserId = (target ?? friendUserIdDraft).trim();
     if (!targetUserId) {
       setFriendsMessage(t("friendIdRequired"));
       return;
@@ -12800,14 +12396,62 @@ export default function Home() {
     void runFriendAction("/api/friends/request/send", { targetUserId }, "friendRequestSent");
   }, [friendUserIdDraft, runFriendAction, t]);
 
-  const handleFriendRemove = useCallback(() => {
-    const friendUserId = friendUserIdDraft.trim();
-    if (!friendUserId) {
-      setFriendsMessage(t("friendIdRequired"));
+  const searchFriendUsers = useCallback(async () => {
+    if (!cloudAuthPayload) {
+      setFriendsMessage(t("friendsHintNoAuth"));
       return;
     }
-    void runFriendAction("/api/friends/remove", { friendUserId }, "friendRemoveSuccess");
-  }, [friendUserIdDraft, runFriendAction, t]);
+    const query = friendUserIdDraft.trim();
+    if (!query) {
+      setFriendsMessage(t("friendIdRequired"));
+      setFriendSearchResults([]);
+      return;
+    }
+
+    setIsFriendSearchLoading(true);
+    try {
+      const payload = await callCloudApi<CloudApiResult>("/api/friends/search", {
+        ...cloudAuthPayload,
+        query,
+      });
+      const source = Array.isArray(payload.users) ? payload.users : [];
+      const nextNames: Record<string, string> = {};
+      const next = Array.from(new Set(source
+        .map((item) => {
+          const row = item && typeof item === "object" ? (item as Record<string, unknown>) : null;
+          if (row) {
+            const friendId = String(row.friendId || row.userId || "").trim();
+            if (!friendId) return "";
+            const playerName = String(row.playerName || "").trim();
+            if (playerName) {
+              nextNames[friendId] = playerName;
+            }
+            return friendId;
+          }
+          return String(item || "").trim();
+        })
+        .filter(Boolean)));
+      if (Object.keys(nextNames).length > 0) {
+        setFriendDisplayNames((prev) => ({
+          ...prev,
+          ...nextNames,
+        }));
+      }
+      setFriendSearchResults(next);
+      if (next.length === 0) {
+        setFriendsMessage(t("friendsSearchEmpty"));
+      } else {
+        setFriendsMessage("");
+      }
+    } catch (error) {
+      console.error(error);
+      const code = error instanceof Error ? error.message : "UNKNOWN";
+      setFriendsMessage(mapFriendErrorMessage(code));
+      setFriendSearchResults([]);
+    } finally {
+      setIsFriendSearchLoading(false);
+    }
+  }, [callCloudApi, cloudAuthPayload, friendUserIdDraft, mapFriendErrorMessage, t]);
 
   const handleFriendApprove = useCallback(() => {
     const requesterUserId = friendUserIdDraft.trim();
@@ -12855,6 +12499,7 @@ export default function Home() {
       const loaded = payload.profile as Record<string, unknown> | undefined;
       setPublicProfile({
         userId: String(loaded?.userId || normalizedUserId || "-").slice(0, 24),
+        friendId: String(loaded?.friendId || normalizedUserId || "-").slice(0, 24),
         playerName: String(loaded?.playerName || normalizedPlayerName || normalizedUserId).slice(0, 24),
         profileBio: String(loaded?.profileBio || "").slice(0, 180),
         playerAvatar: String(loaded?.playerAvatar || ""),
@@ -12976,10 +12621,16 @@ export default function Home() {
     localStorage.setItem(STORAGE_CLOUD_USER_ID_KEY, userId);
     localStorage.setItem(STORAGE_CLOUD_PASSWORD_KEY, password);
     localStorage.setItem(STORAGE_CLOUD_SESSION_ID_KEY, nextSessionId);
+    const nextFriendId = String(data?.friendId || localStorage.getItem(STORAGE_CLOUD_FRIEND_ID_KEY) || "").trim().slice(0, 24);
+    setCloudFriendId(nextFriendId);
+    if (nextFriendId) {
+      localStorage.setItem(STORAGE_CLOUD_FRIEND_ID_KEY, nextFriendId);
+    } else {
+      localStorage.removeItem(STORAGE_CLOUD_FRIEND_ID_KEY);
+    }
     setAuthMode("cloud");
     setAuthSessionId(nextSessionId);
     setEntryMessage("");
-    setMenuMessage("");
     setFriendsMessage("");
     setQuickMatchMode(false);
     setPendingInviteToken("");
@@ -12999,32 +12650,68 @@ export default function Home() {
 
     setIsAuthLoading(true);
     setEntryMessage(t("loginLoading"));
+    const sessionId = authSessionId.trim() || undefined;
     try {
       const data = await callCloudAuthApi("/api/auth/login", {
         userId,
         password,
-        sessionId: authSessionId.trim() || undefined,
+        sessionId,
       });
       applyCloudLoginSuccess(userId, password, data);
     } catch (error) {
-      console.error(error);
       const code = error instanceof Error ? error.message : "";
-      if (code === "ALREADY_LOGGED_IN") {
-        setEntryMessage(t("loginAlreadyLoggedIn"));
+      const isAlreadyLoggedIn = code === "ALREADY_LOGGED_IN" || code === "HTTP 409";
+      if (isAlreadyLoggedIn) {
+        try {
+          await callCloudApi<CloudApiResult>("/api/auth/logout", {
+            userId,
+            password,
+            sessionId,
+          });
+          const retried = await callCloudAuthApi("/api/auth/login", {
+            userId,
+            password,
+            sessionId,
+          });
+          applyCloudLoginSuccess(userId, password, retried);
+          return;
+        } catch (retryError) {
+          console.error(retryError);
+          setEntryMessage(t("loginAlreadyLoggedIn"));
+        }
       } else {
+        console.error(error);
         setEntryMessage(t("loginFailed"));
       }
     } finally {
       setIsAuthLoading(false);
     }
-  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudAuthApi, isAuthLoading, t]);
+  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudApi, callCloudAuthApi, isAuthLoading, t]);
 
   const handleCloudRegister = useCallback(async () => {
     if (isAuthLoading) return;
-    const userId = authUserId.trim();
+    const rawUserId = authUserId.trim();
+    const userId = rawUserId.slice(0, 24);
     const password = authPassword;
     if (!userId || !password) {
       setEntryMessage(t("requireAuthFields"));
+      return;
+    }
+
+    if (rawUserId.length > 24) {
+      setEntryMessage(`${t("registerFailed")} (USER_ID_TOO_LONG: max 24 chars)`);
+      return;
+    }
+
+    const registerConfirmMessage = language === "ja"
+      ? `新規IDを作成しますか？\nID: ${userId}`
+      : language === "ko"
+        ? `새 ID를 생성하시겠습니까?\nID: ${userId}`
+        : language === "zh"
+          ? `要创建新ID吗？\nID: ${userId}`
+          : `Create a new ID?\nID: ${userId}`;
+    if (!window.confirm(registerConfirmMessage)) {
+      setEntryMessage(language === "ja" ? "新規登録をキャンセルしました。" : "Registration canceled.");
       return;
     }
 
@@ -13040,11 +12727,114 @@ export default function Home() {
       setMenuMessage(t("registerSuccess"));
     } catch (error) {
       console.error(error);
-      setEntryMessage(t("registerFailed"));
+      const code = error instanceof Error ? String(error.message || "") : "";
+      if (code === "USER_ALREADY_EXISTS") {
+        setEntryMessage(`${t("registerFailed")} (USER_ALREADY_EXISTS)`);
+      } else if (code === "USER_ID_CASE_CONFLICT") {
+        if (language === "ja") {
+          setEntryMessage("このIDは大文字/小文字違いを含めて既に使われています。別のIDを入力してください。");
+        } else {
+          setEntryMessage("This user ID is already used (case-insensitive). Please choose a different ID.");
+        }
+      } else {
+        setEntryMessage(`${t("registerFailed")} (${code || "UNKNOWN_ERROR"})`);
+      }
     } finally {
       setIsAuthLoading(false);
     }
-  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudAuthApi, isAuthLoading, t]);
+  }, [applyCloudLoginSuccess, authPassword, authSessionId, authUserId, callCloudAuthApi, isAuthLoading, language, t]);
+
+  const buildCredentialMemo = useCallback(() => {
+    const userId = authUserId.trim().slice(0, 24);
+    const password = authPassword;
+    if (!userId || !password) return null;
+
+    const locale = language === "ja" ? "ja-JP" : language === "ko" ? "ko-KR" : language === "zh" ? "zh-CN" : "en-US";
+    const issuedAt = new Date().toLocaleString(locale, { hour12: false });
+    const text = [
+      "Neon Board Arcade Credential Memo",
+      `SavedAt: ${issuedAt}`,
+      `UserId: ${userId}`,
+      `Password: ${password}`,
+      "",
+      "Important: Keep this memo in a safe place.",
+    ].join("\n");
+
+    return { userId, password, issuedAt, text };
+  }, [authPassword, authUserId, language]);
+
+  const handleDownloadCredentialTxt = useCallback(() => {
+    const memo = buildCredentialMemo();
+    if (!memo) {
+      setEntryMessage(t("requireAuthFields"));
+      return;
+    }
+
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15);
+    const safeUserId = memo.userId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fileName = `neon-credential-${safeUserId}-${stamp}.txt`;
+    const blob = new Blob([memo.text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setEntryMessage(t("credentialSaveTxtDone"));
+  }, [buildCredentialMemo, t]);
+
+  const handlePrintCredentialPdf = useCallback(() => {
+    const memo = buildCredentialMemo();
+    if (!memo) {
+      setEntryMessage(t("requireAuthFields"));
+      return;
+    }
+
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=740,height=920");
+    if (!popup) {
+      setEntryMessage(t("credentialSavePopupBlocked"));
+      return;
+    }
+
+    const escapeHtml = (raw: string) => raw
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
+    popup.document.open();
+    popup.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Credential Memo</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; margin: 24px; color: #0f172a; }
+    .card { border: 1px solid #94a3b8; border-radius: 12px; padding: 16px; max-width: 640px; }
+    h1 { margin: 0 0 12px; font-size: 22px; }
+    .row { margin: 8px 0; word-break: break-all; }
+    .label { display: inline-block; min-width: 92px; color: #334155; font-weight: 700; }
+    .warn { margin-top: 14px; color: #b45309; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Neon Board Arcade Credential Memo</h1>
+    <div class="row"><span class="label">SavedAt:</span> ${escapeHtml(memo.issuedAt)}</div>
+    <div class="row"><span class="label">UserId:</span> ${escapeHtml(memo.userId)}</div>
+    <div class="row"><span class="label">Password:</span> ${escapeHtml(memo.password)}</div>
+    <p class="warn">Important: Keep this memo in a safe place.</p>
+  </div>
+</body>
+</html>`);
+    popup.document.close();
+    popup.focus();
+    popup.print();
+    setEntryMessage(t("credentialSavePdfDone"));
+  }, [buildCredentialMemo, t]);
 
   useEffect(() => {
     if (!isAuthLoading) return;
@@ -13077,9 +12867,9 @@ export default function Home() {
     setPendingInviteToken("");
     setRoomChatMessages([]);
     setSpectatorChatMessages([]);
-    setMenuMessage("");
+    setMenuMessage(t("guestStarted"));
     setIsAuthenticated(true);
-  }, [profileNameDraft]);
+  }, [profileNameDraft, t]);
 
   useEffect(() => {
     if (activePanel === "scores") {
@@ -13115,7 +12905,9 @@ export default function Home() {
     setRoomChatMessages([]);
     setSpectatorChatMessages([]);
     localStorage.removeItem(STORAGE_CLOUD_SESSION_ID_KEY);
+    localStorage.removeItem(STORAGE_CLOUD_FRIEND_ID_KEY);
     setAuthSessionId("");
+    setCloudFriendId("");
     setIsAuthenticated(false);
   }, [authMode, authPassword, authSessionId, authUserId, callCloudApi, closeRoomSocket, t]);
 
@@ -13123,13 +12915,20 @@ export default function Home() {
     if (!isAuthenticated || authMode !== "cloud" || !cloudAuthPayload) return;
 
     const ping = () => {
-      void callCloudApi<CloudApiResult>("/api/auth/ping", cloudAuthPayload).catch((error) => {
-        const code = error instanceof Error ? error.message : "";
-        if (code === "INVALID_SESSION") {
-          setEntryMessage(t("loginFailed"));
-          setIsAuthenticated(false);
-        }
-      });
+      void callCloudApi<CloudApiResult>("/api/auth/ping", cloudAuthPayload)
+        .then((payload) => {
+          const nextFriendId = String((payload as Record<string, unknown>).friendId || "").trim().slice(0, 24);
+          if (!nextFriendId) return;
+          setCloudFriendId(nextFriendId);
+          localStorage.setItem(STORAGE_CLOUD_FRIEND_ID_KEY, nextFriendId);
+        })
+        .catch((error) => {
+          const code = error instanceof Error ? error.message : "";
+          if (code === "INVALID_SESSION") {
+            setEntryMessage(t("loginFailed"));
+            setIsAuthenticated(false);
+          }
+        });
     };
 
     ping();
@@ -13149,12 +12948,6 @@ export default function Home() {
     || (othelloChaosTarget === "opponent" && othelloPlayerSide === 1);
   const othelloChaosUsesBothSideSettings = othelloChaosTarget === "both";
   const othelloShowChaosSidePanel = isChaosMode && !gameStarted.othello;
-  const othelloShowChaosSkillPanel = isChaosMode && gameStarted.othello;
-  const othelloBoardMaxWidthClass = othelloShowChaosSkillPanel
-    ? "max-w-[min(96vw,820px)]"
-    : othelloShowChaosSidePanel
-      ? "max-w-[min(96vw,760px)]"
-      : "max-w-[min(96vw,680px)]";
   const othelloCurrentPlayerIndex = othelloPlayerIndex(currentPlayer);
   const othelloSelfDrawVoted = othelloDrawVotes.includes(peerIdRef.current);
   const othelloCanUseChaosSkills =
@@ -13367,13 +13160,6 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 py-6 text-slate-100 sm:px-6 sm:py-8 xl:px-8">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-          <div className="overflow-hidden">
-            <img
-              src="/motionPng/Title/header.png"
-              alt="Neon Board Arcade"
-              className="h-auto w-full object-cover"
-            />
-          </div>
           <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
             <div className="flex items-center justify-end gap-3">
               <div className="flex items-center gap-1 rounded-md border border-cyan-200/30 bg-slate-950/40 p-1 text-xs">
@@ -13418,16 +13204,6 @@ export default function Home() {
                 />
               </label>
 
-              <label className="grid gap-1 text-sm">
-                {t("displayName")}
-                <input
-                  value={profileNameDraft}
-                  onChange={(event) => setProfileNameDraft(event.target.value.slice(0, 24))}
-                  placeholder="Player"
-                  className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                />
-              </label>
-
               <div className="mt-1 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -13451,6 +13227,26 @@ export default function Home() {
                   {t("guestButton")}
                 </button>
               </div>
+
+              <div className="mt-2 rounded-lg border border-slate-400/25 bg-slate-950/35 p-3">
+                <p className="text-xs text-slate-300">{t("credentialSaveLead")}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadCredentialTxt}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1.5 text-xs hover:border-cyan-200/70"
+                  >
+                    {t("credentialSaveTxtButton")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrintCredentialPdf}
+                    className="rounded-md border border-cyan-200/40 px-3 py-1.5 text-xs hover:border-cyan-200/70"
+                  >
+                    {t("credentialSavePdfButton")}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {entryMessage ? <p className="mt-3 text-sm text-cyan-200">{entryMessage}</p> : null}
@@ -13464,20 +13260,13 @@ export default function Home() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 py-6 text-slate-100 sm:px-6 sm:py-8 xl:px-8">
       <div className="mx-auto flex w-full max-w-[92rem] flex-col gap-6">
         <div className="relative">
-          {isAuthenticated ? (
+          {authMode === "cloud" ? (
             <div className="fixed right-3 top-3 z-40 sm:right-6 sm:top-4">
               <p className="rounded-md border border-cyan-200/25 bg-slate-950/70 px-3 py-1 text-xs text-cyan-100/95 backdrop-blur">
                 {loginStatusText}
               </p>
             </div>
           ) : null}
-          <div className="mb-2 overflow-hidden">
-            <img
-              src="/motionPng/Title/header.png"
-              alt="Neon Board Arcade"
-              className="h-auto w-full object-cover"
-            />
-          </div>
           <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex flex-col items-end gap-1">
@@ -13600,7 +13389,16 @@ export default function Home() {
                           </div>
                         </div>
                       ) : null}
-                      <p className="mt-2 text-xs text-slate-300">ID: {authUserId || "-"}</p>
+                      <p className="mt-1 text-xs text-slate-300">Friend ID: {cloudFriendId || "-"}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void copyFriendId();
+                        }}
+                        className="mt-2 rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs"
+                      >
+                        {t("friendIdCopy")}
+                      </button>
                     </section>
                     </>
                     ) : null}
@@ -13660,35 +13458,38 @@ export default function Home() {
                       >
                         {t("friendsTabOutgoing")} ({outgoingFriendIds.length})
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFriendTab("search");
+                          setFriendActionUserId("");
+                        }}
+                        className={`rounded-full border px-2.5 py-1 text-[11px] ${friendTab === "search" ? "border-amber-300/70 bg-amber-300/15" : "border-slate-400/40"}`}
+                      >
+                        {t("friendsTabSearch")}
+                      </button>
                     </div>
 
                     <div className="mt-2.5 grid gap-1.5 sm:grid-cols-[1fr_auto_auto]">
                       <input
-                        value={friendUserIdDraft}
-                        onChange={(event) => setFriendUserIdDraft(event.target.value.slice(0, 24))}
-                        placeholder={t("friendIdPlaceholder")}
+                        value={friendTab === "friends" ? friendSearchQuery : friendUserIdDraft}
+                        onChange={(event) => {
+                          const next = event.target.value.slice(0, 24);
+                          if (friendTab === "friends") {
+                            setFriendSearchQuery(next);
+                          } else {
+                            setFriendUserIdDraft(next);
+                          }
+                        }}
+                        placeholder={friendTab === "friends" ? t("friendSearchPlaceholder") : t("friendIdPlaceholder")}
                         className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2.5 py-1.5 text-xs"
                         disabled={!canUseFriends || isFriendsActionLoading}
                       />
 
                       {friendTab === "friends" ? (
                         <>
-                          <button
-                            type="button"
-                            onClick={handleFriendRequestSend}
-                            disabled={!canUseFriends || isFriendsActionLoading}
-                            className="rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
-                          >
-                            {t("friendRequestSend")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleFriendRemove}
-                            disabled={!canUseFriends || isFriendsActionLoading}
-                            className="rounded-md border border-rose-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
-                          >
-                            {t("friendRemove")}
-                          </button>
+                          <span className="hidden sm:block" />
+                          <span className="hidden sm:block" />
                         </>
                       ) : null}
 
@@ -13726,17 +13527,43 @@ export default function Home() {
                           <span className="hidden sm:block" />
                         </>
                       ) : null}
+
+                      {friendTab === "search" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void searchFriendUsers();
+                            }}
+                            disabled={!canUseFriends || isFriendsActionLoading || isFriendSearchLoading}
+                            className="rounded-md border border-cyan-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
+                          >
+                            {isFriendSearchLoading ? t("processing") : t("friendSearchAction")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleFriendRequestSend()}
+                            disabled={!canUseFriends || isFriendsActionLoading}
+                            className="rounded-md border border-emerald-200/40 px-2.5 py-1.5 text-xs disabled:opacity-60"
+                          >
+                            {t("friendRequestSend")}
+                          </button>
+                        </>
+                      ) : null}
                     </div>
 
                     {isFriendsLoading ? (
                       <p className="mt-3 text-xs text-slate-300">{t("friendsLoading")}</p>
                     ) : (
                       <ul className="mt-2.5 max-h-36 space-y-1 overflow-y-auto text-xs text-slate-200">
-                        {activeFriendRows.length === 0 ? (
+                        {visibleFriendRows.length === 0 ? (
                           <li className="text-slate-300">{activeFriendsEmptyText}</li>
                         ) : (
-                          activeFriendRows.map((id) => (
+                          visibleFriendRows.map((id) => (
                             <li key={`friend-row-${friendTab}-${id}`}>
+                              {(() => {
+                                const displayName = friendDisplayNames[id] || id;
+                                return (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -13750,7 +13577,7 @@ export default function Home() {
                                 className="w-full rounded-md border border-slate-500/40 px-2 py-1 text-left text-xs hover:border-cyan-300/60"
                               >
                                 <span className="flex items-center justify-between gap-2">
-                                  <span>{id}</span>
+                                  <span>{displayName}</span>
                                   {friendTab === "friends" && (friendUnreadCounts[id] || 0) > 0 ? (
                                     <span className="rounded-full bg-rose-400/90 px-1.5 py-0.5 text-[10px] text-slate-950">
                                       {friendUnreadCounts[id]}
@@ -13758,8 +13585,19 @@ export default function Home() {
                                   ) : null}
                                 </span>
                               </button>
+                                );
+                              })()}
                               {friendActionUserId === id ? (
                                 <div className="mt-1 flex justify-end">
+                                  {friendTab === "friends" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => void openPublicProfile(id)}
+                                      className="mr-1 rounded-md border border-cyan-200/40 px-2 py-1 text-[11px]"
+                                    >
+                                      {t("friendViewProfile")}
+                                    </button>
+                                  ) : null}
                                   {friendTab === "friends" ? (
                                     <button
                                       type="button"
@@ -13769,13 +13607,32 @@ export default function Home() {
                                       {t("friendOpenChat")}
                                     </button>
                                   ) : null}
-                                  <button
-                                    type="button"
-                                    onClick={() => void openPublicProfile(id)}
-                                    className="rounded-md border border-cyan-200/40 px-2 py-1 text-[11px]"
-                                  >
-                                    {t("friendViewProfile")}
-                                  </button>
+                                  {friendTab === "friends" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFriendRemove(id)}
+                                      className="rounded-md border border-rose-200/40 px-2 py-1 text-[11px]"
+                                    >
+                                      {t("friendRemove")}
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => void openPublicProfile(id)}
+                                      className="rounded-md border border-cyan-200/40 px-2 py-1 text-[11px]"
+                                    >
+                                      {t("friendViewProfile")}
+                                    </button>
+                                  )}
+                                  {friendTab === "search" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFriendRequestSend(id)}
+                                      className="ml-1 rounded-md border border-emerald-200/40 px-2 py-1 text-[11px]"
+                                    >
+                                      {t("friendRequestSend")}
+                                    </button>
+                                  ) : null}
                                 </div>
                               ) : null}
                             </li>
@@ -13786,7 +13643,7 @@ export default function Home() {
 
                     {friendTab === "friends" && activeFriendChatUserId ? (
                       <div className="mt-3 rounded-xl border border-emerald-200/25 bg-slate-950/60 p-2.5">
-                        <p className="text-[11px] text-emerald-100">{tf("friendChatWith", { userId: activeFriendChatUserId })}</p>
+                        <p className="text-[11px] text-emerald-100">{tf("friendChatWith", { userId: friendDisplayNames[activeFriendChatUserId] || activeFriendChatUserId })}</p>
 
                         {isFriendChatLoading ? (
                           <p className="mt-2 text-xs text-slate-300">{t("friendChatLoading")}</p>
@@ -13798,11 +13655,11 @@ export default function Home() {
                               friendChatMessages.map((row) => (
                                 <li
                                   key={`friend-chat-${row.id}`}
-                                  className={`rounded-md px-2 py-1 ${row.senderUserId === authUserId.trim() ? "bg-cyan-300/15 text-cyan-100" : "bg-slate-800/70 text-slate-100"}`}
+                                  className={`rounded-md px-2 py-1 ${row.senderUserId === cloudFriendId.trim() ? "bg-cyan-300/15 text-cyan-100" : "bg-slate-800/70 text-slate-100"}`}
                                 >
-                                  <p className="text-[10px] opacity-80">{row.senderUserId}</p>
+                                  <p className="text-[10px] opacity-80">{row.senderUserId === cloudFriendId.trim() ? playerName : (friendDisplayNames[row.senderUserId] || row.senderUserId)}</p>
                                   <p className="whitespace-pre-wrap break-words">{row.message}</p>
-                                  {row.senderUserId === authUserId.trim() && row.id <= friendChatPeerReadState.lastReadMessageId ? (
+                                  {row.senderUserId === cloudFriendId.trim() && row.id <= friendChatPeerReadState.lastReadMessageId ? (
                                     <p className="mt-1 text-[10px] text-cyan-200/80">
                                       {friendChatPeerReadState.lastReadAt > 0
                                         ? tf("friendChatReadAt", { time: new Date(friendChatPeerReadState.lastReadAt).toLocaleTimeString() })
@@ -13908,6 +13765,7 @@ export default function Home() {
                 ) : null}
               </div>
             </div>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">{t("appTitle")}</h1>
             {authMode === "cloud" ? (
               <div className="mt-2 flex justify-end gap-2">
                 {canAccessInquiryViewer ? (
@@ -13979,7 +13837,7 @@ export default function Home() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-slate-100">{publicProfile.playerName || publicProfile.userId}</p>
-                      <p className="text-xs text-slate-300">ID: {publicProfile.userId}</p>
+                      <p className="text-xs text-slate-300">Friend ID: {publicProfile.friendId || "-"}</p>
                     </div>
                   </div>
                   <div className="rounded-md border border-slate-500/35 bg-slate-950/50 p-2.5">
@@ -14094,7 +13952,7 @@ export default function Home() {
                               }}
                               className={`w-full rounded-md border px-2 py-1.5 text-left ${selected ? "border-cyan-300/80 bg-cyan-300/20" : "border-slate-500/40 bg-slate-900/40 hover:border-cyan-200/60"}`}
                             >
-                              <p className="font-mono text-[11px]">{room.code}{room.isPublic ? "" : " 🔒"}{room.hasPassword ? " 🔑" : ""}</p>
+                              <p className="font-mono text-[11px]">{room.code}{room.isPublic ? "" : " 🔒"}</p>
                               <p className="text-[11px] text-slate-200">{host} vs {guest}</p>
                               <p className="text-[10px] text-slate-300">{panelText} • {room.totalParticipants}/16 • +{room.spectatorCount}</p>
                             </button>
@@ -14103,63 +13961,6 @@ export default function Home() {
                       })}
                     </ul>
                   )) : null}
-                </div>
-
-                <div className="grid gap-2 rounded-lg border border-slate-400/25 bg-slate-950/35 p-3">
-                  <label className="text-xs font-semibold text-slate-100" htmlFor="menu-room-code-input">
-                    {t("roomCode")}
-                  </label>
-                  <input
-                    id="menu-room-code-input"
-                    value={roomCode}
-                    onChange={(event) => setRoomCode(event.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
-                    placeholder={t("roomCodePlaceholder")}
-                    inputMode="numeric"
-                    maxLength={6}
-                    className="rounded-md border border-slate-400/35 bg-slate-950/60 px-3 py-2 text-sm font-mono tracking-widest text-slate-100 outline-none focus:border-cyan-200/75"
-                  />
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200">
-                    <span className="font-semibold text-slate-200">{t("roomVisibilityLabel")}:</span>
-                    <label className="inline-flex items-center gap-1.5">
-                      <input
-                        type="radio"
-                        checked={roomVisibility === "public"}
-                        onChange={() => setRoomVisibility("public")}
-                      />
-                      {t("roomPublic")}
-                    </label>
-                    <label className="inline-flex items-center gap-1.5">
-                      <input
-                        type="radio"
-                        checked={roomVisibility === "private"}
-                        onChange={() => setRoomVisibility("private")}
-                      />
-                      {t("roomPrivate")}
-                    </label>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs font-semibold text-slate-100" htmlFor="menu-room-password-input">
-                      {t("roomPasswordLabel")}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsRoomPasswordVisible((prev) => !prev)}
-                      className="rounded border border-slate-400/40 px-2 py-[3px] text-[11px] text-slate-100 transition-colors hover:border-cyan-200/70 hover:text-cyan-100"
-                    >
-                      <span aria-hidden="true">{isRoomPasswordVisible ? "🙈" : "👁"}</span>
-                      <span className="sr-only">{isRoomPasswordVisible ? t("roomPasswordHide") : t("roomPasswordShow")}</span>
-                    </button>
-                  </div>
-                  <input
-                    id="menu-room-password-input"
-                    type={isRoomPasswordVisible ? "text" : "password"}
-                    value={roomPassword}
-                    onChange={(event) => setRoomPassword(event.target.value.slice(0, 32))}
-                    placeholder={t("roomPasswordPlaceholder")}
-                    maxLength={32}
-                    autoComplete="new-password"
-                    className="rounded-md border border-slate-400/35 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-200/75"
-                  />
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -14355,18 +14156,7 @@ export default function Home() {
           </section>
         ) : null}
 
-        {connectedRoomCode && activePanel !== "menu" && activePanel !== "scores" ? (
-          <section className="rounded-xl border border-emerald-200/30 bg-emerald-300/10 px-4 py-2 text-sm text-emerald-100">
-            準備状況: {roomReadyCount}/{roomActivePlayerCount} {roomAllReady ? "(開始可能)" : "(全員準備で開始可能)"}
-          </section>
-        ) : null}
-
-        {connectedRoomCode
-        && roomSocketRef.current?.readyState === WebSocket.OPEN
-        && !isRoomWaitingSoloPractice
-        && roomStatus === t("roomStateConnected")
-        && activePanel !== "menu"
-        && activePanel !== "scores" ? (
+        {activePanel !== "menu" && activePanel !== "scores" ? (
           <section className="rounded-xl border border-slate-300/20 bg-slate-900/35 p-3">
             <div className="grid gap-2">
               <p className="text-sm font-semibold text-slate-100">{t("roomTitle")}</p>
@@ -14410,7 +14200,7 @@ export default function Home() {
                               className={`w-full rounded border px-2 py-1 text-left ${selected ? "border-cyan-300/80 bg-cyan-300/20" : "border-slate-500/40 bg-slate-900/35 hover:border-cyan-200/60"}`}
                             >
                               <p>
-                                <span className="font-mono">{room.code}{room.isPublic ? "" : " 🔒"}{room.hasPassword ? " 🔑" : ""}</span>
+                                <span className="font-mono">{room.code}{room.isPublic ? "" : " 🔒"}</span>
                                 <span className="ml-2 text-slate-200">{host} vs {guest}</span>
                               </p>
                               <p className="text-[10px] text-slate-300">{room.totalParticipants}/16 • +{room.spectatorCount}</p>
@@ -14422,14 +14212,14 @@ export default function Home() {
                   )) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200">
-                  <span className="font-semibold text-slate-200">{t("roomVisibilityLabel")}:</span>
+                  <span className="font-semibold text-slate-200">{t("roomPasswordLabel")}:</span>
                   <label className="inline-flex items-center gap-1.5">
                     <input
                       type="radio"
                       checked={roomVisibility === "public"}
                       onChange={() => setRoomVisibility("public")}
                     />
-                    {t("roomPublic")}
+                    {t("roomPasswordOff")}
                   </label>
                   <label className="inline-flex items-center gap-1.5">
                     <input
@@ -14437,31 +14227,8 @@ export default function Home() {
                       checked={roomVisibility === "private"}
                       onChange={() => setRoomVisibility("private")}
                     />
-                    {t("roomPrivate")}
+                    {t("roomPasswordOn")}
                   </label>
-                </div>
-                <div className="grid gap-1.5 text-xs text-slate-200">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="font-semibold text-slate-200" htmlFor="panel-room-password-input">{t("roomPasswordLabel")}</label>
-                    <button
-                      type="button"
-                      onClick={() => setIsRoomPasswordVisible((prev) => !prev)}
-                      className="rounded border border-slate-400/40 px-2 py-[3px] text-[11px] text-slate-100 transition-colors hover:border-cyan-200/70 hover:text-cyan-100"
-                    >
-                      <span aria-hidden="true">{isRoomPasswordVisible ? "🙈" : "👁"}</span>
-                      <span className="sr-only">{isRoomPasswordVisible ? t("roomPasswordHide") : t("roomPasswordShow")}</span>
-                    </button>
-                  </div>
-                  <input
-                    id="panel-room-password-input"
-                    type={isRoomPasswordVisible ? "text" : "password"}
-                    value={roomPassword}
-                    onChange={(event) => setRoomPassword(event.target.value.slice(0, 32))}
-                    placeholder={t("roomPasswordPlaceholder")}
-                    maxLength={32}
-                    autoComplete="new-password"
-                    className="rounded border border-slate-400/35 bg-slate-950/55 px-2 py-1 text-xs text-slate-100 outline-none focus:border-cyan-200/75"
-                  />
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -14503,6 +14270,9 @@ export default function Home() {
                 </button>
               </div>
               <p className="text-xs text-slate-300">{t("roomState")}: {roomStatus}</p>
+              {connectedRoomCode ? (
+                <p className="text-xs text-emerald-200">準備状況: {roomReadyCount}/{roomActivePlayerCount} {roomAllReady ? "(開始可能)" : "(全員準備で開始可能)"}</p>
+              ) : null}
               {menuMessage ? <p className="text-xs text-cyan-200">{menuMessage}</p> : null}
             </div>
           </section>
@@ -14615,9 +14385,9 @@ export default function Home() {
                 </label>
               </div>
 
-            <div className={`mt-4 grid gap-3 ${othelloShowChaosSidePanel ? "md:grid-cols-[minmax(0,1fr)_320px] md:items-start" : othelloShowChaosSkillPanel ? "md:grid-cols-[minmax(0,1fr)_220px] md:items-start" : ""}`}>
+            <div className={`mt-4 grid gap-3 ${othelloShowChaosSidePanel ? "md:grid-cols-2 md:items-start" : ""}`}>
             {othelloShowChaosSidePanel ? (
-              <div className="rounded-lg border border-cyan-200/25 bg-slate-950/35 p-4 text-sm text-slate-200 md:order-2">
+              <div className="rounded-lg border border-cyan-200/25 bg-slate-950/35 p-3 text-xs text-slate-200 md:order-2">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <label className="grid gap-1">
                     <span>{t("othelloChaosTargetLabel")}</span>
@@ -14798,10 +14568,9 @@ export default function Home() {
               </div>
             ) : null}
 
-            {othelloShowChaosSkillPanel ? (
-              <div className="rounded-lg border border-cyan-200/25 bg-slate-950/35 p-3 text-xs text-slate-200 md:order-2">
-                <p className="font-semibold text-cyan-100">SKILL</p>
-                <div className="mt-2 grid gap-2">
+            <div className={othelloShowChaosSidePanel ? "md:order-1" : ""}>
+              {isChaosMode ? (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={onToggleOthelloImmutableSkill}
@@ -14827,10 +14596,7 @@ export default function Home() {
                     {t("othelloChaosDoubleButton")} ({othelloDoubleActionCharges[othelloCurrentPlayerIndex] ?? 0})
                   </button>
                 </div>
-              </div>
-            ) : null}
-
-            <div className={(othelloShowChaosSidePanel || othelloShowChaosSkillPanel) ? "md:order-1" : ""}>
+              ) : null}
 
               {othelloShowImmutableGuide ? (
                 <p className="mb-2 text-xs text-amber-200">{t("othelloChaosImmutableGuide")}</p>
@@ -14839,7 +14605,7 @@ export default function Home() {
                 <p className="mb-2 text-xs text-rose-200">{othelloDestroyGuideText}</p>
               ) : null}
 
-              <div className={`grid w-full ${othelloBoardMaxWidthClass} grid-cols-8 gap-[3px] rounded-xl bg-emerald-900/70 p-1.5 sm:gap-1 sm:p-2 ${(othelloShowChaosSidePanel || othelloShowChaosSkillPanel) ? "mx-auto md:mx-0" : "mx-auto"} ${!gameStarted.othello ? "pointer-events-none opacity-60" : ""}`}>
+              <div className={`grid w-full max-w-[min(96vw,680px)] grid-cols-8 gap-[3px] rounded-xl bg-emerald-900/70 p-1.5 sm:gap-1 sm:p-2 ${othelloShowChaosSidePanel ? "mx-auto md:mx-0" : "mx-auto"} ${!gameStarted.othello ? "pointer-events-none opacity-60" : ""}`}>
                 {board.map((line, row) =>
                   line.map((cell, col) => {
                     const key = `${row}-${col}`;
@@ -15258,7 +15024,7 @@ export default function Home() {
 
               {!gameStarted.shogi ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
 
-              <p className={`text-sm ${isShogiCheckMessage ? "font-semibold text-rose-300" : "text-slate-300"}`}>{shogiMessage}</p>
+              <p className="text-sm text-slate-300">{shogiMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateShogiNow)}</p> : null}
 
               {!connectedRoomCode ? (
@@ -15325,98 +15091,45 @@ export default function Home() {
                       <option value="random">{t("shogiTurnOrderRandom")}</option>
                     </select>
                   </label>
-
-                  {shogiMode === "chaos" ? (
-                    <label className="grid gap-1 text-xs text-slate-300">
-                      <span>{t("shogiChaosMineLabel")}</span>
-                      <select
-                        value={String(shogiChaosMineCount)}
-                        onChange={(event) => {
-                          const raw = Number(event.target.value);
-                          const nextMineCount = Number.isFinite(raw)
-                            ? Math.max(0, Math.min(SHOGI_CHAOS_MINE_COUNT_MAX, Math.floor(raw)))
-                            : 1;
-                          setShogiChaosMineCount(nextMineCount);
-                          resetShogiWith(shogiMode, shogiTurnOrder, { chaosMineCount: nextMineCount });
-                        }}
-                        className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm min-[360px]:text-[13px]"
-                      >
-                        <option value="0">{t("shogiChaosMineNone")}</option>
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                      </select>
-                    </label>
-                  ) : null}
-
-                  {shogiMode === "chaos" ? (
-                    <label className="grid gap-1 text-xs text-slate-300">
-                      <span>{t("shogiChaosKingAbsorbLabel")}</span>
-                      <select
-                        value={shogiChaosKingAbsorbEnabled ? "on" : "off"}
-                        onChange={(event) => {
-                          const nextEnabled = event.target.value !== "off";
-                          setShogiChaosKingAbsorbEnabled(nextEnabled);
-                          resetShogiWith(shogiMode, shogiTurnOrder);
-                        }}
-                        className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm min-[360px]:text-[13px]"
-                      >
-                        <option value="on">ON</option>
-                        <option value="off">OFF</option>
-                      </select>
-                    </label>
-                  ) : null}
                 </div>
               ) : null}
 
-              <div className="relative mt-4 mx-auto w-full max-w-[min(96vw,680px)]">
-                {isShogiOver && shogiResultText ? (
-                  <div className="pointer-events-none absolute left-2 top-2 z-10 rounded-md border border-emerald-300/40 bg-slate-950/75 px-2 py-1 text-xs font-semibold text-emerald-300 shadow-md sm:text-sm">
-                    {t("shogiResultTitle")}: {shogiResultText}
-                  </div>
-                ) : null}
-                <div className={`grid w-full grid-cols-9 gap-[3px] rounded-xl bg-amber-900/60 p-1.5 sm:gap-1 sm:p-2 ${!gameStarted.shogi ? "pointer-events-none opacity-60" : ""}`} style={{ gridTemplateColumns: "repeat(9, minmax(0, 1fr))" }}>
-                  {shogiBoard.map((line, row) =>
-                    line.map((piece, col) => {
-                      const isSelected = selectedShogi?.row === row && selectedShogi?.col === col;
-                      const moveTarget = shogiMoveTargets.get(`${row}-${col}`);
-                      const isMoveTarget = Boolean(moveTarget);
-                      const isCaptureTarget = Boolean(moveTarget?.capture);
-                      const dark = (row + col) % 2 === 1;
-                      return (
-                        <button
-                          key={`s-${row}-${col}`}
-                          type="button"
-                          onClick={() => onShogiClick(row, col)}
-                          disabled={!canOperateShogiNow || isShogiOver || !gameStarted.shogi}
-                          className={`relative aspect-square rounded-sm px-0.5 sm:px-1 ${dark ? "bg-amber-700/95" : "bg-amber-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} ${isMoveTarget ? (isCaptureTarget ? "ring-2 ring-rose-300" : "ring-2 ring-amber-200") : ""} disabled:cursor-not-allowed disabled:opacity-70`}
-                          aria-label={`shogi-${row + 1}-${col + 1}`}
-                        >
-                          {isMoveTarget && !piece ? (
-                            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                              <span className="h-2.5 w-2.5 rounded-full bg-amber-100/95 shadow-[0_0_0_2px_rgba(8,12,22,0.25)] sm:h-3 sm:w-3" />
-                            </span>
-                          ) : null}
-                          {piece ? (
-                            <span
-                              className={`mx-auto grid h-[82%] w-[76%] place-items-center border border-amber-900/80 bg-gradient-to-b from-amber-100 via-amber-200 to-amber-300 text-[clamp(10px,2.45vw,20px)] font-black leading-none text-amber-950 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_2px_4px_rgba(0,0,0,0.25)] [clip-path:polygon(18%_0%,82%_0%,100%_100%,0%_100%)] ${piece.color === "w" ? "rotate-180" : ""}`}
-                              aria-label={`${piece.color === "b" ? t("blackStone") : t("whiteStone")}${shogiPieceLabel(piece)}`}
-                            >
-                              <span className="translate-y-[1px]">{shogiPieceLabel(piece)}</span>
-                            </span>
-                          ) : (
-                            ""
-                          )}
-                          {piece?.isMine && piece.color === shogiMineVisibleColor ? (
-                            <span className="pointer-events-none absolute right-0.5 top-0.5 rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-4 text-white shadow-sm">
-                              !
-                            </span>
-                          ) : null}
-                        </button>
-                      );
-                    }),
-                  )}
-                </div>
+              <div className={`mt-4 mx-auto grid w-full max-w-[min(96vw,680px)] grid-cols-9 gap-[3px] rounded-xl bg-amber-900/60 p-1.5 sm:gap-1 sm:p-2 ${!gameStarted.shogi ? "pointer-events-none opacity-60" : ""}`} style={{ gridTemplateColumns: "repeat(9, minmax(0, 1fr))" }}>
+                {shogiBoard.map((line, row) =>
+                  line.map((piece, col) => {
+                    const isSelected = selectedShogi?.row === row && selectedShogi?.col === col;
+                    const moveTarget = shogiMoveTargets.get(`${row}-${col}`);
+                    const isMoveTarget = Boolean(moveTarget);
+                    const isCaptureTarget = Boolean(moveTarget?.capture);
+                    const dark = (row + col) % 2 === 1;
+                    return (
+                      <button
+                        key={`s-${row}-${col}`}
+                        type="button"
+                        onClick={() => onShogiClick(row, col)}
+                        disabled={!canOperateShogiNow || isShogiOver || !gameStarted.shogi}
+                        className={`relative aspect-square rounded-sm px-0.5 sm:px-1 ${dark ? "bg-amber-700/95" : "bg-amber-500/95"} ${isSelected ? "ring-2 ring-cyan-300" : ""} ${isMoveTarget ? (isCaptureTarget ? "ring-2 ring-rose-300" : "ring-2 ring-amber-200") : ""} disabled:cursor-not-allowed disabled:opacity-70`}
+                        aria-label={`shogi-${row + 1}-${col + 1}`}
+                      >
+                        {isMoveTarget && !piece ? (
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <span className="h-2.5 w-2.5 rounded-full bg-amber-100/95 shadow-[0_0_0_2px_rgba(8,12,22,0.25)] sm:h-3 sm:w-3" />
+                          </span>
+                        ) : null}
+                        {piece ? (
+                          <span
+                            className={`mx-auto grid h-[82%] w-[76%] place-items-center border border-amber-900/80 bg-gradient-to-b from-amber-100 via-amber-200 to-amber-300 text-[clamp(10px,2.45vw,20px)] font-black leading-none text-amber-950 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_2px_4px_rgba(0,0,0,0.25)] [clip-path:polygon(18%_0%,82%_0%,100%_100%,0%_100%)] ${piece.color === "w" ? "rotate-180" : ""}`}
+                            aria-label={`${piece.color === "b" ? t("blackStone") : t("whiteStone")}${shogiPieceLabel(piece)}`}
+                          >
+                            <span className="translate-y-[1px]">{shogiPieceLabel(piece)}</span>
+                          </span>
+                        ) : (
+                          ""
+                        )}
+                      </button>
+                    );
+                  }),
+                )}
               </div>
 
             </article>
@@ -15955,8 +15668,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.blackjack ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.blackjack} className={!gameStarted.blackjack ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.blackjack ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
 
               <div className="mb-3 grid gap-2 rounded-xl border border-cyan-200/20 bg-slate-950/35 p-3">
                 <div className="grid gap-2 text-xs text-slate-200 sm:grid-cols-3">
@@ -16118,6 +15831,7 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
+              )}
             </article>
 
             
@@ -16248,8 +15962,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.sevens ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.sevens} className={!gameStarted.sevens ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.sevens ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
 
               <p className="text-sm text-slate-300">{sevensMessage}</p>
 
@@ -16314,6 +16028,7 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
+              )}
             </article>
 
             
@@ -16351,8 +16066,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.daifugo ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.daifugo} className={!gameStarted.daifugo ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.daifugo ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
 
               <p className="text-sm text-slate-300">{daifugoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateDaifugoNow)}</p> : null}
@@ -16360,11 +16075,7 @@ export default function Home() {
               <div className="mt-4 grid gap-2 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4 text-sm">
                 <p className="flex items-center gap-2">
                   <span>{t("daifugoTable")}:</span>
-                  {daifugoTableCard ? (
-                    renderPlayingCardFace(daifugoCardLabel(daifugoTableCard))
-                  ) : (
-                    <span className="inline-flex h-12 w-9 shrink-0 items-center justify-center rounded-md border border-slate-500/45 bg-slate-800/60 text-xs text-slate-500">-</span>
-                  )}
+                  {daifugoTableCard ? renderPlayingCardFace(daifugoCardLabel(daifugoTableCard)) : <span>-</span>}
                 </p>
                 <p>{t("daifugoCpuHand")}: {daifugoLocalSide === "player" ? daifugoHands[1].length : daifugoHands[0].length}</p>
               </div>
@@ -16405,6 +16116,7 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
+              )}
             </article>
 
             
@@ -17045,8 +16757,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.poker ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.poker} className={!gameStarted.poker ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.poker ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
 
               <div className="mb-3 grid gap-2 rounded-xl border border-cyan-200/20 bg-slate-950/35 p-3">
                 <div className="grid gap-2 text-xs text-slate-200 sm:grid-cols-3">
@@ -17145,7 +16857,7 @@ export default function Home() {
                           >
                             <span className="inline-flex flex-col items-center gap-1">
                               {pokerPhase === "betting"
-                                ? <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200" />
+                                ? <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">🂠</span>
                                 : renderPlayingCardFace(pokerCardLabel(card))}
                               <span className={`rounded px-1.5 py-[1px] text-[10px] ${held ? "bg-cyan-300/25 text-cyan-100" : "bg-slate-700/40 text-slate-400"}`}>
                                 {held ? t("pokerHeld") : ""}
@@ -17168,7 +16880,7 @@ export default function Home() {
                       >
                         {pokerPhase === "showdown"
                           ? renderPlayingCardFace(pokerCardLabel(card))
-                          : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200" />}
+                          : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">??</span>}
                       </div>
                     ))}
                   </div>
@@ -17186,7 +16898,7 @@ export default function Home() {
                         >
                           {card
                             ? renderPlayingCardFace(pokerCardLabel(card))
-                            : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200" />}
+                            : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">?</span>}
                         </div>
                       );
                     })}
@@ -17231,6 +16943,7 @@ export default function Home() {
                 </div>
               ) : null}
               </fieldset>
+              )}
             </article>
 
             
@@ -17290,7 +17003,7 @@ export default function Home() {
               <p className="text-sm text-slate-300">{solitaireMessage}</p>
               <p className="mt-1 text-sm text-slate-300">{tf("solitaireFoundations", { count: foundationCount(solitaireFoundations) })}</p>
 
-              <div className={`solitaire-wrap ${shouldHideSolitaireCardVisuals ? "table-only" : ""}`}>
+              <div className="solitaire-wrap">
                 <div className="solitaire-top-row">
                   <div className="solitaire-piles-left">
                     <button
@@ -17299,7 +17012,7 @@ export default function Home() {
                       className={`solitaire-slot ${solitaireStock.length > 0 ? "card-back" : ""}`}
                       aria-label={t("solitaireStock")}
                     >
-                      {shouldHideSolitaireCardVisuals ? "" : solitaireStock.length > 0 ? "" : "↺"}
+                      {solitaireStock.length > 0 ? "" : "↺"}
                     </button>
 
                     {(() => {
@@ -17325,7 +17038,7 @@ export default function Home() {
                           className={wasteClass}
                           aria-label={t("solitaireWaste")}
                         >
-                          {wasteTop ? renderSolitaireCardText(wasteTop) : ""}
+                          {wasteTop ? solitaireCardLabel(wasteTop) : "W"}
                         </button>
                       );
                     })()}
@@ -17354,7 +17067,7 @@ export default function Home() {
                           className={className}
                           aria-label={`Foundation ${suit}`}
                         >
-                          {top ? renderSolitaireCardText(top) : ""}
+                          {top ? solitaireCardLabel(top) : solitaireSuitSymbol(suit)}
                         </button>
                       );
                     })}
@@ -17429,7 +17142,7 @@ export default function Home() {
                               className={classes.join(" ")}
                               style={{ marginTop: idx === 0 ? "0" : card.faceUp ? "var(--solitaire-overlap-face)" : "var(--solitaire-overlap-back)", zIndex: idx + 1 }}
                             >
-                              {card.faceUp ? renderSolitaireCardText(card) : ""}
+                              {card.faceUp ? solitaireCardLabel(card) : ""}
                             </button>
                           );
                         })
@@ -17634,8 +17347,8 @@ export default function Home() {
                 </div>
               ) : null}
 
-              {!gameStarted.uno ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.uno} className={!gameStarted.uno ? "mt-2 game-table-preview pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.uno ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
+              <fieldset className="mt-2">
 
               <p className="text-sm text-slate-300">{unoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateUnoNow)}</p> : null}
@@ -17912,6 +17625,7 @@ export default function Home() {
                 </button>
               </div>
               </fieldset>
+              )}
             </article>
 
             

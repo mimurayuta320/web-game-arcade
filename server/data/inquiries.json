@@ -24,5 +24,23 @@
     "lang": "ja",
     "submittedAt": "2026-07-24T13:00:15.425Z",
     "userId": "阿部晋三マイクロビキニ部"
+  },
+  {
+    "id": "0f586b3a-10c2-444f-9e7c-b1265423be58",
+    "name": "test",
+    "message": "ゲームをもう少し増やしてほしい",
+    "url": "http://localhost:3000/",
+    "lang": "ja",
+    "submittedAt": "2026-07-29T15:17:59.082Z",
+    "userId": "NullToufu"
+  },
+  {
+    "id": "7df7c8c6-ff68-4eed-bdfb-16b1ce92b2b9",
+    "name": "mysql-check",
+    "message": "mysql inquiry route check message",
+    "url": "http://localhost/test",
+    "lang": "ja",
+    "submittedAt": "2026-07-29T16:12:41.440Z",
+    "userId": "mysqlsw_20260730011241"
   }
 ]

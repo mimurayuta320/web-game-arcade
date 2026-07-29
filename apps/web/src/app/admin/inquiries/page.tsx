@@ -15,6 +15,7 @@ type InquiryItem = {
 const MAX_LIMIT = 200;
 const STORAGE_CLOUD_USER_ID_KEY = "neon-cloud-user-id";
 const STORAGE_CLOUD_PASSWORD_KEY = "neon-cloud-password";
+const STORAGE_CLOUD_SESSION_ID_KEY = "neon-cloud-session-id";
 
 type ViewerLabels = {
   title: string;
@@ -75,13 +76,23 @@ export default function AdminInquiryViewerPage() {
 
   const canLoad = useMemo(() => !isLoading, [isLoading]);
 
+  const handleBackToMenu = () => {
+    if (typeof window === "undefined") return;
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    window.location.href = "/";
+  };
+
   const readCloudAuth = () => {
     if (typeof window === "undefined") {
-      return { userId: "", password: "" };
+      return { userId: "", password: "", sessionId: "" };
     }
     return {
       userId: String(localStorage.getItem(STORAGE_CLOUD_USER_ID_KEY) || "").trim(),
       password: String(localStorage.getItem(STORAGE_CLOUD_PASSWORD_KEY) || ""),
+      sessionId: String(localStorage.getItem(STORAGE_CLOUD_SESSION_ID_KEY) || "").trim(),
     };
   };
 
@@ -104,6 +115,7 @@ export default function AdminInquiryViewerPage() {
         body: JSON.stringify({
           userId: auth.userId,
           password: auth.password,
+          sessionId: auth.sessionId,
           limit: normalizeLimit(limit),
         }),
       });
@@ -159,6 +171,7 @@ export default function AdminInquiryViewerPage() {
         body: JSON.stringify({
           userId: auth.userId,
           password: auth.password,
+          sessionId: auth.sessionId,
           id,
         }),
       });
@@ -220,9 +233,13 @@ export default function AdminInquiryViewerPage() {
             >
               {isLoading ? LABELS.loading : LABELS.load}
             </button>
-            <a href="/" className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm">
+            <button
+              type="button"
+              onClick={handleBackToMenu}
+              className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+            >
               {LABELS.backToMenu}
-            </a>
+            </button>
           </div>
 
           {status ? (
@@ -258,9 +275,7 @@ export default function AdminInquiryViewerPage() {
                   </button>
                 </div>
                 <p className="mt-2 text-xs text-slate-300">name: {item.name || "anonymous"}</p>
-                <p className="mt-1 text-xs text-slate-300">userId: {item.userId || "-"}</p>
                 <p className="mt-1 text-xs text-slate-300">lang: {item.lang || "-"}</p>
-                <p className="mt-1 text-xs text-slate-300 break-all">url: {item.url || "-"}</p>
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm">{item.message || ""}</p>
               </article>
             ))

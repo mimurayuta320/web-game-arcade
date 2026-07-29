@@ -38,6 +38,7 @@ export type UserSumAggregateOutputType = {
 
 export type UserMinAggregateOutputType = {
   userId: string | null
+  friendId: string | null
   passHashBcrypt: string | null
   createdAt: bigint | null
   updatedAt: bigint | null
@@ -45,6 +46,7 @@ export type UserMinAggregateOutputType = {
 
 export type UserMaxAggregateOutputType = {
   userId: string | null
+  friendId: string | null
   passHashBcrypt: string | null
   createdAt: bigint | null
   updatedAt: bigint | null
@@ -52,6 +54,7 @@ export type UserMaxAggregateOutputType = {
 
 export type UserCountAggregateOutputType = {
   userId: number
+  friendId: number
   passHashBcrypt: number
   createdAt: number
   updatedAt: number
@@ -71,6 +74,7 @@ export type UserSumAggregateInputType = {
 
 export type UserMinAggregateInputType = {
   userId?: true
+  friendId?: true
   passHashBcrypt?: true
   createdAt?: true
   updatedAt?: true
@@ -78,6 +82,7 @@ export type UserMinAggregateInputType = {
 
 export type UserMaxAggregateInputType = {
   userId?: true
+  friendId?: true
   passHashBcrypt?: true
   createdAt?: true
   updatedAt?: true
@@ -85,6 +90,7 @@ export type UserMaxAggregateInputType = {
 
 export type UserCountAggregateInputType = {
   userId?: true
+  friendId?: true
   passHashBcrypt?: true
   createdAt?: true
   updatedAt?: true
@@ -179,6 +185,7 @@ export type UserGroupByArgs<ExtArgs extends runtime.Types.Extensions.InternalArg
 
 export type UserGroupByOutputType = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint
   updatedAt: bigint
@@ -209,6 +216,7 @@ export type UserWhereInput = {
   OR?: Prisma.UserWhereInput[]
   NOT?: Prisma.UserWhereInput | Prisma.UserWhereInput[]
   userId?: Prisma.StringFilter<"User"> | string
+  friendId?: Prisma.StringFilter<"User"> | string
   passHashBcrypt?: Prisma.StringFilter<"User"> | string
   createdAt?: Prisma.BigIntFilter<"User"> | bigint | number
   updatedAt?: Prisma.BigIntFilter<"User"> | bigint | number
@@ -229,6 +237,7 @@ export type UserWhereInput = {
 
 export type UserOrderByWithRelationInput = {
   userId?: Prisma.SortOrder
+  friendId?: Prisma.SortOrder
   passHashBcrypt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -250,6 +259,7 @@ export type UserOrderByWithRelationInput = {
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
   userId?: string
+  friendId?: string
   AND?: Prisma.UserWhereInput | Prisma.UserWhereInput[]
   OR?: Prisma.UserWhereInput[]
   NOT?: Prisma.UserWhereInput | Prisma.UserWhereInput[]
@@ -269,10 +279,11 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   readStates?: Prisma.FriendChatReadListRelationFilter
   readByFriend?: Prisma.FriendChatReadListRelationFilter
   inquiries?: Prisma.InquiryListRelationFilter
-}, "userId">
+}, "userId" | "friendId">
 
 export type UserOrderByWithAggregationInput = {
   userId?: Prisma.SortOrder
+  friendId?: Prisma.SortOrder
   passHashBcrypt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -288,6 +299,7 @@ export type UserScalarWhereWithAggregatesInput = {
   OR?: Prisma.UserScalarWhereWithAggregatesInput[]
   NOT?: Prisma.UserScalarWhereWithAggregatesInput | Prisma.UserScalarWhereWithAggregatesInput[]
   userId?: Prisma.StringWithAggregatesFilter<"User"> | string
+  friendId?: Prisma.StringWithAggregatesFilter<"User"> | string
   passHashBcrypt?: Prisma.StringWithAggregatesFilter<"User"> | string
   createdAt?: Prisma.BigIntWithAggregatesFilter<"User"> | bigint | number
   updatedAt?: Prisma.BigIntWithAggregatesFilter<"User"> | bigint | number
@@ -295,6 +307,7 @@ export type UserScalarWhereWithAggregatesInput = {
 
 export type UserCreateInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -315,6 +328,7 @@ export type UserCreateInput = {
 
 export type UserUncheckedCreateInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -335,6 +349,7 @@ export type UserUncheckedCreateInput = {
 
 export type UserUpdateInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -355,6 +370,7 @@ export type UserUpdateInput = {
 
 export type UserUncheckedUpdateInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -375,6 +391,7 @@ export type UserUncheckedUpdateInput = {
 
 export type UserCreateManyInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -382,6 +399,7 @@ export type UserCreateManyInput = {
 
 export type UserUpdateManyMutationInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -389,6 +407,7 @@ export type UserUpdateManyMutationInput = {
 
 export type UserUncheckedUpdateManyInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -402,6 +421,7 @@ export type UserOrderByRelevanceInput = {
 
 export type UserCountOrderByAggregateInput = {
   userId?: Prisma.SortOrder
+  friendId?: Prisma.SortOrder
   passHashBcrypt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -414,6 +434,7 @@ export type UserAvgOrderByAggregateInput = {
 
 export type UserMaxOrderByAggregateInput = {
   userId?: Prisma.SortOrder
+  friendId?: Prisma.SortOrder
   passHashBcrypt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -421,6 +442,7 @@ export type UserMaxOrderByAggregateInput = {
 
 export type UserMinOrderByAggregateInput = {
   userId?: Prisma.SortOrder
+  friendId?: Prisma.SortOrder
   passHashBcrypt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -641,6 +663,7 @@ export type UserUpdateOneWithoutInquiriesNestedInput = {
 
 export type UserCreateWithoutProfileInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -660,6 +683,7 @@ export type UserCreateWithoutProfileInput = {
 
 export type UserUncheckedCreateWithoutProfileInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -695,6 +719,7 @@ export type UserUpdateToOneWithWhereWithoutProfileInput = {
 
 export type UserUpdateWithoutProfileInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -714,6 +739,7 @@ export type UserUpdateWithoutProfileInput = {
 
 export type UserUncheckedUpdateWithoutProfileInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -733,6 +759,7 @@ export type UserUncheckedUpdateWithoutProfileInput = {
 
 export type UserCreateWithoutSessionInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -752,6 +779,7 @@ export type UserCreateWithoutSessionInput = {
 
 export type UserUncheckedCreateWithoutSessionInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -787,6 +815,7 @@ export type UserUpdateToOneWithWhereWithoutSessionInput = {
 
 export type UserUpdateWithoutSessionInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -806,6 +835,7 @@ export type UserUpdateWithoutSessionInput = {
 
 export type UserUncheckedUpdateWithoutSessionInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -825,6 +855,7 @@ export type UserUncheckedUpdateWithoutSessionInput = {
 
 export type UserCreateWithoutScoresInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -844,6 +875,7 @@ export type UserCreateWithoutScoresInput = {
 
 export type UserUncheckedCreateWithoutScoresInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -879,6 +911,7 @@ export type UserUpdateToOneWithWhereWithoutScoresInput = {
 
 export type UserUpdateWithoutScoresInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -898,6 +931,7 @@ export type UserUpdateWithoutScoresInput = {
 
 export type UserUncheckedUpdateWithoutScoresInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -917,6 +951,7 @@ export type UserUncheckedUpdateWithoutScoresInput = {
 
 export type UserCreateWithoutMatchRecordsInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -936,6 +971,7 @@ export type UserCreateWithoutMatchRecordsInput = {
 
 export type UserUncheckedCreateWithoutMatchRecordsInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -971,6 +1007,7 @@ export type UserUpdateToOneWithWhereWithoutMatchRecordsInput = {
 
 export type UserUpdateWithoutMatchRecordsInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -990,6 +1027,7 @@ export type UserUpdateWithoutMatchRecordsInput = {
 
 export type UserUncheckedUpdateWithoutMatchRecordsInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1009,6 +1047,7 @@ export type UserUncheckedUpdateWithoutMatchRecordsInput = {
 
 export type UserCreateWithoutFriendsInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1028,6 +1067,7 @@ export type UserCreateWithoutFriendsInput = {
 
 export type UserUncheckedCreateWithoutFriendsInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1052,6 +1092,7 @@ export type UserCreateOrConnectWithoutFriendsInput = {
 
 export type UserCreateWithoutFriendOfInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1071,6 +1112,7 @@ export type UserCreateWithoutFriendOfInput = {
 
 export type UserUncheckedCreateWithoutFriendOfInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1106,6 +1148,7 @@ export type UserUpdateToOneWithWhereWithoutFriendsInput = {
 
 export type UserUpdateWithoutFriendsInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1125,6 +1168,7 @@ export type UserUpdateWithoutFriendsInput = {
 
 export type UserUncheckedUpdateWithoutFriendsInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1155,6 +1199,7 @@ export type UserUpdateToOneWithWhereWithoutFriendOfInput = {
 
 export type UserUpdateWithoutFriendOfInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1174,6 +1219,7 @@ export type UserUpdateWithoutFriendOfInput = {
 
 export type UserUncheckedUpdateWithoutFriendOfInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1193,6 +1239,7 @@ export type UserUncheckedUpdateWithoutFriendOfInput = {
 
 export type UserCreateWithoutSentRequestsInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1212,6 +1259,7 @@ export type UserCreateWithoutSentRequestsInput = {
 
 export type UserUncheckedCreateWithoutSentRequestsInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1236,6 +1284,7 @@ export type UserCreateOrConnectWithoutSentRequestsInput = {
 
 export type UserCreateWithoutRecvRequestsInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1255,6 +1304,7 @@ export type UserCreateWithoutRecvRequestsInput = {
 
 export type UserUncheckedCreateWithoutRecvRequestsInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1290,6 +1340,7 @@ export type UserUpdateToOneWithWhereWithoutSentRequestsInput = {
 
 export type UserUpdateWithoutSentRequestsInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1309,6 +1360,7 @@ export type UserUpdateWithoutSentRequestsInput = {
 
 export type UserUncheckedUpdateWithoutSentRequestsInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1339,6 +1391,7 @@ export type UserUpdateToOneWithWhereWithoutRecvRequestsInput = {
 
 export type UserUpdateWithoutRecvRequestsInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1358,6 +1411,7 @@ export type UserUpdateWithoutRecvRequestsInput = {
 
 export type UserUncheckedUpdateWithoutRecvRequestsInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1377,6 +1431,7 @@ export type UserUncheckedUpdateWithoutRecvRequestsInput = {
 
 export type UserCreateWithoutSentMessagesInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1396,6 +1451,7 @@ export type UserCreateWithoutSentMessagesInput = {
 
 export type UserUncheckedCreateWithoutSentMessagesInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1420,6 +1476,7 @@ export type UserCreateOrConnectWithoutSentMessagesInput = {
 
 export type UserCreateWithoutRecvMessagesInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1439,6 +1496,7 @@ export type UserCreateWithoutRecvMessagesInput = {
 
 export type UserUncheckedCreateWithoutRecvMessagesInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1474,6 +1532,7 @@ export type UserUpdateToOneWithWhereWithoutSentMessagesInput = {
 
 export type UserUpdateWithoutSentMessagesInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1493,6 +1552,7 @@ export type UserUpdateWithoutSentMessagesInput = {
 
 export type UserUncheckedUpdateWithoutSentMessagesInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1523,6 +1583,7 @@ export type UserUpdateToOneWithWhereWithoutRecvMessagesInput = {
 
 export type UserUpdateWithoutRecvMessagesInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1542,6 +1603,7 @@ export type UserUpdateWithoutRecvMessagesInput = {
 
 export type UserUncheckedUpdateWithoutRecvMessagesInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1561,6 +1623,7 @@ export type UserUncheckedUpdateWithoutRecvMessagesInput = {
 
 export type UserCreateWithoutReadStatesInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1580,6 +1643,7 @@ export type UserCreateWithoutReadStatesInput = {
 
 export type UserUncheckedCreateWithoutReadStatesInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1604,6 +1668,7 @@ export type UserCreateOrConnectWithoutReadStatesInput = {
 
 export type UserCreateWithoutReadByFriendInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1623,6 +1688,7 @@ export type UserCreateWithoutReadByFriendInput = {
 
 export type UserUncheckedCreateWithoutReadByFriendInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1658,6 +1724,7 @@ export type UserUpdateToOneWithWhereWithoutReadStatesInput = {
 
 export type UserUpdateWithoutReadStatesInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1677,6 +1744,7 @@ export type UserUpdateWithoutReadStatesInput = {
 
 export type UserUncheckedUpdateWithoutReadStatesInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1707,6 +1775,7 @@ export type UserUpdateToOneWithWhereWithoutReadByFriendInput = {
 
 export type UserUpdateWithoutReadByFriendInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1726,6 +1795,7 @@ export type UserUpdateWithoutReadByFriendInput = {
 
 export type UserUncheckedUpdateWithoutReadByFriendInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1745,6 +1815,7 @@ export type UserUncheckedUpdateWithoutReadByFriendInput = {
 
 export type UserCreateWithoutInquiriesInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1764,6 +1835,7 @@ export type UserCreateWithoutInquiriesInput = {
 
 export type UserUncheckedCreateWithoutInquiriesInput = {
   userId: string
+  friendId: string
   passHashBcrypt: string
   createdAt: bigint | number
   updatedAt: bigint | number
@@ -1799,6 +1871,7 @@ export type UserUpdateToOneWithWhereWithoutInquiriesInput = {
 
 export type UserUpdateWithoutInquiriesInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1818,6 +1891,7 @@ export type UserUpdateWithoutInquiriesInput = {
 
 export type UserUncheckedUpdateWithoutInquiriesInput = {
   userId?: Prisma.StringFieldUpdateOperationsInput | string
+  friendId?: Prisma.StringFieldUpdateOperationsInput | string
   passHashBcrypt?: Prisma.StringFieldUpdateOperationsInput | string
   createdAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
   updatedAt?: Prisma.BigIntFieldUpdateOperationsInput | bigint | number
@@ -1958,6 +2032,7 @@ export type UserCountOutputTypeCountInquiriesArgs<ExtArgs extends runtime.Types.
 
 export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   userId?: boolean
+  friendId?: boolean
   passHashBcrypt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -1981,12 +2056,13 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
 
 export type UserSelectScalar = {
   userId?: boolean
+  friendId?: boolean
   passHashBcrypt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"userId" | "passHashBcrypt" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
+export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"userId" | "friendId" | "passHashBcrypt" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
 export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   profile?: boolean | Prisma.User$profileArgs<ExtArgs>
   session?: boolean | Prisma.User$sessionArgs<ExtArgs>
@@ -2023,6 +2099,7 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     userId: string
+    friendId: string
     passHashBcrypt: string
     createdAt: bigint
     updatedAt: bigint
@@ -2409,6 +2486,7 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
  */
 export interface UserFieldRefs {
   readonly userId: Prisma.FieldRef<"User", 'String'>
+  readonly friendId: Prisma.FieldRef<"User", 'String'>
   readonly passHashBcrypt: Prisma.FieldRef<"User", 'String'>
   readonly createdAt: Prisma.FieldRef<"User", 'BigInt'>
   readonly updatedAt: Prisma.FieldRef<"User", 'BigInt'>

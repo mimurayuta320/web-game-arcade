@@ -208,6 +208,8 @@ function minesweeperFormat(key, vars = {}) {
 }
 
 export function initMinesweeper(options = {}) {
+  const listenerController = new AbortController();
+  const listenerSignal = listenerController.signal;
   const boardEl = document.getElementById("minesweeperBoard");
   const boardViewportEl = document.getElementById("minesweeperBoardViewport");
   const playLayoutEl = document.getElementById("minesweeperPlayLayout");
@@ -751,6 +753,14 @@ export function initMinesweeper(options = {}) {
       ctx.lineWidth = 2;
       ctx.strokeRect(vx, vy, vw, vh);
     }
+  }
+
+  function syncBoardViewportOverflow() {
+    if (!boardViewportEl || !boardEl) return;
+    const overflowX = boardEl.scrollWidth - boardViewportEl.clientWidth > 1;
+    const overflowY = boardEl.scrollHeight - boardViewportEl.clientHeight > 1;
+    boardViewportEl.style.overflowX = overflowX ? "auto" : "hidden";
+    boardViewportEl.style.overflowY = overflowY ? "auto" : "hidden";
   }
 
   function renderStartCountdownOverlay() {
@@ -1448,6 +1458,7 @@ export function initMinesweeper(options = {}) {
     } else if (state.cols >= 20) {
       cellSize = 30;
     }
+
     boardEl.style.setProperty("--ms-cell-size", `${cellSize}px`);
     boardEl.style.setProperty("--ms-font-size", `${Math.max(8, Math.floor(cellSize * 0.62))}px`);
     boardEl.style.setProperty("--ms-radius", `${Math.max(2, Math.floor(cellSize * 0.22))}px`);
@@ -1693,6 +1704,8 @@ export function initMinesweeper(options = {}) {
         boardEl.appendChild(cellBtn);
       }
     }
+
+    syncBoardViewportOverflow();
   }
 
   function render() {
@@ -1803,7 +1816,7 @@ export function initMinesweeper(options = {}) {
       applyRoomModePayload({ difficulty: state.difficulty }, { shouldEmit: true });
     }
     enterStandby();
-  });
+  }, { signal: listenerSignal });
 
   boardSizeSelectEl?.addEventListener("change", () => {
     if (isRoomMode() && state.roomRole !== "host") return;
@@ -1814,7 +1827,7 @@ export function initMinesweeper(options = {}) {
       applyRoomModePayload({ boardSize: state.boardSize }, { shouldEmit: true });
     }
     enterStandby();
-  });
+  }, { signal: listenerSignal });
 
   modeSelectEl?.addEventListener("change", () => {
     if (isRoomMode() && state.roomRole !== "host") return;
@@ -1832,7 +1845,7 @@ export function initMinesweeper(options = {}) {
       applyRoomModePayload({ playMode: state.playMode }, { shouldEmit: true });
     }
     enterStandby();
-  });
+  }, { signal: listenerSignal });
 
   playerCountSelectEl?.addEventListener("change", () => {
     if (isRoomMode() && state.roomRole !== "host") return;
@@ -1842,7 +1855,7 @@ export function initMinesweeper(options = {}) {
       applyRoomModePayload({ playerCount: state.playerCount }, { shouldEmit: true });
     }
     enterStandby();
-  });
+  }, { signal: listenerSignal });
 
   coopLivesSelectEl?.addEventListener("change", () => {
     if (!coopLivesSelectEl) return;
@@ -1853,7 +1866,7 @@ export function initMinesweeper(options = {}) {
       applyRoomModePayload({ coopMissLimit: state.coopMissLimit }, { shouldEmit: true });
     }
     enterStandby();
-  });
+  }, { signal: listenerSignal });
 
   startBtn?.addEventListener("click", () => {
     if (isRoomMode() && state.roomRole !== "host") return;
@@ -1862,7 +1875,7 @@ export function initMinesweeper(options = {}) {
       return;
     }
     startNewGame({ fromRemote: false });
-  });
+  }, { signal: listenerSignal });
 
   remakeBtn?.addEventListener("click", () => {
     const confirmed = window.confirm(minesweeperText("remakeConfirm"));
@@ -1874,13 +1887,13 @@ export function initMinesweeper(options = {}) {
     }
 
     enterStandby();
-  });
+  }, { signal: listenerSignal });
 
   menuBtn?.addEventListener("click", () => {
     const confirmed = window.confirm(minesweeperText("menuConfirm"));
     if (!confirmed) return;
     options.onBackToMenu?.();
-  });
+  }, { signal: listenerSignal });
 
   langSelectEl?.addEventListener("change", () => {
     syncDifficultyTexts();
@@ -1888,15 +1901,17 @@ export function initMinesweeper(options = {}) {
       messageEl.textContent = minesweeperText("standby");
     }
     render();
-  });
+  }, { signal: listenerSignal });
 
   boardEl?.addEventListener("mouseleave", () => {
     sendLocalCursor(null, null);
-  });
+  }, { signal: listenerSignal });
 
   boardViewportEl?.addEventListener("scroll", () => {
     renderOverviewMap();
-  });
+  }, { signal: listenerSignal });
+
+  window.addEventListener("resize", syncBoardViewportOverflow, { signal: listenerSignal });
 
   overviewCanvasEl?.addEventListener("click", (event) => {
     if (!(overviewCanvasEl instanceof HTMLCanvasElement) || !boardViewportEl || !boardEl) return;
@@ -1913,7 +1928,7 @@ export function initMinesweeper(options = {}) {
     boardViewportEl.scrollLeft = Math.max(0, Math.min(boardEl.scrollWidth - boardViewportEl.clientWidth, targetLeft));
     boardViewportEl.scrollTop = Math.max(0, Math.min(boardEl.scrollHeight - boardViewportEl.clientHeight, targetTop));
     renderOverviewMap();
-  });
+  }, { signal: listenerSignal });
 
   syncDifficultyTexts();
 
@@ -1923,6 +1938,7 @@ export function initMinesweeper(options = {}) {
     startNewGame: ({ fromRemote = false } = {}) => startNewGame({ fromRemote }),
     enterStandby,
     stop: () => {
+      listenerController.abort();
       clearTimer();
       clearDuelPenaltyTimer();
       clearStartCountdown();

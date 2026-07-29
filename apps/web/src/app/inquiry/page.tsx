@@ -14,7 +14,6 @@ const LABELS: Record<Language, {
   lead: string;
   name: string;
   message: string;
-  source: string;
   send: string;
   sending: string;
   back: string;
@@ -29,7 +28,6 @@ const LABELS: Record<Language, {
     lead: "ご意見・不具合報告をこちらから送信できます。",
     name: "お名前（任意）",
     message: "内容",
-    source: "送信元URL",
     send: "送信する",
     sending: "送信中...",
     back: "メニューへ戻る",
@@ -44,7 +42,6 @@ const LABELS: Record<Language, {
     lead: "의견 및 버그 제보를 보낼 수 있습니다.",
     name: "이름 (선택)",
     message: "내용",
-    source: "보낸 URL",
     send: "보내기",
     sending: "전송 중...",
     back: "메뉴로 돌아가기",
@@ -59,7 +56,6 @@ const LABELS: Record<Language, {
     lead: "Send feedback or bug reports from here.",
     name: "Name (optional)",
     message: "Message",
-    source: "Source URL",
     send: "Send",
     sending: "Sending...",
     back: "Back to Menu",
@@ -77,32 +73,10 @@ function normalizeLanguage(value: string | null): Language {
   return "ja";
 }
 
-function isHttpUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function resolveSourceUrl(): string {
-  if (typeof window === "undefined") return "";
-  const params = new URLSearchParams(window.location.search);
-  const sourceFromQuery = String(params.get("source") || "").trim();
-  if (isHttpUrl(sourceFromQuery)) return sourceFromQuery;
-
-  const referrer = String(document.referrer || "").trim();
-  if (isHttpUrl(referrer)) return referrer;
-
-  return window.location.origin;
-}
-
 export default function InquiryPage() {
   const [language, setLanguage] = useState<Language>("ja");
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
-  const [source, setSource] = useState("");
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -111,7 +85,6 @@ export default function InquiryPage() {
     const nextLanguage = normalizeLanguage(localStorage.getItem(STORAGE_UI_LANGUAGE_KEY));
     setLanguage(nextLanguage);
     setName("");
-    setSource(resolveSourceUrl());
   }, []);
 
   const labels = useMemo(() => LABELS[language], [language]);
@@ -160,7 +133,6 @@ export default function InquiryPage() {
         body: JSON.stringify({
           name: trimmedName,
           message: trimmedMessage,
-          url: source,
           lang: language,
           userId,
         }),
@@ -217,16 +189,6 @@ export default function InquiryPage() {
             </label>
 
             <p className="text-right text-xs text-slate-300">{message.length} / {MAX_MESSAGE_LENGTH}</p>
-
-            <label className="grid gap-1 text-sm">
-              <span>{labels.source}</span>
-              <input
-                value={source}
-                onChange={(event) => setSource(event.target.value)}
-                className="rounded-lg border border-slate-400/40 bg-slate-950/70 px-3 py-2"
-                readOnly
-              />
-            </label>
 
             <div className="flex flex-wrap gap-2">
               <button

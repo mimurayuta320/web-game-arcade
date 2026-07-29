@@ -81,6 +81,7 @@ export type TransactionIsolationLevel = (typeof TransactionIsolationLevel)[keyof
 
 export const UserScalarFieldEnum = {
   userId: 'userId',
+  friendId: 'friendId',
   passHashBcrypt: 'passHashBcrypt',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
@@ -214,6 +215,7 @@ export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNu
 
 export const UserOrderByRelevanceFieldEnum = {
   userId: 'userId',
+  friendId: 'friendId',
   passHashBcrypt: 'passHashBcrypt'
 } as const
 

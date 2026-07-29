@@ -1,9 +1,79 @@
 import { Injectable } from '@nestjs/common';
 import bcrypt from 'bcryptjs';
+import { config as loadEnv } from 'dotenv';
 import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import SyncMysql from 'sync-mysql';
+
+const workspaceEnvPath = resolve(process.cwd(), 'apps/api/.env');
+const localEnvPath = resolve(process.cwd(), '.env');
+const envPath = existsSync(workspaceEnvPath) ? workspaceEnvPath : localEnvPath;
+
+loadEnv({ path: envPath });
+
+type MysqlQueryPacket = {
+  affectedRows?: number;
+  insertId?: number;
+};
+
+type MysqlCompatClient = {
+  query: (sql: string, values?: unknown[]) => unknown;
+};
+
+class MysqlPreparedStatement {
+  constructor(
+    private readonly db: MysqlCompatDb,
+    private readonly sql: string,
+  ) {}
+
+  run(...params: unknown[]) {
+    return this.db.run(this.sql, params);
+  }
+
+  get(...params: unknown[]) {
+    return this.db.get(this.sql, params);
+  }
+
+  all(...params: unknown[]) {
+    return this.db.all(this.sql, params);
+  }
+}
+
+class MysqlCompatDb {
+  constructor(private readonly client: MysqlCompatClient) {}
+
+  prepare(sql: string) {
+    return new MysqlPreparedStatement(this, sql);
+  }
+
+  exec(sql: string) {
+    this.client.query(sql);
+  }
+
+  run(sql: string, params: unknown[]) {
+    const result = this.client.query(sql, params) as MysqlQueryPacket | MysqlQueryPacket[];
+    if (Array.isArray(result)) {
+      return { changes: 0, lastInsertRowid: 0 };
+    }
+
+    return {
+      changes: Number(result?.affectedRows || 0),
+      lastInsertRowid: Number(result?.insertId || 0),
+    };
+  }
+
+  get(sql: string, params: unknown[]) {
+    const rows = this.client.query(sql, params);
+    if (!Array.isArray(rows) || rows.length === 0) return undefined;
+    return rows[0] as Record<string, unknown>;
+  }
+
+  all(sql: string, params: unknown[]) {
+    const rows = this.client.query(sql, params);
+    return Array.isArray(rows) ? rows : [];
+  }
+}
 
 type ApiResult = {
   ok: boolean;
@@ -26,6 +96,7 @@ type SessionIssueResult =
 
 type UserRow = {
   user_id: string;
+  friend_id?: string;
   pass_hash_bcrypt: string;
   pass_salt_hex?: string;
   pass_hash_hex?: string;
@@ -90,6 +161,11 @@ type FriendChatPeerReadState = {
   lastReadAt: number;
 };
 
+type FriendListEntry = {
+  friendId: string;
+  playerName: string;
+};
+
 type ScoreRank = 'S' | 'A' | 'B' | 'C';
 
 type Profile = {
@@ -140,19 +216,28 @@ const DEFAULT_PROFILE: Profile = {
 
 @Injectable()
 export class CloudService {
-  private readonly dataDir = this.resolveDataDir();
-  private readonly sqlitePath =
-    process.env.A5M2_DB_PATH || resolve(this.dataDir, 'a5m2.sqlite');
-  private readonly inquiryPath =
-    process.env.INQUIRY_DB_PATH || resolve(this.dataDir, 'inquiries.json');
   private readonly inquiryAdminUserIds = this.resolveInquiryAdminUserIds();
   private readonly bcryptRounds = Number(process.env.BCRYPT_ROUNDS || 12);
-  private readonly db: DatabaseSync;
+  private readonly db: MysqlCompatDb;
 
   constructor() {
-    this.ensureDataDir();
-    this.db = new DatabaseSync(this.sqlitePath);
-    this.initTables();
+    const databaseUrl = String(process.env.DATABASE_URL || '').trim();
+    if (!databaseUrl) {
+      throw new Error('DATABASE_URL is required for MySQL operation');
+    }
+
+    const parsed = new URL(databaseUrl);
+    const mysql = new SyncMysql({
+      host: parsed.hostname || '127.0.0.1',
+      port: Number(parsed.port || 3306),
+      user: decodeURIComponent(parsed.username || ''),
+      password: decodeURIComponent(parsed.password || ''),
+      database: decodeURIComponent(parsed.pathname.replace(/^\//, '') || ''),
+      charset: 'utf8mb4',
+    }) as MysqlCompatClient;
+
+    this.db = new MysqlCompatDb(mysql);
+    this.ensureMysqlCompatibilitySchema();
   }
 
   register(body: Record<string, unknown>): ApiResult {
@@ -161,29 +246,35 @@ export class CloudService {
 
     const existing = this.readUser(auth.userId);
     if (existing) {
+      if (existing.user_id !== auth.userId) {
+        return {
+          ok: false,
+          code: 'USER_ID_CASE_CONFLICT',
+          message: `User ID conflicts with existing account by case-insensitive match: ${existing.user_id}`,
+        };
+      }
       return { ok: false, code: 'USER_ALREADY_EXISTS', message: 'User already exists' };
     }
 
     const passwordHash = bcrypt.hashSync(auth.password, this.bcryptRounds);
+    const friendId = this.generateUniqueFriendId();
     this.db
       .prepare(
         `
         INSERT INTO users (
           user_id,
-          pass_salt_hex,
-          pass_hash_hex,
+          friend_id,
           pass_hash_bcrypt,
           profile_json,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
       `,
       )
       .run(
         auth.userId,
-        '',
-        '',
+        friendId,
         passwordHash,
         JSON.stringify(DEFAULT_PROFILE),
         Date.now(),
@@ -201,6 +292,7 @@ export class CloudService {
         ok: true,
         created: true,
         sessionId: issued.sessionId,
+        friendId,
         profile: DEFAULT_PROFILE,
       },
     };
@@ -209,6 +301,7 @@ export class CloudService {
   login(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body, { requireSession: false });
     if (!auth.ok) return auth;
+    const friendId = this.ensureUserFriendId(auth.user);
 
     const issued = this.issueSession(auth.user.user_id, body.sessionId);
     if (!issued.ok) return issued;
@@ -220,6 +313,7 @@ export class CloudService {
       payload: {
         ok: true,
         sessionId: issued.sessionId,
+        friendId,
         profile: this.sanitizeProfile(this.parseProfile(auth.user.profile_json), DEFAULT_PROFILE),
       },
     };
@@ -250,23 +344,26 @@ export class CloudService {
   ping(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
+    const friendId = this.ensureUserFriendId(auth.user);
     return {
       ok: true,
       code: 'OK',
       message: 'session alive',
-      payload: { ok: true, sessionId: auth.sessionId },
+      payload: { ok: true, sessionId: auth.sessionId, friendId },
     };
   }
 
   loadProfile(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
+    const friendId = this.ensureUserFriendId(auth.user);
     return {
       ok: true,
       code: 'OK',
       message: 'profile loaded',
       payload: {
         ok: true,
+        friendId,
         profile: this.sanitizeProfile(this.parseProfile(auth.user.profile_json), DEFAULT_PROFILE),
       },
     };
@@ -296,18 +393,25 @@ export class CloudService {
     if (!auth.ok) return auth;
 
     const targetUserId = this.normalizeUserId(body.targetUserId ?? body.userId);
+    const targetFriendId = this.normalizeFriendId(body.targetFriendId ?? body.friendId);
     const targetPlayerName = this.normalizePlayerName(body.targetPlayerName ?? body.playerName);
-    if (!targetUserId && !targetPlayerName) {
+    if (!targetUserId && !targetFriendId && !targetPlayerName) {
       return {
         ok: false,
         code: 'TARGET_USER_ID_REQUIRED',
-        message: 'targetUserId or targetPlayerName is required',
+        message: 'targetUserId or targetFriendId or targetPlayerName is required',
       };
     }
 
     let target: UserRow | null = null;
     if (targetUserId) {
       target = this.readUser(targetUserId);
+      if (!target) {
+        target = this.readUserByFriendId(targetUserId);
+      }
+    }
+    if (!target && targetFriendId) {
+      target = this.readUserByFriendId(targetFriendId);
     }
     if (!target && targetPlayerName) {
       target = this.findUserByPlayerName(targetPlayerName);
@@ -325,6 +429,7 @@ export class CloudService {
         ok: true,
         profile: {
           userId: target.user_id,
+          friendId: this.ensureUserFriendId(target),
           playerName: profile.playerName,
           profileBio: profile.profileBio,
           playerAvatar: profile.playerAvatar,
@@ -393,8 +498,9 @@ export class CloudService {
   removeFriend(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
-    const friendUserId = this.normalizeUserId(body.friendUserId);
-    if (!friendUserId) {
+    const friendTarget = this.normalizeFriendId(body.friendUserId ?? body.targetUserId);
+    const friendUserId = this.resolveUserIdByFriendId(friendTarget);
+    if (!friendTarget || !friendUserId) {
       return { ok: false, code: 'FRIEND_ID_REQUIRED', message: 'friendUserId is required' };
     }
 
@@ -423,9 +529,20 @@ export class CloudService {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
 
-    const targetUserId = this.normalizeUserId(body.targetUserId ?? body.friendUserId);
-    if (!targetUserId) {
+    const rawTarget = String(body.targetUserId ?? body.friendUserId ?? body.targetFriendId ?? body.targetPlayerName ?? '').trim();
+    const targetFriendId = this.normalizeFriendId(rawTarget);
+    let targetUserId = targetFriendId ? this.resolveUserIdByFriendId(targetFriendId) : '';
+    if (!targetUserId && rawTarget) {
+      const targetByName = this.findUserByPlayerName(rawTarget);
+      if (targetByName) {
+        targetUserId = targetByName.user_id;
+      }
+    }
+    if (!rawTarget) {
       return { ok: false, code: 'FRIEND_ID_REQUIRED', message: 'targetUserId is required' };
+    }
+    if (!targetUserId) {
+      return { ok: false, code: 'FRIEND_NOT_FOUND', message: 'Friend user not found' };
     }
     if (targetUserId === auth.user.user_id) {
       return { ok: false, code: 'FRIEND_SELF_FORBIDDEN', message: 'Cannot add yourself' };
@@ -494,8 +611,9 @@ export class CloudService {
   approveFriendRequest(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
-    const requesterUserId = this.normalizeUserId(body.requesterUserId);
-    if (!requesterUserId) {
+    const requesterFriendId = this.normalizeFriendId(body.requesterUserId ?? body.requesterFriendId);
+    const requesterUserId = this.resolveUserIdByFriendId(requesterFriendId);
+    if (!requesterFriendId || !requesterUserId) {
       return {
         ok: false,
         code: 'REQUESTER_ID_REQUIRED',
@@ -519,7 +637,7 @@ export class CloudService {
       const now = Date.now();
       const insert = this.db.prepare(
         `
-        INSERT OR IGNORE INTO friends (user_id, friend_user_id, created_at)
+        INSERT IGNORE INTO friends (user_id, friend_user_id, created_at)
         VALUES (?, ?, ?)
       `,
       );
@@ -546,8 +664,9 @@ export class CloudService {
   rejectFriendRequest(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
-    const requesterUserId = this.normalizeUserId(body.requesterUserId);
-    if (!requesterUserId) {
+    const requesterFriendId = this.normalizeFriendId(body.requesterUserId ?? body.requesterFriendId);
+    const requesterUserId = this.resolveUserIdByFriendId(requesterFriendId);
+    if (!requesterFriendId || !requesterUserId) {
       return {
         ok: false,
         code: 'REQUESTER_ID_REQUIRED',
@@ -582,8 +701,9 @@ export class CloudService {
   cancelFriendRequest(body: Record<string, unknown>): ApiResult {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
-    const targetUserId = this.normalizeUserId(body.targetUserId ?? body.friendUserId);
-    if (!targetUserId) {
+    const targetFriendId = this.normalizeFriendId(body.targetUserId ?? body.friendUserId ?? body.targetFriendId);
+    const targetUserId = this.resolveUserIdByFriendId(targetFriendId);
+    if (!targetFriendId || !targetUserId) {
       return {
         ok: false,
         code: 'FRIEND_ID_REQUIRED',
@@ -619,16 +739,16 @@ export class CloudService {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
 
-    const friendUserId = this.normalizeUserId(body.friendUserId ?? body.targetUserId);
-    if (!friendUserId) {
+    const friendTarget = this.normalizeFriendId(body.friendUserId ?? body.targetUserId ?? body.targetFriendId);
+    const friendUserId = this.resolveUserIdByFriendId(friendTarget);
+    if (!friendTarget || !friendUserId) {
       return { ok: false, code: 'FRIEND_ID_REQUIRED', message: 'friendUserId is required' };
-    }
-    if (!this.readUser(friendUserId)) {
-      return { ok: false, code: 'FRIEND_NOT_FOUND', message: 'Friend user not found' };
     }
     if (!this.areAlreadyFriends(auth.user.user_id, friendUserId)) {
       return { ok: false, code: 'FRIEND_CHAT_FORBIDDEN', message: 'Friend relationship required' };
     }
+
+    const friendPublicId = this.resolveFriendIdByUserId(friendUserId) || friendTarget;
 
     return {
       ok: true,
@@ -636,7 +756,7 @@ export class CloudService {
       message: 'friend messages loaded',
       payload: {
         ok: true,
-        friendUserId,
+        friendUserId: friendPublicId,
         messages: this.listFriendMessagesByPair(auth.user.user_id, friendUserId),
         peerReadState: this.getFriendPeerReadState(auth.user.user_id, friendUserId),
       },
@@ -647,16 +767,16 @@ export class CloudService {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
 
-    const friendUserId = this.normalizeUserId(body.friendUserId ?? body.targetUserId);
-    if (!friendUserId) {
+    const friendTarget = this.normalizeFriendId(body.friendUserId ?? body.targetUserId ?? body.targetFriendId);
+    const friendUserId = this.resolveUserIdByFriendId(friendTarget);
+    if (!friendTarget || !friendUserId) {
       return { ok: false, code: 'FRIEND_ID_REQUIRED', message: 'friendUserId is required' };
-    }
-    if (!this.readUser(friendUserId)) {
-      return { ok: false, code: 'FRIEND_NOT_FOUND', message: 'Friend user not found' };
     }
     if (!this.areAlreadyFriends(auth.user.user_id, friendUserId)) {
       return { ok: false, code: 'FRIEND_CHAT_FORBIDDEN', message: 'Friend relationship required' };
     }
+
+    const friendPublicId = this.resolveFriendIdByUserId(friendUserId) || friendTarget;
 
     const message = this.normalizeFriendChatMessage(body.message ?? body.text);
     if (!message) {
@@ -698,7 +818,7 @@ export class CloudService {
       message: 'friend message sent',
       payload: {
         ok: true,
-        friendUserId,
+        friendUserId: friendPublicId,
         messages: this.listFriendMessagesByPair(auth.user.user_id, friendUserId),
         peerReadState: this.getFriendPeerReadState(auth.user.user_id, friendUserId),
       },
@@ -733,7 +853,7 @@ export class CloudService {
 
     const unreadByFriend: Record<string, number> = {};
     rows.forEach((row) => {
-      const friendUserId = this.normalizeUserId(row.friend_user_id);
+      const friendUserId = this.resolveFriendIdByUserId(this.normalizeUserId(row.friend_user_id));
       const unread = Number.isFinite(row.unread) ? Math.max(0, Math.floor(Number(row.unread))) : 0;
       if (friendUserId && unread > 0) {
         unreadByFriend[friendUserId] = unread;
@@ -755,13 +875,16 @@ export class CloudService {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
 
-    const friendUserId = this.normalizeUserId(body.friendUserId ?? body.targetUserId);
-    if (!friendUserId) {
+    const friendTarget = this.normalizeFriendId(body.friendUserId ?? body.targetUserId ?? body.targetFriendId);
+    const friendUserId = this.resolveUserIdByFriendId(friendTarget);
+    if (!friendTarget || !friendUserId) {
       return { ok: false, code: 'FRIEND_ID_REQUIRED', message: 'friendUserId is required' };
     }
     if (!this.areAlreadyFriends(auth.user.user_id, friendUserId)) {
       return { ok: false, code: 'FRIEND_CHAT_FORBIDDEN', message: 'Friend relationship required' };
     }
+
+    const friendPublicId = this.resolveFriendIdByUserId(friendUserId) || friendTarget;
 
     const latestIncoming = this.db
       .prepare(
@@ -782,10 +905,9 @@ export class CloudService {
         `
         INSERT INTO friend_chat_reads (user_id, friend_user_id, last_read_message_id, updated_at)
         VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id, friend_user_id)
-        DO UPDATE SET
-          last_read_message_id = excluded.last_read_message_id,
-          updated_at = excluded.updated_at
+        ON DUPLICATE KEY UPDATE
+          last_read_message_id = VALUES(last_read_message_id),
+          updated_at = VALUES(updated_at)
       `,
       )
       .run(auth.user.user_id, friendUserId, lastReadMessageId, Date.now());
@@ -796,7 +918,7 @@ export class CloudService {
       message: 'friend messages marked as read',
       payload: {
         ok: true,
-        friendUserId,
+        friendUserId: friendPublicId,
         lastReadMessageId,
       },
     };
@@ -806,26 +928,49 @@ export class CloudService {
     const auth = this.authenticate(body);
     if (!auth.ok) return auth;
 
-    const query = this.normalizeUserId(body.query ?? body.keyword).toLowerCase();
-    if (!query) {
+    const rawQuery = String(body.query ?? body.keyword ?? '').trim();
+    const friendIdQuery = this.normalizeFriendId(rawQuery).toLowerCase();
+    const playerNameQuery = rawQuery.toLowerCase();
+    if (!friendIdQuery && !playerNameQuery) {
       return { ok: true, code: 'OK', message: 'empty query', payload: { ok: true, users: [] } };
     }
 
     const rows = this.db
       .prepare(
         `
-        SELECT user_id
+        SELECT user_id, friend_id, profile_json
         FROM users
-        WHERE lower(user_id) LIKE ?
-        ORDER BY user_id COLLATE NOCASE ASC
-        LIMIT 20
+        WHERE user_id <> ?
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 500
       `,
       )
-      .all(`${query}%`) as Array<{ user_id: string }>;
+      .all(auth.user.user_id) as Array<{ user_id: string; friend_id: string; profile_json: string }>;
+
+    const selfFriendId = this.ensureUserFriendId(auth.user);
 
     const users = rows
-      .map((row) => this.normalizeUserId(row.user_id))
-      .filter((id) => Boolean(id) && id !== auth.user.user_id);
+      .map((row) => {
+        const loginUserId = this.normalizeUserId(row.user_id);
+        if (!loginUserId || loginUserId === auth.user.user_id) return null;
+
+        const friendId = this.normalizeFriendId(row.friend_id) || this.resolveFriendIdByUserId(loginUserId);
+        if (!friendId || friendId === selfFriendId) return null;
+
+        const profile = this.sanitizeProfile(this.parseProfile(row.profile_json), DEFAULT_PROFILE);
+        const playerName = this.normalizePlayerName(profile.playerName || friendId);
+        const matchesFriendId = friendIdQuery ? friendId.toLowerCase().includes(friendIdQuery) : false;
+        const matchesLoginId = playerNameQuery ? loginUserId.toLowerCase().includes(playerNameQuery) : false;
+        const matchesPlayerName = playerNameQuery ? playerName.toLowerCase().includes(playerNameQuery) : false;
+        if (!matchesFriendId && !matchesPlayerName && !matchesLoginId) return null;
+
+        return {
+          friendId,
+          playerName,
+        };
+      })
+      .filter((row): row is { friendId: string; playerName: string } => Boolean(row))
+      .slice(0, 20);
 
     return {
       ok: true,
@@ -859,8 +1004,24 @@ export class CloudService {
     const name = this.normalizeInquiryName(body.name);
     const url = this.normalizeInquiryUrl(body.url);
     const lang = this.normalizeInquiryLang(body.lang);
-    const rows = this.readInquiries();
     const now = Date.now();
+    const rows = this.db
+      .prepare(
+        `
+        SELECT id,
+               user_id AS userId,
+               name,
+               message,
+               url,
+               lang,
+               submitted_at AS submittedAt
+        FROM inquiries
+        WHERE submitted_at >= ?
+        ORDER BY submitted_at DESC
+        LIMIT 1000
+      `,
+      )
+      .all(now - Math.max(INQUIRY_MIN_INTERVAL_MS, INQUIRY_DUPLICATE_WINDOW_MS)) as Array<Record<string, unknown>>;
     const senderKey = userId || `anon:${url || 'unknown'}`;
     const normalizedMessage = this.normalizeInquiryForDuplicateCheck(message);
 
@@ -893,18 +1054,14 @@ export class CloudService {
       };
     }
 
-    const nextRow: Record<string, unknown> = {
-      id: randomUUID(),
-      name,
-      message,
-      url,
-      lang,
-      submittedAt: new Date().toISOString(),
-      ...(userId ? { userId } : {}),
-    };
-
-    const next = [...rows, nextRow].slice(-1000);
-    this.writeInquiries(next);
+    const inserted = this.db
+      .prepare(
+        `
+        INSERT INTO inquiries (user_id, name, message, url, lang, submitted_at)
+        VALUES (?, ?, ?, COALESCE(?, ''), ?, ?)
+      `,
+      )
+      .run(userId || null, name, message, url, lang, now);
 
     return {
       ok: true,
@@ -912,7 +1069,7 @@ export class CloudService {
       message: 'inquiry submitted',
       payload: {
         ok: true,
-        id: nextRow.id,
+        id: String(inserted.lastInsertRowid || ''),
       },
     };
   }
@@ -929,9 +1086,32 @@ export class CloudService {
       ? Math.max(1, Math.min(200, Math.floor(limitRaw)))
       : 50;
 
-    const items = this.readInquiries()
-      .sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')))
-      .slice(0, limit);
+    const rows = this.db
+      .prepare(
+        `
+        SELECT id,
+               user_id AS userId,
+               name,
+               message,
+               url,
+               lang,
+               submitted_at AS submittedAt
+        FROM inquiries
+        ORDER BY submitted_at DESC
+        LIMIT ?
+      `,
+      )
+      .all(limit) as Array<Record<string, unknown>>;
+
+    const items = rows.map((row) => ({
+      id: String(row.id || ''),
+      userId: this.normalizeUserId(row.userId),
+      name: this.normalizeInquiryName(row.name),
+      message: this.normalizeInquiryMessage(row.message),
+      url: this.normalizeInquiryUrl(row.url),
+      lang: this.normalizeInquiryLang(row.lang),
+      submittedAt: new Date(Number(row.submittedAt || 0)).toISOString(),
+    }));
 
     return {
       ok: true,
@@ -951,18 +1131,24 @@ export class CloudService {
       return { ok: false, code: 'FORBIDDEN', message: 'Admin role is required' };
     }
 
-    const targetId = String(body.id || '').trim();
+    const targetIdRaw = Number(body.id);
+    const targetId = Number.isFinite(targetIdRaw) ? Math.floor(targetIdRaw) : 0;
     if (!targetId) {
       return { ok: false, code: 'INQUIRY_ID_REQUIRED', message: 'id is required' };
     }
 
-    const rows = this.readInquiries();
-    const next = rows.filter((row) => String(row.id || '') !== targetId);
-    if (next.length === rows.length) {
+    const result = this.db
+      .prepare(
+        `
+        DELETE FROM inquiries
+        WHERE id = ?
+      `,
+      )
+      .run(targetId);
+    if (!Number(result.changes)) {
       return { ok: false, code: 'NOT_FOUND', message: 'Inquiry not found' };
     }
 
-    this.writeInquiries(next);
     return {
       ok: true,
       code: 'OK',
@@ -1030,136 +1216,53 @@ export class CloudService {
     };
   }
 
-  private ensureDataDir() {
-    if (!existsSync(this.dataDir)) {
-      mkdirSync(this.dataDir, { recursive: true });
+  private ensureMysqlCompatibilitySchema() {
+    const hasColumn = (tableName: string, columnName: string) => {
+      const row = this.db
+        .prepare(
+          `
+          SELECT COUNT(*) AS count
+          FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = ?
+            AND COLUMN_NAME = ?
+        `,
+        )
+        .get(tableName, columnName) as { count?: number } | undefined;
+      return Number(row?.count || 0) > 0;
+    };
+
+    const hasIndex = (tableName: string, indexName: string) => {
+      const row = this.db
+        .prepare(
+          `
+          SELECT COUNT(*) AS count
+          FROM information_schema.STATISTICS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = ?
+            AND INDEX_NAME = ?
+        `,
+        )
+        .get(tableName, indexName) as { count?: number } | undefined;
+      return Number(row?.count || 0) > 0;
+    };
+
+    if (!hasColumn('users', 'pass_salt_hex')) {
+      this.db.exec(`ALTER TABLE users ADD COLUMN pass_salt_hex VARCHAR(255) NOT NULL DEFAULT ''`);
     }
-  }
-
-  private resolveDataDir() {
-    const workspaceDataDir = resolve(process.cwd(), '../../server/data');
-    if (existsSync(workspaceDataDir)) return workspaceDataDir;
-    return resolve(process.cwd(), 'server/data');
-  }
-
-  private initTables() {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
-        user_id TEXT PRIMARY KEY,
-        pass_salt_hex TEXT NOT NULL DEFAULT '',
-        pass_hash_hex TEXT NOT NULL DEFAULT '',
-        pass_hash_bcrypt TEXT NOT NULL DEFAULT '',
-        profile_json TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS match_records (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        game TEXT NOT NULL,
-        result TEXT NOT NULL,
-        room_code TEXT NOT NULL,
-        opponent TEXT NOT NULL,
-        played_at INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_match_records_user_time
-        ON match_records(user_id, played_at DESC);
-
-      CREATE TABLE IF NOT EXISTS friends (
-        user_id TEXT NOT NULL,
-        friend_user_id TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        PRIMARY KEY (user_id, friend_user_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS friend_requests (
-        requester_user_id TEXT NOT NULL,
-        target_user_id TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        PRIMARY KEY (requester_user_id, target_user_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS friend_messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sender_user_id TEXT NOT NULL,
-        receiver_user_id TEXT NOT NULL,
-        message TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_friend_messages_pair_time
-        ON friend_messages(sender_user_id, receiver_user_id, created_at DESC);
-
-      CREATE TABLE IF NOT EXISTS friend_chat_reads (
-        user_id TEXT NOT NULL,
-        friend_user_id TEXT NOT NULL,
-        last_read_message_id INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        PRIMARY KEY (user_id, friend_user_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS scores (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        player_name TEXT NOT NULL,
-        score INTEGER NOT NULL,
-        game TEXT,
-        max_score INTEGER,
-        score_ratio INTEGER,
-        rank TEXT,
-        created_at INTEGER NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS auth_sessions (
-        session_id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL UNIQUE,
-        created_at INTEGER NOT NULL,
-        last_seen_at INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_auth_sessions_last_seen
-        ON auth_sessions(last_seen_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_scores_created
-        ON scores(created_at DESC);
-    `);
-
-    this.ensureUserColumns();
-    this.ensureScoreColumns();
-  }
-
-  private ensureUserColumns() {
-    const columns = this.db
-      .prepare(`PRAGMA table_info(users)`)
-      .all() as Array<{ name: string }>;
-    const names = new Set(columns.map((column) => String(column.name || '')));
-
-    if (!names.has('pass_salt_hex')) {
-      this.db.exec(`ALTER TABLE users ADD COLUMN pass_salt_hex TEXT NOT NULL DEFAULT ''`);
+    if (!hasColumn('users', 'pass_hash_hex')) {
+      this.db.exec(`ALTER TABLE users ADD COLUMN pass_hash_hex VARCHAR(255) NOT NULL DEFAULT ''`);
     }
-    if (!names.has('pass_hash_hex')) {
-      this.db.exec(`ALTER TABLE users ADD COLUMN pass_hash_hex TEXT NOT NULL DEFAULT ''`);
+    if (!hasColumn('users', 'profile_json')) {
+      this.db.exec(`ALTER TABLE users ADD COLUMN profile_json MEDIUMTEXT NOT NULL DEFAULT '{}'`);
+      this.db.exec(`UPDATE users SET profile_json = '{}' WHERE profile_json IS NULL OR profile_json = ''`);
     }
-    if (!names.has('pass_hash_bcrypt')) {
-      this.db.exec(`ALTER TABLE users ADD COLUMN pass_hash_bcrypt TEXT NOT NULL DEFAULT ''`);
+    if (!hasColumn('users', 'friend_id')) {
+      this.db.exec(`ALTER TABLE users ADD COLUMN friend_id VARCHAR(24) NOT NULL DEFAULT ''`);
     }
-  }
-
-  private ensureScoreColumns() {
-    const columns = this.db
-      .prepare(`PRAGMA table_info(scores)`)
-      .all() as Array<{ name: string }>;
-    const names = new Set(columns.map((column) => String(column.name || '')));
-
-    if (!names.has('max_score')) {
-      this.db.exec(`ALTER TABLE scores ADD COLUMN max_score INTEGER`);
-    }
-    if (!names.has('score_ratio')) {
-      this.db.exec(`ALTER TABLE scores ADD COLUMN score_ratio INTEGER`);
-    }
-    if (!names.has('rank')) {
-      this.db.exec(`ALTER TABLE scores ADD COLUMN rank TEXT`);
+    this.db.exec("UPDATE users SET friend_id = CONCAT('F', UPPER(SUBSTRING(REPLACE(UUID(), '-', ''), 1, 11))) WHERE friend_id IS NULL OR friend_id = ''");
+    if (!hasIndex('users', 'uidx_users_friend_id')) {
+      this.db.exec('CREATE UNIQUE INDEX uidx_users_friend_id ON users(friend_id)');
     }
   }
 
@@ -1185,6 +1288,7 @@ export class CloudService {
     if (!user) {
       return { ok: false, code: 'USER_NOT_FOUND', message: 'User not found' };
     }
+    this.ensureUserFriendId(user);
 
     const hasBcrypt = Boolean(user.pass_hash_bcrypt && user.pass_hash_bcrypt.trim());
     if (hasBcrypt && bcrypt.compareSync(auth.password, user.pass_hash_bcrypt)) {
@@ -1274,18 +1378,53 @@ export class CloudService {
       };
     }
 
-    const sessionId = requestedSessionId || randomUUID();
-    const now = Date.now();
-    this.db
-      .prepare(
-        `
-        INSERT INTO auth_sessions (session_id, user_id, created_at, last_seen_at)
-        VALUES (?, ?, ?, ?)
-      `,
-      )
-      .run(sessionId, userId, now, now);
+    // Requested session IDs can collide with another account's active session.
+    // In that case, ignore the requested value and issue a fresh UUID.
+    let preferredSessionId = requestedSessionId;
+    if (preferredSessionId) {
+      const occupied = this.db
+        .prepare(
+          `
+          SELECT user_id
+          FROM auth_sessions
+          WHERE session_id = ?
+        `,
+        )
+        .get(preferredSessionId) as { user_id?: string } | undefined;
+      if (occupied?.user_id && occupied.user_id !== userId) {
+        preferredSessionId = '';
+      }
+    }
 
-    return { ok: true, sessionId };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const sessionId = attempt === 0 && preferredSessionId
+        ? preferredSessionId
+        : randomUUID();
+      const now = Date.now();
+      try {
+        this.db
+          .prepare(
+            `
+            INSERT INTO auth_sessions (session_id, user_id, created_at, last_seen_at)
+            VALUES (?, ?, ?, ?)
+          `,
+          )
+          .run(sessionId, userId, now, now);
+        return { ok: true, sessionId };
+      } catch (error) {
+        const code = (error as { code?: string } | null)?.code;
+        if (code === 'ER_DUP_ENTRY') {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return {
+      ok: false,
+      code: 'SESSION_ISSUE_FAILED',
+      message: 'failed to issue session',
+    };
   }
 
   private validateAndTouchSession(
@@ -1339,12 +1478,29 @@ export class CloudService {
     const row = this.db
       .prepare(
         `
-        SELECT user_id, pass_salt_hex, pass_hash_hex, pass_hash_bcrypt, profile_json
+        SELECT user_id, friend_id, pass_salt_hex, pass_hash_hex, pass_hash_bcrypt, profile_json
         FROM users
         WHERE user_id = ?
       `,
       )
       .get(userId) as UserRow | undefined;
+
+    return row || null;
+  }
+
+  private readUserByFriendId(friendId: string): UserRow | null {
+    const normalized = this.normalizeFriendId(friendId);
+    if (!normalized) return null;
+
+    const row = this.db
+      .prepare(
+        `
+        SELECT user_id, friend_id, pass_salt_hex, pass_hash_hex, pass_hash_bcrypt, profile_json
+        FROM users
+        WHERE friend_id = ?
+      `,
+      )
+      .get(normalized) as UserRow | undefined;
 
     return row || null;
   }
@@ -1355,7 +1511,7 @@ export class CloudService {
     const rows = this.db
       .prepare(
         `
-        SELECT user_id, pass_salt_hex, pass_hash_hex, pass_hash_bcrypt, profile_json
+        SELECT user_id, friend_id, pass_salt_hex, pass_hash_hex, pass_hash_bcrypt, profile_json
         FROM users
       `,
       )
@@ -1422,6 +1578,55 @@ export class CloudService {
 
   private normalizeUserId(raw: unknown) {
     return String(raw || '').trim().slice(0, 24);
+  }
+
+  private normalizeFriendId(raw: unknown) {
+    return String(raw || '')
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .slice(0, 24);
+  }
+
+  private generateUniqueFriendId() {
+    for (let i = 0; i < 6; i += 1) {
+      const candidate = `F${randomUUID().replace(/-/g, '').slice(0, 11).toUpperCase()}`;
+      if (!this.readUserByFriendId(candidate)) {
+        return candidate;
+      }
+    }
+    return `F${Date.now().toString(36).toUpperCase().slice(0, 11)}`;
+  }
+
+  private ensureUserFriendId(user: UserRow) {
+    const current = this.normalizeFriendId(user.friend_id);
+    if (current) {
+      user.friend_id = current;
+      return current;
+    }
+
+    const next = this.generateUniqueFriendId();
+    this.db
+      .prepare(
+        `
+        UPDATE users
+        SET friend_id = ?, updated_at = ?
+        WHERE user_id = ?
+      `,
+      )
+      .run(next, Date.now(), user.user_id);
+    user.friend_id = next;
+    return next;
+  }
+
+  private resolveUserIdByFriendId(friendId: string) {
+    const row = this.readUserByFriendId(friendId);
+    return row?.user_id || '';
+  }
+
+  private resolveFriendIdByUserId(userId: string) {
+    const row = this.readUser(userId);
+    if (!row) return '';
+    return this.ensureUserFriendId(row);
   }
 
   private resolveInquiryAdminUserIds() {
@@ -1764,55 +1969,82 @@ export class CloudService {
     };
   }
 
-  private listFriendsByUserId(userId: string): string[] {
+  private listFriendsByUserId(userId: string): FriendListEntry[] {
     const rows = this.db
       .prepare(
         `
-        SELECT friend_user_id
-        FROM friends
-        WHERE user_id = ?
-        ORDER BY friend_user_id COLLATE NOCASE ASC
+        SELECT u.friend_id AS friendId, u.profile_json AS profileJson
+        FROM friends fr
+        JOIN users u ON u.user_id = fr.friend_user_id
+        WHERE fr.user_id = ?
+        ORDER BY LOWER(u.friend_id) ASC
       `,
       )
-      .all(userId) as Array<{ friend_user_id: string }>;
+      .all(userId) as Array<{ friendId: string; profileJson: string }>;
 
     return rows
-      .map((row) => this.normalizeUserId(row.friend_user_id))
-      .filter(Boolean);
+      .map((row) => {
+        const friendId = this.normalizeFriendId(row.friendId);
+        if (!friendId) return null;
+        const profile = this.sanitizeProfile(this.parseProfile(row.profileJson), DEFAULT_PROFILE);
+        return {
+          friendId,
+          playerName: this.normalizePlayerName(profile.playerName || friendId),
+        };
+      })
+      .filter((row): row is FriendListEntry => Boolean(row));
   }
 
-  private listIncomingByUserId(userId: string): string[] {
+  private listIncomingByUserId(userId: string): FriendListEntry[] {
     const rows = this.db
       .prepare(
         `
-        SELECT requester_user_id
-        FROM friend_requests
-        WHERE target_user_id = ?
-        ORDER BY created_at DESC
+        SELECT u.friend_id AS friendId, u.profile_json AS profileJson
+        FROM friend_requests fr
+        JOIN users u ON u.user_id = fr.requester_user_id
+        WHERE fr.target_user_id = ?
+        ORDER BY fr.created_at DESC
       `,
       )
-      .all(userId) as Array<{ requester_user_id: string }>;
+      .all(userId) as Array<{ friendId: string; profileJson: string }>;
 
     return rows
-      .map((row) => this.normalizeUserId(row.requester_user_id))
-      .filter(Boolean);
+      .map((row) => {
+        const friendId = this.normalizeFriendId(row.friendId);
+        if (!friendId) return null;
+        const profile = this.sanitizeProfile(this.parseProfile(row.profileJson), DEFAULT_PROFILE);
+        return {
+          friendId,
+          playerName: this.normalizePlayerName(profile.playerName || friendId),
+        };
+      })
+      .filter((row): row is FriendListEntry => Boolean(row));
   }
 
-  private listOutgoingByUserId(userId: string): string[] {
+  private listOutgoingByUserId(userId: string): FriendListEntry[] {
     const rows = this.db
       .prepare(
         `
-        SELECT target_user_id
-        FROM friend_requests
-        WHERE requester_user_id = ?
-        ORDER BY created_at DESC
+        SELECT u.friend_id AS friendId, u.profile_json AS profileJson
+        FROM friend_requests fr
+        JOIN users u ON u.user_id = fr.target_user_id
+        WHERE fr.requester_user_id = ?
+        ORDER BY fr.created_at DESC
       `,
       )
-      .all(userId) as Array<{ target_user_id: string }>;
+      .all(userId) as Array<{ friendId: string; profileJson: string }>;
 
     return rows
-      .map((row) => this.normalizeUserId(row.target_user_id))
-      .filter(Boolean);
+      .map((row) => {
+        const friendId = this.normalizeFriendId(row.friendId);
+        if (!friendId) return null;
+        const profile = this.sanitizeProfile(this.parseProfile(row.profileJson), DEFAULT_PROFILE);
+        return {
+          friendId,
+          playerName: this.normalizePlayerName(profile.playerName || friendId),
+        };
+      })
+      .filter((row): row is FriendListEntry => Boolean(row));
   }
 
   private hasPendingRequest(requesterUserId: string, targetUserId: string): boolean {
@@ -1865,11 +2097,24 @@ export class CloudService {
       created_at: number;
     }>;
 
+    const friendIdCache = new Map<string, string>();
+    const resolvePublicId = (rawUserId: string) => {
+      const normalizedUserId = this.normalizeUserId(rawUserId);
+      if (!normalizedUserId) return '';
+      const cached = friendIdCache.get(normalizedUserId);
+      if (cached) return cached;
+      const next = this.resolveFriendIdByUserId(normalizedUserId);
+      if (next) {
+        friendIdCache.set(normalizedUserId, next);
+      }
+      return next;
+    };
+
     return rows
       .map((row) => ({
         id: Number(row.id),
-        senderUserId: this.normalizeUserId(row.sender_user_id),
-        receiverUserId: this.normalizeUserId(row.receiver_user_id),
+        senderUserId: resolvePublicId(row.sender_user_id),
+        receiverUserId: resolvePublicId(row.receiver_user_id),
         message: this.normalizeFriendChatMessage(row.message),
         createdAt: Number.isFinite(row.created_at) ? Math.floor(Number(row.created_at)) : 0,
       }))
@@ -1904,21 +2149,4 @@ export class CloudService {
     };
   }
 
-  private readInquiries() {
-    if (!existsSync(this.inquiryPath)) {
-      return [] as Array<Record<string, unknown>>;
-    }
-
-    try {
-      const parsed = JSON.parse(readFileSync(this.inquiryPath, 'utf8'));
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((item) => item && typeof item === 'object');
-    } catch {
-      return [] as Array<Record<string, unknown>>;
-    }
-  }
-
-  private writeInquiries(items: Array<Record<string, unknown>>) {
-    writeFileSync(this.inquiryPath, JSON.stringify(items, null, 2), 'utf8');
-  }
 }
