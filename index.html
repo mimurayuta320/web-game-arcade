@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;700&family=Space+Grotesk:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -1325,12 +1325,26 @@
       </section>
 
       <section id="numeronScreen" class="game-screen hidden">
-        <header class="top-bar">
-          <h1>Neon NUMERON</h1>
-          <p>数字を推理して先に正解した方が勝ち。</p>
+        <header class="top-bar numeron-top-bar">
+          <div>
+            <h1>NUMERON</h1>
+            <p>ヌメロン</p>
+          </div>
+          <div class="numeron-top-chips">
+            <div class="numeron-chip">
+              <span class="numeron-chip-label">TURN</span>
+              <strong id="numeronTurnText">-</strong>
+            </div>
+            <div class="numeron-chip numeron-chip-time">
+              <span class="numeron-chip-label">TIME</span>
+              <strong id="numeronTimeText">00:00</strong>
+            </div>
+            <div id="numeronTurnBadge" class="numeron-turn-badge">待機中</div>
+            <button id="numeronMenuBtn" class="start-btn ghost numeron-menu-btn" aria-label="メニュー">☰</button>
+          </div>
         </header>
 
-        <section class="hud">
+        <section class="hud numeron-hud">
           <div class="metric metric-select">
             <span class="label">MODE</span>
             <select id="numeronModeSelect" class="difficulty-select" aria-label="Numeron mode">
@@ -1354,10 +1368,6 @@
             </select>
           </div>
           <div class="metric">
-            <span class="label">TURN</span>
-            <span id="numeronTurnText">-</span>
-          </div>
-          <div class="metric">
             <span class="label">P1 TRIES</span>
             <span id="numeronP1TryCount">0</span>
           </div>
@@ -1365,12 +1375,11 @@
             <span class="label">P2 TRIES</span>
             <span id="numeronP2TryCount">0</span>
           </div>
-          <button id="numeronStartBtn" class="start-btn hud-primary">GAME START</button>
-          <button id="numeronRemakeBtn" class="start-btn ghost">REMAKE</button>
-          <button id="numeronMenuBtn" class="start-btn ghost">MENU</button>
+          <button id="numeronStartBtn" class="start-btn hud-primary">START</button>
+          <button id="numeronRemakeBtn" class="start-btn ghost">RESET</button>
         </section>
 
-        <section class="canvas-wrap numeron-history-wrap">
+        <section class="canvas-wrap numeron-status-wrap">
           <div class="metric">
             <span class="label">STATUS</span>
             <span id="numeronStatusText">-</span>
@@ -1389,9 +1398,10 @@
           </div>
         </section>
 
-        <section class="canvas-wrap">
+        <section class="canvas-wrap numeron-secret-wrap">
           <div>
-            <p class="label">YOUR SECRET</p>
+            <p class="label">YOU</p>
+            <p class="numeron-sub-label">あなたの数字（自分のみ確認できます）</p>
             <div id="numeronSecretSlots"></div>
             <div id="numeronSecretDeck"></div>
             <div class="entry-actions">
@@ -1401,28 +1411,38 @@
             </div>
           </div>
           <div id="numeronOpponentSecretBlock">
-            <p class="label">OPPONENT SECRET</p>
+            <p class="label">RIVAL</p>
+            <p class="numeron-sub-label">相手の数字（推理してください）</p>
             <div id="numeronOpponentSecretSlots"></div>
           </div>
         </section>
 
-        <section class="canvas-wrap">
+        <section class="canvas-wrap numeron-guess-wrap">
           <div>
-            <p class="label">YOUR GUESS</p>
+            <p class="label">コールする数字を入力</p>
             <div id="numeronGuessSlots"></div>
             <div id="numeronGuessDeck"></div>
             <div class="entry-actions">
-              <button id="numeronGuessBtn" class="start-btn" type="button">GUESS</button>
-              <button id="numeronGuessBackBtn" class="start-btn ghost" type="button">BACK</button>
-              <button id="numeronGuessClearBtn" class="start-btn ghost" type="button">CLEAR</button>
+              <button id="numeronGuessBtn" class="start-btn" type="button">この数字でコールする</button>
+              <button id="numeronGuessBackBtn" class="start-btn ghost" type="button">1文字戻す</button>
+              <button id="numeronGuessClearBtn" class="start-btn ghost" type="button">クリア</button>
             </div>
           </div>
-          <div>
-            <p class="label">ITEMS</p>
+          <div class="numeron-item-panel">
+            <p class="label">アイテム</p>
             <div class="entry-actions">
-              <button id="numeronItemDoubleBtn" class="start-btn ghost" type="button">DOUBLE</button>
-              <button id="numeronItemShuffleBtn" class="start-btn ghost" type="button">SHUFFLE</button>
-              <button id="numeronItemHighLowBtn" class="start-btn ghost" type="button">HIGH&LOW</button>
+              <button id="numeronItemHighLowBtn" class="start-btn ghost" type="button">
+                <span class="numeron-item-title">ハイ&ロー</span>
+                <span class="numeron-item-sub">各桁が5以上か4以下かを調べる</span>
+              </button>
+              <button id="numeronItemDoubleBtn" class="start-btn ghost" type="button">
+                <span class="numeron-item-title">ターゲット</span>
+                <span class="numeron-item-sub">指定した数字が含まれるか調べる</span>
+              </button>
+              <button id="numeronItemShuffleBtn" class="start-btn ghost" type="button">
+                <span class="numeron-item-title">スラッシュ</span>
+                <span class="numeron-item-sub">秘密数字の順番を入れ替える</span>
+              </button>
             </div>
             <label class="label" for="numeronHighLowDigitSelect">HIGH&LOW DIGIT</label>
             <select id="numeronHighLowDigitSelect" class="difficulty-select" aria-label="Numeron high low digit">
@@ -1441,20 +1461,32 @@
           </div>
         </section>
 
-        <section class="canvas-wrap">
-          <div>
-            <p class="label">YOUR HISTORY</p>
+        <section class="canvas-wrap numeron-history-wrap">
+          <div class="numeron-history-panel">
+            <p class="label">コール履歴</p>
+            <div class="numeron-history-head" aria-hidden="true">
+              <span>TURN</span>
+              <span>CALL</span>
+              <span>EAT</span>
+              <span>BITE</span>
+            </div>
             <ul id="numeronSelfHistory">
               <li>-</li>
             </ul>
           </div>
-          <div>
-            <p class="label">OPPONENT HISTORY</p>
+          <div class="numeron-history-panel">
+            <p class="label">相手の履歴</p>
+            <div class="numeron-history-head" aria-hidden="true">
+              <span>TURN</span>
+              <span>CALL</span>
+              <span>EAT</span>
+              <span>BITE</span>
+            </div>
             <ul id="numeronOpponentHistory">
               <li>-</li>
             </ul>
           </div>
-          <div>
+          <div class="numeron-history-panel">
             <p class="label">MEMO</p>
             <textarea id="numeronMemoPad" class="room-input" rows="8" placeholder="メモ"></textarea>
             <button id="numeronMemoClearBtn" class="start-btn ghost" type="button">MEMO CLEAR</button>

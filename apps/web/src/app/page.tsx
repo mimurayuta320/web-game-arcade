@@ -15254,11 +15254,11 @@ export default function Home() {
         ) : null}
 
         {activePanel === "numeron" ? (
-          <section className="grid gap-5 md:grid-cols-[1.62fr_0.82fr]">
-            <article className="min-h-[700px] rounded-2xl border border-cyan-300/25 bg-[linear-gradient(160deg,rgba(12,24,39,0.88),rgba(8,19,28,0.92))] p-6 shadow-[0_0_0_1px_rgba(24,219,255,0.12),0_14px_30px_rgba(3,8,13,0.45)]">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold">{t("numeronTitle")}</h2>
-                <div className="flex flex-wrap items-center gap-2">
+          <section className="numeron-next-shell grid gap-5 md:grid-cols-[1.62fr_0.82fr]">
+            <article className="numeron-next-main min-h-[700px] rounded-2xl border border-cyan-300/25 bg-[linear-gradient(160deg,rgba(12,24,39,0.88),rgba(8,19,28,0.92))] p-6 shadow-[0_0_0_1px_rgba(24,219,255,0.12),0_14px_30px_rgba(3,8,13,0.45)]">
+              <div className="numeron-next-head flex items-center justify-between gap-3">
+                <h2 className="numeron-next-title text-xl font-semibold">{t("numeronTitle")}</h2>
+                <div className="numeron-next-head-actions flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => startPanelGame("numeron", resetNumeron)}
@@ -15334,7 +15334,7 @@ export default function Home() {
                         </button>
                       ) : null}
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-wrap gap-2 numeron-next-slots">
                       {Array.from({ length: numeronDigitCount }, (_, index) => {
                         const value = numeronSecretDraft[index] ?? "-";
                         const canBackTo = Boolean(numeronSecretDraft[index]);
@@ -15344,7 +15344,7 @@ export default function Home() {
                             type="button"
                             onClick={() => setNumeronSecretDraft((prev) => prev.slice(0, index))}
                             disabled={!canBackTo || isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed}
-                            className="h-11 min-w-11 rounded-md border border-cyan-200/35 bg-slate-900/80 px-3 text-lg font-bold tracking-[0.22em] disabled:cursor-not-allowed disabled:opacity-60"
+                            className="numeron-next-slot h-11 min-w-11 rounded-md border border-cyan-200/35 bg-slate-900/80 px-3 text-lg font-bold tracking-[0.22em] disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {value}
                           </button>
@@ -15352,7 +15352,7 @@ export default function Home() {
                       })}
                     </div>
 
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2 numeron-next-digit-grid">
                       {Array.from({ length: 10 }, (_, i) => String(i)).map((digit) => {
                         const selected = numeronSecretDraft.includes(digit);
                         return (
@@ -15361,7 +15361,7 @@ export default function Home() {
                             type="button"
                             onClick={() => onNumeronPickSecretDigit(digit)}
                             disabled={isNumeronOver || numeronHistory.length > 0 || isNumeronSecretConfirmed || selected || numeronSecretDraft.length >= numeronDigitCount}
-                            className={`h-11 w-11 rounded-md border text-base font-semibold ${selected ? "border-amber-300/60 bg-amber-300/20" : "border-cyan-200/30 bg-cyan-400/10"}`}
+                            className={`numeron-next-digit h-11 w-11 rounded-md border text-base font-semibold ${selected ? "border-amber-300/60 bg-amber-300/20" : "border-cyan-200/30 bg-cyan-400/10"}`}
                           >
                             {digit}
                           </button>
@@ -15415,9 +15415,9 @@ export default function Home() {
                   {t("numeronSecretLabel")}: {isNumeronOver ? numeronSecret : "*".repeat(numeronDigitCount)}
                 </p>
 
-                <div ref={numeronGuessPanelRef} className="mt-4 rounded-xl border border-cyan-300/20 bg-slate-950/40 p-3">
+                <div ref={numeronGuessPanelRef} className="numeron-next-guess-panel mt-4 rounded-xl border border-cyan-300/20 bg-slate-950/40 p-3">
                   <p className="text-xs tracking-wide text-slate-400">{t("numeronGuess")}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap gap-2 numeron-next-slots">
                     {Array.from({ length: numeronDigitCount }, (_, index) => {
                       const value = numeronDraft[index] ?? "-";
                       const canBackTo = Boolean(numeronDraft[index]);
@@ -15427,7 +15427,7 @@ export default function Home() {
                           type="button"
                           onClick={() => setNumeronDraft((prev) => prev.slice(0, index))}
                           disabled={!canBackTo || isNumeronOver || !isNumeronSecretConfirmed || Boolean(numeronPendingItem)}
-                          className="h-11 min-w-11 rounded-md border border-cyan-200/35 bg-slate-900/80 px-3 text-lg font-bold tracking-[0.22em] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="numeron-next-slot h-11 min-w-11 rounded-md border border-cyan-200/35 bg-slate-900/80 px-3 text-lg font-bold tracking-[0.22em] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {value}
                         </button>
@@ -15435,7 +15435,7 @@ export default function Home() {
                     })}
                   </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2 numeron-next-digit-grid">
                     {Array.from({ length: 10 }, (_, i) => String(i)).map((digit) => {
                       const selected = numeronDraft.includes(digit);
                       return (
@@ -15444,7 +15444,7 @@ export default function Home() {
                           type="button"
                           onClick={() => onNumeronPickDigit(digit)}
                           disabled={isNumeronOver || !isNumeronSecretConfirmed || Boolean(numeronPendingItem) || selected || numeronDraft.length >= numeronDigitCount}
-                          className={`h-11 w-11 rounded-md border text-base font-semibold ${selected ? "border-amber-300/60 bg-amber-300/20" : "border-cyan-200/30 bg-cyan-400/10"}`}
+                          className={`numeron-next-digit h-11 w-11 rounded-md border text-base font-semibold ${selected ? "border-amber-300/60 bg-amber-300/20" : "border-cyan-200/30 bg-cyan-400/10"}`}
                         >
                           {digit}
                         </button>
@@ -15543,7 +15543,7 @@ export default function Home() {
               </fieldset>
             </article>
 
-            <article className="w-full max-w-[360px] justify-self-end rounded-2xl border border-slate-300/20 bg-slate-900/40 p-4">
+            <article className="numeron-next-side w-full max-w-[360px] justify-self-end rounded-2xl border border-slate-300/20 bg-slate-900/40 p-4">
               <div className="grid gap-4">
                 <div>
                   <p className="text-sm font-semibold text-cyan-100">{t("numeronOpponentField")}</p>
@@ -15553,7 +15553,7 @@ export default function Home() {
                       {Array.from({ length: numeronDigitCount }, (_, index) => (
                         <span
                           key={`numeron-op-secret-${index}`}
-                          className="inline-grid h-9 min-w-9 place-items-center rounded-md border border-cyan-200/25 bg-slate-900/80 px-2 text-base font-bold"
+                          className="numeron-next-secret-card inline-grid h-9 min-w-9 place-items-center rounded-md border border-cyan-200/25 bg-slate-900/80 px-2 text-base font-bold"
                         >
                           {isNumeronOver ? (numeronSecret[index] ?? "-") : "?"}
                         </span>
@@ -15575,7 +15575,7 @@ export default function Home() {
                         return (
                           <span
                             key={`numeron-my-secret-${index}`}
-                            className="inline-grid h-9 min-w-9 place-items-center rounded-md border border-emerald-200/25 bg-slate-900/80 px-2 text-base font-bold"
+                            className="numeron-next-secret-card inline-grid h-9 min-w-9 place-items-center rounded-md border border-emerald-200/25 bg-slate-900/80 px-2 text-base font-bold"
                           >
                             {value}
                           </span>
@@ -15584,12 +15584,12 @@ export default function Home() {
                     </div>
 
                     <p className="mt-3 text-[11px] tracking-wide text-slate-300">{t("numeronOpponentHistory")}</p>
-                    <ul className="mt-2 max-h-[210px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/35 p-2 text-sm text-slate-200">
+                    <ul className="numeron-next-history mt-2 max-h-[210px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/35 p-2 text-sm text-slate-200">
                       {numeronHistory.length === 0 ? (
                         <li className="text-slate-400">-</li>
                       ) : (
                         numeronHistory.map((entry, index) => (
-                          <li key={`op-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="grid grid-cols-[2rem_1fr] gap-2">
+                          <li key={`op-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="numeron-next-history-row grid grid-cols-[2rem_1fr] gap-2">
                             <span className="text-slate-500">{index + 1}.</span>
                             <span>{tf("numeronResult", { guess: entry.guess, hits: entry.hits, blows: entry.blows })}</span>
                           </li>
@@ -15616,12 +15616,12 @@ export default function Home() {
                         </button>
                       </div>
                       {isNumeronEnemyHistoryOpen ? (
-                        <ul className="mt-2 max-h-[160px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/40 p-2 text-xs text-slate-200">
+                        <ul className="numeron-next-history mt-2 max-h-[160px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/40 p-2 text-xs text-slate-200">
                           {numeronEnemyHistory.length === 0 ? (
                             <li className="text-slate-400">-</li>
                           ) : (
                             numeronEnemyHistory.map((entry, index) => (
-                              <li key={`enemy-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="grid grid-cols-[1.6rem_1fr] gap-2">
+                              <li key={`enemy-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="numeron-next-history-row grid grid-cols-[1.6rem_1fr] gap-2">
                                 <span className="text-slate-500">{index + 1}.</span>
                                 <span>{tf("numeronEnemyResult", { guess: entry.guess, hits: entry.hits, blows: entry.blows })}</span>
                               </li>

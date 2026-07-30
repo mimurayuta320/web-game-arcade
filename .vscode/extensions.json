@@ -1,6 +1,8 @@
 {
   "recommendations": [
     "qwtel.sqlite-viewer",
-    "alexcvzz.vscode-sqlite"
+    "alexcvzz.vscode-sqlite",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-mysql"
   ]
 }

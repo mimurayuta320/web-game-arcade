@@ -1,0 +1,24 @@
+{
+  "files.exclude": {
+    "**/backups/*.sql": true
+  },
+  "search.exclude": {
+    "**/backups/*.sql": true
+  },
+  "sqltools.connections": [
+    {
+      "name": "web_game_local_mysql",
+      "dialect": "MySQL",
+      "driver": "MySQL",
+      "server": "127.0.0.1",
+      "port": 3306,
+      "database": "web_game",
+      "username": "root",
+      "askForPassword": true,
+      "previewLimit": 100,
+      "mysqlOptions": {
+        "authProtocol": "default"
+      }
+    }
+  ]
+}

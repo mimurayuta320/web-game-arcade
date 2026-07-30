@@ -164,6 +164,8 @@ function toHalfWidthText(value) {
 export function initNumeron(options = {}) {
   const numeronScreenEl = document.getElementById("numeronScreen");
   const turnTextEl = document.getElementById("numeronTurnText");
+  const timeTextEl = document.getElementById("numeronTimeText");
+  const turnBadgeEl = document.getElementById("numeronTurnBadge");
   const p1TryCountEl = document.getElementById("numeronP1TryCount");
   const p2TryCountEl = document.getElementById("numeronP2TryCount");
   const p1ItemsEl = document.getElementById("numeronP1Items");
@@ -217,6 +219,7 @@ export function initNumeron(options = {}) {
     secrets: ["", ""],
     history: [[], []],
     cpuTimerId: null,
+    clockTimerId: null,
     cpuCandidates: [[], []],
     secretDraft: [],
     guessDraft: [],
@@ -225,6 +228,8 @@ export function initNumeron(options = {}) {
     openingChoice: "first",
     openingPlayer: 0,
     codeLength: 3,
+    matchStartedAt: null,
+    matchEndedAt: null,
   };
 
   function normalizeCodeLength(value) {
@@ -250,6 +255,39 @@ export function initNumeron(options = {}) {
   function popDraftDigit(draft) {
     if (!Array.isArray(draft) || draft.length === 0) return draft;
     return draft.slice(0, -1);
+  }
+
+  function formatElapsedTime(ms) {
+    const totalSeconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function getElapsedMs() {
+    if (!Number.isFinite(state.matchStartedAt)) return 0;
+    const endAt = Number.isFinite(state.matchEndedAt) ? state.matchEndedAt : Date.now();
+    return Math.max(0, endAt - state.matchStartedAt);
+  }
+
+  function renderElapsedTime() {
+    if (!timeTextEl) return;
+    timeTextEl.textContent = formatElapsedTime(getElapsedMs());
+  }
+
+  function clearClockTimer() {
+    if (state.clockTimerId) {
+      clearInterval(state.clockTimerId);
+      state.clockTimerId = null;
+    }
+  }
+
+  function ensureClockTimer() {
+    if (state.clockTimerId) return;
+    state.clockTimerId = setInterval(() => {
+      if (state.gameOver || isSetupPhase()) return;
+      renderElapsedTime();
+    }, 1000);
   }
 
   function onSecretSlotClick(index) {
@@ -437,7 +475,25 @@ export function initNumeron(options = {}) {
 
     entries.forEach((entry, idx) => {
       const item = document.createElement("li");
-      item.textContent = `${idx + 1}. ${entry.guess}  ${entry.hits} EAT / ${entry.blows} BITE`;
+      item.className = "numeron-history-row";
+
+      const turn = document.createElement("span");
+      turn.className = "value-turn";
+      turn.textContent = String(idx + 1);
+
+      const call = document.createElement("span");
+      call.className = "value-call";
+      call.textContent = entry.guess;
+
+      const eat = document.createElement("span");
+      eat.className = "value-eat";
+      eat.textContent = String(entry.hits);
+
+      const bite = document.createElement("span");
+      bite.className = "value-bite";
+      bite.textContent = String(entry.blows);
+
+      item.append(turn, call, eat, bite);
       target.append(item);
     });
   }
@@ -480,6 +536,25 @@ export function initNumeron(options = {}) {
         turnTextEl.textContent = state.winnerIndex == null ? "-" : `${playerLabel(state.winnerIndex)} WIN`;
       } else {
         turnTextEl.textContent = `${playerLabel(state.currentPlayer)} (${state.turnActionsLeft} ACTION)`;
+      }
+    }
+
+    renderElapsedTime();
+
+    if (turnBadgeEl) {
+      turnBadgeEl.classList.remove("is-rival", "is-wait");
+
+      if (isSetupPhase()) {
+        turnBadgeEl.textContent = "セットアップ中";
+        turnBadgeEl.classList.add("is-wait");
+      } else if (state.gameOver) {
+        turnBadgeEl.textContent = state.winnerIndex == null ? "待機中" : "ゲーム終了";
+        turnBadgeEl.classList.add("is-wait");
+      } else if (canLocalInput()) {
+        turnBadgeEl.textContent = "あなたのターン";
+      } else {
+        turnBadgeEl.textContent = `${playerLabel(state.currentPlayer)} のターン`;
+        turnBadgeEl.classList.add("is-rival");
       }
     }
 
@@ -610,6 +685,8 @@ export function initNumeron(options = {}) {
     state.itemResultText = "-";
     state.items = [createDefaultItems(), createDefaultItems()];
     state.cpuCandidates = [buildCandidatesFromHistory(state.history[0], state.codeLength), buildCandidatesFromHistory(state.history[1], state.codeLength)];
+    state.matchStartedAt = Date.now();
+    state.matchEndedAt = null;
 
     updateOverlay("");
     pushMessage(`推理カードを${digitsLabel()}選んで確定。${state.codeLength} EAT で勝利です。アイテムは各1回まで使えます。`);
@@ -626,6 +703,8 @@ export function initNumeron(options = {}) {
     state.secretDraft = [];
     state.itemResultText = "-";
     state.openingPlayer = resolveOpeningPlayer(state.openingChoice);
+    state.matchStartedAt = null;
+    state.matchEndedAt = null;
 
     if (isRoomMode()) {
       state.roomLocked = false;
@@ -709,6 +788,7 @@ export function initNumeron(options = {}) {
   function finishGame(winnerIndex, guess) {
     state.gameOver = true;
     state.winnerIndex = winnerIndex;
+    state.matchEndedAt = Date.now();
     clearCpuTimer();
 
     const loserIndex = winnerIndex === 0 ? 1 : 0;
@@ -897,6 +977,8 @@ export function initNumeron(options = {}) {
     state.guessDraft = [];
     state.items = [createDefaultItems(), createDefaultItems()];
     state.itemResultText = "-";
+    state.matchStartedAt = null;
+    state.matchEndedAt = null;
     state.roomLocked = false;
     state.roomLockMessage = "";
 
@@ -1005,6 +1087,7 @@ export function initNumeron(options = {}) {
   window.addEventListener("keydown", handleGlobalKeyDown);
 
   enterStandby();
+  ensureClockTimer();
 
   return {
     startNewGame: ({ fromRemote = false } = {}) => {
@@ -1016,6 +1099,7 @@ export function initNumeron(options = {}) {
     enterStandby,
     stop: () => {
       clearCpuTimer();
+      clearClockTimer();
       window.removeEventListener("keydown", handleGlobalKeyDown);
     },
     configureRoomMode: ({ roomCode, roomRole }) => {
@@ -1084,6 +1168,8 @@ export function initNumeron(options = {}) {
       guessDraft: isRoomMode() ? [] : [...state.guessDraft],
       items: [{ ...state.items[0] }, { ...state.items[1] }],
       itemResultText: state.itemResultText,
+      matchStartedAt: Number.isFinite(state.matchStartedAt) ? state.matchStartedAt : null,
+      matchEndedAt: Number.isFinite(state.matchEndedAt) ? state.matchEndedAt : null,
       message: messageEl?.textContent || "",
       overlay: overlayEl?.textContent || "",
     }),
@@ -1150,6 +1236,8 @@ export function initNumeron(options = {}) {
       ];
 
       state.itemResultText = typeof snapshot.itemResultText === "string" ? snapshot.itemResultText : "-";
+      state.matchStartedAt = Number.isFinite(snapshot.matchStartedAt) ? snapshot.matchStartedAt : null;
+      state.matchEndedAt = Number.isFinite(snapshot.matchEndedAt) ? snapshot.matchEndedAt : null;
 
       if (typeof snapshot.message === "string" && messageEl) {
         messageEl.textContent = snapshot.message;
@@ -1168,6 +1256,7 @@ export function initNumeron(options = {}) {
       }
 
       render();
+      ensureClockTimer();
       maybeRunCpu();
     },
   };
