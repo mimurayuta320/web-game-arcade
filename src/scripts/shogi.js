@@ -280,6 +280,34 @@ function mergeKingAbsorbedAbility(piece, target) {
   const abilities = getKingAbsorbedAbilities(piece);
   if (!target || !DISGUISE_TYPES.includes(target.type)) return abilities;
 
+  const directionSet = new Set();
+  abilities.forEach((ability) => {
+    const absorbedPiece = {
+      owner: piece.owner,
+      type: ability.type,
+      promoted: Boolean(ability.promoted),
+    };
+    collectPieceDirectionVectors(absorbedPiece, 0, 0).forEach(([dr, dc]) => {
+      directionSet.add(`${dr}:${dc}`);
+    });
+  });
+
+  const targetKeySet = new Set();
+  collectPieceDirectionVectors(
+    {
+      owner: piece.owner,
+      type: target.type,
+      promoted: Boolean(target.promoted),
+    },
+    0,
+    0,
+  ).forEach(([dr, dc]) => {
+    targetKeySet.add(`${dr}:${dc}`);
+  });
+
+  const expandsRange = [...targetKeySet].some((key) => !directionSet.has(key));
+  if (!expandsRange) return abilities;
+
   const existing = abilities.find((entry) => entry.type === target.type);
   if (existing) {
     if (target.promoted) existing.promoted = true;
@@ -287,11 +315,6 @@ function mergeKingAbsorbedAbility(piece, target) {
   }
 
   return [...abilities, { type: target.type, promoted: Boolean(target.promoted) }];
-}
-
-function hasKingAbsorbedType(piece, type) {
-  if (!piece || piece.type !== "K") return false;
-  return getKingAbsorbedAbilities(piece).some((entry) => entry.type === type);
 }
 
 function normalizeDirection(delta) {
@@ -865,7 +888,7 @@ function getPseudoMoves(board, row, col) {
       moves.push({ row: r, col: c });
     };
 
-    const bonusDirectionCounts = new Map();
+    const bonusDirectionKeys = new Set();
     const absorbedAbilities = getKingAbsorbedAbilities(piece);
     absorbedAbilities.forEach((ability) => {
       const absorbedPiece = {
@@ -874,8 +897,7 @@ function getPseudoMoves(board, row, col) {
         promoted: Boolean(ability.promoted),
       };
       collectPieceDirectionVectors(absorbedPiece, row, col).forEach(([dr, dc]) => {
-        const key = `${dr}:${dc}`;
-        bonusDirectionCounts.set(key, (bonusDirectionCounts.get(key) ?? 0) + 1);
+        bonusDirectionKeys.add(`${dr}:${dc}`);
       });
     });
 
@@ -891,7 +913,7 @@ function getPseudoMoves(board, row, col) {
     ];
 
     for (const [dr, dc] of kingDirs) {
-      const bonus = bonusDirectionCounts.get(`${dr}:${dc}`) ?? 0;
+      const bonus = bonusDirectionKeys.has(`${dr}:${dc}`) ? 1 : 0;
       const maxDistance = 1 + bonus;
       for (let dist = 1; dist <= maxDistance; dist += 1) {
         const r = row + dr * dist;
@@ -906,11 +928,7 @@ function getPseudoMoves(board, row, col) {
 
         if (target.owner !== piece.owner) {
           pushUniqueMove(r, c);
-        } else if (
-          isKingAllyAbsorbEnabled(piece) &&
-          target.type !== "K" &&
-          !hasKingAbsorbedType(piece, target.type)
-        ) {
+        } else if (isKingAllyAbsorbEnabled(piece) && target.type !== "K") {
           pushUniqueMove(r, c);
         }
         break;
@@ -1003,7 +1021,6 @@ function applyMoveOn(board, hands, fromRow, fromCol, toRow, toCol, promote, meta
 
     if (targetState.owner === pieceState.owner && isKingAllyAbsorbEnabled(pieceState)) {
       if (target.type === "K") return false;
-      if (hasKingAbsorbedType(pieceState, targetState.type)) return false;
       const absorbedAbilities = mergeKingAbsorbedAbility(pieceState, targetState);
       board[toRow][toCol] = {
         ...nextMovedState,
@@ -1418,14 +1435,25 @@ export function initShogi(options = {}) {
     if (turnOrderLabelEl) turnOrderLabelEl.textContent = is4p ? "開始プレイヤー" : "先攻後攻";
     if (myPieceColorLabelEl) myPieceColorLabelEl.textContent = is4p ? "駒色テーマ" : "自分の駒色";
 
-    if (blackHandicapLabelEl) blackHandicapLabelEl.textContent = "ハンデ";
-    if (whiteHandicapLabelEl) whiteHandicapLabelEl.textContent = "ハンデ";
-    if (thirdHandicapLabelEl) thirdHandicapLabelEl.textContent = "ハンデ";
-    if (fourthHandicapLabelEl) fourthHandicapLabelEl.textContent = "ハンデ";
-    if (blackMineCountLabelEl) blackMineCountLabelEl.textContent = "地雷数";
-    if (whiteMineCountLabelEl) whiteMineCountLabelEl.textContent = "地雷数";
-    if (thirdMineCountLabelEl) thirdMineCountLabelEl.textContent = "地雷数";
-    if (fourthMineCountLabelEl) fourthMineCountLabelEl.textContent = "地雷数";
+    if (is4p) {
+      if (blackHandicapLabelEl) blackHandicapLabelEl.textContent = "1Pハンデ";
+      if (whiteHandicapLabelEl) whiteHandicapLabelEl.textContent = "2Pハンデ";
+      if (thirdHandicapLabelEl) thirdHandicapLabelEl.textContent = "3Pハンデ";
+      if (fourthHandicapLabelEl) fourthHandicapLabelEl.textContent = "4Pハンデ";
+      if (blackMineCountLabelEl) blackMineCountLabelEl.textContent = "1P地雷数";
+      if (whiteMineCountLabelEl) whiteMineCountLabelEl.textContent = "2P地雷数";
+      if (thirdMineCountLabelEl) thirdMineCountLabelEl.textContent = "3P地雷数";
+      if (fourthMineCountLabelEl) fourthMineCountLabelEl.textContent = "4P地雷数";
+    } else {
+      if (blackHandicapLabelEl) blackHandicapLabelEl.textContent = "先手ハンデ";
+      if (whiteHandicapLabelEl) whiteHandicapLabelEl.textContent = "後手ハンデ";
+      if (thirdHandicapLabelEl) thirdHandicapLabelEl.textContent = "3Pハンデ";
+      if (fourthHandicapLabelEl) fourthHandicapLabelEl.textContent = "4Pハンデ";
+      if (blackMineCountLabelEl) blackMineCountLabelEl.textContent = "先手地雷数";
+      if (whiteMineCountLabelEl) whiteMineCountLabelEl.textContent = "後手地雷数";
+      if (thirdMineCountLabelEl) thirdMineCountLabelEl.textContent = "3P地雷数";
+      if (fourthMineCountLabelEl) fourthMineCountLabelEl.textContent = "4P地雷数";
+    }
 
     if (myPieceColorSelect) {
       myPieceColorSelect.disabled = is4p;

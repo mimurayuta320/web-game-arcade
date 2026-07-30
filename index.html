@@ -703,6 +703,137 @@
               <option value="pro">プロ</option>
             </select>
           </div>
+          <div class="metric metric-select">
+            <span id="shogiTurnOrderLabel" class="label">先攻後攻</span>
+            <select id="shogiTurnOrderSelect" class="difficulty-select" aria-label="Shogi turn order">
+              <option value="first" selected>先攻</option>
+              <option value="second">後攻</option>
+              <option value="random">ランダム</option>
+            </select>
+          </div>
+          <div class="metric metric-select">
+            <span id="shogiMyPieceColorLabel" class="label">自分の駒色</span>
+            <select id="shogiMyPieceColorSelect" class="difficulty-select" aria-label="Shogi piece color">
+              <option value="amber" selected>Amber</option>
+              <option value="cyan">Cyan</option>
+              <option value="lime">Lime</option>
+              <option value="magenta">Magenta</option>
+            </select>
+          </div>
+          <div id="shogiPlayerSetting1" class="metric metric-select hidden">
+            <span id="shogiBlackHandicapLabel" class="label">1ハンデ</span>
+            <select id="shogiBlackHandicapSelect" class="difficulty-select" aria-label="Shogi player 1 handicap">
+              <option value="none" selected>なし</option>
+              <option value="rook">飛車落ち</option>
+              <option value="bishop">角落ち</option>
+              <option value="rookBishop">飛角落ち</option>
+              <option value="fourPiece">四枚落ち</option>
+            </select>
+          </div>
+          <div id="shogiPlayerSetting2" class="metric metric-select hidden">
+            <span id="shogiWhiteHandicapLabel" class="label">2ハンデ</span>
+            <select id="shogiWhiteHandicapSelect" class="difficulty-select" aria-label="Shogi player 2 handicap">
+              <option value="none" selected>なし</option>
+              <option value="rook">飛車落ち</option>
+              <option value="bishop">角落ち</option>
+              <option value="rookBishop">飛角落ち</option>
+              <option value="fourPiece">四枚落ち</option>
+            </select>
+          </div>
+          <div id="shogiPlayerSetting3" class="metric metric-select hidden">
+            <span id="shogiThirdHandicapLabel" class="label">3ハンデ</span>
+            <select id="shogiThirdHandicapSelect" class="difficulty-select" aria-label="Shogi player 3 handicap">
+              <option value="none" selected>なし</option>
+              <option value="rook">飛車落ち</option>
+              <option value="bishop">角落ち</option>
+              <option value="rookBishop">飛角落ち</option>
+              <option value="fourPiece">四枚落ち</option>
+            </select>
+          </div>
+          <div id="shogiPlayerSetting4" class="metric metric-select hidden">
+            <span id="shogiFourthHandicapLabel" class="label">4ハンデ</span>
+            <select id="shogiFourthHandicapSelect" class="difficulty-select" aria-label="Shogi player 4 handicap">
+              <option value="none" selected>なし</option>
+              <option value="rook">飛車落ち</option>
+              <option value="bishop">角落ち</option>
+              <option value="rookBishop">飛角落ち</option>
+              <option value="fourPiece">四枚落ち</option>
+            </select>
+          </div>
+          <div class="metric metric-select hidden">
+            <span class="label">ハンデ対象</span>
+            <select id="shogiHandicapTargetSelect" class="difficulty-select" aria-label="Shogi handicap target">
+              <option value="opponent" selected>相手</option>
+              <option value="self">自分</option>
+              <option value="both">両方</option>
+              <option value="black">先手</option>
+              <option value="white">後手</option>
+            </select>
+          </div>
+          <div class="metric metric-select hidden">
+            <span class="label">共通ハンデ</span>
+            <select id="shogiHandicapSelect" class="difficulty-select" aria-label="Shogi legacy handicap">
+              <option value="none" selected>なし</option>
+              <option value="rook">飛車落ち</option>
+              <option value="bishop">角落ち</option>
+              <option value="rookBishop">飛角落ち</option>
+              <option value="fourPiece">四枚落ち</option>
+            </select>
+          </div>
+          <div class="metric metric-select hidden">
+            <span id="shogiBlackMineCountLabel" class="label">1地雷数</span>
+            <select id="shogiBlackMineCountSelect" class="difficulty-select" aria-label="Shogi player 1 mine count">
+              <option value="0">0</option>
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
+          <div class="metric metric-select hidden">
+            <span id="shogiWhiteMineCountLabel" class="label">2地雷数</span>
+            <select id="shogiWhiteMineCountSelect" class="difficulty-select" aria-label="Shogi player 2 mine count">
+              <option value="0">0</option>
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
+          <div class="metric metric-select hidden">
+            <span id="shogiThirdMineCountLabel" class="label">3地雷数</span>
+            <select id="shogiThirdMineCountSelect" class="difficulty-select" aria-label="Shogi player 3 mine count">
+              <option value="0">0</option>
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
+          <div class="metric metric-select hidden">
+            <span id="shogiFourthMineCountLabel" class="label">4地雷数</span>
+            <select id="shogiFourthMineCountSelect" class="difficulty-select" aria-label="Shogi player 4 mine count">
+              <option value="0">0</option>
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </div>
+          <div class="metric metric-select hidden">
+            <span class="label">王の駒吸収</span>
+            <select id="shogiKingAbsorbSelect" class="difficulty-select" aria-label="Shogi king absorb">
+              <option value="on" selected>ON</option>
+              <option value="off">OFF</option>
+            </select>
+          </div>
+          <div class="metric metric-select hidden">
+            <span class="label">カオス人数</span>
+            <select id="shogiChaosPlayerModeSelect" class="difficulty-select" aria-label="Shogi chaos player mode">
+              <option value="2p" selected>2人</option>
+              <option value="4p">4人</option>
+            </select>
+          </div>
+          <div id="shogiChaosRuleMetric" class="metric hidden">
+            <span class="label">カオス設定</span>
+            <span id="shogiChaosRuleText">-</span>
+          </div>
           <button id="shogiStartBtn" class="start-btn hud-primary">新規対局</button>
           <button id="shogiRemakeBtn" class="start-btn ghost">リメイク</button>
           <button id="shogiMenuBtn" class="start-btn ghost">メニュー</button>

@@ -177,6 +177,7 @@ type ChessTurnOrder = "white" | "black" | "random";
 type ShogiMode = "local" | "cpu" | "chaos";
 type ShogiCpuLevel = "easy" | "normal" | "hard";
 type ShogiTurnOrder = "black" | "white" | "random";
+type ShogiChaosKingAbsorb = "on" | "off";
 type OthelloChaosTarget = "none" | "black" | "white" | "both" | "player" | "opponent";
 type OthelloChaosHandicap = "none" | "immutable1";
 type OthelloChaosToggle = "off" | "on";
@@ -581,6 +582,10 @@ const LOGIN_I18N = {
     shogiTurnOrderBlack: "1P先手(先手)",
     shogiTurnOrderWhite: "1P後手(後手)",
     shogiTurnOrderRandom: "ランダム",
+    shogiChaosKingAbsorbLabel: "王の駒吸収",
+    shogiChaosKingAbsorbOn: "ON",
+    shogiChaosKingAbsorbOff: "OFF",
+    shogiChaosMineCountLabel: "地雷数",
     shogiCpuThinking: "CPUが考えています...",
     shogiTurnBlack: "先手の番です",
     shogiTurnWhite: "後手の番です",
@@ -1284,6 +1289,10 @@ const LOGIN_I18N = {
     shogiTurnOrderBlack: "1P 선공(선수)",
     shogiTurnOrderWhite: "1P 후공(후수)",
     shogiTurnOrderRandom: "랜덤",
+    shogiChaosKingAbsorbLabel: "왕의 말 흡수",
+    shogiChaosKingAbsorbOn: "ON",
+    shogiChaosKingAbsorbOff: "OFF",
+    shogiChaosMineCountLabel: "지뢰 수",
     shogiCpuThinking: "CPU가 생각 중입니다...",
     shogiTurnBlack: "선수 차례입니다",
     shogiTurnWhite: "후수 차례입니다",
@@ -1911,9 +1920,11 @@ type ChessPiece = {
 };
 type ShogiColor = "b" | "w";
 type ShogiPieceType = "K" | "R" | "B" | "G" | "S" | "N" | "L" | "P";
+type ShogiAbsorbAbility = Exclude<ShogiPieceType, "K">;
 type ShogiPiece = {
   color: ShogiColor;
   type: ShogiPieceType;
+  absorbedAbilities?: ShogiAbsorbAbility[];
 };
 type MineCell = {
   mine: boolean;
@@ -3842,6 +3853,62 @@ function isShogiPathClear(
   return true;
 }
 
+function normalizeShogiStep(delta: number): -1 | 0 | 1 {
+  if (delta > 0) return 1;
+  if (delta < 0) return -1;
+  return 0;
+}
+
+function normalizeShogiAbsorbAbilities(piece: ShogiPiece | null): ShogiAbsorbAbility[] {
+  if (!piece || piece.type !== "K" || !Array.isArray(piece.absorbedAbilities)) return [];
+  const valid: ShogiAbsorbAbility[] = ["R", "B", "G", "S", "N", "L", "P"];
+  const normalized: ShogiAbsorbAbility[] = [];
+  piece.absorbedAbilities.forEach((entry) => {
+    if (!valid.includes(entry)) return;
+    normalized.push(entry);
+  });
+  return normalized;
+}
+
+function hasShogiAbsorbedAbilityType(piece: ShogiPiece | null, type: ShogiAbsorbAbility): boolean {
+  return normalizeShogiAbsorbAbilities(piece).includes(type);
+}
+
+function shogiDirectionVectorsByType(type: ShogiAbsorbAbility, color: ShogiColor): Array<[number, number]> {
+  const forward = color === "b" ? -1 : 1;
+  if (type === "R") return [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  if (type === "B") return [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+  if (type === "G") return [[forward, -1], [forward, 0], [forward, 1], [0, -1], [0, 1], [-forward, 0]];
+  if (type === "S") return [[forward, -1], [forward, 0], [forward, 1], [-forward, -1], [-forward, 1]];
+  if (type === "N") return [[forward * 2, -1], [forward * 2, 1]];
+  if (type === "L") return [[forward, 0]];
+  return [[forward, 0]];
+}
+
+function shogiDirectionKeySetFromAbility(type: ShogiAbsorbAbility, color: ShogiColor): Set<string> {
+  const keys = new Set<string>();
+  shogiDirectionVectorsByType(type, color).forEach(([dr, dc]) => {
+    keys.add(`${normalizeShogiStep(dr)}:${normalizeShogiStep(dc)}`);
+  });
+  return keys;
+}
+
+function shogiKingBonusDirectionCounts(piece: ShogiPiece): Map<string, number> {
+  const counts = new Map<string, number>();
+  normalizeShogiAbsorbAbilities(piece).forEach((type) => {
+    shogiDirectionKeySetFromAbility(type, piece.color).forEach((key) => {
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+  });
+  return counts;
+}
+
+function mergeShogiKingAbsorbAbilities(piece: ShogiPiece, target: ShogiPiece): ShogiAbsorbAbility[] {
+  const current = normalizeShogiAbsorbAbilities(piece);
+  if (target.type === "K") return current;
+  return [...current, target.type as ShogiAbsorbAbility];
+}
+
 function isLegalShogiMove(
   board: Array<Array<ShogiPiece | null>>,
   fromRow: number,
@@ -3849,6 +3916,10 @@ function isLegalShogiMove(
   toRow: number,
   toCol: number,
   turn: ShogiColor,
+  options?: {
+    isChaosMode?: boolean;
+    kingAbsorbChoice?: ShogiChaosKingAbsorb;
+  },
 ): boolean {
   if (!inShogiBounds(fromRow, fromCol) || !inShogiBounds(toRow, toCol)) return false;
   if (fromRow === toRow && fromCol === toCol) return false;
@@ -3856,7 +3927,23 @@ function isLegalShogiMove(
   const piece = board[fromRow][fromCol];
   if (!piece || piece.color !== turn) return false;
   const target = board[toRow][toCol];
-  if (target && target.color === piece.color) return false;
+  const kingAllyAbsorbEnabled = Boolean(options?.isChaosMode) && options?.kingAbsorbChoice !== "off";
+  const isAbsorbDuplicateTarget = Boolean(
+    kingAllyAbsorbEnabled
+      && piece.type === "K"
+      && target
+      && target.type !== "K"
+      && hasShogiAbsorbedAbilityType(piece, target.type as ShogiAbsorbAbility),
+  );
+  if (isAbsorbDuplicateTarget) return false;
+  const canKingAbsorbAlly = Boolean(
+    target
+      && target.color === piece.color
+      && piece.type === "K"
+      && target.type !== "K"
+      && kingAllyAbsorbEnabled,
+  );
+  if (target && target.color === piece.color && !canKingAbsorbAlly) return false;
 
   const dr = toRow - fromRow;
   const dc = toCol - fromCol;
@@ -3865,7 +3952,30 @@ function isLegalShogiMove(
   const dir = piece.color === "b" ? -1 : 1;
   const fdr = dr * dir;
 
-  if (piece.type === "K") return absDr <= 1 && absDc <= 1;
+  if (piece.type === "K") {
+    if (!kingAllyAbsorbEnabled) return absDr <= 1 && absDc <= 1;
+
+    if (!(dr === 0 || dc === 0 || absDr === absDc)) return false;
+
+    const stepR = normalizeShogiStep(dr);
+    const stepC = normalizeShogiStep(dc);
+    const distance = Math.max(absDr, absDc);
+    const bonusDirCounts = shogiKingBonusDirectionCounts(piece);
+    const bonus = bonusDirCounts.get(`${stepR}:${stepC}`) ?? 0;
+    const maxDistance = 1 + bonus;
+    if (distance > maxDistance) return false;
+
+    for (let dist = 1; dist < distance; dist += 1) {
+      const midRow = fromRow + stepR * dist;
+      const midCol = fromCol + stepC * dist;
+      if (board[midRow][midCol]) return false;
+    }
+
+    if (target && target.color === piece.color) {
+      return canKingAbsorbAlly;
+    }
+    return true;
+  }
 
   if (piece.type === "G") {
     return (
@@ -3905,7 +4015,14 @@ function isLegalShogiMove(
   return false;
 }
 
-function collectLegalShogiMoves(board: Array<Array<ShogiPiece | null>>, turn: ShogiColor) {
+function collectLegalShogiMoves(
+  board: Array<Array<ShogiPiece | null>>,
+  turn: ShogiColor,
+  options?: {
+    isChaosMode?: boolean;
+    kingAbsorbChoice?: ShogiChaosKingAbsorb;
+  },
+) {
   const moves: Array<{ fromRow: number; fromCol: number; toRow: number; toCol: number; capture: ShogiPiece | null }> = [];
   for (let fromRow = 0; fromRow < 9; fromRow += 1) {
     for (let fromCol = 0; fromCol < 9; fromCol += 1) {
@@ -3914,7 +4031,7 @@ function collectLegalShogiMoves(board: Array<Array<ShogiPiece | null>>, turn: Sh
 
       for (let toRow = 0; toRow < 9; toRow += 1) {
         for (let toCol = 0; toCol < 9; toCol += 1) {
-          if (!isLegalShogiMove(board, fromRow, fromCol, toRow, toCol, turn)) continue;
+          if (!isLegalShogiMove(board, fromRow, fromCol, toRow, toCol, turn, options)) continue;
           moves.push({
             fromRow,
             fromCol,
@@ -3933,8 +4050,12 @@ function pickShogiCpuMove(
   board: Array<Array<ShogiPiece | null>>,
   turn: ShogiColor,
   level: ShogiCpuLevel,
+  options?: {
+    isChaosMode?: boolean;
+    kingAbsorbChoice?: ShogiChaosKingAbsorb;
+  },
 ) {
-  const legal = collectLegalShogiMoves(board, turn);
+  const legal = collectLegalShogiMoves(board, turn, options);
   if (legal.length === 0) return null;
 
   if (level === "easy") {
@@ -3975,7 +4096,6 @@ function createMinesweeperBoard(size = 9, mineCount = 10): MineCell[][] {
 
   for (let row = 0; row < size; row += 1) {
     for (let col = 0; col < size; col += 1) {
-      if (board[row][col].mine) continue;
       let count = 0;
       for (let dr = -1; dr <= 1; dr += 1) {
         for (let dc = -1; dc <= 1; dc += 1) {
@@ -4592,6 +4712,8 @@ export default function Home() {
   const [shogiMode, setShogiMode] = useState<ShogiMode>("local");
   const [shogiCpuLevel, setShogiCpuLevel] = useState<ShogiCpuLevel>("normal");
   const [shogiTurnOrder, setShogiTurnOrder] = useState<ShogiTurnOrder>("black");
+  const [shogiChaosKingAbsorb, setShogiChaosKingAbsorb] = useState<ShogiChaosKingAbsorb>("on");
+  const [shogiChaosMineCount, setShogiChaosMineCount] = useState<number>(1);
   const [shogiPlayerSide, setShogiPlayerSide] = useState<ShogiColor>("b");
   const [shogiTurn, setShogiTurn] = useState<ShogiColor>("b");
   const [selectedShogi, setSelectedShogi] = useState<{ row: number; col: number } | null>(null);
@@ -4604,7 +4726,17 @@ export default function Home() {
 
     for (let row = 0; row < 9; row += 1) {
       for (let col = 0; col < 9; col += 1) {
-        if (!isLegalShogiMove(shogiBoard, selectedShogi.row, selectedShogi.col, row, col, shogiTurn)) continue;
+        if (!isLegalShogiMove(
+          shogiBoard,
+          selectedShogi.row,
+          selectedShogi.col,
+          row,
+          col,
+          shogiTurn,
+          { isChaosMode: shogiMode === "chaos", kingAbsorbChoice: shogiChaosKingAbsorb },
+        )) {
+          continue;
+        }
         const targetPiece = shogiBoard[row][col];
         targets.set(`${row}-${col}`, {
           capture: Boolean(targetPiece && targetPiece.color !== selectedPiece.color),
@@ -4613,7 +4745,7 @@ export default function Home() {
     }
 
     return targets;
-  }, [selectedShogi, shogiBoard, shogiTurn]);
+  }, [selectedShogi, shogiBoard, shogiTurn, shogiMode, shogiChaosKingAbsorb]);
   const [shogiMessage, setShogiMessage] = useState<string>(LOGIN_I18N.ja.shogiTurnBlack);
   const [isShogiOver, setIsShogiOver] = useState(false);
   const [mineBoard, setMineBoard] = useState<MineCell[][]>(() => createMinesweeperBoard());
@@ -4739,6 +4871,8 @@ export default function Home() {
   const [survivorsHasteBonus, setSurvivorsHasteBonus] = useState(0);
   const [survivorsMultiShotBonus, setSurvivorsMultiShotBonus] = useState(0);
   const [survivorsArmorBonus, setSurvivorsArmorBonus] = useState(0);
+  const [isSurvivorsAttackMotion, setIsSurvivorsAttackMotion] = useState(false);
+  const [survivorsPlayerFrame, setSurvivorsPlayerFrame] = useState<1 | 2 | 3>(1);
   const [survivorsPendingAugments, setSurvivorsPendingAugments] = useState<SurvivorsAugmentOption[]>([]);
   const [isSurvivorsAugmentOpen, setIsSurvivorsAugmentOpen] = useState(false);
   const [survivorsAugmentReason, setSurvivorsAugmentReason] = useState<SurvivorsAugmentReason>("levelup");
@@ -4887,6 +5021,7 @@ export default function Home() {
     x: SURVIVORS_ARENA_WIDTH / 2,
     y: SURVIVORS_ARENA_HEIGHT / 2,
   });
+  const survivorsAttackMotionRef = useRef(false);
   const survivorsInputRef = useRef({ up: false, down: false, left: false, right: false });
   const survivorsAutoAttackReadyAtRef = useRef(0);
   const survivorsContactReadyAtRef = useRef(0);
@@ -6954,6 +7089,13 @@ export default function Home() {
     if (state.shogiMode === "local" || state.shogiMode === "cpu" || state.shogiMode === "chaos") {
       setShogiMode(state.shogiMode as ShogiMode);
     }
+    if (state.shogiChaosKingAbsorb === "on" || state.shogiChaosKingAbsorb === "off") {
+      setShogiChaosKingAbsorb(state.shogiChaosKingAbsorb as ShogiChaosKingAbsorb);
+    }
+    if (Number.isFinite(state.shogiChaosMineCount)) {
+      const parsedShogiMineCount = Number(state.shogiChaosMineCount);
+      setShogiChaosMineCount(Math.max(0, Math.min(3, Math.floor(parsedShogiMineCount))));
+    }
     if (state.shogiCpuLevel === "easy" || state.shogiCpuLevel === "normal" || state.shogiCpuLevel === "hard") {
       setShogiCpuLevel(state.shogiCpuLevel as ShogiCpuLevel);
     }
@@ -8263,6 +8405,8 @@ export default function Home() {
         isChessOver,
         shogiBoard,
         shogiMode,
+        shogiChaosKingAbsorb,
+        shogiChaosMineCount,
         shogiCpuLevel,
         shogiTurnOrder,
         shogiPlayerSide,
@@ -9206,13 +9350,29 @@ export default function Home() {
     if (
       piece
       && piece.color === shogiTurn
-      && !isLegalShogiMove(shogiBoard, selectedShogi.row, selectedShogi.col, row, col, shogiTurn)
+      && !isLegalShogiMove(
+        shogiBoard,
+        selectedShogi.row,
+        selectedShogi.col,
+        row,
+        col,
+        shogiTurn,
+        { isChaosMode: shogiMode === "chaos", kingAbsorbChoice: shogiChaosKingAbsorb },
+      )
     ) {
       setSelectedShogi({ row, col });
       return;
     }
 
-    const legal = isLegalShogiMove(shogiBoard, selectedShogi.row, selectedShogi.col, row, col, shogiTurn);
+    const legal = isLegalShogiMove(
+      shogiBoard,
+      selectedShogi.row,
+      selectedShogi.col,
+      row,
+      col,
+      shogiTurn,
+      { isChaosMode: shogiMode === "chaos", kingAbsorbChoice: shogiChaosKingAbsorb },
+    );
     if (!legal) {
       setShogiMessage(t("shogiIllegalMove"));
       return;
@@ -9221,13 +9381,24 @@ export default function Home() {
     const next = shogiBoard.map((line) => [...line]);
     const moving = next[selectedShogi.row][selectedShogi.col];
     const captured = next[row][col];
-    next[row][col] = moving;
+    const isKingAbsorbEnabled = Boolean(
+      moving
+      && captured
+      && moving.type === "K"
+      && captured.type !== "K"
+      && shogiMode === "chaos"
+      && shogiChaosKingAbsorb === "on",
+    );
+    const movedPiece = moving && isKingAbsorbEnabled
+      ? { ...moving, absorbedAbilities: mergeShogiKingAbsorbAbilities(moving, captured as ShogiPiece) }
+      : moving;
+    next[row][col] = movedPiece;
     next[selectedShogi.row][selectedShogi.col] = null;
 
     setShogiBoard(next);
     setSelectedShogi(null);
 
-    if (captured?.type === "K") {
+    if (captured?.type === "K" && captured.color !== shogiTurn) {
       const winner = shogiTurn === "b" ? t("blackStone") : t("whiteStone");
       setShogiMessage(tf("shogiWin", { winner }));
       setIsShogiOver(true);
@@ -9252,7 +9423,12 @@ export default function Home() {
     setShogiMessage(t("shogiCpuThinking"));
 
     const timer = setTimeout(() => {
-      const move = pickShogiCpuMove(shogiBoard, cpuColor, shogiCpuLevel);
+      const move = pickShogiCpuMove(
+        shogiBoard,
+        cpuColor,
+        shogiCpuLevel,
+        { isChaosMode: shogiMode === "chaos", kingAbsorbChoice: shogiChaosKingAbsorb },
+      );
       if (!move) {
         return;
       }
@@ -9260,7 +9436,17 @@ export default function Home() {
       const next = shogiBoard.map((line) => [...line]);
       const moving = next[move.fromRow][move.fromCol];
       const captured = next[move.toRow][move.toCol];
-      next[move.toRow][move.toCol] = moving;
+      const isCpuKingAbsorbEnabled = Boolean(
+        moving
+        && captured
+        && moving.type === "K"
+        && captured.type !== "K"
+        && shogiMode === "chaos"
+        && shogiChaosKingAbsorb === "on",
+      );
+      next[move.toRow][move.toCol] = moving && isCpuKingAbsorbEnabled
+        ? { ...moving, absorbedAbilities: mergeShogiKingAbsorbAbilities(moving, captured as ShogiPiece) }
+        : moving;
       next[move.fromRow][move.fromCol] = null;
 
       setShogiBoard(next);
@@ -9287,6 +9473,7 @@ export default function Home() {
     shogiBoard,
     shogiCpuLevel,
     shogiMode,
+    shogiChaosKingAbsorb,
     shogiPlayerSide,
     shogiTurn,
     t,
@@ -11370,6 +11557,8 @@ export default function Home() {
     setSurvivorsHasteBonus(0);
     setSurvivorsMultiShotBonus(0);
     setSurvivorsArmorBonus(0);
+    setIsSurvivorsAttackMotion(false);
+    setSurvivorsPlayerFrame(1);
     setSurvivorsPendingAugments([]);
     setIsSurvivorsAugmentOpen(false);
     setSurvivorsAugmentReason("levelup");
@@ -11560,11 +11749,17 @@ export default function Home() {
     if (activePanel !== "survivors") return;
     if (!gameStarted.survivors || isSurvivorsOver || isSurvivorsAugmentOpen) return;
 
-    const timer = window.setInterval(() => {
-      const now = Date.now();
+    let animationFrameId = 0;
+    let lastAt = performance.now();
+
+    const tick = (now: number) => {
+      const deltaMs = Math.max(0, Math.min(80, now - lastAt));
+      lastAt = now;
+      const tickScale = deltaMs / 50;
+
       const input = survivorsInputRef.current;
       const currentPlayer = survivorsPlayerRef.current;
-      const moveSpeed = 5 + Math.min(2, survivorsLevel * 0.12);
+      const moveSpeed = (5 + Math.min(2, survivorsLevel * 0.12)) * tickScale;
       const dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
       const dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
       const norm = Math.hypot(dx, dy) || 1;
@@ -11584,6 +11779,7 @@ export default function Home() {
       let totalContactDamage = 0;
       let killCount = 0;
       let pendingNextWave: number | null = null;
+      let hasEnemyInRange = false;
       const canAutoAttack = now >= survivorsAutoAttackReadyAtRef.current;
       const attackIntervalMs = Math.max(110, 520 - Math.max(0, survivorsLevel - 1) * 16 - survivorsHasteBonus);
       const attackRange = 220 + Math.min(160, survivorsLevel * 4);
@@ -11596,7 +11792,7 @@ export default function Home() {
           const vx = nextPlayer.x - enemy.x;
           const vy = nextPlayer.y - enemy.y;
           const dist = Math.hypot(vx, vy) || 1;
-          const step = enemy.speed;
+          const step = enemy.speed * tickScale;
           const x = Math.max(
             SURVIVORS_ENEMY_RADIUS,
             Math.min(SURVIVORS_ARENA_WIDTH - SURVIVORS_ENEMY_RADIUS, enemy.x + (vx / dist) * step),
@@ -11625,12 +11821,16 @@ export default function Home() {
 
         if (nearestIndex < 0) return moved;
 
+        const inRangeTargets = moved
+          .map((enemy, index) => ({ index, dist: Math.hypot(nextPlayer.x - enemy.x, nextPlayer.y - enemy.y) }))
+          .filter((row) => row.dist <= attackRange)
+          .sort((a, b) => a.dist - b.dist);
+
+        hasEnemyInRange = inRangeTargets.length > 0;
+
         let attacked = moved;
         if (canAutoAttack) {
-          const sorted = moved
-            .map((enemy, index) => ({ index, dist: Math.hypot(nextPlayer.x - enemy.x, nextPlayer.y - enemy.y) }))
-            .filter((row) => row.dist <= attackRange)
-            .sort((a, b) => a.dist - b.dist)
+          const sorted = inRangeTargets
             .slice(0, attackTargets)
             .map((row) => row.index);
           if (sorted.length > 0) {
@@ -11653,6 +11853,8 @@ export default function Home() {
 
         return alive;
       });
+
+      setIsSurvivorsAttackMotion((prev) => (prev === hasEnemyInRange ? prev : hasEnemyInRange));
 
       if (killCount > 0) {
         setSurvivorsKills((prev) => prev + killCount);
@@ -11685,9 +11887,11 @@ export default function Home() {
           return nextHp;
         });
       }
-    }, 50);
+      animationFrameId = window.requestAnimationFrame(tick);
+    };
 
-    return () => window.clearInterval(timer);
+    animationFrameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrameId);
   }, [
     activePanel,
     createSurvivorsEnemies,
@@ -11713,6 +11917,37 @@ export default function Home() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [activePanel, gameStarted.survivors, isSurvivorsAugmentOpen, isSurvivorsOver]);
+
+  useEffect(() => {
+    survivorsAttackMotionRef.current = isSurvivorsAttackMotion;
+  }, [isSurvivorsAttackMotion]);
+
+  useEffect(() => {
+    if (activePanel !== "survivors") return;
+    if (!gameStarted.survivors || isSurvivorsOver) return;
+    let animationFrameId = 0;
+    let lastSwapAt = performance.now();
+    const frameIntervalMs = 95;
+    let wasAttacking = false;
+
+    const tick = (now: number) => {
+      const isAttacking = survivorsAttackMotionRef.current;
+      if (!isAttacking) {
+        if (wasAttacking) {
+          setSurvivorsPlayerFrame(1);
+        }
+        wasAttacking = false;
+      } else if (now - lastSwapAt >= frameIntervalMs) {
+        setSurvivorsPlayerFrame((prev) => (prev === 3 ? 1 : ((prev + 1) as 1 | 2 | 3)));
+        lastSwapAt = now;
+        wasAttacking = true;
+      }
+      animationFrameId = window.requestAnimationFrame(tick);
+    };
+
+    animationFrameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [activePanel, gameStarted.survivors, isSurvivorsOver]);
 
   useEffect(() => {
     if (activePanel !== "chinchiro") return;
@@ -15549,6 +15784,42 @@ export default function Home() {
                       <option value="random">{t("shogiTurnOrderRandom")}</option>
                     </select>
                   </label>
+
+                  {shogiMode === "chaos" ? (
+                    <label className="grid gap-1 text-xs text-slate-300">
+                      <span>{t("shogiChaosKingAbsorbLabel")}</span>
+                      <select
+                        value={shogiChaosKingAbsorb}
+                        onChange={(event) => {
+                          setShogiChaosKingAbsorb(event.target.value === "off" ? "off" : "on");
+                        }}
+                        className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm min-[360px]:text-[13px]"
+                      >
+                        <option value="on">{t("shogiChaosKingAbsorbOn")}</option>
+                        <option value="off">{t("shogiChaosKingAbsorbOff")}</option>
+                      </select>
+                    </label>
+                  ) : null}
+
+                  {shogiMode === "chaos" ? (
+                    <label className="grid gap-1 text-xs text-slate-300">
+                      <span>{t("shogiChaosMineCountLabel")}</span>
+                      <select
+                        value={String(shogiChaosMineCount)}
+                        onChange={(event) => {
+                          const parsed = Number.parseInt(event.target.value, 10);
+                          if (!Number.isFinite(parsed)) return;
+                          setShogiChaosMineCount(Math.max(0, Math.min(3, parsed)));
+                        }}
+                        className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm min-[360px]:text-[13px]"
+                      >
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                      </select>
+                    </label>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -17758,12 +18029,23 @@ export default function Home() {
                 >
                   <div className="pointer-events-none absolute inset-0 rounded-lg border border-cyan-200/20" />
                   <div
-                    className="absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/90 bg-cyan-300/85 shadow-[0_0_20px_rgba(34,211,238,0.55)]"
+                    className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
                     style={{
                       left: `${(survivorsPlayer.x / SURVIVORS_ARENA_WIDTH) * 100}%`,
                       top: `${(survivorsPlayer.y / SURVIVORS_ARENA_HEIGHT) * 100}%`,
                     }}
-                  />
+                  >
+                    <div className="absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-300/28 blur-[2.5px]" />
+                    <img
+                      src={`/motionPng/Survivors/hammer${survivorsPlayerFrame}.png`}
+                      alt="survivor player"
+                      className="relative h-11 w-11 select-none object-contain drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]"
+                      draggable={false}
+                    />
+                    <div className="pointer-events-none absolute left-1/2 top-[-18px] -translate-x-1/2 rounded bg-slate-950/75 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-cyan-100">
+                      YOU
+                    </div>
+                  </div>
                   {survivorsEnemies.map((enemy) => (
                     <div
                       key={`survivors-dot-${enemy.id}`}
