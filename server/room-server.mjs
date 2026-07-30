@@ -87,6 +87,13 @@ function normalizePlayablePanel(raw) {
   return "";
 }
 
+function normalizeRoomPassword(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 24);
+}
+
 function roomMetaOf(code) {
   if (!roomMeta.has(code)) {
     roomMeta.set(code, {
@@ -94,6 +101,7 @@ function roomMetaOf(code) {
       parentRoomCode: "",
       listContext: "menu",
       isPublic: true,
+      accessPassword: "",
       inGame: false,
       allowedPeerIds: new Set(),
       mutedPeers: new Map(),
@@ -416,6 +424,7 @@ function listPublicRooms(limit = 80, listContext = "all") {
       code,
       listContext: roomListContext,
       isPublic: Boolean(meta.isPublic),
+      hasPassword: Boolean(meta.accessPassword),
       inGame: Boolean(meta.inGame),
       activePlayers: activePlayers.length,
       spectatorCount: participants.filter((participant) => participant.role === "spectator").length,
@@ -570,6 +579,7 @@ function broadcastRoomState(code) {
     participants: roomParticipants(code),
     hostPeerId: meta.hostPeerId || "",
     isPublic: Boolean(meta.isPublic),
+    hasPassword: Boolean(meta.accessPassword),
     inGame: Boolean(meta.inGame),
     rematchVotes: [...meta.rematchVotes],
     drawVotes: [...meta.drawVotes],
@@ -688,7 +698,19 @@ function tryJoinRoom(ws, payload) {
   const meta = roomMetaOf(code);
   ensureHostPeerId(code);
   const inviteToken = String(payload?.inviteToken || "").trim();
-  if (!ws.roomCode && !meta.isPublic && ws.peerId !== meta.hostPeerId) {
+  const requestedRoomPassword = normalizeRoomPassword(payload?.roomPassword);
+  if (!ws.roomCode && meta.accessPassword && ws.peerId !== meta.hostPeerId) {
+    if (!requestedRoomPassword) {
+      sendError(ws, "ROOM_PASSWORD_REQUIRED");
+      return { ok: false, joined: false };
+    }
+    if (requestedRoomPassword !== meta.accessPassword) {
+      sendError(ws, "ROOM_PASSWORD_INVALID");
+      return { ok: false, joined: false };
+    }
+  }
+  const requiresInviteToken = !meta.isPublic && !meta.accessPassword;
+  if (!ws.roomCode && requiresInviteToken && ws.peerId !== meta.hostPeerId) {
     const alreadyAllowed = ws.peerId && meta.privateAccessPeerIds.has(ws.peerId);
     const consumed = alreadyAllowed ? true : consumeInviteToken(meta, inviteToken);
     if (!consumed) {
@@ -743,8 +765,12 @@ function tryJoinRoom(ws, payload) {
   const requestedPublic = asBoolean(payload?.roomPublic, meta.isPublic);
   if (ws.peerId && meta.hostPeerId === ws.peerId) {
     meta.isPublic = requestedPublic;
+    if (requestedPublic) {
+      meta.accessPassword = "";
+    }
     if (asBoolean(payload?.create, false)) {
       meta.listContext = requestedListContext || (ws.currentPanel ? "game" : "menu");
+      meta.accessPassword = requestedPublic ? "" : requestedRoomPassword;
     }
   }
 

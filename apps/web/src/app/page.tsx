@@ -282,6 +282,8 @@ const LOGIN_I18N = {
     roomPublic: "公開",
     roomPrivate: "非公開",
     roomPasswordLabel: "パスワード",
+    roomPasswordPlaceholder: "ルームパスワード",
+    roomPasswordRequired: "非公開ルームにはパスワードが必要です。",
     roomPasswordOff: "なし",
     roomPasswordOn: "あり",
     roomListTitle: "公開ルーム一覧",
@@ -423,6 +425,8 @@ const LOGIN_I18N = {
     roomErrMessageNotOwned: "自分のメッセージのみ編集・撤回できます。",
     roomErrMessageAlreadyRetracted: "このメッセージは既に撤回済みです。",
     roomErrEditRetractExpired: "編集・撤回可能時間を過ぎています。",
+    roomErrRoomPasswordRequired: "このルームはパスワードが必要です。",
+    roomErrRoomPasswordInvalid: "ルームパスワードが違います。",
     roomErrInvitePrivateOnly: "招待トークンは非公開ルームのみ発行できます。",
     roomErrSpectatorOnly: "観戦者のみ利用できる機能です。",
     roomErrRematchVoteForbidden: "現在は再戦投票できません。",
@@ -827,7 +831,7 @@ const LOGIN_I18N = {
     solitaireAppliedScore: "ソリティアの結果をスコア欄へ反映しました。",
     survivorsTitle: "Survivors",
     survivorsReset: "リスタート",
-    survivorsHint: "敵をクリックして倒し、できるだけ長く生き残ってください。",
+    survivorsHint: "WASD / 矢印キーで移動。近い敵へ自動攻撃しながら生き残れ。",
     survivorsWave: "WAVE {wave}",
     survivorsHp: "HP {hp}/{max}",
     survivorsLevel: "LV {level}",
@@ -981,6 +985,8 @@ const LOGIN_I18N = {
     roomPublic: "공개",
     roomPrivate: "비공개",
     roomPasswordLabel: "비밀번호",
+    roomPasswordPlaceholder: "룸 비밀번호",
+    roomPasswordRequired: "비공개 룸에는 비밀번호가 필요합니다.",
     roomPasswordOff: "없음",
     roomPasswordOn: "있음",
     roomListTitle: "공개 룸 목록",
@@ -1122,6 +1128,8 @@ const LOGIN_I18N = {
     roomErrMessageNotOwned: "본인 메시지만 수정/회수할 수 있습니다.",
     roomErrMessageAlreadyRetracted: "이 메시지는 이미 회수되었습니다.",
     roomErrEditRetractExpired: "수정/회수 가능 시간이 지났습니다.",
+    roomErrRoomPasswordRequired: "이 룸은 비밀번호가 필요합니다.",
+    roomErrRoomPasswordInvalid: "룸 비밀번호가 올바르지 않습니다.",
     roomErrInvitePrivateOnly: "초대 토큰은 비공개 룸에서만 발급할 수 있습니다.",
     roomErrSpectatorOnly: "관전자 전용 기능입니다.",
     roomErrRematchVoteForbidden: "지금은 재대결 투표를 할 수 없습니다.",
@@ -1526,7 +1534,7 @@ const LOGIN_I18N = {
     solitaireAppliedScore: "솔리테어 결과를 점수 입력란에 반영했습니다.",
     survivorsTitle: "Survivors (Next 이전판)",
     survivorsReset: "재시작",
-    survivorsHint: "적을 클릭해 처치하고 최대한 오래 생존하세요.",
+    survivorsHint: "WASD / 방향키로 이동하며 가까운 적을 자동 공격해 생존하세요.",
     survivorsWave: "WAVE {wave}",
     survivorsHp: "HP {hp}/{max}",
     survivorsLevel: "LV {level}",
@@ -1680,8 +1688,12 @@ const EN_I18N: Partial<I18nMap> = {
   roomPublic: "Public",
   roomPrivate: "Private",
   roomPasswordLabel: "Password",
+  roomPasswordPlaceholder: "Room password",
+  roomPasswordRequired: "Private rooms require a password.",
   roomPasswordOff: "Off",
   roomPasswordOn: "On",
+  roomErrRoomPasswordRequired: "This room requires a password.",
+  roomErrRoomPasswordInvalid: "Incorrect room password.",
   roomListTitle: "Public Rooms",
   roomListRefresh: "Refresh",
   roomListEmpty: "No joinable public rooms right now.",
@@ -1820,8 +1832,12 @@ const ZH_I18N: Partial<I18nMap> = {
   roomPublic: "公开",
   roomPrivate: "私密",
   roomPasswordLabel: "密码",
+  roomPasswordPlaceholder: "房间密码",
+  roomPasswordRequired: "私密房间需要密码。",
   roomPasswordOff: "无",
   roomPasswordOn: "有",
+  roomErrRoomPasswordRequired: "该房间需要密码。",
+  roomErrRoomPasswordInvalid: "房间密码不正确。",
   friendsHintReady: "在好友标签可按名称或 Friend ID 进行筛选",
   friendsTabSearch: "搜索",
   friendsHintSearch: "可在搜索标签按名称/Friend ID查找并发送申请",
@@ -1998,7 +2014,22 @@ type SurvivorsEnemy = {
   id: string;
   hp: number;
   maxHp: number;
+  x: number;
+  y: number;
+  speed: number;
+  contactDamage: number;
 };
+type SurvivorsPlayer = {
+  x: number;
+  y: number;
+};
+type SurvivorsAugmentOption = {
+  id: "vital" | "power" | "haste" | "multi" | "guard";
+  title: string;
+  desc: string;
+};
+type SurvivorsAugmentReason = "levelup" | "wave";
+type SurvivorsAugmentWeights = Record<SurvivorsAugmentOption["id"], number>;
 type BrushCursorPreview = {
   x: number;
   y: number;
@@ -2026,6 +2057,11 @@ const FOUR_PANEL_RANDOM_TITLES = [
   "秘密基地の夜",
   "温泉でタイムスリップ",
 ];
+
+const SURVIVORS_ARENA_WIDTH = 860;
+const SURVIVORS_ARENA_HEIGHT = 480;
+const SURVIVORS_PLAYER_RADIUS = 16;
+const SURVIVORS_ENEMY_RADIUS = 14;
 
 const pickRandomFourPanelTitle = () => {
   return FOUR_PANEL_RANDOM_TITLES[Math.floor(Math.random() * FOUR_PANEL_RANDOM_TITLES.length)] || FOUR_PANEL_RANDOM_TITLES[0];
@@ -4695,6 +4731,17 @@ export default function Home() {
   const [survivorsTimeSec, setSurvivorsTimeSec] = useState(0);
   const [survivorsKills, setSurvivorsKills] = useState(0);
   const [survivorsEnemies, setSurvivorsEnemies] = useState<SurvivorsEnemy[]>([]);
+  const [survivorsPlayer, setSurvivorsPlayer] = useState<SurvivorsPlayer>({
+    x: SURVIVORS_ARENA_WIDTH / 2,
+    y: SURVIVORS_ARENA_HEIGHT / 2,
+  });
+  const [survivorsDamageBonus, setSurvivorsDamageBonus] = useState(0);
+  const [survivorsHasteBonus, setSurvivorsHasteBonus] = useState(0);
+  const [survivorsMultiShotBonus, setSurvivorsMultiShotBonus] = useState(0);
+  const [survivorsArmorBonus, setSurvivorsArmorBonus] = useState(0);
+  const [survivorsPendingAugments, setSurvivorsPendingAugments] = useState<SurvivorsAugmentOption[]>([]);
+  const [isSurvivorsAugmentOpen, setIsSurvivorsAugmentOpen] = useState(false);
+  const [survivorsAugmentReason, setSurvivorsAugmentReason] = useState<SurvivorsAugmentReason>("levelup");
   const [survivorsMessage, setSurvivorsMessage] = useState<string>(LOGIN_I18N.ja.survivorsHint);
   const [isSurvivorsOver, setIsSurvivorsOver] = useState(false);
   const [unoDeck, setUnoDeck] = useState<UnoCard[]>([]);
@@ -4718,6 +4765,7 @@ export default function Home() {
   const [startCountdownSec, setStartCountdownSec] = useState(0);
   const [roomCode, setRoomCode] = useState("");
   const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
+  const [roomPasswordDraft, setRoomPasswordDraft] = useState("");
   const [isRoomControlsOpen, setIsRoomControlsOpen] = useState(true);
   const [roomStatus, setRoomStatus] = useState("未接続");
   const [connectedRoomCode, setConnectedRoomCode] = useState("");
@@ -4835,6 +4883,13 @@ export default function Home() {
   const solitairePartyTimerRef = useRef<number | null>(null);
   const solitaireFlightTimersRef = useRef<number[]>([]);
   const solitaireDragSelectionRef = useRef<SolitaireSelection | null>(null);
+  const survivorsPlayerRef = useRef<SurvivorsPlayer>({
+    x: SURVIVORS_ARENA_WIDTH / 2,
+    y: SURVIVORS_ARENA_HEIGHT / 2,
+  });
+  const survivorsInputRef = useRef({ up: false, down: false, left: false, right: false });
+  const survivorsAutoAttackReadyAtRef = useRef(0);
+  const survivorsContactReadyAtRef = useRef(0);
   const casinoBankHydratedRef = useRef(false);
 
   const normalizeRoomPanel = useCallback((value: unknown): PlayablePanel | null => {
@@ -5333,6 +5388,8 @@ export default function Home() {
       if (code === "MESSAGE_NOT_OWNED") return t("roomErrMessageNotOwned");
       if (code === "MESSAGE_ALREADY_RETRACTED") return t("roomErrMessageAlreadyRetracted");
       if (code === "EDIT_RETRACT_WINDOW_EXPIRED") return t("roomErrEditRetractExpired");
+      if (code === "ROOM_PASSWORD_REQUIRED") return t("roomErrRoomPasswordRequired");
+      if (code === "ROOM_PASSWORD_INVALID") return t("roomErrRoomPasswordInvalid");
       if (code === "INVITE_TOKEN_PRIVATE_ONLY") return t("roomErrInvitePrivateOnly");
       if (code === "SPECTATOR_ONLY") return t("roomErrSpectatorOnly");
       if (code === "REMATCH_VOTE_FORBIDDEN") return t("roomErrRematchVoteForbidden");
@@ -7108,9 +7165,32 @@ export default function Home() {
     if (typeof state.survivorsXp === "number") setSurvivorsXp(state.survivorsXp);
     if (typeof state.survivorsTimeSec === "number") setSurvivorsTimeSec(state.survivorsTimeSec);
     if (typeof state.survivorsKills === "number") setSurvivorsKills(state.survivorsKills);
+    if (typeof state.survivorsDamageBonus === "number") setSurvivorsDamageBonus(state.survivorsDamageBonus);
+    if (typeof state.survivorsHasteBonus === "number") setSurvivorsHasteBonus(state.survivorsHasteBonus);
+    if (typeof state.survivorsMultiShotBonus === "number") setSurvivorsMultiShotBonus(state.survivorsMultiShotBonus);
+    if (typeof state.survivorsArmorBonus === "number") setSurvivorsArmorBonus(state.survivorsArmorBonus);
     if (Array.isArray(state.survivorsEnemies)) setSurvivorsEnemies(state.survivorsEnemies as SurvivorsEnemy[]);
+    if (
+      state.survivorsPlayer
+      && typeof state.survivorsPlayer === "object"
+      && Number.isFinite((state.survivorsPlayer as SurvivorsPlayer).x)
+      && Number.isFinite((state.survivorsPlayer as SurvivorsPlayer).y)
+    ) {
+      const player = state.survivorsPlayer as SurvivorsPlayer;
+      survivorsPlayerRef.current = player;
+      setSurvivorsPlayer(player);
+    }
     if (typeof state.survivorsMessage === "string") setSurvivorsMessage(state.survivorsMessage);
     if (typeof state.isSurvivorsOver === "boolean") setIsSurvivorsOver(state.isSurvivorsOver);
+    if (Array.isArray(state.survivorsPendingAugments)) {
+      setSurvivorsPendingAugments(state.survivorsPendingAugments as SurvivorsAugmentOption[]);
+    }
+    if (typeof state.isSurvivorsAugmentOpen === "boolean") {
+      setIsSurvivorsAugmentOpen(state.isSurvivorsAugmentOpen);
+    }
+    if (state.survivorsAugmentReason === "levelup" || state.survivorsAugmentReason === "wave") {
+      setSurvivorsAugmentReason(state.survivorsAugmentReason);
+    }
     if (Array.isArray(state.unoDeck)) setUnoDeck(state.unoDeck as UnoCard[]);
     if (Array.isArray(state.unoPlayerHand)) setUnoPlayerHand(state.unoPlayerHand as UnoCard[]);
     if (Array.isArray(state.unoCpuHand)) setUnoCpuHand(state.unoCpuHand as UnoCard[]);
@@ -7218,6 +7298,10 @@ export default function Home() {
             create: Boolean(options?.createRoom),
             inviteToken: String(options?.inviteToken || "").trim(),
           };
+          const roomPassword = roomPasswordDraft.trim().slice(0, 24);
+          if (roomPassword) {
+            payload.roomPassword = roomPassword;
+          }
           if (options?.listContextOverride === "menu" || options?.listContextOverride === "game") {
             payload.listContext = options.listContextOverride;
           }
@@ -7765,6 +7849,7 @@ export default function Home() {
       roomCode,
       roomErrorLabel,
       roomVisibility,
+      roomPasswordDraft,
       stripInviteTokenFromAddressBar,
       finalizeOthelloDrawAgreement,
       applySurrenderToPanel,
@@ -7940,6 +8025,11 @@ export default function Home() {
   const createRoomFromCurrentPanel = useCallback(() => {
     setQuickMatchMode(false);
     setPendingInviteToken("");
+    const normalizedRoomPassword = roomPasswordDraft.trim().slice(0, 24);
+    if (roomVisibility === "private" && !normalizedRoomPassword) {
+      setMenuMessage(t("roomPasswordRequired"));
+      return;
+    }
     const panelNow = normalizeRoomPanel(activePanel) || getCurrentRoomPanel();
     const sourceRoomCode = menuRootRoomCode || connectedRoomCode;
 
@@ -7959,19 +8049,24 @@ export default function Home() {
     window.setTimeout(() => {
       requestPublicRoomList("panel", true);
     }, 250);
-  }, [activePanel, connectedRoomCode, connectRoom, getCurrentRoomPanel, menuRootRoomCode, normalizeRoomPanel, requestPublicRoomList, roomVisibility, t, tf]);
+  }, [activePanel, connectedRoomCode, connectRoom, getCurrentRoomPanel, menuRootRoomCode, normalizeRoomPanel, requestPublicRoomList, roomPasswordDraft, roomVisibility, t, tf]);
 
   const createRoomFromMenu = useCallback(() => {
     setQuickMatchMode(false);
     setPendingInviteToken("");
+    const normalizedRoomPassword = roomPasswordDraft.trim().slice(0, 24);
+    if (roomVisibility === "private" && !normalizedRoomPassword) {
+      setMenuMessage(t("roomPasswordRequired"));
+      return;
+    }
 
     setMenuMessage(
       tf("roomCreatePreparing", {
-        password: t("roomPasswordOff"),
+        password: roomVisibility === "private" ? t("roomPasswordOn") : t("roomPasswordOff"),
       }),
     );
     connectRoom("", true, {
-      roomPublic: true,
+      roomPublic: roomVisibility === "public",
       panelOverride: "",
       createRoom: true,
       listContextOverride: "menu",
@@ -7980,7 +8075,7 @@ export default function Home() {
     window.setTimeout(() => {
       requestPublicRoomList("menu", true);
     }, 250);
-  }, [connectRoom, requestPublicRoomList, t, tf]);
+  }, [connectRoom, requestPublicRoomList, roomPasswordDraft, roomVisibility, t, tf]);
 
   const disconnectRoomFromCurrentPanel = useCallback(() => {
     setQuickMatchMode(false);
@@ -8271,7 +8366,15 @@ export default function Home() {
         survivorsXp,
         survivorsTimeSec,
         survivorsKills,
+        survivorsDamageBonus,
+        survivorsHasteBonus,
+        survivorsMultiShotBonus,
+        survivorsArmorBonus,
         survivorsEnemies,
+        survivorsPlayer,
+        survivorsPendingAugments,
+        isSurvivorsAugmentOpen,
+        survivorsAugmentReason,
         survivorsMessage,
         isSurvivorsOver,
         unoDeck,
@@ -11214,18 +11317,48 @@ export default function Home() {
   };
 
   const createSurvivorsEnemies = useCallback((wave: number) => {
-    const count = Math.min(6, 2 + Math.floor((wave + 1) / 2));
+    const count = Math.min(12, 3 + Math.floor((wave + 1) / 2));
     return Array.from({ length: count }, (_, index) => {
-      const hp = 18 + wave * 6 + index * 3;
+      const hp = 16 + wave * 5 + index * 2;
+      const side = Math.floor(Math.random() * 4);
+      const margin = 28;
+      let x = margin;
+      let y = margin;
+      if (side === 0) {
+        x = margin;
+        y = margin + Math.random() * (SURVIVORS_ARENA_HEIGHT - margin * 2);
+      } else if (side === 1) {
+        x = SURVIVORS_ARENA_WIDTH - margin;
+        y = margin + Math.random() * (SURVIVORS_ARENA_HEIGHT - margin * 2);
+      } else if (side === 2) {
+        x = margin + Math.random() * (SURVIVORS_ARENA_WIDTH - margin * 2);
+        y = margin;
+      } else {
+        x = margin + Math.random() * (SURVIVORS_ARENA_WIDTH - margin * 2);
+        y = SURVIVORS_ARENA_HEIGHT - margin;
+      }
       return {
         id: `w${wave}-e${index}-${Math.random().toString(36).slice(2, 7)}`,
         hp,
         maxHp: hp,
+        x,
+        y,
+        speed: 1.8 + Math.min(2.6, wave * 0.07) + Math.random() * 0.7,
+        contactDamage: 2 + Math.floor(wave / 5),
       } satisfies SurvivorsEnemy;
     });
   }, []);
 
   const resetSurvivors = useCallback(() => {
+    const center = {
+      x: SURVIVORS_ARENA_WIDTH / 2,
+      y: SURVIVORS_ARENA_HEIGHT / 2,
+    };
+    survivorsInputRef.current = { up: false, down: false, left: false, right: false };
+    survivorsPlayerRef.current = center;
+    survivorsAutoAttackReadyAtRef.current = 0;
+    survivorsContactReadyAtRef.current = 0;
+    setSurvivorsPlayer(center);
     setSurvivorsWave(1);
     setSurvivorsHp(100);
     setSurvivorsMaxHp(100);
@@ -11233,6 +11366,13 @@ export default function Home() {
     setSurvivorsXp(0);
     setSurvivorsTimeSec(0);
     setSurvivorsKills(0);
+    setSurvivorsDamageBonus(0);
+    setSurvivorsHasteBonus(0);
+    setSurvivorsMultiShotBonus(0);
+    setSurvivorsArmorBonus(0);
+    setSurvivorsPendingAugments([]);
+    setIsSurvivorsAugmentOpen(false);
+    setSurvivorsAugmentReason("levelup");
     setSurvivorsEnemies(createSurvivorsEnemies(1));
     setSurvivorsMessage(t("survivorsHint"));
     setIsSurvivorsOver(false);
@@ -11273,34 +11413,306 @@ export default function Home() {
     setMessage(t("survivorsAppliedScore"));
   };
 
+  const getSurvivorsAugmentWeightProfile = useCallback((reason: SurvivorsAugmentReason, wave: number) => {
+    const levelWave = Math.max(1, Math.floor(wave));
+    const tier: "early" | "mid" | "late" = levelWave <= 5 ? "early" : levelWave <= 10 ? "mid" : "late";
+    const waveShift = levelWave - 1;
+    const weights: SurvivorsAugmentWeights = tier === "early"
+      ? {
+        vital: Math.max(14, 42 - waveShift * 3),
+        guard: Math.max(12, 30 - waveShift * 2),
+        haste: 16 + Math.floor(waveShift / 2),
+        power: 10 + waveShift,
+        multi: 4 + Math.floor(waveShift / 3),
+      }
+      : tier === "mid"
+        ? {
+          vital: Math.max(10, 22 - Math.floor((levelWave - 5) * 1.5)),
+          guard: 20,
+          haste: 22 + Math.floor((levelWave - 5) / 2),
+          power: 22 + (levelWave - 5),
+          multi: 16 + Math.floor((levelWave - 5) / 2),
+        }
+        : {
+          vital: 10,
+          guard: 14,
+          haste: 24 + Math.floor((levelWave - 10) / 2),
+          power: 30 + Math.floor((levelWave - 10) * 1.4),
+          multi: 24 + (levelWave - 10),
+        };
+
+    if (reason === "wave") {
+      weights.vital += tier === "early" ? 10 : 6;
+      weights.guard += 6;
+    }
+
+    return { tier, weights };
+  }, []);
+
+  const createSurvivorsAugmentChoices = useCallback((reason: SurvivorsAugmentReason, wave: number): SurvivorsAugmentOption[] => {
+    const { tier, weights } = getSurvivorsAugmentWeightProfile(reason, wave);
+
+    const options: Record<SurvivorsAugmentOption["id"], SurvivorsAugmentOption> = {
+      vital: { id: "vital", title: tier === "early" ? "VITAL CORE" : tier === "mid" ? "REPAIR KIT" : "BONUS REPAIR", desc: "最大HP +16 / 即時回復 +10" },
+      power: { id: "power", title: tier === "late" ? "OVERDRIVE+" : "OVERDRIVE", desc: "自動攻撃ダメージ +2" },
+      haste: { id: "haste", title: tier === "mid" ? "COOLING LOOP" : "RAPID LOOP", desc: "自動攻撃間隔 -35ms" },
+      multi: { id: "multi", title: tier === "late" ? "SPLIT BEAM" : "FORK SHOT", desc: "同時攻撃対象 +1" },
+      guard: { id: "guard", title: tier === "mid" || tier === "late" ? "HARD SHIELD" : "BARRIER PLATE", desc: "被ダメージ -3%" },
+    };
+
+    const weightedEntries: Array<{ option: SurvivorsAugmentOption; weight: number }> = [
+      { option: options.vital, weight: Math.max(1, Math.floor(weights.vital)) },
+      { option: options.power, weight: Math.max(1, Math.floor(weights.power)) },
+      { option: options.haste, weight: Math.max(1, Math.floor(weights.haste)) },
+      { option: options.multi, weight: Math.max(1, Math.floor(weights.multi)) },
+      { option: options.guard, weight: Math.max(1, Math.floor(weights.guard)) },
+    ];
+
+    const picks: SurvivorsAugmentOption[] = [];
+    const pool = [...weightedEntries];
+    while (pool.length > 0 && picks.length < 3) {
+      const totalWeight = pool.reduce((sum, row) => sum + row.weight, 0);
+      let r = Math.random() * totalWeight;
+      let chosenIndex = 0;
+      for (let i = 0; i < pool.length; i += 1) {
+        r -= pool[i].weight;
+        if (r <= 0) {
+          chosenIndex = i;
+          break;
+        }
+      }
+      picks.push(pool[chosenIndex].option);
+      pool.splice(chosenIndex, 1);
+    }
+    return picks;
+  }, [getSurvivorsAugmentWeightProfile]);
+
+  const onSurvivorsPickAugment = (augmentId: SurvivorsAugmentOption["id"]) => {
+    if (!isSurvivorsAugmentOpen) return;
+    if (augmentId === "vital") {
+      setSurvivorsMaxHp((prev) => prev + 16);
+      setSurvivorsHp((prev) => Math.min(prev + 10, survivorsMaxHp + 16));
+    } else if (augmentId === "power") {
+      setSurvivorsDamageBonus((prev) => prev + 2);
+    } else if (augmentId === "haste") {
+      setSurvivorsHasteBonus((prev) => prev + 35);
+    } else if (augmentId === "multi") {
+      setSurvivorsMultiShotBonus((prev) => prev + 1);
+    } else if (augmentId === "guard") {
+      setSurvivorsArmorBonus((prev) => prev + 1);
+    }
+    setIsSurvivorsAugmentOpen(false);
+    setSurvivorsPendingAugments([]);
+    setSurvivorsAugmentReason("levelup");
+    setSurvivorsMessage("強化を適用しました。戦闘再開！");
+  };
+
   useEffect(() => {
+    if (!gameStarted.survivors || isSurvivorsOver) return;
+    if (isSurvivorsAugmentOpen) return;
     if (survivorsXp < survivorsLevel * 40) return;
     setSurvivorsXp((prev) => prev - survivorsLevel * 40);
     setSurvivorsLevel((prev) => prev + 1);
     setSurvivorsMaxHp((prev) => prev + 8);
     setSurvivorsHp((prev) => prev + 8);
-  }, [survivorsLevel, survivorsXp]);
+    setSurvivorsAugmentReason("levelup");
+    setSurvivorsPendingAugments(createSurvivorsAugmentChoices("levelup", survivorsWave));
+    setIsSurvivorsAugmentOpen(true);
+    setSurvivorsMessage("LEVEL UP! 強化を1つ選択してください。");
+  }, [createSurvivorsAugmentChoices, gameStarted.survivors, isSurvivorsAugmentOpen, isSurvivorsOver, survivorsLevel, survivorsXp]);
 
   useEffect(() => {
-    if (activePanel !== "survivors" || isSurvivorsOver) return;
-    if (!gameStarted.survivors) return;
+    if (activePanel !== "survivors") return;
+    if (!gameStarted.survivors || isSurvivorsOver || isSurvivorsAugmentOpen) return;
 
-    const timer = setInterval(() => {
-      setSurvivorsTimeSec((prev) => prev + 1);
-      setSurvivorsHp((prev) => {
-        const incoming = Math.max(1, Math.floor((survivorsEnemies.length + survivorsWave) / 2));
-        const nextHp = prev - incoming;
-        if (nextHp <= 0) {
-          setIsSurvivorsOver(true);
-          setSurvivorsMessage(t("survivorsGameOver"));
-          return 0;
+    const keyToDir = (key: string) => {
+      if (key === "w" || key === "arrowup") return "up";
+      if (key === "s" || key === "arrowdown") return "down";
+      if (key === "a" || key === "arrowleft") return "left";
+      if (key === "d" || key === "arrowright") return "right";
+      return "";
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const dir = keyToDir(String(event.key || "").toLowerCase());
+      if (!dir) return;
+      event.preventDefault();
+      survivorsInputRef.current[dir as "up" | "down" | "left" | "right"] = true;
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      const dir = keyToDir(String(event.key || "").toLowerCase());
+      if (!dir) return;
+      survivorsInputRef.current[dir as "up" | "down" | "left" | "right"] = false;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      survivorsInputRef.current = { up: false, down: false, left: false, right: false };
+    };
+  }, [activePanel, gameStarted.survivors, isSurvivorsAugmentOpen, isSurvivorsOver]);
+
+  useEffect(() => {
+    if (activePanel !== "survivors") return;
+    if (!gameStarted.survivors || isSurvivorsOver || isSurvivorsAugmentOpen) return;
+
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      const input = survivorsInputRef.current;
+      const currentPlayer = survivorsPlayerRef.current;
+      const moveSpeed = 5 + Math.min(2, survivorsLevel * 0.12);
+      const dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      const dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+      const norm = Math.hypot(dx, dy) || 1;
+      const nextPlayer = {
+        x: Math.max(
+          SURVIVORS_PLAYER_RADIUS,
+          Math.min(SURVIVORS_ARENA_WIDTH - SURVIVORS_PLAYER_RADIUS, currentPlayer.x + (dx / norm) * moveSpeed),
+        ),
+        y: Math.max(
+          SURVIVORS_PLAYER_RADIUS,
+          Math.min(SURVIVORS_ARENA_HEIGHT - SURVIVORS_PLAYER_RADIUS, currentPlayer.y + (dy / norm) * moveSpeed),
+        ),
+      };
+      survivorsPlayerRef.current = nextPlayer;
+      setSurvivorsPlayer(nextPlayer);
+
+      let totalContactDamage = 0;
+      let killCount = 0;
+      let pendingNextWave: number | null = null;
+      const canAutoAttack = now >= survivorsAutoAttackReadyAtRef.current;
+      const attackIntervalMs = Math.max(110, 520 - Math.max(0, survivorsLevel - 1) * 16 - survivorsHasteBonus);
+      const attackRange = 220 + Math.min(160, survivorsLevel * 4);
+      const attackTargets = 1 + Math.floor(Math.max(0, survivorsLevel - 1) / 6) + survivorsMultiShotBonus;
+
+      setSurvivorsEnemies((prevEnemies) => {
+        if (prevEnemies.length <= 0) return prevEnemies;
+
+        const moved = prevEnemies.map((enemy) => {
+          const vx = nextPlayer.x - enemy.x;
+          const vy = nextPlayer.y - enemy.y;
+          const dist = Math.hypot(vx, vy) || 1;
+          const step = enemy.speed;
+          const x = Math.max(
+            SURVIVORS_ENEMY_RADIUS,
+            Math.min(SURVIVORS_ARENA_WIDTH - SURVIVORS_ENEMY_RADIUS, enemy.x + (vx / dist) * step),
+          );
+          const y = Math.max(
+            SURVIVORS_ENEMY_RADIUS,
+            Math.min(SURVIVORS_ARENA_HEIGHT - SURVIVORS_ENEMY_RADIUS, enemy.y + (vy / dist) * step),
+          );
+          const hitDist = SURVIVORS_PLAYER_RADIUS + SURVIVORS_ENEMY_RADIUS + 3;
+          if (Math.hypot(nextPlayer.x - x, nextPlayer.y - y) <= hitDist) {
+            totalContactDamage += enemy.contactDamage;
+          }
+          return { ...enemy, x, y };
+        });
+
+        let nearestIndex = -1;
+        let nearestDist = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < moved.length; i += 1) {
+          const enemy = moved[i];
+          const dist = Math.hypot(nextPlayer.x - enemy.x, nextPlayer.y - enemy.y);
+          if (dist < nearestDist) {
+            nearestDist = dist;
+            nearestIndex = i;
+          }
         }
-        return nextHp;
-      });
-    }, 1000);
 
-    return () => clearInterval(timer);
-  }, [activePanel, gameStarted.survivors, isSurvivorsOver, survivorsEnemies.length, survivorsWave, t]);
+        if (nearestIndex < 0) return moved;
+
+        let attacked = moved;
+        if (canAutoAttack) {
+          const sorted = moved
+            .map((enemy, index) => ({ index, dist: Math.hypot(nextPlayer.x - enemy.x, nextPlayer.y - enemy.y) }))
+            .filter((row) => row.dist <= attackRange)
+            .sort((a, b) => a.dist - b.dist)
+            .slice(0, attackTargets)
+            .map((row) => row.index);
+          if (sorted.length > 0) {
+            const attackDamage = 4 + survivorsLevel * 1.15 + survivorsDamageBonus + Math.floor(Math.random() * 3);
+            attacked = moved.map((enemy, index) => {
+              if (!sorted.includes(index)) return enemy;
+              return { ...enemy, hp: enemy.hp - attackDamage };
+            });
+            survivorsAutoAttackReadyAtRef.current = now + attackIntervalMs;
+          }
+        }
+
+        const alive = attacked.filter((enemy) => enemy.hp > 0);
+        killCount = attacked.length - alive.length;
+
+        if (alive.length <= 0) {
+          pendingNextWave = survivorsWave + 1;
+          return createSurvivorsEnemies(pendingNextWave);
+        }
+
+        return alive;
+      });
+
+      if (killCount > 0) {
+        setSurvivorsKills((prev) => prev + killCount);
+        setSurvivorsXp((prev) => prev + killCount * (8 + survivorsWave));
+      }
+
+      if (pendingNextWave !== null) {
+        setSurvivorsWave(pendingNextWave);
+        setSurvivorsMessage(tf("survivorsWaveClear", { wave: survivorsWave }));
+        setSurvivorsHp((prev) => Math.min(survivorsMaxHp, prev + 8));
+        if (pendingNextWave % 3 === 0) {
+          setSurvivorsAugmentReason("wave");
+          setSurvivorsPendingAugments(createSurvivorsAugmentChoices("wave", pendingNextWave));
+          setIsSurvivorsAugmentOpen(true);
+          setSurvivorsMessage(`WAVE ${pendingNextWave} BONUS! 報酬を1つ選択してください。`);
+        }
+      }
+
+      if (totalContactDamage > 0 && now >= survivorsContactReadyAtRef.current) {
+        survivorsContactReadyAtRef.current = now + 420;
+        const armorScale = Math.max(0.45, 0.88 - Math.min(0.2, survivorsLevel * 0.01) - survivorsArmorBonus * 0.03);
+        const reduced = Math.max(1, Math.floor(totalContactDamage * armorScale));
+        setSurvivorsHp((prev) => {
+          const nextHp = prev - reduced;
+          if (nextHp <= 0) {
+            setIsSurvivorsOver(true);
+            setSurvivorsMessage(t("survivorsGameOver"));
+            return 0;
+          }
+          return nextHp;
+        });
+      }
+    }, 50);
+
+    return () => window.clearInterval(timer);
+  }, [
+    activePanel,
+    createSurvivorsEnemies,
+    gameStarted.survivors,
+    isSurvivorsAugmentOpen,
+    isSurvivorsOver,
+    survivorsDamageBonus,
+    survivorsHasteBonus,
+    survivorsArmorBonus,
+    survivorsLevel,
+    survivorsMaxHp,
+    survivorsMultiShotBonus,
+    survivorsWave,
+    t,
+    tf,
+  ]);
+
+  useEffect(() => {
+    if (activePanel !== "survivors") return;
+    if (!gameStarted.survivors || isSurvivorsOver || isSurvivorsAugmentOpen) return;
+    const timer = window.setInterval(() => {
+      setSurvivorsTimeSec((prev) => prev + 1);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [activePanel, gameStarted.survivors, isSurvivorsAugmentOpen, isSurvivorsOver]);
 
   useEffect(() => {
     if (activePanel !== "chinchiro") return;
@@ -13158,9 +13570,14 @@ export default function Home() {
 
   if (!isAuthenticated) {
     return (
-      <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 py-6 text-slate-100 sm:px-6 sm:py-8 xl:px-8">
+      <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 pb-6 pt-0 text-slate-100 sm:px-6 sm:pb-8 sm:pt-0 xl:px-8">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-          <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
+          <header>
+            <img
+              src="/motionPng/Title/header.png"
+              alt="Neon Board Arcade Header"
+              className="h-auto w-full object-cover"
+            />
             <div className="flex items-center justify-end gap-3">
               <div className="flex items-center gap-1 rounded-md border border-cyan-200/30 bg-slate-950/40 p-1 text-xs">
                 <span className="px-1 text-cyan-100">{t("languageLabel")}</span>
@@ -13257,7 +13674,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 py-6 text-slate-100 sm:px-6 sm:py-8 xl:px-8">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_20%_20%,#16213a_0%,#0d1324_45%,#090d18_100%)] px-4 pb-6 pt-0 text-slate-100 sm:px-6 sm:pb-8 sm:pt-0 xl:px-8">
       <div className="mx-auto flex w-full max-w-[92rem] flex-col gap-6">
         <div className="relative">
           {authMode === "cloud" ? (
@@ -13267,7 +13684,12 @@ export default function Home() {
               </p>
             </div>
           ) : null}
-          <header className="rounded-2xl border border-cyan-200/20 bg-cyan-300/10 p-6 backdrop-blur">
+          <header>
+            <img
+              src="/motionPng/Title/header.png"
+              alt="Neon Board Arcade Header"
+              className="h-auto w-full object-cover"
+            />
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-2">
@@ -13963,6 +14385,34 @@ export default function Home() {
                   )) : null}
                 </div>
 
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200">
+                  <span className="font-semibold text-slate-200">{t("roomPasswordLabel")}:</span>
+                  <label className="inline-flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={roomVisibility === "public"}
+                      onChange={() => setRoomVisibility("public")}
+                    />
+                    {t("roomPasswordOff")}
+                  </label>
+                  <label className="inline-flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={roomVisibility === "private"}
+                      onChange={() => setRoomVisibility("private")}
+                    />
+                    {t("roomPasswordOn")}
+                  </label>
+                  <input
+                    type="password"
+                    value={roomPasswordDraft}
+                    onChange={(event) => setRoomPasswordDraft(event.target.value.slice(0, 24))}
+                    placeholder={t("roomPasswordPlaceholder")}
+                    className="min-w-[10rem] rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                    autoComplete="off"
+                  />
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -14229,6 +14679,14 @@ export default function Home() {
                     />
                     {t("roomPasswordOn")}
                   </label>
+                  <input
+                    type="password"
+                    value={roomPasswordDraft}
+                    onChange={(event) => setRoomPasswordDraft(event.target.value.slice(0, 24))}
+                    placeholder={t("roomPasswordPlaceholder")}
+                    className="min-w-[10rem] rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                    autoComplete="off"
+                  />
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -17243,6 +17701,44 @@ export default function Home() {
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsKills", { count: survivorsKills })}</span>
               </div>
 
+              <p className="mt-2 text-xs text-slate-300">
+                WASD / Arrow Keys: MOVE | AUTO: {Math.max(110, 520 - Math.max(0, survivorsLevel - 1) * 16 - survivorsHasteBonus)}ms / {1 + Math.floor(Math.max(0, survivorsLevel - 1) / 6) + survivorsMultiShotBonus} targets | DMG+{survivorsDamageBonus} | ARMOR+{survivorsArmorBonus}
+              </p>
+
+              {isSurvivorsAugmentOpen ? (
+                <div className="mt-3 rounded-xl border border-amber-200/40 bg-amber-400/10 p-3">
+                  <p className="text-sm font-semibold text-amber-100">
+                    {survivorsAugmentReason === "wave" ? "WAVE BONUS - 報酬を選択" : "LEVEL UP - 強化を選択"}
+                  </p>
+                  <p className="mt-1 text-[11px] text-amber-100/80">
+                    TIER: {survivorsWave <= 5 ? "EARLY" : survivorsWave <= 10 ? "MID" : "LATE"}
+                  </p>
+                  {(() => {
+                    const profile = getSurvivorsAugmentWeightProfile(survivorsAugmentReason, survivorsWave);
+                    const total = profile.weights.vital + profile.weights.power + profile.weights.haste + profile.weights.multi + profile.weights.guard;
+                    const pct = (value: number) => Math.round((value / total) * 100);
+                    return (
+                      <p className="mt-1 text-[11px] text-amber-100/80">
+                        WEIGHT V:{pct(profile.weights.vital)}% P:{pct(profile.weights.power)}% H:{pct(profile.weights.haste)}% M:{pct(profile.weights.multi)}% G:{pct(profile.weights.guard)}%
+                      </p>
+                    );
+                  })()}
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                    {survivorsPendingAugments.map((option) => (
+                      <button
+                        key={`survivors-augment-${option.id}`}
+                        type="button"
+                        onClick={() => onSurvivorsPickAugment(option.id)}
+                        className="rounded-lg border border-amber-200/45 bg-slate-950/50 p-2 text-left transition hover:border-amber-200/75"
+                      >
+                        <p className="text-xs font-semibold text-amber-100">{option.title}</p>
+                        <p className="mt-1 text-xs text-slate-200">{option.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -17251,6 +17747,44 @@ export default function Home() {
                 >
                   {t("survivorsApplyScore")}
                 </button>
+              </div>
+
+              <div className="mt-4 overflow-hidden rounded-xl border border-cyan-200/30 bg-[radial-gradient(circle_at_35%_30%,rgba(16,185,129,0.2),rgba(15,23,42,0.95)_62%)] p-2">
+                <div
+                  className="relative mx-auto w-full max-w-[860px]"
+                  style={{
+                    aspectRatio: `${SURVIVORS_ARENA_WIDTH} / ${SURVIVORS_ARENA_HEIGHT}`,
+                  }}
+                >
+                  <div className="pointer-events-none absolute inset-0 rounded-lg border border-cyan-200/20" />
+                  <div
+                    className="absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/90 bg-cyan-300/85 shadow-[0_0_20px_rgba(34,211,238,0.55)]"
+                    style={{
+                      left: `${(survivorsPlayer.x / SURVIVORS_ARENA_WIDTH) * 100}%`,
+                      top: `${(survivorsPlayer.y / SURVIVORS_ARENA_HEIGHT) * 100}%`,
+                    }}
+                  />
+                  {survivorsEnemies.map((enemy) => (
+                    <div
+                      key={`survivors-dot-${enemy.id}`}
+                      className="absolute -translate-x-1/2 -translate-y-1/2"
+                      style={{
+                        left: `${(enemy.x / SURVIVORS_ARENA_WIDTH) * 100}%`,
+                        top: `${(enemy.y / SURVIVORS_ARENA_HEIGHT) * 100}%`,
+                      }}
+                    >
+                      <div className="h-7 w-7 rounded-full border border-rose-100/70 bg-rose-400/80 shadow-[0_0_16px_rgba(251,113,133,0.45)]" />
+                      <div className="mt-1 h-1.5 w-8 overflow-hidden rounded bg-slate-950/70">
+                        <div
+                          className="h-full bg-rose-200"
+                          style={{
+                            width: `${Math.max(0, Math.min(100, (enemy.hp / enemy.maxHp) * 100))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -17264,7 +17798,8 @@ export default function Home() {
                   >
                     <p className="text-sm font-semibold">ENEMY {index + 1}</p>
                     <p className="mt-1 text-xs text-slate-300">HP {Math.max(0, enemy.hp)} / {enemy.maxHp}</p>
-                    <p className="mt-2 text-xs text-rose-200">{t("survivorsAttack")}</p>
+                    <p className="mt-1 text-xs text-slate-400">POS {Math.round(enemy.x)}, {Math.round(enemy.y)}</p>
+                    <p className="mt-2 text-xs text-rose-200">{t("survivorsAttack")} (BURST)</p>
                   </button>
                 ))}
               </div>
