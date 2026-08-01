@@ -1,0 +1,37 @@
+.mainGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.leftColumn {
+  min-width: 0;
+}
+
+.middleColumn {
+  min-width: 0;
+}
+
+.rightColumn {
+  min-width: 0;
+}
+
+@media (min-width: 600px) and (max-width: 799px) {
+  .mainGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .leftColumn {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 800px) {
+  .mainGrid {
+    grid-template-columns: minmax(0, 1.8fr) minmax(180px, 0.8fr) minmax(210px, 0.9fr);
+  }
+
+  .leftColumn {
+    grid-column: auto;
+  }
+}

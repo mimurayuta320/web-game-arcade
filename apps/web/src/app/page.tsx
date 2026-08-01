@@ -2,6 +2,28 @@
 
 import { PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LegacyFitPuzzle from "./components/LegacyFitPuzzle";
+import MahjongGame from "../components/mahjong/MahjongGame";
+import CharacterSelectScreen from "../components/survivors/CharacterSelectScreen";
+import WaveShopScreen, {
+  SurvivorsOwnedItemView,
+  SurvivorsOwnedWeaponView,
+  SurvivorsShopSlotView,
+  SurvivorsShopStatRowView,
+  SurvivorsShopWaveEventView,
+} from "../components/survivors/WaveShopScreen";
+import type {
+  SurvivorsCharacterConfig as SelectCharacterConfig,
+  SurvivorsCharacterRecord,
+  SurvivorsStageSettings,
+} from "../components/survivors/types";
+import type {
+  MahjongActionButton,
+  MahjongLogEvent,
+  MahjongPlayerView,
+  MahjongResultView,
+  MahjongRuleCategory,
+  MahjongRulePreset,
+} from "../components/mahjong/types";
 
 type Panel = "menu" | "scores" | "othello" | "gomoku" | "chess" | "shogi" | "uno" | "minesweeper" | "numeron" | "blackjack" | "chinchiro" | "sevens" | "daifugo" | "fourPanel" | "drawingRelay" | "fitPuzzle" | "mahjong" | "poker" | "solitaire" | "survivors";
 type PlayablePanel = Exclude<Panel, "menu" | "scores">;
@@ -59,6 +81,7 @@ type PublicRoomSummary = {
   code: string;
   listContext: "menu" | "game";
   isPublic: boolean;
+  maxPlayers: number;
   inGame: boolean;
   activePlayers: number;
   spectatorCount: number;
@@ -312,7 +335,7 @@ const LOGIN_I18N = {
     roomOpponentLabel: "対面",
     roomOpponentWaiting: "相手待機中",
     roomMembersEmpty: "未参加",
-    roomCapacityHint: "ルーム上限: 16人",
+    roomCapacityHint: "ルーム上限: {count}人",
     profileLink: "プロフィール",
     inquiryViewerLink: "問い合わせ管理",
     inquiryFormLink: "問い合わせフォーム",
@@ -406,7 +429,7 @@ const LOGIN_I18N = {
     roomUrlInvalid: "RoomサーバーURLが不正です。",
     roomConnectFailed: "Roomサーバーへ接続できませんでした。",
     roomFull: "このルームは満員です。",
-    roomFullRejected: "ルーム {code} は満員です（16人まで）",
+    roomFullRejected: "ルーム {code} は満員です（{max}人まで）",
     roomInGame: "このルームはゲーム中です。観戦モードは次対応予定です。",
     roomInGameSuggestSpectate: "対戦中のため参加できません。観戦を使ってください。",
     roomInviteRequired: "この非公開ルームへの参加には招待リンクが必要です。",
@@ -586,6 +609,10 @@ const LOGIN_I18N = {
     shogiChaosKingAbsorbOn: "ON",
     shogiChaosKingAbsorbOff: "OFF",
     shogiChaosMineCountLabel: "地雷数",
+    shogiMinePieceLabel: "地雷",
+    shogiMineOwnHint: "M = 自分の地雷",
+    shogiAbsorbStatusLabel: "吸収能力",
+    shogiAbsorbNone: "なし",
     shogiCpuThinking: "CPUが考えています...",
     shogiTurnBlack: "先手の番です",
     shogiTurnWhite: "後手の番です",
@@ -1019,7 +1046,7 @@ const LOGIN_I18N = {
     roomOpponentLabel: "상대",
     roomOpponentWaiting: "상대 대기 중",
     roomMembersEmpty: "없음",
-    roomCapacityHint: "룸 최대 인원: 16명",
+    roomCapacityHint: "룸 최대 인원: {count}명",
     profileLink: "프로필",
     inquiryViewerLink: "문의 관리",
     inquiryFormLink: "문의 폼",
@@ -1113,7 +1140,7 @@ const LOGIN_I18N = {
     roomUrlInvalid: "룸 서버 URL이 올바르지 않습니다.",
     roomConnectFailed: "룸 서버에 연결할 수 없습니다.",
     roomFull: "이 룸은 인원이 가득 찼습니다.",
-    roomFullRejected: "룸 {code} 은(는) 가득 찼습니다 (최대 16명)",
+    roomFullRejected: "룸 {code} 은(는) 가득 찼습니다 (최대 {max}명)",
     roomInGame: "이 룸은 게임 중입니다. 관전 모드는 다음에 지원 예정입니다.",
     roomInGameSuggestSpectate: "경기 중이라 참가할 수 없습니다. 관전을 이용하세요.",
     roomInviteRequired: "이 비공개 룸은 초대 링크가 필요합니다.",
@@ -1293,6 +1320,10 @@ const LOGIN_I18N = {
     shogiChaosKingAbsorbOn: "ON",
     shogiChaosKingAbsorbOff: "OFF",
     shogiChaosMineCountLabel: "지뢰 수",
+    shogiMinePieceLabel: "지뢰",
+    shogiMineOwnHint: "M = 내 지뢰",
+    shogiAbsorbStatusLabel: "흡수 능력",
+    shogiAbsorbNone: "없음",
     shogiCpuThinking: "CPU가 생각 중입니다...",
     shogiTurnBlack: "선수 차례입니다",
     shogiTurnWhite: "후수 차례입니다",
@@ -1719,7 +1750,7 @@ const EN_I18N: Partial<I18nMap> = {
   roomMatchedPlayers: "Matched Players",
   roomOpponentLabel: "Opponent",
   roomOpponentWaiting: "Waiting for opponent",
-  roomCapacityHint: "Room Capacity: 16 participants",
+  roomCapacityHint: "Room Capacity: {count} participants",
   profileLink: "Profile",
   friendViewProfile: "View Profile",
   friendOpenChat: "Chat",
@@ -1875,7 +1906,7 @@ const ZH_I18N: Partial<I18nMap> = {
   roomMatchedPlayers: "匹配人数",
   roomOpponentLabel: "对手",
   roomOpponentWaiting: "等待对手中",
-  roomCapacityHint: "房间上限: 16人",
+  roomCapacityHint: "房间上限: {count}人",
   profileLink: "个人资料",
   friendViewProfile: "查看资料",
   friendOpenChat: "聊天",
@@ -1907,10 +1938,26 @@ const ZH_I18N: Partial<I18nMap> = {
 };
 
 type Cell = 0 | 1 | 2;
-type UnoColor = "R" | "G" | "B" | "Y";
+type UnoColor = "R" | "G" | "B" | "Y" | "W";
+type UnoCardType = "number" | "skip" | "reverse" | "draw2" | "wild" | "wildDraw4";
 type UnoCard = {
+  id: string;
   color: UnoColor;
   value: number;
+  type: UnoCardType;
+  symbol: string;
+};
+type UnoSelectionValidation = {
+  isValid: boolean;
+  selectedCards: UnoCard[];
+  invalidCardId?: string;
+  reason?: string;
+};
+type UnoNotification = {
+  playerId: string;
+  playerName: string;
+  subText: string;
+  token: number;
 };
 type ChessColor = "w" | "b";
 type ChessPieceType = "K" | "Q" | "R" | "B" | "N" | "P";
@@ -1925,6 +1972,7 @@ type ShogiPiece = {
   color: ShogiColor;
   type: ShogiPieceType;
   absorbedAbilities?: ShogiAbsorbAbility[];
+  isMine?: boolean;
 };
 type MineCell = {
   mine: boolean;
@@ -1950,13 +1998,71 @@ type SevensCard = {
   suit: "S" | "H" | "D" | "C";
   rank: number;
 };
+type SevensPlayerStatus = "playing" | "finished" | "eliminated" | "disconnected";
+type SevensCpuDifficulty = "easy" | "normal" | "hard";
+type SevensMode = "cpu" | "multiplayer";
+type SevensGameStatus = "idle" | "playing" | "finished";
+type SevensPlayer = {
+  id: string;
+  name: string;
+  isCpu: boolean;
+  hand: SevensCard[];
+  status: SevensPlayerStatus;
+  passCount: number;
+  rank: number | null;
+};
 type SevensTableRange = {
   low: number | null;
   high: number | null;
 };
+type SevensDisplaySeat = {
+  id: string;
+  name: string;
+  isCpu: boolean;
+  status: SevensPlayerStatus;
+  passCount: number;
+  rank: number | null;
+  handCount: number;
+  isPlaceholder: boolean;
+  isLocal: boolean;
+};
 type DaifugoCard = {
-  suit: "S" | "H" | "D" | "C";
+  id: string;
+  suit: "S" | "H" | "D" | "C" | "J";
   rank: number;
+};
+type DaifugoMode = "cpu" | "local" | "multiplayer";
+type DaifugoCpuDifficulty = "easy" | "normal" | "hard";
+type DaifugoPlayerStatus = "playing" | "passed" | "finished" | "disconnected";
+type DaifugoPlayerClass = "daifugo" | "fugo" | "heimin" | "hinmin" | "daihinmin";
+type DaifugoGamePhase = "idle" | "dealing" | "exchange" | "playing" | "roundResult" | "finished";
+type DaifugoComboKind = "single" | "pair" | "triple" | "four" | "straight";
+type DaifugoRuleSet = {
+  joker: boolean;
+  kakumei: boolean;
+  shibari: boolean;
+  eightCut: boolean;
+  miyakoOchhi: boolean;
+  sp3Return: boolean;
+};
+type DaifugoPlayer = {
+  id: string;
+  name: string;
+  isCpu: boolean;
+  hand: DaifugoCard[];
+  handCount: number;
+  status: DaifugoPlayerStatus;
+  rank?: number;
+  className?: DaifugoPlayerClass;
+  connected?: boolean;
+};
+type DaifugoComboAnalysis = {
+  valid: boolean;
+  kind?: DaifugoComboKind;
+  strength?: number;
+  length?: number;
+  label?: string;
+  reason?: string;
 };
 type PokerSuit = "S" | "H" | "D" | "C";
 type PokerCard = {
@@ -1976,7 +2082,82 @@ type PokerEval = {
     | "fourKind"
     | "straightFlush";
 };
-  type PokerPhase = "betting" | "preflop" | "flop" | "turn" | "river" | "showdown";
+type PokerPhase = "waiting" | "preflop" | "flop" | "turn" | "river" | "showdown" | "result" | "tournamentResult";
+type TournamentStatus = "idle" | "running" | "break" | "finished";
+type PokerGameMode = "normal" | "tournament";
+type PokerCpuDifficulty = "easy" | "normal" | "hard";
+type PokerNormalSessionStatus = "idle" | "running";
+type PokerPlayerStatus = "active" | "folded" | "allIn" | "eliminated";
+type BlindSpeed = "turbo" | "normal" | "slow";
+type PokerActionType = "fold" | "check" | "call" | "bet" | "raise" | "allIn";
+type BlindLevel = {
+  level: number;
+  smallBlind: number;
+  bigBlind: number;
+  ante: number;
+  hands: number;
+};
+type TournamentPlayer = {
+  id: string;
+  name: string;
+  chips: number;
+  currentBet: number;
+  totalBet: number;
+  currentStreetBet: number;
+  totalHandBet: number;
+  status: PokerPlayerStatus;
+  seatIndex: number;
+  rank?: number;
+  isDealer: boolean;
+  isSmallBlind: boolean;
+  isBigBlind: boolean;
+  isCpu: boolean;
+  eliminatedAtHand?: number;
+  eliminatedById?: string;
+};
+type Pot = {
+  id: string;
+  amount: number;
+  eligiblePlayerIds: string[];
+};
+type TournamentSettings = {
+  gameMode: PokerGameMode;
+  cpuCount: number;
+  cpuDifficulty: PokerCpuDifficulty;
+  startingChips: number;
+  normalSmallBlind: number;
+  normalBigBlind: number;
+  blindSpeed: BlindSpeed;
+};
+type HandBlindState = {
+  level: number;
+  smallBlind: number;
+  bigBlind: number;
+  ante: number;
+};
+type BettingRoundState = {
+  phase: "preflop" | "flop" | "turn" | "river";
+  currentHighestBet: number;
+  lastRaiseSize: number;
+  minimumBet: number;
+  lastAggressorId?: string;
+};
+type PokerNotification = {
+  id: number;
+  text: string;
+};
+type HandResult = {
+  winnerIds: string[];
+  winnerNameText: string;
+  gainPerWinner: number;
+  summary: string;
+};
+type PokerNormalRecord = {
+  playerWins: number;
+  cpuWins: number;
+  draws: number;
+  rounds: number;
+};
 type SolitaireSuit = "H" | "D" | "C" | "S";
 type SolitaireCard = {
   suit: SolitaireSuit;
@@ -2041,6 +2222,110 @@ type SurvivorsAugmentOption = {
 };
 type SurvivorsAugmentReason = "levelup" | "wave";
 type SurvivorsAugmentWeights = Record<SurvivorsAugmentOption["id"], number>;
+type SurvivorsShopProductCategory = "weapon" | "item";
+type SurvivorsShopRarity = "common" | "rare" | "epic";
+type SurvivorsShopSlot = {
+  slotId: string;
+  option: SurvivorsAugmentOption;
+  category: SurvivorsShopProductCategory;
+  rarity: SurvivorsShopRarity;
+  price: number;
+  locked: boolean;
+  purchased: boolean;
+};
+type SurvivorsShopInventoryItem = {
+  id: SurvivorsAugmentOption["id"];
+  title: string;
+  desc: string;
+  count: number;
+};
+type SurvivorsShopInventoryWeapon = {
+  id: string;
+  title: string;
+  desc: string;
+  rarity: SurvivorsShopRarity;
+  count: number;
+};
+type SurvivorsCharacterId = "fairy" | "hammer" | "daikon";
+type SurvivorsCharacterProfile = {
+  roleLabel: string;
+  attackRangeBase: number;
+  attackRangePerLevel: number;
+  attackDamageBonus: number;
+  attackIntervalAdjustMs: number;
+  innateMultiShot: number;
+  skillName: string;
+  skillMpCost: number;
+  skillDurationMs: number;
+  skillHasteMs: number;
+  skillDamageBonus: number;
+  skillRangeBonus: number;
+  skillMultiShotBonus: number;
+};
+type SurvivorsProjectile = {
+  id: string;
+  fromX: number;
+  fromY: number;
+  ctrlX: number;
+  ctrlY: number;
+  toX: number;
+  toY: number;
+  angleDeg: number;
+  progress: number;
+  durationMs: number;
+};
+type WeaponRenderConfig = {
+  gripX: number;
+  gripY: number;
+  tipX: number;
+  tipY: number;
+  scale: number;
+  baseRotation: number;
+  distanceFromPlayer: number;
+  attackExtension: number;
+  renderLayer: "behind" | "front";
+};
+type SurvivorsWeaponSlotView = {
+  slotKey: string;
+  weaponId: string;
+  imageSrc: string;
+  config: WeaponRenderConfig;
+};
+type SurvivorsWeaponAttackKind = "melee" | "ranged";
+type SurvivorsWeaponAttackMotion = {
+  startedAt: number;
+  durationMs: number;
+  kind: SurvivorsWeaponAttackKind;
+};
+type SurvivorsWeaponRenderPose = {
+  slotKey: string;
+  imageSrc: string;
+  localX: number;
+  localY: number;
+  rotationDeg: number;
+  scale: number;
+  scaleY: number;
+  gripX: number;
+  gripY: number;
+  isBehindPlayer: boolean;
+  muzzleX: number;
+  muzzleY: number;
+  flashIntensity: number;
+};
+type SurvivorsDaikonAttackVisual = {
+  active: boolean;
+  frameIndex: number;
+  facingLeft: boolean;
+  angleDeg: number;
+};
+type SurvivorsDaikonMoveDirection = "downLeft" | "up" | "downRight" | "upLeft" | "left" | "right" | "down" | "upRight";
+type SurvivorsDaikonSpriteMeta = {
+  naturalWidth: number;
+  naturalHeight: number;
+  frameWidth: number;
+  frameHeight: number;
+  valid: boolean;
+};
 type BrushCursorPreview = {
   x: number;
   y: number;
@@ -2073,6 +2358,477 @@ const SURVIVORS_ARENA_WIDTH = 860;
 const SURVIVORS_ARENA_HEIGHT = 480;
 const SURVIVORS_PLAYER_RADIUS = 16;
 const SURVIVORS_ENEMY_RADIUS = 14;
+const SURVIVORS_SKILL_COOLDOWN_MS = 12000;
+const SURVIVORS_WAVE_INTERVAL_BASE_SEC = 20;
+const SURVIVORS_WAVE_INTERVAL_STEP_SEC = 5;
+const SURVIVORS_WAVE_INTERVAL_STEP_WAVES = 3;
+const SURVIVORS_WAVE_INTERVAL_MAX_SEC = 50;
+const SURVIVORS_FAIRY_HOLD_MP_DRAIN_PER_SEC = 13;
+const SURVIVORS_FAIRY_HOLD_HASTE_RATIO = 0.5;
+const SURVIVORS_FAIRY_HOLD_MIN_ATTACK_INTERVAL_MS = 60;
+const getSurvivorsWaveIntervalSec = (wave: number) => {
+  const safeWave = Math.max(1, Math.floor(wave));
+  const stepCount = Math.floor((safeWave - 1) / SURVIVORS_WAVE_INTERVAL_STEP_WAVES);
+  return Math.min(
+    SURVIVORS_WAVE_INTERVAL_MAX_SEC,
+    SURVIVORS_WAVE_INTERVAL_BASE_SEC + stepCount * SURVIVORS_WAVE_INTERVAL_STEP_SEC,
+  );
+};
+const getSurvivorsNextWaveAtSec = (currentWave: number) => {
+  const safeWave = Math.max(1, Math.floor(currentWave));
+  let total = 0;
+  for (let wave = 1; wave <= safeWave; wave += 1) {
+    total += getSurvivorsWaveIntervalSec(wave);
+  }
+  return total;
+};
+const SURVIVORS_WAVE_EVENT_RULES = {
+  horde: { start: 4, interval: 4, icon: "👾", label: "大群" },
+  boss: { start: 7, interval: 7, icon: "👑", label: "ボス" },
+} as const;
+const getSurvivorsUpcomingWaveEvents = (startWave: number, maxCount = 4): SurvivorsShopWaveEventView[] => {
+  const fromWave = Math.max(1, Math.floor(startWave));
+  const result: SurvivorsShopWaveEventView[] = [];
+
+  (Object.keys(SURVIVORS_WAVE_EVENT_RULES) as Array<keyof typeof SURVIVORS_WAVE_EVENT_RULES>).forEach((kind) => {
+    const rule = SURVIVORS_WAVE_EVENT_RULES[kind];
+    const n = Math.max(0, Math.ceil((fromWave - rule.start) / rule.interval));
+    const wave = rule.start + n * rule.interval;
+    if (wave >= fromWave) {
+      result.push({
+        key: `${kind}-${wave}`,
+        kind,
+        label: rule.label,
+        icon: rule.icon,
+        wave,
+      });
+    }
+  });
+
+  let cursor = fromWave;
+  while (result.length < maxCount) {
+    cursor += 1;
+    if ((cursor - SURVIVORS_WAVE_EVENT_RULES.horde.start) % SURVIVORS_WAVE_EVENT_RULES.horde.interval === 0 && cursor >= SURVIVORS_WAVE_EVENT_RULES.horde.start) {
+      result.push({
+        key: `horde-${cursor}`,
+        kind: "horde",
+        label: SURVIVORS_WAVE_EVENT_RULES.horde.label,
+        icon: SURVIVORS_WAVE_EVENT_RULES.horde.icon,
+        wave: cursor,
+      });
+    }
+    if ((cursor - SURVIVORS_WAVE_EVENT_RULES.boss.start) % SURVIVORS_WAVE_EVENT_RULES.boss.interval === 0 && cursor >= SURVIVORS_WAVE_EVENT_RULES.boss.start) {
+      result.push({
+        key: `boss-${cursor}`,
+        kind: "boss",
+        label: SURVIVORS_WAVE_EVENT_RULES.boss.label,
+        icon: SURVIVORS_WAVE_EVENT_RULES.boss.icon,
+        wave: cursor,
+      });
+    }
+    if (cursor > fromWave + 40) break;
+  }
+
+  return result
+    .sort((a, b) => a.wave - b.wave)
+    .filter((row, index, arr) => arr.findIndex((x) => x.key === row.key) === index)
+    .slice(0, maxCount);
+};
+const SURVIVORS_PLAYER_SPRITES: Record<SurvivorsCharacterId, Record<1 | 2 | 3, string>> = {
+  fairy: {
+    1: "/motionPng/Survivors/hakusai-front.png",
+    2: "/motionPng/Survivors/hakusai-front.png",
+    3: "/motionPng/Survivors/hakusai-front.png",
+  },
+  hammer: {
+    1: "/motionPng/Survivors/hammer1.png",
+    2: "/motionPng/Survivors/hammer1.png",
+    3: "/motionPng/Survivors/hammer1.png",
+  },
+  daikon: {
+    1: "/motionPng/Survivors/大根/大根キャラ.png",
+    2: "/motionPng/Survivors/大根/大根キャラ.png",
+    3: "/motionPng/Survivors/大根/大根キャラ.png",
+  },
+};
+const SURVIVORS_CHARACTER_RENDER_RULES: Record<SurvivorsCharacterId, { usesFullBodyAttackAnimation: boolean }> = {
+  fairy: { usesFullBodyAttackAnimation: false },
+  hammer: { usesFullBodyAttackAnimation: false },
+  daikon: { usesFullBodyAttackAnimation: true },
+};
+const SURVIVORS_DEFAULT_WEAPON_IMAGE_BY_CHARACTER: Record<SurvivorsCharacterId, string> = {
+  fairy: "/motionPng/Survivors/hakusai-attack.png",
+  hammer: "/motionPng/Survivors/hammer2.png",
+  daikon: "/motionPng/Survivors/daikon.png",
+};
+const SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER: Record<SurvivorsCharacterId, WeaponRenderConfig> = {
+  fairy: {
+    gripX: 18,
+    gripY: 18,
+    tipX: 34,
+    tipY: 18,
+    scale: 0.9,
+    baseRotation: 0,
+    distanceFromPlayer: 14,
+    attackExtension: 8,
+    renderLayer: "front",
+  },
+  hammer: {
+    gripX: 12,
+    gripY: 22,
+    tipX: 36,
+    tipY: 10,
+    scale: 0.95,
+    baseRotation: -8,
+    distanceFromPlayer: 16,
+    attackExtension: 18,
+    renderLayer: "front",
+  },
+  daikon: {
+    gripX: 16,
+    gripY: 22,
+    tipX: 34,
+    tipY: 6,
+    scale: 0.9,
+    baseRotation: -6,
+    distanceFromPlayer: 15,
+    attackExtension: 14,
+    renderLayer: "front",
+  },
+};
+const SURVIVORS_WEAPON_RENDER_CONFIG_BY_ID: Record<string, WeaponRenderConfig> = {
+  "starter-fairy": SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER.fairy,
+  "starter-hammer": SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER.hammer,
+  "starter-daikon": SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER.daikon,
+  power: {
+    ...SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER.hammer,
+    attackExtension: 20,
+  },
+  haste: {
+    ...SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER.fairy,
+    attackExtension: 10,
+  },
+  multi: {
+    ...SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER.fairy,
+    scale: 0.86,
+    attackExtension: 12,
+  },
+};
+const normalizeAngleRad = (angle: number) => {
+  let out = angle;
+  while (out > Math.PI) out -= Math.PI * 2;
+  while (out < -Math.PI) out += Math.PI * 2;
+  return out;
+};
+const getShortestAngleDeltaRad = (from: number, to: number) => normalizeAngleRad(to - from);
+const getSurvivorsWeaponSlotSpread = (count: number): number[] => {
+  if (count <= 1) return [0];
+  if (count === 2) return [-0.3, 0.3];
+  if (count === 3) return [0, -0.52, 0.52];
+  return Array.from({ length: count }, (_, index) => ((index / count) * Math.PI * 2) - Math.PI / 2);
+};
+const expandSurvivorsWeaponSlots = (
+  characterId: SurvivorsCharacterId,
+  weapons: SurvivorsShopInventoryWeapon[],
+): SurvivorsWeaponSlotView[] => {
+  const expanded: SurvivorsWeaponSlotView[] = [];
+  weapons.forEach((weapon) => {
+    const count = Math.max(1, Math.floor(weapon.count));
+    for (let idx = 0; idx < count; idx += 1) {
+      const slotKey = `${weapon.id}-${idx}`;
+      const defaultImage = SURVIVORS_DEFAULT_WEAPON_IMAGE_BY_CHARACTER[characterId];
+      const imageSrc = weapon.id.startsWith("starter-") ? defaultImage : defaultImage;
+      expanded.push({
+        slotKey,
+        weaponId: weapon.id,
+        imageSrc,
+        config: SURVIVORS_WEAPON_RENDER_CONFIG_BY_ID[weapon.id] || SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER[characterId],
+      });
+    }
+  });
+  if (expanded.length > 0) return expanded;
+  return [
+    {
+      slotKey: `starter-${characterId}-0`,
+      weaponId: `starter-${characterId}`,
+      imageSrc: SURVIVORS_DEFAULT_WEAPON_IMAGE_BY_CHARACTER[characterId],
+      config: SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER[characterId],
+    },
+  ];
+};
+const SURVIVORS_DAIKON_IDLE_SHEET_COLS = 4;
+const SURVIVORS_DAIKON_IDLE_SHEET_ROWS = 2;
+const SURVIVORS_DAIKON_IDLE_SPRITE = "/motionPng/Survivors/大根/大根キャラ.png";
+const SURVIVORS_DAIKON_DIRECTION_SPRITES: Record<
+SurvivorsDaikonMoveDirection,
+{ frameNumber: number; frameIndex: number; column: number; row: number }
+> = {
+  downLeft: {
+    frameNumber: 1,
+    frameIndex: 0,
+    column: 0,
+    row: 0,
+  },
+  up: {
+    frameNumber: 2,
+    frameIndex: 1,
+    column: 1,
+    row: 0,
+  },
+  downRight: {
+    frameNumber: 3,
+    frameIndex: 2,
+    column: 2,
+    row: 0,
+  },
+  upLeft: {
+    frameNumber: 4,
+    frameIndex: 3,
+    column: 3,
+    row: 0,
+  },
+  left: {
+    frameNumber: 5,
+    frameIndex: 4,
+    column: 0,
+    row: 1,
+  },
+  right: {
+    frameNumber: 6,
+    frameIndex: 5,
+    column: 1,
+    row: 1,
+  },
+  down: {
+    frameNumber: 7,
+    frameIndex: 6,
+    column: 2,
+    row: 1,
+  },
+  upRight: {
+    frameNumber: 8,
+    frameIndex: 7,
+    column: 3,
+    row: 1,
+  },
+};
+const SURVIVORS_DAIKON_DIRECTION_CENTER_DEG: Record<SurvivorsDaikonMoveDirection, number> = {
+  right: 0,
+  downRight: 45,
+  down: 90,
+  downLeft: 135,
+  left: 180,
+  upLeft: -135,
+  up: -90,
+  upRight: -45,
+};
+const normalizeDeg = (angle: number) => {
+  let out = angle;
+  while (out >= 180) out -= 360;
+  while (out < -180) out += 360;
+  return out;
+};
+const shortestAngleDeltaDeg = (from: number, to: number) => normalizeDeg(to - from);
+const getSurvivorsDaikonDirection = (
+  dx: number,
+  dy: number,
+  lastDirection: SurvivorsDaikonMoveDirection,
+): SurvivorsDaikonMoveDirection => {
+  const deadZone = 0.01;
+  const hysteresisDeg = 7;
+
+  if (Math.abs(dx) < deadZone && Math.abs(dy) < deadZone) {
+    return lastDirection;
+  }
+
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+  let nextDirection: SurvivorsDaikonMoveDirection;
+  if (angle >= -22.5 && angle < 22.5) {
+    nextDirection = "right";
+  } else if (angle >= 22.5 && angle < 67.5) {
+    nextDirection = "downRight";
+  } else if (angle >= 67.5 && angle < 112.5) {
+    nextDirection = "down";
+  } else if (angle >= 112.5 && angle < 157.5) {
+    nextDirection = "downLeft";
+  } else if (angle >= 157.5 || angle < -157.5) {
+    nextDirection = "left";
+  } else if (angle >= -157.5 && angle < -112.5) {
+    nextDirection = "upLeft";
+  } else if (angle >= -112.5 && angle < -67.5) {
+    nextDirection = "up";
+  } else {
+    nextDirection = "upRight";
+  }
+
+  if (nextDirection !== lastDirection) {
+    const lastCenter = SURVIVORS_DAIKON_DIRECTION_CENTER_DEG[lastDirection];
+    const deltaToLastCenter = Math.abs(shortestAngleDeltaDeg(lastCenter, angle));
+    if (deltaToLastCenter <= 22.5 + hysteresisDeg) {
+      return lastDirection;
+    }
+  }
+
+  return nextDirection;
+};
+const SURVIVORS_DAIKON_ATTACK_FRAME_COUNT = 5;
+const SURVIVORS_DAIKON_ATTACK_HIT_FRAME_INDEX = 2;
+const SURVIVORS_DAIKON_ATTACK_BASE_DURATION_MS = 360;
+const SURVIVORS_DAIKON_ATTACK_MOTION_SPRITE = "/motionPng/Survivors/大根/大根attackMotion_背景透過.png";
+const SURVIVORS_DAIKON_ATTACK_SHEET_HEIGHT = 1024;
+const SURVIVORS_DAIKON_ATTACK_RENDER_SCALE = 0.1;
+// Non-uniform frame windows for the replaced daikon attack sheet.
+const SURVIVORS_DAIKON_ATTACK_FRAME_RECTS = [
+  { x: 0, width: 251 },
+  { x: 251, width: 333 },
+  { x: 584, width: 294 },
+  { x: 878, width: 331 },
+  { x: 1209, width: 327 },
+] as const;
+const SURVIVORS_DAIKON_ATTACK_WEAPON_FLOAT_PX = [0, -4, -8, -5, 0] as const;
+const SURVIVORS_SHOP_SLOT_IDS = ["slot-a", "slot-b", "slot-c", "slot-d"] as const;
+const SURVIVORS_SHOP_WEAPON_LIMIT = 6;
+const SURVIVORS_CHARACTER_PROFILES: Record<SurvivorsCharacterId, SurvivorsCharacterProfile> = {
+  hammer: {
+    roleLabel: "近距離特化",
+    attackRangeBase: 120,
+    attackRangePerLevel: 2,
+    attackDamageBonus: 5,
+    attackIntervalAdjustMs: 60,
+    innateMultiShot: 0,
+    skillName: "HAMMER RUSH",
+    skillMpCost: 35,
+    skillDurationMs: 3200,
+    skillHasteMs: 40,
+    skillDamageBonus: 8,
+    skillRangeBonus: 55,
+    skillMultiShotBonus: 0,
+  },
+  fairy: {
+    roleLabel: "魔法攻撃",
+    attackRangeBase: 265,
+    attackRangePerLevel: 6,
+    attackDamageBonus: -1,
+    attackIntervalAdjustMs: -35,
+    innateMultiShot: 1,
+    skillName: "FAIRY RAPID",
+    skillMpCost: 45,
+    skillDurationMs: 4200,
+    skillHasteMs: 210,
+    skillDamageBonus: 0,
+    skillRangeBonus: 0,
+    skillMultiShotBonus: 1,
+  },
+  daikon: {
+    // TODO: Confirm official daikon gameplay values once source data is available.
+    roleLabel: "近中距離バランス",
+    attackRangeBase: 220,
+    attackRangePerLevel: 4,
+    attackDamageBonus: 2,
+    attackIntervalAdjustMs: 10,
+    innateMultiShot: 0,
+    skillName: "DAIKON WALL",
+    skillMpCost: 40,
+    skillDurationMs: 3600,
+    skillHasteMs: 60,
+    skillDamageBonus: 3,
+    skillRangeBonus: 20,
+    skillMultiShotBonus: 0,
+  },
+};
+const SURVIVORS_CHARACTER_HINTS: Record<SurvivorsCharacterId, { name: string; detail: string }> = {
+  fairy: {
+    name: "白菜 (Fairy)",
+    detail: "魔法型。連射と多段攻撃が得意。長押しで超連射。",
+  },
+  hammer: {
+    name: "Hammer",
+    detail: "近距離型。射程は短いが一撃が重く耐久寄り。",
+  },
+  daikon: {
+    name: "大根",
+    detail: "独立キャラクター。防御寄りの立ち回り型。",
+  },
+};
+const SURVIVORS_CHARACTER_BASE_STATS: Record<
+  SurvivorsCharacterId,
+  { maxHp: number; maxMp: number; damageBonus: number; hasteBonus: number; multiShotBonus: number; armorBonus: number }
+> = {
+  fairy: { maxHp: 100, maxMp: 100, damageBonus: 0, hasteBonus: 0, multiShotBonus: 0, armorBonus: 0 },
+  hammer: { maxHp: 100, maxMp: 100, damageBonus: 0, hasteBonus: 0, multiShotBonus: 0, armorBonus: 0 },
+  // TODO: Confirm finalized daikon baseline stats from balancing sheet.
+  daikon: { maxHp: 118, maxMp: 95, damageBonus: 1, hasteBonus: -10, multiShotBonus: 0, armorBonus: 1 },
+};
+const SURVIVORS_CHARACTER_SELECT_CONFIGS: SelectCharacterConfig[] = [
+  {
+    id: "fairy",
+    name: "Fairy",
+    description: "魔法弾で安全圏から削る連射特化キャラクター。",
+    image: SURVIVORS_PLAYER_SPRITES.fairy[1],
+    startingWeapon: {
+      name: "白菜ショット",
+      icon: "/motionPng/Survivors/hakusai-attack.png",
+    },
+    abilities: [
+      "長押しで超連射",
+      "自動攻撃の同時対象+1",
+    ],
+    statModifiers: [
+      { label: "攻撃射程", value: "長い", kind: "buff" },
+      { label: "攻撃間隔", value: "短い", kind: "buff" },
+      { label: "基礎攻撃力", value: "やや低い", kind: "nerf" },
+      { label: "特殊", value: "長押し中のみMP消費", kind: "special" },
+    ],
+    unlocked: true,
+    themeColor: "#22d3ee",
+  },
+  {
+    id: "hammer",
+    name: "Hammer",
+    description: "近距離で押し切る高火力タイプ。",
+    image: SURVIVORS_PLAYER_SPRITES.hammer[1],
+    startingWeapon: {
+      name: "ハンマー",
+      icon: "/motionPng/Survivors/hammer2.png",
+    },
+    abilities: [
+      "近距離高火力",
+      "スキル発動でダメージ強化",
+    ],
+    statModifiers: [
+      { label: "攻撃力", value: "+", kind: "buff" },
+      { label: "射程", value: "短い", kind: "nerf" },
+      { label: "特殊", value: "HAMMER RUSH", kind: "special" },
+    ],
+    unlocked: true,
+    themeColor: "#f59e0b",
+  },
+  {
+    id: "daikon",
+    name: "大根",
+    // TODO: Replace with finalized daikon lore text from design spec.
+    description: "防御寄りの独立キャラクター。",
+    image: SURVIVORS_PLAYER_SPRITES.daikon[1],
+    startingWeapon: {
+      name: "大根スピア",
+      icon: SURVIVORS_PLAYER_SPRITES.daikon[1],
+    },
+    abilities: [
+      // TODO: Replace with finalized daikon ability list.
+      "被弾しながら粘る耐久型",
+      "スキルで前線維持",
+    ],
+    statModifiers: [
+      // TODO: Replace with finalized daikon modifiers from source data.
+      { label: "攻撃力", value: "標準", kind: "neutral" },
+      { label: "射程", value: "中距離", kind: "neutral" },
+      { label: "特殊", value: "DAIKON WALL", kind: "special" },
+    ],
+    unlocked: true,
+    themeColor: "#34d399",
+  },
+];
 
 const pickRandomFourPanelTitle = () => {
   return FOUR_PANEL_RANDOM_TITLES[Math.floor(Math.random() * FOUR_PANEL_RANDOM_TITLES.length)] || FOUR_PANEL_RANDOM_TITLES[0];
@@ -2237,150 +2993,57 @@ const MAHJONG_TILE_LABELS = [
   "R",
 ] as const;
 const MAHJONG_ORPHAN_TILE_IDS = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33] as const;
+const MAHJONG_RULE_CATEGORIES: MahjongRuleCategory[] = [
+  {
+    id: "playerCount",
+    title: "卓人数・進行",
+    description: "人数と局進行に関する設定",
+    fields: [
+      { id: "rule-player-count", label: "人数", help: "4人麻雀 / 3人麻雀を選択", value: "四人麻雀" },
+      { id: "rule-length", label: "対局長", help: "東風戦・半荘戦を選択", value: "東風戦" },
+      { id: "rule-start-point", label: "持ち点 / 返し点", help: "初期点と終局基準点", value: "25000 / 30000" },
+      { id: "rule-time", label: "持ち時間", help: "1手あたりの持ち時間", value: "7秒" },
+    ],
+  },
+  {
+    id: "basicYaku",
+    title: "基本ルール",
+    description: "赤ドラや喰いタンなど一般項目",
+    fields: [
+      { id: "rule-aka", label: "赤ドラ", help: "牌譜が見やすい標準3枚構成", value: "あり" },
+      { id: "rule-kuitan", label: "喰いタン", help: "副露タンヤオを許可", value: "あり" },
+      { id: "rule-atodzuke", label: "後付け", help: "役確定前の副露を許可", value: "あり" },
+      { id: "rule-tobi", label: "飛び終了", help: "0点未満で終局", value: "あり" },
+    ],
+  },
+  {
+    id: "advanced",
+    title: "上級ルール",
+    description: "競技寄りの裁定や役満まわり",
+    fields: [
+      { id: "rule-ron", label: "ダブロン / トリプルロン", help: "同時和了の扱い", value: "ダブロンあり / トリプルロンなし" },
+      { id: "rule-headbump", label: "頭ハネ", help: "同時和了時の優先順位", value: "なし" },
+      { id: "rule-yakuman", label: "数え役満 / ダブル役満", help: "役満の上限設定", value: "数え役満あり / ダブル役満あり" },
+      { id: "rule-kiriage", label: "切り上げ満貫", help: "30符4翻などの処理", value: "あり" },
+    ],
+  },
+  {
+    id: "scoreMeta",
+    title: "点数・卓方針",
+    description: "ウマ・オカ・CPU・観戦の設定",
+    fields: [
+      { id: "rule-umaoka", label: "ウマ / オカ", help: "精算時のボーナス点", value: "ウマ 10-20 / オカ 20" },
+      { id: "rule-cpu", label: "CPU強さ", help: "対人不足時の補完難易度", value: "標準" },
+      { id: "rule-spectate", label: "観戦許可", help: "ルーム観戦の可否", value: "許可" },
+      { id: "rule-nagashi", label: "流し満貫", help: "流局役の採用", value: "あり" },
+    ],
+  },
+];
 const FOUR_PANEL_EMPTY_SNAPSHOT = "__EMPTY__";
 
 function mahjongTileLabel(id: number): string {
   if (!Number.isInteger(id) || id < 0) return "?";
   return MAHJONG_TILE_LABELS[id % MAHJONG_TILE_LABELS.length] || "?";
-}
-
-function mahjongTileFace(tile: number): { main: string; sub: string; toneClass: string } {
-  if (tile >= 0 && tile <= 8) {
-    return { main: String((tile % 9) + 1), sub: "萬", toneClass: "text-rose-700" };
-  }
-  if (tile >= 9 && tile <= 17) {
-    return { main: String((tile % 9) + 1), sub: "筒", toneClass: "text-slate-700" };
-  }
-  if (tile >= 18 && tile <= 26) {
-    return { main: String((tile % 9) + 1), sub: "索", toneClass: "text-emerald-700" };
-  }
-
-  const honorFaces = ["東", "南", "西", "北", "白", "發", "中"];
-  const honorIndex = tile - 27;
-  const main = honorFaces[honorIndex] || "?";
-  const toneClass = tile === 33 ? "text-red-700" : tile === 32 ? "text-emerald-700" : "text-slate-800";
-  return { main, sub: "", toneClass };
-}
-
-const MAHJONG_DIGIT_KANJI = ["一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
-const MAHJONG_PIN_COORDS = [
-  [[50, 50]],
-  [[50, 24], [50, 76]],
-  [[50, 18], [50, 50], [50, 82]],
-  [[30, 24], [70, 24], [30, 76], [70, 76]],
-  [[30, 24], [70, 24], [50, 50], [30, 76], [70, 76]],
-  [[30, 20], [70, 20], [30, 50], [70, 50], [30, 80], [70, 80]],
-  [[30, 16], [70, 16], [50, 34], [30, 50], [70, 50], [30, 84], [70, 84]],
-  [[30, 14], [70, 14], [30, 36], [70, 36], [30, 64], [70, 64], [30, 86], [70, 86]],
-  [[30, 14], [50, 14], [70, 14], [30, 50], [50, 50], [70, 50], [30, 86], [50, 86], [70, 86]],
-] as const;
-
-const MAHJONG_SOU_COORDS = [
-  [[50, 50]],
-  [[40, 28], [60, 72]],
-  [[35, 22], [50, 50], [65, 78]],
-  [[35, 24], [65, 24], [35, 76], [65, 76]],
-  [[35, 24], [65, 24], [50, 50], [35, 76], [65, 76]],
-  [[35, 18], [65, 18], [35, 50], [65, 50], [35, 82], [65, 82]],
-  [[25, 18], [50, 18], [75, 18], [25, 50], [75, 50], [25, 82], [75, 82]],
-  [[25, 16], [50, 16], [75, 16], [25, 39], [75, 39], [25, 62], [75, 62], [50, 84]],
-  [[25, 16], [50, 16], [75, 16], [25, 39], [50, 39], [75, 39], [25, 72], [50, 72], [75, 72]],
-] as const;
-
-function mahjongTileKind(tile: number): "man" | "pin" | "sou" | "honor" {
-  if (tile >= 0 && tile <= 8) return "man";
-  if (tile >= 9 && tile <= 17) return "pin";
-  if (tile >= 18 && tile <= 26) return "sou";
-  return "honor";
-}
-
-function mahjongTileRank(tile: number): number {
-  return (tile % 9) + 1;
-}
-
-function renderMahjongTileArt(tile: number, compact = false) {
-  const kind = mahjongTileKind(tile);
-  const rank = mahjongTileRank(tile);
-  const isRedFive = rank === 5 && (kind === "man" || kind === "pin" || kind === "sou");
-  const brushFont = "'Yu Mincho', 'Hiragino Mincho ProN', 'MS Mincho', serif";
-
-  if (kind === "man") {
-    return (
-      <>
-        <span
-          className={`block text-center ${compact ? "text-sm" : "text-xl"} font-black leading-none tracking-tight ${isRedFive ? "text-red-700" : "text-slate-800"}`}
-          style={{ fontFamily: brushFont }}
-        >
-          {MAHJONG_DIGIT_KANJI[rank - 1]}
-        </span>
-        <span
-          className={`mt-0.5 block text-center ${compact ? "text-[8px]" : "text-[10px]"} font-semibold leading-none ${isRedFive ? "text-red-700" : "text-slate-700"}`}
-          style={{ fontFamily: brushFont }}
-        >
-          萬
-        </span>
-      </>
-    );
-  }
-
-  if (kind === "pin") {
-    const coords = MAHJONG_PIN_COORDS[rank - 1] || [];
-    return (
-      <div className={`relative mx-auto ${compact ? "h-8 w-5" : "h-11 w-7"}`}>
-        {coords.map(([x, y], idx) => {
-          const ring = isRedFive ? "bg-red-700" : rank === 1 ? "bg-rose-700" : "bg-sky-800";
-          const center = isRedFive ? "bg-rose-300" : "bg-white";
-          return (
-            <span
-              key={`mahjong-pin-${tile}-${idx}`}
-              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
-              style={{ left: `${x}%`, top: `${y}%` }}
-            >
-              <span className={`block h-2.5 w-2.5 rounded-full ${ring} shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]`}>
-                <span className={`mx-auto mt-[3px] block h-1 w-1 rounded-full ${center}`} />
-              </span>
-            </span>
-          );
-        })}
-      </div>
-    );
-  }
-
-  if (kind === "sou") {
-    const coords = MAHJONG_SOU_COORDS[rank - 1] || [];
-    return (
-      <div className={`relative mx-auto ${compact ? "h-8 w-5" : "h-11 w-7"}`}>
-        {coords.map(([x, y], idx) => {
-          const stem = isRedFive ? "bg-red-700" : "bg-emerald-700";
-          return (
-            <span
-              key={`mahjong-sou-${tile}-${idx}`}
-              className="absolute -translate-x-1/2 -translate-y-1/2"
-              style={{ left: `${x}%`, top: `${y}%` }}
-            >
-              <span className={`relative block h-3 w-1.5 rounded-full ${stem} shadow-[inset_0_0_0_1px_rgba(255,255,255,0.22)]`}>
-                <span className="absolute -top-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-emerald-300/80" />
-                <span className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-emerald-300/80" />
-              </span>
-            </span>
-          );
-        })}
-      </div>
-    );
-  }
-
-  const face = mahjongTileFace(tile);
-  if (tile === 31) {
-    return <span className={`block text-center ${compact ? "text-base" : "text-2xl"} font-black leading-none text-slate-400`} style={{ fontFamily: brushFont }}>▢</span>;
-  }
-  return (
-    <span
-      className={`block text-center ${compact ? "text-base" : "text-2xl"} font-extrabold leading-none tracking-tight ${face.toneClass}`}
-      style={{ fontFamily: brushFont, textShadow: "0 0.4px 0 rgba(15,23,42,0.15)" }}
-    >
-      {face.main}
-    </span>
-  );
 }
 
 function shuffleNumberList(list: number[]): number[] {
@@ -2785,6 +3448,162 @@ function createFitPuzzleShuffledTiles(stepCount = 80): number[] {
 const BOARD_SIZE = 8;
 const GOMOKU_SIZE = 15;
 const UNO_COLORS: UnoColor[] = ["R", "G", "B", "Y"];
+const UNO_PLAY_ANIMATION_DELAY_MS = 140;
+let unoCardSerial = 0;
+
+function nextUnoCardId(): string {
+  unoCardSerial += 1;
+  return `uno-${unoCardSerial}`;
+}
+
+function createUnoNumberCard(color: Exclude<UnoColor, "W">, value: number): UnoCard {
+  return {
+    id: nextUnoCardId(),
+    color,
+    value,
+    type: "number",
+    symbol: String(value),
+  };
+}
+
+function normalizeUnoCard(raw: unknown): UnoCard | null {
+  if (!raw || typeof raw !== "object") return null;
+  const card = raw as Partial<UnoCard> & Record<string, unknown>;
+  const color = card.color === "R" || card.color === "G" || card.color === "B" || card.color === "Y" || card.color === "W"
+    ? card.color
+    : null;
+  const value = Number(card.value);
+  if (!color || !Number.isFinite(value)) return null;
+  const type: UnoCardType =
+    card.type === "skip" || card.type === "reverse" || card.type === "draw2" || card.type === "wild" || card.type === "wildDraw4"
+      ? card.type
+      : "number";
+  const symbol = String(card.symbol || (type === "number" ? String(Math.trunc(value)) : type)).trim() || (type === "number" ? String(Math.trunc(value)) : type);
+  const id = String(card.id || "").trim() || nextUnoCardId();
+  return {
+    id,
+    color,
+    value: Math.trunc(value),
+    type,
+    symbol,
+  };
+}
+
+function normalizeUnoCardList(raw: unknown): UnoCard[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const next: UnoCard[] = [];
+  raw.forEach((entry) => {
+    const card = normalizeUnoCard(entry);
+    if (!card) return;
+    if (seen.has(card.id)) {
+      card.id = nextUnoCardId();
+    }
+    seen.add(card.id);
+    next.push(card);
+  });
+  return next;
+}
+
+function normalizeUnoHands(raw: unknown): UnoCard[][] {
+  if (!Array.isArray(raw)) return [[], []];
+  return raw.map((hand) => normalizeUnoCardList(hand));
+}
+
+function isUnoWildCard(card: UnoCard): boolean {
+  return card.type === "wild" || card.type === "wildDraw4" || card.color === "W";
+}
+
+function canPlayCardOnTop(card: UnoCard, top: UnoCard): boolean {
+  if (isUnoWildCard(card)) return true;
+  return card.color === top.color || card.value === top.value || card.symbol === top.symbol;
+}
+
+function canIncludeInMultiPlay(card: UnoCard): boolean {
+  return !isUnoWildCard(card);
+}
+
+function canChainCards(previousCard: UnoCard, nextCard: UnoCard): boolean {
+  if (!canIncludeInMultiPlay(previousCard) || !canIncludeInMultiPlay(nextCard)) return false;
+  if (previousCard.type !== nextCard.type) return false;
+  if (previousCard.type === "number") {
+    return previousCard.value === nextCard.value;
+  }
+  return previousCard.symbol === nextCard.symbol;
+}
+
+function validateSelectedCards(selectedCards: UnoCard[], topCard: UnoCard): UnoSelectionValidation {
+  if (selectedCards.length <= 0) {
+    return { isValid: false, selectedCards: [], reason: "カードを1枚以上選択してください。" };
+  }
+
+  const first = selectedCards[0];
+  if (!canPlayCardOnTop(first, topCard)) {
+    return {
+      isValid: false,
+      selectedCards,
+      invalidCardId: first.id,
+      reason: "1枚目が場札に対して出せません。",
+    };
+  }
+
+  if (selectedCards.length > 1 && !canIncludeInMultiPlay(first)) {
+    return {
+      isValid: false,
+      selectedCards,
+      invalidCardId: first.id,
+      reason: "ワイルド系カードは単体でのみ提出できます。",
+    };
+  }
+
+  for (let i = 1; i < selectedCards.length; i += 1) {
+    const previous = selectedCards[i - 1];
+    const current = selectedCards[i];
+    if (isUnoWildCard(current)) {
+      return {
+        isValid: false,
+        selectedCards,
+        invalidCardId: current.id,
+        reason: "ワイルド系カードは連続提出に含められません。",
+      };
+    }
+    if (!canChainCards(previous, current)) {
+      return {
+        isValid: false,
+        selectedCards,
+        invalidCardId: current.id,
+        reason: "2枚目以降は直前のカードと同じ数字または同じ記号のみ提出できます。",
+      };
+    }
+  }
+
+  return { isValid: true, selectedCards };
+}
+
+function calculateCombinedEffects(cards: UnoCard[]): { skipCount: number; reverseCount: number; drawCount: number } {
+  return cards.reduce(
+    (acc, card) => {
+      if (card.type === "skip") acc.skipCount += 1;
+      if (card.type === "reverse") acc.reverseCount += 1;
+      if (card.type === "draw2") acc.drawCount += 2;
+      return acc;
+    },
+    { skipCount: 0, reverseCount: 0, drawCount: 0 },
+  );
+}
+
+function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function wrapTurnIndex(index: number, totalPlayers: number): number {
+  if (totalPlayers <= 0) return 0;
+  const mod = index % totalPlayers;
+  return mod >= 0 ? mod : mod + totalPlayers;
+}
+
 const OTHELLO_DEFAULT_OVERWRITE = 2;
 const OTHELLO_DEFAULT_IMMUTABLE = 1;
 const OTHELLO_DEFAULT_DESTROY = 1;
@@ -3637,9 +4456,9 @@ function createUnoDeck(): UnoCard[] {
   const deck: UnoCard[] = [];
   for (const color of UNO_COLORS) {
     for (let value = 0; value <= 9; value += 1) {
-      deck.push({ color, value });
+      deck.push(createUnoNumberCard(color, value));
       if (value !== 0) {
-        deck.push({ color, value });
+        deck.push(createUnoNumberCard(color, value));
       }
     }
   }
@@ -3656,7 +4475,7 @@ function shuffleCards(cards: UnoCard[]): UnoCard[] {
 }
 
 function canPlayCard(card: UnoCard, top: UnoCard): boolean {
-  return card.color === top.color || card.value === top.value;
+  return canPlayCardOnTop(card, top);
 }
 
 function createChessBoard(): Array<Array<ChessPiece | null>> {
@@ -3830,6 +4649,35 @@ function createShogiBoard(): Array<Array<ShogiPiece | null>> {
   return board;
 }
 
+function assignShogiChaosMines(board: Array<Array<ShogiPiece | null>>, mineCountPerSide: number): void {
+  const count = Math.max(0, Math.min(3, Math.floor(Number.isFinite(mineCountPerSide) ? mineCountPerSide : 0)));
+  if (count <= 0) return;
+
+  (["b", "w"] as ShogiColor[]).forEach((color) => {
+    const candidates: Array<[number, number]> = [];
+    for (let row = 0; row < 9; row += 1) {
+      for (let col = 0; col < 9; col += 1) {
+        const piece = board[row][col];
+        if (!piece || piece.color !== color || piece.type === "K") continue;
+        candidates.push([row, col]);
+      }
+    }
+
+    for (let i = candidates.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    const pickCount = Math.min(count, candidates.length);
+    for (let i = 0; i < pickCount; i += 1) {
+      const [row, col] = candidates[i];
+      const piece = board[row][col];
+      if (!piece) continue;
+      board[row][col] = { ...piece, isMine: true };
+    }
+  });
+}
+
 function inShogiBounds(row: number, col: number): boolean {
   return row >= 0 && row < 9 && col >= 0 && col < 9;
 }
@@ -3932,7 +4780,10 @@ function isLegalShogiMove(
     kingAllyAbsorbEnabled
       && piece.type === "K"
       && target
+      && target.color === piece.color
       && target.type !== "K"
+      && target.type !== "R"
+      && target.type !== "B"
       && hasShogiAbsorbedAbilityType(piece, target.type as ShogiAbsorbAbility),
   );
   if (isAbsorbDuplicateTarget) return false;
@@ -4377,14 +5228,91 @@ function sevensCardLabel(card: SevensCard): string {
   return `${rank}${suitMap[card.suit]}`;
 }
 
+function sevensCardKey(card: SevensCard): string {
+  return `${card.suit}-${card.rank}`;
+}
+
+function dealSevensHands(deck: SevensCard[], playerCount: number, startOffset: number): SevensCard[][] {
+  const normalizedCount = Math.max(2, Math.min(8, Math.floor(playerCount)));
+  const hands = Array.from({ length: normalizedCount }, () => [] as SevensCard[]);
+  for (let i = 0; i < deck.length; i += 1) {
+    const target = (startOffset + i) % normalizedCount;
+    hands[target].push(deck[i]);
+  }
+  return hands.map((cards) => sortSevensHand(cards));
+}
+
+function findNextSevensTurnIndex(players: SevensPlayer[], fromIndex: number): number | null {
+  if (players.length === 0) return null;
+  for (let step = 1; step <= players.length; step += 1) {
+    const idx = (fromIndex + step) % players.length;
+    const player = players[idx];
+    if (!player) continue;
+    if (player.status === "playing" && player.hand.length > 0) {
+      return idx;
+    }
+  }
+  return null;
+}
+
+function selectSevensCpuMove(
+  difficulty: SevensCpuDifficulty,
+  hand: SevensCard[],
+  table: Record<"S" | "H" | "D" | "C", SevensTableRange>,
+): number {
+  const playableIndexes: number[] = [];
+  hand.forEach((card, index) => {
+    if (isSevensPlayable(card, table)) playableIndexes.push(index);
+  });
+  if (playableIndexes.length === 0) return -1;
+  if (difficulty === "easy") {
+    return playableIndexes[Math.floor(Math.random() * playableIndexes.length)] ?? playableIndexes[0];
+  }
+
+  const centerPriority = (card: SevensCard) => Math.abs(7 - card.rank);
+  const extensionScore = (card: SevensCard) => {
+    const nextTable = applySevensCard(table, card);
+    return hand.reduce((score, other) => {
+      if (sevensCardKey(other) === sevensCardKey(card)) return score;
+      return score + (isSevensPlayable(other, nextTable) ? 1 : 0);
+    }, 0);
+  };
+
+  const sorted = [...playableIndexes].sort((a, b) => {
+    const aCard = hand[a];
+    const bCard = hand[b];
+    const extA = extensionScore(aCard);
+    const extB = extensionScore(bCard);
+    if (extA !== extB) return extB - extA;
+    const centerA = centerPriority(aCard);
+    const centerB = centerPriority(bCard);
+    if (centerA !== centerB) return centerA - centerB;
+    return Math.random() < 0.5 ? -1 : 1;
+  });
+
+  if (difficulty === "normal") {
+    return sorted[0] ?? playableIndexes[0];
+  }
+
+  const edgeFirst = [...sorted].sort((a, b) => {
+    const edgeA = Math.max(0, Math.abs(hand[a].rank - 7));
+    const edgeB = Math.max(0, Math.abs(hand[b].rank - 7));
+    if (edgeA !== edgeB) return edgeB - edgeA;
+    return 0;
+  });
+  return edgeFirst[0] ?? sorted[0] ?? playableIndexes[0];
+}
+
 function createDaifugoDeck(): DaifugoCard[] {
   const suits: Array<"S" | "H" | "D" | "C"> = ["S", "H", "D", "C"];
   const deck: DaifugoCard[] = [];
   for (const suit of suits) {
     for (let rank = 1; rank <= 13; rank += 1) {
-      deck.push({ suit, rank });
+      deck.push({ id: `${suit}-${rank}`, suit, rank });
     }
   }
+  deck.push({ id: "JOKER-1", suit: "J", rank: 16 });
+  deck.push({ id: "JOKER-2", suit: "J", rank: 16 });
   return deck;
 }
 
@@ -4398,13 +5326,14 @@ function shuffleDaifugoDeck(cards: DaifugoCard[]): DaifugoCard[] {
 }
 
 function daifugoPower(rank: number): number {
+  if (rank >= 16) return 99;
   if (rank === 1) return 14;
   if (rank === 2) return 15;
   return rank;
 }
 
 function sortDaifugoHand(cards: DaifugoCard[]): DaifugoCard[] {
-  const suitOrder = { S: 0, H: 1, D: 2, C: 3 } as const;
+  const suitOrder = { S: 0, H: 1, D: 2, C: 3, J: 4 } as const;
   return [...cards].sort((a, b) => {
     const p = daifugoPower(a.rank) - daifugoPower(b.rank);
     if (p !== 0) return p;
@@ -4412,7 +5341,288 @@ function sortDaifugoHand(cards: DaifugoCard[]): DaifugoCard[] {
   });
 }
 
+function daifugoClassLabel(className?: DaifugoPlayerClass): string {
+  if (className === "daifugo") return "大富豪";
+  if (className === "fugo") return "富豪";
+  if (className === "hinmin") return "貧民";
+  if (className === "daihinmin") return "大貧民";
+  if (className === "heimin") return "平民";
+  return "-";
+}
+
+function daifugoClassFromRank(rank: number, totalPlayers: number): DaifugoPlayerClass {
+  if (rank <= 1) return "daifugo";
+  if (rank === 2) return "fugo";
+  if (rank >= totalPlayers) return "daihinmin";
+  if (rank === totalPlayers - 1) return "hinmin";
+  return "heimin";
+}
+
+function daifugoComboName(kind?: DaifugoComboKind): string {
+  if (kind === "pair") return "ペア";
+  if (kind === "triple") return "3枚組";
+  if (kind === "four") return "4枚組";
+  if (kind === "straight") return "階段";
+  return "単体";
+}
+
+function analyzeDaifugoCombo(cards: DaifugoCard[]): DaifugoComboAnalysis {
+  if (cards.length <= 0) {
+    return { valid: false, reason: "カードを選択してください。" };
+  }
+
+  const sorted = sortDaifugoHand(cards);
+  const jokers = sorted.filter((card) => card.suit === "J");
+  const normals = sorted.filter((card) => card.suit !== "J");
+  if (cards.length > 1 && jokers.length > 0) {
+    return { valid: false, reason: "ジョーカーを含む複数枚は現在未対応です。" };
+  }
+
+  if (cards.length === 1) {
+    const only = sorted[0];
+    return {
+      valid: true,
+      kind: "single",
+      strength: daifugoPower(only.rank),
+      length: 1,
+      label: `単体 ${daifugoCardLabel(only)}`,
+    };
+  }
+
+  const allSameRank = normals.length === cards.length && normals.every((card) => card.rank === normals[0]?.rank);
+  if (allSameRank) {
+    const length = cards.length;
+    const strength = daifugoPower(normals[0]?.rank || 0);
+    if (length === 2) return { valid: true, kind: "pair", strength, length, label: `ペア ${daifugoCardLabel(normals[0] || cards[0]).slice(0, -1)}` };
+    if (length === 3) return { valid: true, kind: "triple", strength, length, label: `3枚組 ${daifugoCardLabel(normals[0] || cards[0]).slice(0, -1)}` };
+    if (length === 4) return { valid: true, kind: "four", strength, length, label: `4枚組 ${daifugoCardLabel(normals[0] || cards[0]).slice(0, -1)}` };
+    return { valid: false, reason: "同ランクは4枚までです。" };
+  }
+
+  if (cards.length >= 3 && normals.length === cards.length) {
+    const suit = normals[0]?.suit;
+    const sameSuit = normals.every((card) => card.suit === suit);
+    const powers = normals.map((card) => daifugoPower(card.rank));
+    const consecutive = powers.every((power, index) => index === 0 || power === powers[index - 1] + 1);
+    if (sameSuit && consecutive) {
+      return {
+        valid: true,
+        kind: "straight",
+        strength: powers[powers.length - 1],
+        length: cards.length,
+        label: `階段 ${normals.map((card) => daifugoCardLabel(card).slice(0, -1)).join("-")}`,
+      };
+    }
+    return { valid: false, reason: "階段は同じスートで連番3枚以上が必要です。" };
+  }
+
+  return { valid: false, reason: "同じ数字を選択してください。" };
+}
+
+function canPlayDaifugoCombo(
+  selected: DaifugoComboAnalysis,
+  table: DaifugoComboAnalysis,
+  options?: { revolution?: boolean },
+): { ok: boolean; reason?: string } {
+  if (!selected.valid) return { ok: false, reason: selected.reason || "無効な組み合わせです。" };
+  if (!table.valid || !table.kind) return { ok: true };
+  if (selected.kind !== table.kind) {
+    return { ok: false, reason: "場札と同じ種類の組み合わせを出してください。" };
+  }
+  if ((selected.length || 0) !== (table.length || 0)) {
+    return { ok: false, reason: "場札と同じ枚数で出してください。" };
+  }
+  const selectedPower = Number(selected.strength || 0);
+  const tablePower = Number(table.strength || 0);
+  const revolution = Boolean(options?.revolution);
+  if (revolution ? selectedPower >= tablePower : selectedPower <= tablePower) {
+    return { ok: false, reason: revolution ? "革命中のため、より弱い組み合わせが必要です。" : "現在の場札より強い組み合わせが必要です。" };
+  }
+  return { ok: true };
+}
+
+function getDaifugoSeatPosition(index: number, totalPlayers: number): { x: number; y: number } {
+  const layouts: Record<number, Array<{ x: number; y: number }>> = {
+    2: [{ x: 50, y: 14 }],
+    3: [{ x: 14, y: 44 }, { x: 86, y: 44 }],
+    4: [{ x: 10, y: 46 }, { x: 50, y: 9 }, { x: 90, y: 46 }],
+    5: [{ x: 12, y: 55 }, { x: 14, y: 29 }, { x: 50, y: 12 }, { x: 86, y: 29 }],
+    6: [{ x: 12, y: 57 }, { x: 10, y: 41 }, { x: 18, y: 22 }, { x: 50, y: 12 }, { x: 82, y: 22 }],
+    7: [{ x: 13, y: 60 }, { x: 10, y: 45 }, { x: 14, y: 28 }, { x: 50, y: 11 }, { x: 86, y: 28 }, { x: 90, y: 45 }],
+    8: [{ x: 14, y: 62 }, { x: 9, y: 47 }, { x: 13, y: 30 }, { x: 50, y: 11 }, { x: 87, y: 30 }, { x: 91, y: 47 }, { x: 86, y: 62 }],
+  };
+  const safeTotal = Math.max(2, Math.min(8, totalPlayers));
+  const slots = layouts[safeTotal] || layouts[8];
+  const slot = slots[index] || slots[slots.length - 1] || { x: 50, y: 14 };
+  return slot;
+}
+
+function daifugoSeatPanelSize(totalPlayers: number): "lg" | "md" | "sm" {
+  if (totalPlayers <= 4) return "lg";
+  if (totalPlayers <= 6) return "md";
+  return "sm";
+}
+
+function daifugoSeatLayoutMode(totalPlayers: number): "normal" | "compact" | "dense" {
+  if (totalPlayers <= 4) return "normal";
+  if (totalPlayers <= 6) return "compact";
+  return "dense";
+}
+
+function daifugoOpponentBackCount(totalPlayers: number): number {
+  if (totalPlayers <= 4) return 3;
+  if (totalPlayers <= 6) return 2;
+  return 1;
+}
+
+function getDaifugoDenseSeatCell(index: number, totalPlayers: number): { col: 1 | 2 | 3; row: 1 | 2 | 3 | 4 } {
+  const map8: Array<{ col: 1 | 2 | 3; row: 1 | 2 | 3 | 4 }> = [
+    { col: 1, row: 4 },
+    { col: 1, row: 3 },
+    { col: 1, row: 2 },
+    { col: 2, row: 1 },
+    { col: 3, row: 2 },
+    { col: 3, row: 3 },
+    { col: 3, row: 4 },
+  ];
+  const map7: Array<{ col: 1 | 2 | 3; row: 1 | 2 | 3 | 4 }> = [
+    { col: 1, row: 4 },
+    { col: 1, row: 3 },
+    { col: 1, row: 2 },
+    { col: 2, row: 1 },
+    { col: 3, row: 2 },
+    { col: 3, row: 3 },
+  ];
+  const safeTotal = Math.max(7, Math.min(8, totalPlayers));
+  const map = safeTotal >= 8 ? map8 : map7;
+  return map[index] || map[map.length - 1] || { col: 2, row: 1 };
+}
+
+function calculateDaifugoCardWidth(cardCount: number, viewportWidth: number, mode: "single" | "overlap" | "twoRows"): number {
+  const safeCount = Math.max(1, cardCount);
+  const safeViewport = Math.max(360, viewportWidth);
+  const isMobile = safeViewport < 640;
+  const isTablet = safeViewport >= 640 && safeViewport < 1024;
+
+  let min = 56;
+  let max = 66;
+  let penaltyUnit = 1.2;
+  if (mode === "single") {
+    min = isMobile ? 56 : isTablet ? 64 : 68;
+    max = isMobile ? 66 : isTablet ? 76 : 82;
+    penaltyUnit = isMobile ? 0.8 : 1.0;
+  } else if (mode === "overlap") {
+    min = isMobile ? 56 : isTablet ? 60 : 62;
+    max = isMobile ? 64 : isTablet ? 72 : 76;
+    penaltyUnit = isMobile ? 0.9 : 1.2;
+  } else {
+    min = isMobile ? 56 : isTablet ? 56 : 58;
+    max = isMobile ? 62 : isTablet ? 68 : 72;
+    penaltyUnit = isMobile ? 0.8 : 1.1;
+  }
+
+  const baseline = mode === "single" ? 9 : mode === "overlap" ? 13 : 14;
+  const penalty = Math.max(0, safeCount - baseline) * penaltyUnit;
+  const proposed = Math.round(max - penalty);
+  return Math.max(min, Math.min(max, proposed));
+}
+
+function calculateDaifugoCardStep(options: {
+  containerWidth: number;
+  cardWidth: number;
+  cardCount: number;
+  mode: "single" | "overlap" | "twoRows";
+}): number {
+  const cardCount = Math.max(1, Math.floor(options.cardCount || 1));
+  const containerWidth = Math.max(220, Math.floor(options.containerWidth || 220));
+  const cardWidth = Math.max(48, Math.floor(options.cardWidth || 48));
+  if (cardCount <= 1) return cardWidth;
+
+  const availableStep = (containerWidth - cardWidth) / Math.max(1, cardCount - 1);
+  const minStep = options.mode === "single"
+    ? Math.max(30, Math.floor(cardWidth * 0.52))
+    : options.mode === "overlap"
+      ? Math.max(24, Math.floor(cardWidth * 0.42))
+      : Math.max(22, Math.floor(cardWidth * 0.36));
+  const maxStep = cardWidth + 8;
+  return Math.min(maxStep, Math.max(minStep, Math.floor(availableStep)));
+}
+
+function daifugoHandCardStyle(index: number, total: number, options: { step: number; maxRotate: number; centerLift: number }) {
+  const step = Math.max(12, options.step);
+  const maxRotate = Math.max(1.5, options.maxRotate);
+  const center = (total - 1) / 2;
+  const offset = index - center;
+  const maxAbs = Math.max(1, center);
+  const centerBias = Math.max(0, 1 - Math.abs(offset) / maxAbs);
+  const rotate = Math.max(-maxRotate, Math.min(maxRotate, (offset / maxAbs) * maxRotate));
+  const lift = centerBias * options.centerLift;
+  const stackTop = 10 + (total - Math.round(Math.abs(offset) * 2));
+  return {
+    left: `${Math.round(index * step)}px`,
+    transform: `translateY(-${lift.toFixed(2)}px) rotate(${rotate.toFixed(2)}deg)`,
+    transformOrigin: "bottom center" as const,
+    position: "absolute" as const,
+    bottom: 0,
+    zIndex: Math.max(1, stackTop),
+  };
+}
+
+function buildDaifugoCpuCandidates(hand: DaifugoCard[]): DaifugoCard[][] {
+  const sorted = sortDaifugoHand(hand);
+  const candidates: DaifugoCard[][] = [];
+
+  sorted.forEach((card) => {
+    candidates.push([card]);
+  });
+
+  const byRank = new Map<number, DaifugoCard[]>();
+  sorted.forEach((card) => {
+    if (card.suit === "J") return;
+    const group = byRank.get(card.rank) || [];
+    group.push(card);
+    byRank.set(card.rank, group);
+  });
+  byRank.forEach((group) => {
+    if (group.length >= 2) candidates.push(group.slice(0, 2));
+    if (group.length >= 3) candidates.push(group.slice(0, 3));
+    if (group.length >= 4) candidates.push(group.slice(0, 4));
+  });
+
+  const bySuit = new Map<"S" | "H" | "D" | "C", DaifugoCard[]>();
+  sorted.forEach((card) => {
+    if (card.suit === "J") return;
+    const suit = card.suit as "S" | "H" | "D" | "C";
+    const list = bySuit.get(suit) || [];
+    list.push(card);
+    bySuit.set(suit, list);
+  });
+  bySuit.forEach((cards) => {
+    const uniq = cards.filter((card, index, arr) => arr.findIndex((a) => a.rank === card.rank) === index);
+    for (let i = 0; i < uniq.length; i += 1) {
+      const straight: DaifugoCard[] = [uniq[i]];
+      for (let j = i + 1; j < uniq.length; j += 1) {
+        const prev = straight[straight.length - 1];
+        if (!prev) continue;
+        if (daifugoPower(uniq[j].rank) === daifugoPower(prev.rank) + 1) {
+          straight.push(uniq[j]);
+          if (straight.length >= 3) {
+            candidates.push([...straight]);
+          }
+        } else if (daifugoPower(uniq[j].rank) > daifugoPower(prev.rank) + 1) {
+          break;
+        }
+      }
+    }
+  });
+
+  return candidates;
+}
+
 function daifugoCardLabel(card: DaifugoCard): string {
+  if (card.suit === "J") {
+    return "JOKER";
+  }
   const suitMap = {
     S: "♠",
     H: "♥",
@@ -4578,6 +5788,92 @@ function pokerCpuHoldIndexes(cards: PokerCard[]): Set<number> {
     .forEach(({ index }) => hold.add(index));
 
   return hold;
+}
+
+function buildBlindStructure(speed: BlindSpeed): BlindLevel[] {
+  if (speed === "turbo") {
+    return [
+      { level: 1, smallBlind: 10, bigBlind: 20, ante: 0, hands: 4 },
+      { level: 2, smallBlind: 15, bigBlind: 30, ante: 0, hands: 4 },
+      { level: 3, smallBlind: 25, bigBlind: 50, ante: 5, hands: 4 },
+      { level: 4, smallBlind: 50, bigBlind: 100, ante: 10, hands: 4 },
+      { level: 5, smallBlind: 75, bigBlind: 150, ante: 15, hands: 4 },
+      { level: 6, smallBlind: 100, bigBlind: 200, ante: 25, hands: 4 },
+      { level: 7, smallBlind: 150, bigBlind: 300, ante: 25, hands: 4 },
+      { level: 8, smallBlind: 200, bigBlind: 400, ante: 50, hands: 4 },
+      { level: 9, smallBlind: 300, bigBlind: 600, ante: 75, hands: 4 },
+      { level: 10, smallBlind: 400, bigBlind: 800, ante: 100, hands: 4 },
+    ];
+  }
+  if (speed === "slow") {
+    return [
+      { level: 1, smallBlind: 10, bigBlind: 20, ante: 0, hands: 12 },
+      { level: 2, smallBlind: 15, bigBlind: 30, ante: 0, hands: 12 },
+      { level: 3, smallBlind: 25, bigBlind: 50, ante: 5, hands: 12 },
+      { level: 4, smallBlind: 40, bigBlind: 80, ante: 10, hands: 12 },
+      { level: 5, smallBlind: 60, bigBlind: 120, ante: 15, hands: 12 },
+      { level: 6, smallBlind: 100, bigBlind: 200, ante: 25, hands: 12 },
+      { level: 7, smallBlind: 150, bigBlind: 300, ante: 25, hands: 12 },
+      { level: 8, smallBlind: 200, bigBlind: 400, ante: 50, hands: 12 },
+      { level: 9, smallBlind: 300, bigBlind: 600, ante: 75, hands: 12 },
+      { level: 10, smallBlind: 500, bigBlind: 1000, ante: 100, hands: 12 },
+    ];
+  }
+  return [
+    { level: 1, smallBlind: 10, bigBlind: 20, ante: 0, hands: 8 },
+    { level: 2, smallBlind: 15, bigBlind: 30, ante: 0, hands: 8 },
+    { level: 3, smallBlind: 25, bigBlind: 50, ante: 5, hands: 8 },
+    { level: 4, smallBlind: 40, bigBlind: 80, ante: 10, hands: 8 },
+    { level: 5, smallBlind: 60, bigBlind: 120, ante: 15, hands: 8 },
+    { level: 6, smallBlind: 100, bigBlind: 200, ante: 25, hands: 8 },
+    { level: 7, smallBlind: 150, bigBlind: 300, ante: 25, hands: 8 },
+    { level: 8, smallBlind: 250, bigBlind: 500, ante: 50, hands: 8 },
+    { level: 9, smallBlind: 400, bigBlind: 800, ante: 100, hands: 8 },
+    { level: 10, smallBlind: 600, bigBlind: 1200, ante: 150, hands: 8 },
+  ];
+}
+
+function getPokerSeatLayout(count: number): number[] {
+  const layouts: Record<number, number[]> = {
+    2: [5, 0],
+    3: [5, 2, 0],
+    4: [5, 3, 1, 0],
+    5: [5, 3, 1, 0, 8],
+    6: [5, 4, 2, 1, 0, 8],
+    7: [5, 4, 2, 1, 0, 8, 7],
+    8: [5, 4, 3, 2, 1, 0, 8, 7],
+    9: [5, 4, 3, 2, 1, 0, 8, 7, 6],
+  };
+  return layouts[Math.max(2, Math.min(9, count))] || layouts[8] || [5, 4, 3, 2, 1, 0, 8, 7];
+}
+
+const POKER_SEAT_ANCHOR_CLASS: Record<number, string> = {
+  0: "top-[8%] left-1/2 -translate-x-1/2",
+  1: "top-[16%] right-[14%]",
+  2: "top-[34%] right-[4%]",
+  3: "bottom-[36%] right-[4%]",
+  4: "bottom-[18%] right-[14%]",
+  5: "bottom-[8%] left-1/2 -translate-x-1/2",
+  6: "bottom-[18%] left-[14%]",
+  7: "bottom-[36%] left-[4%]",
+  8: "top-[16%] left-[14%]",
+};
+
+function isPokerPlayerAlive(player: TournamentPlayer): boolean {
+  return player.status !== "eliminated";
+}
+
+function isPokerPlayerActionable(player: TournamentPlayer): boolean {
+  return player.status === "active";
+}
+
+function isPokerPlayerInHand(player: TournamentPlayer): boolean {
+  return player.status === "active" || player.status === "allIn";
+}
+
+function rankText(rank: number): string {
+  if (rank === 1) return "1位";
+  return `${rank}位`;
 }
 
 function createSolitaireDeck(): SolitaireCard[] {
@@ -4779,18 +6075,49 @@ export default function Home() {
   const [chinchiroWager, setChinchiroWager] = useState(0);
   const [chinchiroMessage, setChinchiroMessage] = useState<string>(LOGIN_I18N.ja.chinchiroHint);
   const [isChinchiroOver, setIsChinchiroOver] = useState(false);
-  const [sevensHands, setSevensHands] = useState<[SevensCard[], SevensCard[]]>([[], []]);
   const [sevensTable, setSevensTable] = useState<Record<"S" | "H" | "D" | "C", SevensTableRange>>(createSevensTable());
-  const [sevensTurn, setSevensTurn] = useState<"player" | "cpu">("player");
-  const [sevensPassCount, setSevensPassCount] = useState<[number, number]>([0, 0]);
-  const [sevensMessage, setSevensMessage] = useState<string>(LOGIN_I18N.ja.sevensYourTurn);
+  const [sevensPlayers, setSevensPlayers] = useState<SevensPlayer[]>([]);
+  const [sevensCurrentTurnIndex, setSevensCurrentTurnIndex] = useState(0);
+  const [sevensMode, setSevensMode] = useState<SevensMode>("cpu");
+  const [sevensCpuCount, setSevensCpuCount] = useState(1);
+  const [sevensMaxPlayers, setSevensMaxPlayers] = useState(8);
+  const [sevensCpuDifficulty, setSevensCpuDifficulty] = useState<SevensCpuDifficulty>("normal");
+  const [sevensRoundCount, setSevensRoundCount] = useState(1);
+  const [sevensCurrentRound, setSevensCurrentRound] = useState(1);
+  const [sevensPassLimit, setSevensPassLimit] = useState(0);
+  const [sevensMessage, setSevensMessage] = useState<string>("ゲームを開始してください。");
   const [isSevensOver, setIsSevensOver] = useState(false);
+  const [sevensSelectedCardIndex, setSevensSelectedCardIndex] = useState<number | null>(null);
+  const [sevensLastResult, setSevensLastResult] = useState<Array<{ name: string; rank: number; cards: number; passCount: number; status: SevensPlayerStatus }>>([]);
+  const [pendingRemoteSevensAction, setPendingRemoteSevensAction] = useState<{ from: string; action: "play" | "pass"; cardKey?: string } | null>(null);
+  const [daifugoMode, setDaifugoMode] = useState<DaifugoMode>("cpu");
+  const [daifugoCpuCount, setDaifugoCpuCount] = useState(3);
+  const [daifugoMaxPlayers, setDaifugoMaxPlayers] = useState(8);
+  const [daifugoCpuLevel, setDaifugoCpuLevel] = useState<DaifugoCpuDifficulty>("normal");
+  const [daifugoRules, setDaifugoRules] = useState<DaifugoRuleSet>({
+    joker: true,
+    kakumei: true,
+    shibari: false,
+    eightCut: true,
+    miyakoOchhi: false,
+    sp3Return: false,
+  });
+  const [daifugoPlayers, setDaifugoPlayers] = useState<DaifugoPlayer[]>([]);
+  const [daifugoCurrentTurnIndex, setDaifugoCurrentTurnIndex] = useState(0);
+  const [daifugoTableCards, setDaifugoTableCards] = useState<DaifugoCard[]>([]);
+  const [daifugoTableCombo, setDaifugoTableCombo] = useState<DaifugoComboAnalysis>({ valid: false });
+  const [daifugoSelectedCardIds, setDaifugoSelectedCardIds] = useState<string[]>([]);
+  const [daifugoPassStreak, setDaifugoPassStreak] = useState(0);
+  const [daifugoLastPlayedBy, setDaifugoLastPlayedBy] = useState<string | null>(null);
+  const [daifugoNotification, setDaifugoNotification] = useState("");
+  const [showDaifugoWinBurst, setShowDaifugoWinBurst] = useState(false);
+  const [daifugoRoundResult, setDaifugoRoundResult] = useState<Array<{ rank: number; name: string; className: DaifugoPlayerClass; cards: number; isCpu: boolean }>>([]);
+  const [daifugoPhase, setDaifugoPhase] = useState<DaifugoGamePhase>("idle");
+  const [daifugoMessage, setDaifugoMessage] = useState<string>("ゲームを開始してください。");
+  const [isDaifugoOver, setIsDaifugoOver] = useState(false);
   const [daifugoHands, setDaifugoHands] = useState<[DaifugoCard[], DaifugoCard[]]>([[], []]);
   const [daifugoTableCard, setDaifugoTableCard] = useState<DaifugoCard | null>(null);
   const [daifugoTurn, setDaifugoTurn] = useState<"player" | "cpu">("player");
-  const [daifugoPassStreak, setDaifugoPassStreak] = useState(0);
-  const [daifugoMessage, setDaifugoMessage] = useState<string>(LOGIN_I18N.ja.daifugoYourTurn);
-  const [isDaifugoOver, setIsDaifugoOver] = useState(false);
   const [fourPanelTitle, setFourPanelTitle] = useState(FOUR_PANEL_RANDOM_TITLES[0]);
   const [fourPanelImages, setFourPanelImages] = useState<string[]>([]);
   const [fourPanelIndex, setFourPanelIndex] = useState(0);
@@ -4831,6 +6158,13 @@ export default function Home() {
   const [mahjongWinSummary, setMahjongWinSummary] = useState<MahjongWinSummary | null>(null);
   const [mahjongMessage, setMahjongMessage] = useState<string>(LOGIN_I18N.ja.mahjongHint);
   const [isMahjongOver, setIsMahjongOver] = useState(false);
+  const [isMahjongRuleSettingsOpen, setIsMahjongRuleSettingsOpen] = useState(true);
+  const [isMahjongLogOpen, setIsMahjongLogOpen] = useState(false);
+  const [mahjongRulePreset, setMahjongRulePreset] = useState<MahjongRulePreset>("standard");
+  const [mahjongAutoWinEnabled, setMahjongAutoWinEnabled] = useState(false);
+  const [mahjongNoCallEnabled, setMahjongNoCallEnabled] = useState(false);
+  const [mahjongReduceEffects, setMahjongReduceEffects] = useState(false);
+  const [mahjongLogEvents, setMahjongLogEvents] = useState<MahjongLogEvent[]>([]);
   const [pokerDeck, setPokerDeck] = useState<PokerCard[]>([]);
   const [pokerPlayerHand, setPokerPlayerHand] = useState<PokerCard[]>([]);
   const [pokerCpuHand, setPokerCpuHand] = useState<PokerCard[]>([]);
@@ -4838,11 +6172,60 @@ export default function Home() {
   const [pokerBet, setPokerBet] = useState(MIN_CASINO_BET);
   const [pokerWager, setPokerWager] = useState(0);
   const [pokerHold, setPokerHold] = useState<boolean[]>([false, false]);
-  const [pokerPhase, setPokerPhase] = useState<PokerPhase>("betting");
-  const [pokerMessage, setPokerMessage] = useState<string>(LOGIN_I18N.ja.pokerHint);
+  const [pokerPhase, setPokerPhase] = useState<PokerPhase>("waiting");
+  const [pokerMessage, setPokerMessage] = useState<string>("大会開始待ち");
   const [pokerPlayerEval, setPokerPlayerEval] = useState<PokerEval | null>(null);
   const [pokerCpuEval, setPokerCpuEval] = useState<PokerEval | null>(null);
   const [pokerOutcome, setPokerOutcome] = useState<"win" | "lose" | "draw" | "pending">("pending");
+  const [pokerTournamentStatus, setPokerTournamentStatus] = useState<TournamentStatus>("idle");
+  const [pokerSettings, setPokerSettings] = useState<TournamentSettings>({
+    gameMode: "tournament",
+    cpuCount: 3,
+    cpuDifficulty: "normal",
+    startingChips: 3000,
+    normalSmallBlind: 10,
+    normalBigBlind: 20,
+    blindSpeed: "normal",
+  });
+  const [pokerNormalSessionStatus, setPokerNormalSessionStatus] = useState<PokerNormalSessionStatus>("idle");
+  const [pokerNormalRecord, setPokerNormalRecord] = useState<PokerNormalRecord>({
+    playerWins: 0,
+    cpuWins: 0,
+    draws: 0,
+    rounds: 0,
+  });
+  const [pokerBlindStructure, setPokerBlindStructure] = useState<BlindLevel[]>(() => buildBlindStructure("normal"));
+  const [pokerBlindLevelIndex, setPokerBlindLevelIndex] = useState(0);
+  const [pokerHandCount, setPokerHandCount] = useState(0);
+  const [pokerHandsUntilLevelUp, setPokerHandsUntilLevelUp] = useState(buildBlindStructure("normal")[0]?.hands || 8);
+  const [pokerPlayers, setPokerPlayers] = useState<TournamentPlayer[]>([]);
+  const [pokerHoleCardsByPlayerId, setPokerHoleCardsByPlayerId] = useState<Record<string, PokerCard[]>>({});
+  const [pokerDeckCursor, setPokerDeckCursor] = useState(0);
+  const [pokerDealerSeat, setPokerDealerSeat] = useState(0);
+  const [pokerCurrentTurnSeat, setPokerCurrentTurnSeat] = useState<number | null>(null);
+  const [pokerCurrentStreetBet, setPokerCurrentStreetBet] = useState(0);
+  const [pokerCurrentHandBlinds, setPokerCurrentHandBlinds] = useState<HandBlindState>(() => {
+    const blind = buildBlindStructure("normal")[0] ?? { level: 1, smallBlind: 10, bigBlind: 20, hands: 8 };
+    return {
+      level: blind.level,
+      smallBlind: blind.smallBlind,
+      bigBlind: blind.bigBlind,
+      ante: Math.floor(blind.bigBlind * 0.1),
+    };
+  });
+  const [pokerBettingRound, setPokerBettingRound] = useState<BettingRoundState>(() => ({
+    phase: "preflop",
+    currentHighestBet: 0,
+    lastRaiseSize: 20,
+    minimumBet: 20,
+  }));
+  const [pokerMinRaiseTo, setPokerMinRaiseTo] = useState(0);
+  const [pokerRaiseTo, setPokerRaiseTo] = useState(0);
+  const [pokerPots, setPokerPots] = useState<Pot[]>([{ id: "main", amount: 0, eligiblePlayerIds: [] }]);
+  const [pokerActionNotice, setPokerActionNotice] = useState<PokerNotification | null>(null);
+  const [pokerHandResult, setPokerHandResult] = useState<HandResult | null>(null);
+  const [, setPokerEliminationLog] = useState<Array<{ playerId: string; hand: number; byId?: string }>>([]);
+  const [pokerActedSeats, setPokerActedSeats] = useState<number[]>([]);
   const [solitaireStock, setSolitaireStock] = useState<SolitaireCard[]>([]);
   const [solitaireWaste, setSolitaireWaste] = useState<SolitaireCard[]>([]);
   const [solitaireFoundations, setSolitaireFoundations] = useState<Record<SolitaireSuit, SolitaireCard[]>>({ H: [], D: [], C: [], S: [] });
@@ -4858,6 +6241,8 @@ export default function Home() {
   const [survivorsWave, setSurvivorsWave] = useState(1);
   const [survivorsHp, setSurvivorsHp] = useState(100);
   const [survivorsMaxHp, setSurvivorsMaxHp] = useState(100);
+  const [survivorsMp, setSurvivorsMp] = useState(100);
+  const [survivorsMaxMp, setSurvivorsMaxMp] = useState(100);
   const [survivorsLevel, setSurvivorsLevel] = useState(1);
   const [survivorsXp, setSurvivorsXp] = useState(0);
   const [survivorsTimeSec, setSurvivorsTimeSec] = useState(0);
@@ -4872,10 +6257,55 @@ export default function Home() {
   const [survivorsMultiShotBonus, setSurvivorsMultiShotBonus] = useState(0);
   const [survivorsArmorBonus, setSurvivorsArmorBonus] = useState(0);
   const [isSurvivorsAttackMotion, setIsSurvivorsAttackMotion] = useState(false);
+  const [survivorsAttackMotionIntensity, setSurvivorsAttackMotionIntensity] = useState(0);
   const [survivorsPlayerFrame, setSurvivorsPlayerFrame] = useState<1 | 2 | 3>(1);
+  const [survivorsDaikonLastMoveDirection, setSurvivorsDaikonLastMoveDirection] = useState<SurvivorsDaikonMoveDirection>("down");
+  const [survivorsDaikonSpriteMeta, setSurvivorsDaikonSpriteMeta] = useState<SurvivorsDaikonSpriteMeta>({
+    naturalWidth: 0,
+    naturalHeight: 0,
+    frameWidth: 0,
+    frameHeight: 0,
+    valid: true,
+  });
+  const [survivorsDaikonAttackVisual, setSurvivorsDaikonAttackVisual] = useState<SurvivorsDaikonAttackVisual>({
+    active: false,
+    frameIndex: 0,
+    facingLeft: false,
+    angleDeg: 0,
+  });
+  const [survivorsWeaponRenderPoses, setSurvivorsWeaponRenderPoses] = useState<SurvivorsWeaponRenderPose[]>([]);
+  const [survivorsCharacterId, setSurvivorsCharacterId] = useState<SurvivorsCharacterId>("fairy");
+  const [survivorsCharacterHoverId, setSurvivorsCharacterHoverId] = useState<SurvivorsCharacterId | null>(null);
+  const [survivorsStageSettings, setSurvivorsStageSettings] = useState<SurvivorsStageSettings>({
+    difficulty: "normal",
+    endlessMode: false,
+    chaosMode: false,
+    coopMode: false,
+  });
+  const [survivorsRunConfig, setSurvivorsRunConfig] = useState<SurvivorsStageSettings>({
+    difficulty: "normal",
+    endlessMode: false,
+    chaosMode: false,
+    coopMode: false,
+  });
+  // TODO: Replace with persistent API data when survivor record endpoint is ready.
+  const [survivorsCharacterRecords] = useState<Partial<Record<SurvivorsCharacterId, SurvivorsCharacterRecord>>>({});
+  const [survivorsProjectiles, setSurvivorsProjectiles] = useState<SurvivorsProjectile[]>([]);
   const [survivorsPendingAugments, setSurvivorsPendingAugments] = useState<SurvivorsAugmentOption[]>([]);
   const [isSurvivorsAugmentOpen, setIsSurvivorsAugmentOpen] = useState(false);
   const [survivorsAugmentReason, setSurvivorsAugmentReason] = useState<SurvivorsAugmentReason>("levelup");
+  const [survivorsQueuedLevelRewards, setSurvivorsQueuedLevelRewards] = useState(0);
+  const [survivorsQueuedWaveRewards, setSurvivorsQueuedWaveRewards] = useState(0);
+  const [isSurvivorsShopSessionActive, setIsSurvivorsShopSessionActive] = useState(false);
+  const [survivorsCoins, setSurvivorsCoins] = useState(0);
+  const [survivorsShopRerollCount, setSurvivorsShopRerollCount] = useState(0);
+  const [survivorsShopSlots, setSurvivorsShopSlots] = useState<SurvivorsShopSlot[]>([]);
+  const [survivorsShopItems, setSurvivorsShopItems] = useState<SurvivorsShopInventoryItem[]>([]);
+  const [survivorsShopWeapons, setSurvivorsShopWeapons] = useState<SurvivorsShopInventoryWeapon[]>([]);
+  const [survivorsShopFinishedWave, setSurvivorsShopFinishedWave] = useState(0);
+  const [survivorsShopNextWave, setSurvivorsShopNextWave] = useState(1);
+  const [isSurvivorsShopRerolling, setIsSurvivorsShopRerolling] = useState(false);
+  const [isSurvivorsStartingNextWave, setIsSurvivorsStartingNextWave] = useState(false);
   const [survivorsMessage, setSurvivorsMessage] = useState<string>(LOGIN_I18N.ja.survivorsHint);
   const [isSurvivorsOver, setIsSurvivorsOver] = useState(false);
   const [unoDeck, setUnoDeck] = useState<UnoCard[]>([]);
@@ -4887,7 +6317,10 @@ export default function Home() {
   const [unoLocalTurnIndex, setUnoLocalTurnIndex] = useState(0);
   const [unoTopCard, setUnoTopCard] = useState<UnoCard | null>(null);
   const [unoTurn, setUnoTurn] = useState<"player" | "cpu">("player");
-  const [unoActivationFilter, setUnoActivationFilter] = useState<"color" | "number" | null>(null);
+  const [unoTurnDirection, setUnoTurnDirection] = useState<1 | -1>(1);
+  const [unoSelectedCardIds, setUnoSelectedCardIds] = useState<string[]>([]);
+  const [isUnoAnimatingPlay, setIsUnoAnimatingPlay] = useState(false);
+  const [unoNotification, setUnoNotification] = useState<UnoNotification | null>(null);
   const [unoMessage, setUnoMessage] = useState<string>(LOGIN_I18N.ja.unoYourTurn);
   const [isUnoOver, setIsUnoOver] = useState(false);
   const [activePanel, setActivePanel] = useState<Panel>("menu");
@@ -4899,6 +6332,7 @@ export default function Home() {
   const [startCountdownSec, setStartCountdownSec] = useState(0);
   const [roomCode, setRoomCode] = useState("");
   const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
+  const [roomMaxPlayersDraft, setRoomMaxPlayersDraft] = useState(8);
   const [roomPasswordDraft, setRoomPasswordDraft] = useState("");
   const [isRoomControlsOpen, setIsRoomControlsOpen] = useState(true);
   const [roomStatus, setRoomStatus] = useState("未接続");
@@ -4908,6 +6342,7 @@ export default function Home() {
   const [pendingLobbyReturnCode, setPendingLobbyReturnCode] = useState("");
   const [roomReadyById, setRoomReadyById] = useState<Record<string, boolean>>({});
   const [roomRole, setRoomRole] = useState("");
+  const [connectedRoomMaxPlayers, setConnectedRoomMaxPlayers] = useState(8);
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
   const [menuPublicRooms, setMenuPublicRooms] = useState<PublicRoomSummary[]>([]);
   const [panelPublicRooms, setPanelPublicRooms] = useState<PublicRoomSummary[]>([]);
@@ -4922,8 +6357,8 @@ export default function Home() {
   const [pendingRemoteGomokuMove, setPendingRemoteGomokuMove] = useState<{ row: number; col: number } | null>(null);
   const [pendingRemoteChessClick, setPendingRemoteChessClick] = useState<{ row: number; col: number } | null>(null);
   const [pendingRemoteShogiClick, setPendingRemoteShogiClick] = useState<{ row: number; col: number } | null>(null);
-  const [pendingRemoteUnoAction, setPendingRemoteUnoAction] = useState<{ action: "play" | "draw"; index?: number } | null>(null);
-  const [pendingRemoteDaifugoAction, setPendingRemoteDaifugoAction] = useState<{ action: "play" | "pass"; index?: number } | null>(null);
+  const [pendingRemoteUnoAction, setPendingRemoteUnoAction] = useState<{ action: "play" | "draw"; cardIds?: string[] } | null>(null);
+  const [pendingRemoteDaifugoAction, setPendingRemoteDaifugoAction] = useState<{ action: "play" | "pass"; index?: number; cardIds?: string[] } | null>(null);
   const [isChaosMode, setIsChaosMode] = useState(false);
   const [menuMessage, setMenuMessage] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -4988,12 +6423,22 @@ export default function Home() {
   const inviteCopyFeedbackTimerRef = useRef<number | null>(null);
   const pendingRoomChatIdsRef = useRef<string[]>([]);
   const peerIdRef = useRef(`next-${Math.random().toString(36).slice(2, 10)}`);
+  const [localPeerId] = useState(() => peerIdRef.current);
   const clientIdRef = useRef(`client-${Math.random().toString(36).slice(2, 12)}`);
   const activePanelRef = useRef<Panel>("menu");
   const isNumeronSessionActiveRef = useRef(false);
   const startCountdownTimerRef = useRef<number | null>(null);
   const casinoWinBurstTimerRef = useRef<number | null>(null);
+  const daifugoWinBurstTimerRef = useRef<number | null>(null);
+  const daifugoNotificationTimerRef = useRef<number | null>(null);
+  const daifugoNotificationSeqRef = useRef(0);
+  const daifugoNotificationQueueRef = useRef<Array<{ id: number; text: string; priority: number }>>([]);
+  const daifugoNotificationActiveRef = useRef(false);
   const blackjackDealerResolveTimerRef = useRef<number | null>(null);
+  const unoNotificationTimerRef = useRef<number | null>(null);
+  const unoNotificationTokenRef = useRef(0);
+  const unoHandCountPrevRef = useRef<number[]>([]);
+  const unoHandCountBootstrappedRef = useRef(false);
   const prevUnreadTotalRef = useRef(0);
   const friendChatListRef = useRef<HTMLUListElement | null>(null);
   const snapshotRef = useRef<Record<string, unknown>>({});
@@ -5023,8 +6468,43 @@ export default function Home() {
   });
   const survivorsAttackMotionRef = useRef(false);
   const survivorsInputRef = useRef({ up: false, down: false, left: false, right: false });
+  const survivorsEnemiesRef = useRef<SurvivorsEnemy[]>([]);
+  const survivorsMpRef = useRef(100);
+  const survivorsSkillHoldRef = useRef(false);
+  const survivorsRapidHoldStartedAtRef = useRef<number | null>(null);
+  const survivorsRunConfigRef = useRef<SurvivorsStageSettings>({
+    difficulty: "normal",
+    endlessMode: false,
+    chaosMode: false,
+    coopMode: false,
+  });
+  const survivorsNextWaveAtSecRef = useRef(getSurvivorsNextWaveAtSec(1));
   const survivorsAutoAttackReadyAtRef = useRef(0);
   const survivorsContactReadyAtRef = useRef(0);
+  const survivorsSkillReadyAtRef = useRef(0);
+  const survivorsSkillActiveUntilRef = useRef(0);
+  const survivorsWaveTransitioningRef = useRef(false);
+  const survivorsWaveKillsAtStartRef = useRef(0);
+  const survivorsShopRerollBusyRef = useRef(false);
+  const survivorsShopStartWaveBusyRef = useRef(false);
+  const survivorsDaikonLastMoveDirectionRef = useRef<SurvivorsDaikonMoveDirection>("down");
+  const survivorsLastMoveDirRef = useRef({ x: 0, y: -1 });
+  const survivorsWeaponAimAnglesRef = useRef<Record<string, number>>({});
+  const survivorsWeaponAttackMotionRef = useRef<Record<string, SurvivorsWeaponAttackMotion>>({});
+  const survivorsDaikonAttackRef = useRef({
+    active: false,
+    startedAt: 0,
+    durationMs: SURVIVORS_DAIKON_ATTACK_BASE_DURATION_MS,
+    frameIndex: 0,
+    targetEnemyIds: [] as string[],
+    damage: 0,
+    hitApplied: false,
+    facingLeft: false,
+    angleDeg: 0,
+    dirX: 0,
+    dirY: -1,
+    impactRange: 0,
+  });
   const casinoBankHydratedRef = useRef(false);
 
   const normalizeRoomPanel = useCallback((value: unknown): PlayablePanel | null => {
@@ -5350,8 +6830,11 @@ export default function Home() {
   }, [casinoBankroll]);
 
   const stepPokerBet = useCallback((delta: number) => {
-    setPokerBet((prev) => clampCasinoBet(prev + delta, casinoBankroll));
-  }, [casinoBankroll]);
+    const me = pokerPlayers.find((player) => player.id === "p1");
+    if (!me) return;
+    const maxRaiseTo = me.currentStreetBet + me.chips;
+    setPokerRaiseTo((prev) => Math.max(pokerMinRaiseTo, Math.min(maxRaiseTo, prev + delta)));
+  }, [pokerMinRaiseTo, pokerPlayers]);
 
   const allInBlackjackBet = useCallback(() => {
     setBlackjackBet(clampCasinoBet(casinoBankroll, casinoBankroll));
@@ -5362,8 +6845,10 @@ export default function Home() {
   }, [casinoBankroll]);
 
   const allInPokerBet = useCallback(() => {
-    setPokerBet(clampCasinoBet(casinoBankroll, casinoBankroll));
-  }, [casinoBankroll]);
+    const me = pokerPlayers.find((player) => player.id === "p1");
+    if (!me) return;
+    setPokerRaiseTo(me.currentStreetBet + me.chips);
+  }, [pokerPlayers]);
 
   const setBlackjackBetByRatio = useCallback((ratio: number) => {
     const safeRatio = Math.min(1, Math.max(0.1, ratio));
@@ -5372,18 +6857,31 @@ export default function Home() {
   }, [casinoBankroll]);
 
   const setPokerBetByRatio = useCallback((ratio: number) => {
-    const safeRatio = Math.min(1, Math.max(0.1, ratio));
-    const target = Math.floor((casinoBankroll * safeRatio) / CASINO_BET_STEP) * CASINO_BET_STEP;
-    setPokerBet(clampCasinoBet(target, casinoBankroll));
-  }, [casinoBankroll]);
+    const me = pokerPlayers.find((player) => player.id === "p1");
+    if (!me) return;
+    const pot = pokerPots.reduce((sum, item) => sum + item.amount, 0);
+    const target = Math.floor((pot * Math.min(1, Math.max(0.1, ratio))) / 10) * 10;
+    const maxRaiseTo = me.currentStreetBet + me.chips;
+    setPokerRaiseTo(Math.max(pokerMinRaiseTo, Math.min(maxRaiseTo, target)));
+  }, [pokerMinRaiseTo, pokerPlayers, pokerPots]);
+
+  const onPokerGameModeChange = useCallback((mode: PokerGameMode) => {
+    setPokerSettings((prev) => ({ ...prev, gameMode: mode }));
+    setGameStarted((prev) => ({ ...prev, poker: false }));
+  }, []);
 
   const formatChip = useCallback((value: number) => {
     const locale = language === "ko" ? "ko-KR" : language === "en" ? "en-US" : "ja-JP";
     return new Intl.NumberFormat(locale).format(Math.max(0, Math.floor(value)));
   }, [language]);
 
+  const pokerIsTournamentMode = pokerSettings.gameMode === "tournament";
+  const pokerIsRunning = pokerIsTournamentMode
+    ? pokerTournamentStatus === "running"
+    : pokerNormalSessionStatus === "running";
+
   const isBlackjackRoundActive = !isBlackjackOver && blackjackWager > 0 && blackjackPlayerHand.length > 0;
-  const isPokerRoundActive = pokerPhase !== "betting" && pokerPhase !== "showdown" && pokerWager > 0 && pokerPlayerHand.length > 0;
+  const isPokerRoundActive = pokerIsRunning && (pokerPhase === "preflop" || pokerPhase === "flop" || pokerPhase === "turn" || pokerPhase === "river");
 
   const clearBlackjackDealerResolveTimer = useCallback(() => {
     if (blackjackDealerResolveTimerRef.current !== null) {
@@ -5407,12 +6905,73 @@ export default function Home() {
     });
   }, []);
 
+  const triggerDaifugoWinBurst = useCallback(() => {
+    if (daifugoWinBurstTimerRef.current !== null) {
+      window.clearTimeout(daifugoWinBurstTimerRef.current);
+      daifugoWinBurstTimerRef.current = null;
+    }
+    setShowDaifugoWinBurst(false);
+    window.requestAnimationFrame(() => {
+      setShowDaifugoWinBurst(true);
+      daifugoWinBurstTimerRef.current = window.setTimeout(() => {
+        setShowDaifugoWinBurst(false);
+        daifugoWinBurstTimerRef.current = null;
+      }, 1300);
+    });
+  }, []);
+
+  const runDaifugoNotificationQueue = useCallback(() => {
+    if (daifugoNotificationActiveRef.current) return;
+    const next = daifugoNotificationQueueRef.current.shift();
+    if (!next) return;
+    daifugoNotificationActiveRef.current = true;
+    setDaifugoNotification(next.text);
+    if (daifugoNotificationTimerRef.current !== null) {
+      window.clearTimeout(daifugoNotificationTimerRef.current);
+      daifugoNotificationTimerRef.current = null;
+    }
+    daifugoNotificationTimerRef.current = window.setTimeout(() => {
+      setDaifugoNotification("");
+      daifugoNotificationActiveRef.current = false;
+      daifugoNotificationTimerRef.current = null;
+      runDaifugoNotificationQueue();
+    }, 1400);
+  }, []);
+
+  const enqueueDaifugoNotification = useCallback((text: string, priority = 1) => {
+    const body = String(text || "").trim();
+    if (!body) return;
+    const id = daifugoNotificationSeqRef.current + 1;
+    daifugoNotificationSeqRef.current = id;
+    daifugoNotificationQueueRef.current.push({ id, text: body, priority });
+    daifugoNotificationQueueRef.current.sort((a, b) => (b.priority - a.priority) || (a.id - b.id));
+    runDaifugoNotificationQueue();
+  }, [runDaifugoNotificationQueue]);
+
+  const clearDaifugoNotificationQueue = useCallback(() => {
+    if (daifugoNotificationTimerRef.current !== null) {
+      window.clearTimeout(daifugoNotificationTimerRef.current);
+      daifugoNotificationTimerRef.current = null;
+    }
+    daifugoNotificationQueueRef.current = [];
+    daifugoNotificationActiveRef.current = false;
+    setDaifugoNotification("");
+  }, []);
+
   useEffect(() => {
     return () => {
       clearBlackjackDealerResolveTimer();
       if (casinoWinBurstTimerRef.current !== null) {
         window.clearTimeout(casinoWinBurstTimerRef.current);
         casinoWinBurstTimerRef.current = null;
+      }
+      if (daifugoWinBurstTimerRef.current !== null) {
+        window.clearTimeout(daifugoWinBurstTimerRef.current);
+        daifugoWinBurstTimerRef.current = null;
+      }
+      if (daifugoNotificationTimerRef.current !== null) {
+        window.clearTimeout(daifugoNotificationTimerRef.current);
+        daifugoNotificationTimerRef.current = null;
       }
     };
   }, [clearBlackjackDealerResolveTimer]);
@@ -5441,19 +7000,54 @@ export default function Home() {
   }, [t]);
 
   const pokerPhaseLabel = useMemo(() => {
-    if (pokerPhase === "betting") return "BET";
-    if (pokerPhase === "preflop") return "PREFLOP";
-    if (pokerPhase === "flop") return "FLOP";
-    if (pokerPhase === "turn") return "TURN";
-    if (pokerPhase === "river") return "RIVER";
-    return "SHOWDOWN";
+    if (pokerPhase === "waiting") return "開始待ち";
+    if (pokerPhase === "preflop") return "プリフロップ";
+    if (pokerPhase === "flop") return "フロップ";
+    if (pokerPhase === "turn") return "ターン";
+    if (pokerPhase === "river") return "リバー";
+    if (pokerPhase === "result") return "ハンド結果";
+    if (pokerPhase === "tournamentResult") return "大会結果";
+    return "ショーダウン";
   }, [pokerPhase]);
 
   const pokerActionLabel = useMemo(() => {
-    if (pokerPhase === "betting") return "BET";
-    if (language === "ko") return "다음";
-    return "次へ";
-  }, [language, pokerPhase]);
+    if (!pokerIsRunning) return pokerIsTournamentMode ? "大会開始" : "ゲーム開始";
+    if (pokerPhase === "result") return "次ハンド";
+    if (pokerIsTournamentMode && pokerPhase === "tournamentResult") return "大会終了";
+    return "進行中";
+  }, [pokerIsRunning, pokerIsTournamentMode, pokerPhase]);
+
+  const pokerActionNoticeLabel = useMemo(() => {
+    const text = pokerActionNotice?.text || "";
+    if (!text) return "";
+    if (text === "FOLD") return "フォールド";
+    if (text === "FLOP") return "フロップ";
+    if (text === "TURN") return "ターン";
+    if (text === "RIVER") return "リバー";
+    if (text === "SHOWDOWN") return "ショーダウン";
+    if (text === "SHOWDOWN DRAW") return "ショーダウン（引き分け）";
+    if (text === "ALL IN") return "オールイン";
+    if (text.startsWith("BLIND LEVEL UP")) {
+      const level = text.match(/LV\.(\d+)/)?.[1];
+      return level ? `ブラインドアップ（LV.${level}）` : "ブラインドアップ";
+    }
+    return text;
+  }, [pokerActionNotice]);
+
+  const pokerTurnNotice = useMemo(() => {
+    if (!pokerIsRunning) return pokerIsTournamentMode ? "大会開始を待っています" : "ゲーム開始を待っています";
+    if (isPokerRoundActive && pokerCurrentTurnSeat != null) {
+      const turnPlayer = pokerPlayers.find((player) => player.seatIndex === pokerCurrentTurnSeat);
+      if (turnPlayer) return `${turnPlayer.name}のアクション待ち`;
+    }
+    return pokerMessage;
+  }, [isPokerRoundActive, pokerCurrentTurnSeat, pokerIsRunning, pokerIsTournamentMode, pokerMessage, pokerPlayers]);
+
+  const pokerSeatPanelClass = useMemo(() => {
+    if (pokerPlayers.length <= 4) return "w-[clamp(120px,14vw,145px)]";
+    if (pokerPlayers.length <= 6) return "w-[clamp(108px,12.5vw,130px)]";
+    return "w-[clamp(96px,11vw,116px)]";
+  }, [pokerPlayers.length]);
 
   const chessPieceLabel = useCallback((piece: ChessPiece) => {
     const map: Record<ChessColor, Record<ChessPieceType, string>> = {
@@ -5499,6 +7093,41 @@ export default function Home() {
     };
     return map[piece.type];
   }, []);
+
+  const shogiKingAbsorbStatus = useMemo(() => {
+    const typeOrder: ShogiAbsorbAbility[] = ["R", "B", "G", "S", "N", "L", "P"];
+
+    const summarizeKingAbilities = (color: ShogiColor): string => {
+      let king: ShogiPiece | null = null;
+      for (const row of shogiBoard) {
+        for (const piece of row) {
+          if (piece?.type === "K" && piece.color === color) {
+            king = piece;
+            break;
+          }
+        }
+        if (king) break;
+      }
+
+      const abilities = normalizeShogiAbsorbAbilities(king);
+      if (abilities.length === 0) return t("shogiAbsorbNone");
+
+      const counts = new Map<ShogiAbsorbAbility, number>();
+      abilities.forEach((type) => {
+        counts.set(type, (counts.get(type) ?? 0) + 1);
+      });
+
+      return typeOrder
+        .filter((type) => (counts.get(type) ?? 0) > 0)
+        .map((type) => `${shogiPieceLabel({ color, type })}x${counts.get(type) ?? 0}`)
+        .join(" / ");
+    };
+
+    return {
+      black: summarizeKingAbilities("b"),
+      white: summarizeKingAbilities("w"),
+    };
+  }, [shogiBoard, shogiPieceLabel, t]);
 
   const roomRoleLabel = useCallback(
     (role: string) => {
@@ -5579,11 +7208,13 @@ export default function Home() {
         if (color === "R") return "빨강";
         if (color === "G") return "초록";
         if (color === "B") return "파랑";
+        if (color === "W") return "와일드";
         return "노랑";
       }
       if (color === "R") return "赤";
       if (color === "G") return "緑";
       if (color === "B") return "青";
+      if (color === "W") return "ワイルド";
       return "黄";
     },
     [language],
@@ -5591,7 +7222,10 @@ export default function Home() {
 
   const unoCardLabel = useCallback(
     (card: UnoCard) => {
-      return `${unoColorLabel(card.color)} ${card.value}`;
+      if (isUnoWildCard(card)) {
+        return `${unoColorLabel(card.color)} ${card.symbol}`;
+      }
+      return `${unoColorLabel(card.color)} ${card.symbol}`;
     },
     [unoColorLabel],
   );
@@ -5636,6 +7270,74 @@ export default function Home() {
     [],
   );
 
+  const renderPlayingCardBack = useCallback((options?: { compact?: boolean }) => {
+    const compact = Boolean(options?.compact);
+    return (
+      <span
+        aria-label="card back"
+        className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-emerald-200/50 bg-emerald-900/95 text-[10px] font-black tracking-wide text-emerald-100 shadow-[0_1px_2px_rgba(0,0,0,0.25)] ${compact ? "h-10 w-8 sm:h-11 sm:w-9" : "h-12 w-9 sm:h-14 sm:w-10 lg:h-16 lg:w-12"}`}
+      >
+        <span className="absolute inset-[3px] rounded-[4px] border border-emerald-200/45" />
+        <span className="absolute inset-0 bg-[repeating-linear-gradient(135deg,rgba(74,222,128,0.16)_0px,rgba(74,222,128,0.16)_4px,rgba(15,23,42,0)_4px,rgba(15,23,42,0)_8px)]" />
+        <span className="relative z-[1]">PF</span>
+      </span>
+    );
+  }, []);
+
+  const renderDaifugoCardFace = useCallback((label: string, options: { width: number; height: number }) => {
+    const text = String(label || "").trim();
+    const suit = text.slice(-1);
+    const rank = text.slice(0, -1);
+    const isSuitCard = suit === "♠" || suit === "♥" || suit === "♦" || suit === "♣";
+
+    if (!isSuitCard || !rank) {
+      return (
+        <span
+          className="inline-flex items-center justify-center rounded-md border border-slate-300/35 bg-white/95 font-bold text-slate-900 shadow-sm"
+          style={{ width: `${options.width}px`, height: `${options.height}px`, fontSize: `${Math.max(12, Math.round(options.width * 0.24))}px` }}
+        >
+          {text || "-"}
+        </span>
+      );
+    }
+
+    const redSuit = suit === "♥" || suit === "♦";
+    const tone = redSuit ? "text-rose-600" : "text-slate-900";
+    const rankSize = Math.max(13, Math.round(options.width * 0.28));
+    const cornerSuitSize = Math.max(9, Math.round(options.width * 0.18));
+    const centerSuitSize = Math.max(19, Math.round(options.width * 0.38));
+    const cornerPad = Math.max(2, Math.round(options.width * 0.08));
+
+    return (
+      <span
+        aria-label={text}
+        className="relative inline-flex shrink-0 items-center justify-center rounded-md border border-slate-300/45 bg-white/95 shadow-[0_2px_4px_rgba(0,0,0,0.25)]"
+        style={{ width: `${options.width}px`, height: `${options.height}px` }}
+      >
+        <span className={`absolute left-[2px] top-[2px] rounded-sm bg-white/90 font-black leading-none tracking-tight [font-variant-numeric:tabular-nums] ${tone}`} style={{ padding: `${Math.max(1, Math.round(cornerPad * 0.4))}px`, fontSize: `${rankSize}px` }}>{rank}</span>
+        <span className={`${tone} absolute leading-none opacity-70`} style={{ left: `${cornerPad + 2}px`, top: `${Math.max(12, Math.round(options.height * 0.22))}px`, fontSize: `${cornerSuitSize}px` }}>{suit}</span>
+        <span className={`${tone} leading-none opacity-90`} style={{ fontSize: `${centerSuitSize}px` }}>{suit}</span>
+        <span className={`absolute bottom-[2px] right-[2px] rotate-180 rounded-sm bg-white/90 font-black leading-none tracking-tight [font-variant-numeric:tabular-nums] ${tone}`} style={{ padding: `${Math.max(1, Math.round(cornerPad * 0.4))}px`, fontSize: `${rankSize}px` }}>{rank}</span>
+        <span className={`${tone} absolute rotate-180 leading-none opacity-70`} style={{ right: `${cornerPad + 2}px`, bottom: `${Math.max(12, Math.round(options.height * 0.22))}px`, fontSize: `${cornerSuitSize}px` }}>{suit}</span>
+      </span>
+    );
+  }, []);
+
+  const renderDaifugoCardBack = useCallback((options: { width: number; height: number }) => {
+    const fontSize = Math.max(10, Math.round(options.width * 0.18));
+    return (
+      <span
+        aria-label="card back"
+        className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-emerald-200/50 bg-emerald-900/95 font-black tracking-wide text-emerald-100 shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+        style={{ width: `${options.width}px`, height: `${options.height}px`, fontSize: `${fontSize}px` }}
+      >
+        <span className="absolute inset-[3px] rounded-[4px] border border-emerald-200/45" />
+        <span className="absolute inset-0 bg-[repeating-linear-gradient(135deg,rgba(74,222,128,0.16)_0px,rgba(74,222,128,0.16)_4px,rgba(15,23,42,0)_4px,rgba(15,23,42,0)_8px)]" />
+        <span className="relative z-[1]">PF</span>
+      </span>
+    );
+  }, []);
+
   const renderUnoCardFace = useCallback((card: UnoCard) => {
     const colorClass =
       card.color === "R"
@@ -5644,8 +7346,10 @@ export default function Home() {
           ? "border-emerald-300/60 bg-emerald-500/85"
           : card.color === "B"
             ? "border-sky-300/60 bg-sky-500/85"
+            : card.color === "W"
+              ? "border-fuchsia-200/70 bg-slate-800/90"
             : "border-amber-300/60 bg-amber-400/90";
-    const value = String(card.value || "");
+    const value = String(card.symbol || card.value || "");
     return (
       <span className={`inline-flex h-12 w-9 items-center justify-center rounded-md border text-sm font-black text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] sm:h-14 sm:w-10 sm:text-base lg:h-16 lg:w-12 lg:text-lg ${colorClass}`}>
         {value}
@@ -5830,6 +7534,12 @@ export default function Home() {
     return shogiTurn === shogiRoomPlayer;
   }, [connectedRoomCode, shogiMode, shogiPlayerSide, shogiRoomPlayer, shogiTurn]);
 
+  const shogiMineViewerColor = useMemo<ShogiColor | null>(() => {
+    if (connectedRoomCode) return shogiRoomPlayer;
+    if (shogiMode === "cpu") return shogiPlayerSide;
+    return shogiTurn;
+  }, [connectedRoomCode, shogiMode, shogiPlayerSide, shogiRoomPlayer, shogiTurn]);
+
   const unoRoomPlayer = useMemo<"player" | "cpu" | null>(() => {
     if (!connectedRoomCode) return null;
     if (roomRole === "host") return "player";
@@ -5858,18 +7568,230 @@ export default function Home() {
     return unoTurn === unoRoomPlayer;
   }, [connectedRoomCode, isUnoExtendedMode, roomRole, unoLocalTurnIndex, unoRoomHumanIndex, unoRoomPlayer, unoTurn]);
 
-  const daifugoRoomPlayer = useMemo<"player" | "cpu" | null>(() => {
-    if (!connectedRoomCode) return null;
-    if (roomRole === "host") return "player";
-    if (roomRole === "guest") return "cpu";
-    return null;
-  }, [connectedRoomCode, roomRole]);
+  const daifugoLocalPlayerId = useMemo(() => {
+    if (connectedRoomCode) return localPeerId;
+    return "daifugo-local";
+  }, [connectedRoomCode, localPeerId]);
+
+  const daifugoCurrentPlayer = useMemo(() => {
+    if (daifugoPlayers.length <= 0) return null;
+    return daifugoPlayers[daifugoCurrentTurnIndex] || null;
+  }, [daifugoCurrentTurnIndex, daifugoPlayers]);
+
+  const daifugoLocalPlayer = useMemo(() => {
+    return daifugoPlayers.find((player) => player.id === daifugoLocalPlayerId) || null;
+  }, [daifugoLocalPlayerId, daifugoPlayers]);
 
   const canOperateDaifugoNow = useMemo(() => {
-    if (!connectedRoomCode) return true;
-    if (!daifugoRoomPlayer) return false;
-    return daifugoTurn === daifugoRoomPlayer;
-  }, [connectedRoomCode, daifugoRoomPlayer, daifugoTurn]);
+    if (isDaifugoOver) return false;
+    if (!daifugoCurrentPlayer) return false;
+    if (connectedRoomCode && roomRole === "spectator") return false;
+    return daifugoCurrentPlayer.id === daifugoLocalPlayerId;
+  }, [connectedRoomCode, daifugoCurrentPlayer, daifugoLocalPlayerId, isDaifugoOver, roomRole]);
+
+  const sevensSuitRows = useMemo(() => {
+    return [
+      { suit: "C" as const, icon: "♣", label: "CLUB" },
+      { suit: "S" as const, icon: "♠", label: "SPADE" },
+      { suit: "D" as const, icon: "♦", label: "DIAMOND" },
+      { suit: "H" as const, icon: "♥", label: "HEART" },
+    ];
+  }, []);
+
+  const sevensLocalPlayerId = useMemo(() => {
+    if (connectedRoomCode) return localPeerId;
+    return "local-player";
+  }, [connectedRoomCode, localPeerId]);
+
+  const sevensCurrentPlayer = useMemo(() => {
+    if (sevensPlayers.length === 0) return null;
+    return sevensPlayers[sevensCurrentTurnIndex] || null;
+  }, [sevensCurrentTurnIndex, sevensPlayers]);
+
+  const sevensLocalPlayer = useMemo(() => {
+    return sevensPlayers.find((player) => player.id === sevensLocalPlayerId) || null;
+  }, [sevensLocalPlayerId, sevensPlayers]);
+
+  const canOperateSevensNow = useMemo(() => {
+    if (isSevensOver) return false;
+    if (!sevensCurrentPlayer) return false;
+    if (connectedRoomCode && roomRole === "spectator") return false;
+    return sevensCurrentPlayer.id === sevensLocalPlayerId;
+  }, [connectedRoomCode, isSevensOver, roomRole, sevensCurrentPlayer, sevensLocalPlayerId]);
+
+  const sevensPlayerCardKeys = useMemo(() => {
+    const keys = new Set<string>();
+    const hand = sevensLocalPlayer?.hand || [];
+    for (const card of hand) keys.add(`${card.suit}-${card.rank}`);
+    return keys;
+  }, [sevensLocalPlayer]);
+
+  const sevensPlayableIndexes = useMemo(() => {
+    const indexes = new Set<number>();
+    const hand = sevensLocalPlayer?.hand || [];
+    hand.forEach((card, index) => {
+      if (isSevensPlayable(card, sevensTable)) indexes.add(index);
+    });
+    return indexes;
+  }, [sevensLocalPlayer, sevensTable]);
+
+  const sevensPlacedCount = useMemo(() => {
+    return (["S", "H", "D", "C"] as const).reduce((count, suit) => {
+      const range = sevensTable[suit];
+      if (range.low === null || range.high === null) return count;
+      return count + (range.high - range.low + 1);
+    }, 0);
+  }, [sevensTable]);
+
+  const sevensSelfStatus = useMemo(() => {
+    if (!sevensLocalPlayer) return "待機";
+    if (sevensLocalPlayer.status === "finished") return "上がり";
+    if (sevensLocalPlayer.status === "eliminated") return "失格";
+    if (sevensCurrentPlayer?.id === sevensLocalPlayer.id && !isSevensOver) return "手番";
+    if (sevensLocalPlayer.passCount > 0) return `パス ${sevensLocalPlayer.passCount}`;
+    return "待機";
+  }, [isSevensOver, sevensCurrentPlayer, sevensLocalPlayer]);
+
+  const sevensGameStatus = useMemo<SevensGameStatus>(() => {
+    if (!gameStarted.sevens) return "idle";
+    if (isSevensOver) return "finished";
+    return "playing";
+  }, [gameStarted.sevens, isSevensOver]);
+
+  const sevensEffectiveMode = useMemo<SevensMode>(() => {
+    if (connectedRoomCode) return "multiplayer";
+    return sevensMode;
+  }, [connectedRoomCode, sevensMode]);
+
+  const sevensPreviewMaxPlayers = useMemo(() => {
+    if (connectedRoomCode) {
+      return Math.max(2, Math.min(8, Math.floor(connectedRoomMaxPlayers || 8)));
+    }
+    return Math.max(2, Math.min(8, Math.floor(sevensMaxPlayers || 8)));
+  }, [connectedRoomCode, connectedRoomMaxPlayers, sevensMaxPlayers]);
+
+  const sevensDisplaySeats = useMemo<SevensDisplaySeat[]>(() => {
+    if (sevensGameStatus !== "idle" && sevensPlayers.length > 0) {
+      return sevensPlayers.map((player) => ({
+        id: player.id,
+        name: player.name,
+        isCpu: player.isCpu,
+        status: player.status,
+        passCount: player.passCount,
+        rank: player.rank,
+        handCount: player.hand.length,
+        isPlaceholder: false,
+        isLocal: player.id === sevensLocalPlayerId,
+      }));
+    }
+
+    if (sevensEffectiveMode === "cpu") {
+      const localName = String(playerName || "").trim() || "あなた";
+      const seats: SevensDisplaySeat[] = [
+        {
+          id: "local-player",
+          name: localName,
+          isCpu: false,
+          status: "playing",
+          passCount: 0,
+          rank: null,
+          handCount: 0,
+          isPlaceholder: false,
+          isLocal: true,
+        },
+      ];
+      const cpuCount = Math.max(1, Math.min(6, Math.floor(sevensCpuCount || 1)));
+      for (let i = 0; i < cpuCount; i += 1) {
+        seats.push({
+          id: `preview-cpu-${i + 1}`,
+          name: `CPU ${i + 1}`,
+          isCpu: true,
+          status: "playing",
+          passCount: 0,
+          rank: null,
+          handCount: 0,
+          isPlaceholder: false,
+          isLocal: false,
+        });
+      }
+      return seats;
+    }
+
+    const maxPlayers = sevensPreviewMaxPlayers;
+    const joined = connectedRoomCode
+      ? roomParticipants.filter((participant) => participant.role !== "spectator").slice(0, maxPlayers).map((participant, idx) => ({
+        id: participant.id,
+        name: String(participant.name || "").trim() || `プレイヤー${idx + 1}`,
+        isLocal: participant.id === sevensLocalPlayerId,
+      }))
+      : [{ id: "local-player", name: String(playerName || "").trim() || "あなた", isLocal: true }];
+
+    const seats: SevensDisplaySeat[] = joined.map((participant) => ({
+      id: participant.id,
+      name: participant.name,
+      isCpu: false,
+      status: "playing",
+      passCount: 0,
+      rank: null,
+      handCount: 0,
+      isPlaceholder: false,
+      isLocal: participant.isLocal,
+    }));
+
+    while (seats.length < maxPlayers) {
+      seats.push({
+        id: `preview-empty-${seats.length + 1}`,
+        name: "空きスロット",
+        isCpu: false,
+        status: "disconnected",
+        passCount: 0,
+        rank: null,
+        handCount: 0,
+        isPlaceholder: true,
+        isLocal: false,
+      });
+    }
+
+    if (!seats.some((seat) => seat.isLocal) && seats.length > 0 && !connectedRoomCode) {
+      seats[0] = { ...seats[0], isLocal: true };
+    }
+
+    return seats;
+  }, [
+    connectedRoomCode,
+    playerName,
+    roomParticipants,
+    sevensCpuCount,
+    sevensEffectiveMode,
+    sevensGameStatus,
+    sevensLocalPlayerId,
+    sevensPlayers,
+    sevensPreviewMaxPlayers,
+  ]);
+
+  const sevensDisplayLocalSeat = useMemo(() => {
+    return sevensDisplaySeats.find((seat) => seat.isLocal) || sevensDisplaySeats[0] || null;
+  }, [sevensDisplaySeats]);
+
+  const sevensDisplayOtherSeats = useMemo(() => {
+    if (!sevensDisplayLocalSeat) return sevensDisplaySeats;
+    return sevensDisplaySeats.filter((seat) => seat.id !== sevensDisplayLocalSeat.id);
+  }, [sevensDisplayLocalSeat, sevensDisplaySeats]);
+
+  const sevensPreviewJoinedCount = useMemo(() => {
+    return sevensDisplaySeats.filter((seat) => !seat.isPlaceholder).length;
+  }, [sevensDisplaySeats]);
+
+  const sevensStatusText = useMemo(() => {
+    if (sevensGameStatus === "idle") return "開始前";
+    if (sevensGameStatus === "finished") return "終了";
+    return "進行中";
+  }, [sevensGameStatus]);
+
+  const sevensTurnText = useMemo(() => {
+    if (sevensGameStatus === "idle") return "ゲームを開始してください";
+    return sevensCurrentPlayer?.name || "-";
+  }, [sevensCurrentPlayer, sevensGameStatus]);
 
   const unoLocalSide = useMemo<"player" | "cpu">(() => {
     if (connectedRoomCode && roomRole === "guest") return "cpu";
@@ -5907,53 +7829,169 @@ export default function Home() {
     return unoLocalPlayerHand;
   }, [connectedRoomCode, isUnoExtendedMode, unoCpuHand, unoLocalHands, unoLocalPlayerHand, unoLocalSide, unoPlayerHand, unoRoomHumanIndex]);
 
-  const unoActivationState = useMemo(() => {
-    const playableByColor = new Set<number>();
-    const playableByNumber = new Set<number>();
-    const playableAny = new Set<number>();
-
-    if (!unoTopCard) {
-      return {
-        playableAny,
-        activeIndices: new Set<number>(),
-        canChooseColor: false,
-        canChooseNumber: false,
-        requiresRuleChoice: false,
-      };
+  const unoSeatNameByIndex = useMemo(() => {
+    const names: string[] = [];
+    if (connectedRoomCode && isUnoExtendedMode) {
+      const active = roomParticipants.filter((participant) => participant.role === "host" || participant.role === "guest");
+      active.forEach((participant, index) => {
+        const name = String(participant.name || "").trim() || `Player ${index + 1}`;
+        names[index] = participant.id === peerIdRef.current ? "あなた" : name;
+      });
+      for (let i = 0; i < unoRoomCpuCount; i += 1) {
+        names[active.length + i] = `CPU ${i + 1}`;
+      }
+      return names;
     }
 
-    unoVisibleHand.forEach((card, index) => {
-      if (!canPlayCard(card, unoTopCard)) return;
-      playableAny.add(index);
-      if (card.color === unoTopCard.color) playableByColor.add(index);
-      if (card.value === unoTopCard.value) playableByNumber.add(index);
+    if (!connectedRoomCode && isUnoExtendedMode) {
+      names[0] = "あなた";
+      for (let i = 0; i < unoCpuCount; i += 1) {
+        names[i + 1] = `CPU ${i + 1}`;
+      }
+      return names;
+    }
+
+    names[0] = unoLocalSide === "player" ? "あなた" : "相手";
+    names[1] = unoLocalSide === "player" ? (connectedRoomCode ? "相手" : "CPU") : "あなた";
+    return names;
+  }, [connectedRoomCode, isUnoExtendedMode, roomParticipants, unoCpuCount, unoLocalSide, unoRoomCpuCount]);
+
+  const unoHandCountsForNotification = useMemo(() => {
+    if (isUnoExtendedMode) {
+      const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
+      return Array.from({ length: totalPlayers }, (_, index) => (unoLocalHands[index] || []).length);
+    }
+    return [unoPlayerHand.length, unoCpuHand.length];
+  }, [connectedRoomCode, isUnoExtendedMode, unoCpuHand.length, unoLocalHands, unoLocalTotalPlayers, unoPlayerHand.length, unoRoomTotalPlayers]);
+
+  const showUnoNotification = useCallback((playerIndex: number) => {
+    const playerName = String(unoSeatNameByIndex[playerIndex] || `Player ${playerIndex + 1}`);
+    const safePlayerId = `seat-${playerIndex}`;
+    if (unoNotificationTimerRef.current !== null) {
+      window.clearTimeout(unoNotificationTimerRef.current);
+      unoNotificationTimerRef.current = null;
+    }
+    unoNotificationTokenRef.current += 1;
+    const token = unoNotificationTokenRef.current;
+    setUnoNotification({
+      playerId: safePlayerId,
+      playerName,
+      subText: `${playerName} の残り手札は1枚です`,
+      token,
     });
-
-    const canChooseColor = playableByColor.size > 0;
-    const canChooseNumber = playableByNumber.size > 0;
-    const requiresRuleChoice = playableAny.size > 1 && canChooseColor && canChooseNumber;
-
-    const activeIndices = new Set<number>();
-    if (!requiresRuleChoice || !unoActivationFilter) {
-      playableAny.forEach((idx) => activeIndices.add(idx));
-    } else if (unoActivationFilter === "color") {
-      playableByColor.forEach((idx) => activeIndices.add(idx));
-    } else {
-      playableByNumber.forEach((idx) => activeIndices.add(idx));
-    }
-
-    return {
-      playableAny,
-      activeIndices,
-      canChooseColor,
-      canChooseNumber,
-      requiresRuleChoice,
-    };
-  }, [unoActivationFilter, unoTopCard, unoVisibleHand]);
+    unoNotificationTimerRef.current = window.setTimeout(() => {
+      setUnoNotification((prev) => {
+        if (!prev || prev.token !== token) return prev;
+        return null;
+      });
+      unoNotificationTimerRef.current = null;
+    }, 1800);
+  }, [unoSeatNameByIndex]);
 
   useEffect(() => {
-    setUnoActivationFilter(null);
-  }, [connectedRoomCode, unoLocalTurnIndex, unoTopCard, unoTurn]);
+    if (activePanel !== "uno" || !gameStarted.uno) {
+      unoHandCountBootstrappedRef.current = false;
+      unoHandCountPrevRef.current = [];
+      return;
+    }
+    const currentCounts = [...unoHandCountsForNotification];
+    if (!unoHandCountBootstrappedRef.current) {
+      unoHandCountPrevRef.current = currentCounts;
+      unoHandCountBootstrappedRef.current = true;
+      return;
+    }
+    if (isUnoOver) {
+      unoHandCountPrevRef.current = currentCounts;
+      return;
+    }
+
+    const previous = unoHandCountPrevRef.current;
+    for (let index = 0; index < currentCounts.length; index += 1) {
+      const before = Number.isFinite(previous[index]) ? previous[index] : currentCounts[index];
+      const after = currentCounts[index];
+      if (before !== 1 && after === 1) {
+        showUnoNotification(index);
+        break;
+      }
+    }
+    unoHandCountPrevRef.current = currentCounts;
+  }, [activePanel, gameStarted.uno, isUnoOver, showUnoNotification, unoHandCountsForNotification]);
+
+  useEffect(() => {
+    return () => {
+      if (unoNotificationTimerRef.current !== null) {
+        window.clearTimeout(unoNotificationTimerRef.current);
+      }
+    };
+  }, []);
+
+  const unoSelectionOrderById = useMemo(() => {
+    const next: Record<string, number> = {};
+    unoSelectedCardIds.forEach((id, index) => {
+      next[id] = index + 1;
+    });
+    return next;
+  }, [unoSelectedCardIds]);
+
+  const unoSelectedValidation = useMemo(() => {
+    if (!unoTopCard) {
+      return {
+        isValid: false,
+        selectedCards: [] as UnoCard[],
+        reason: "場札がありません。",
+      } as UnoSelectionValidation;
+    }
+
+    if (unoSelectedCardIds.length <= 0) {
+      return {
+        isValid: false,
+        selectedCards: [] as UnoCard[],
+        reason: "カードを選択してください。",
+      } as UnoSelectionValidation;
+    }
+
+    const handById = new Map(unoVisibleHand.map((card) => [card.id, card]));
+    const seen = new Set<string>();
+    const selectedCards: UnoCard[] = [];
+    for (const cardId of unoSelectedCardIds) {
+      if (seen.has(cardId)) {
+        return {
+          isValid: false,
+          selectedCards,
+          invalidCardId: cardId,
+          reason: "同じカードIDが重複しています。",
+        } as UnoSelectionValidation;
+      }
+      seen.add(cardId);
+      const card = handById.get(cardId);
+      if (!card) {
+        return {
+          isValid: false,
+          selectedCards,
+          invalidCardId: cardId,
+          reason: "手札に存在しないカードが選択されています。",
+        } as UnoSelectionValidation;
+      }
+      selectedCards.push(card);
+    }
+
+    return validateSelectedCards(selectedCards, unoTopCard);
+  }, [unoSelectedCardIds, unoTopCard, unoVisibleHand]);
+
+  const unoSelectedValidationMessage = useMemo(() => {
+    if (unoSelectedValidation.isValid) return "";
+    const invalidId = unoSelectedValidation.invalidCardId;
+    if (!invalidId) {
+      return unoSelectedValidation.reason || "提出できない組み合わせです。";
+    }
+    const order = unoSelectionOrderById[invalidId] || 0;
+    const invalidCard = unoVisibleHand.find((card) => card.id === invalidId)
+      || unoSelectedValidation.selectedCards.find((card) => card.id === invalidId)
+      || null;
+    const label = invalidCard ? unoCardLabel(invalidCard) : invalidId;
+    const orderLabel = order > 0 ? `${order}枚目` : "選択カード";
+    return `${orderLabel} (${label}) は提出できません。${unoSelectedValidation.reason ? ` ${unoSelectedValidation.reason}` : ""}`;
+  }, [unoCardLabel, unoSelectedValidation, unoSelectionOrderById, unoVisibleHand]);
 
   const unoCpuSeatLayout = useMemo(() => {
     const totalCpu = unoLocalCpuHands.length;
@@ -6029,9 +8067,274 @@ export default function Home() {
   }, [isUnoLocalTableMode, isUnoRoomTableMode]);
 
   const daifugoLocalSide = useMemo<"player" | "cpu">(() => {
-    if (connectedRoomCode && roomRole === "guest") return "cpu";
-    return "player";
-  }, [connectedRoomCode, roomRole]);
+    const localIndex = daifugoPlayers.findIndex((player) => player.id === daifugoLocalPlayerId);
+    return localIndex === 0 ? "player" : "cpu";
+  }, [daifugoLocalPlayerId, daifugoPlayers]);
+
+  const daifugoEffectiveMode = useMemo<DaifugoMode>(() => {
+    if (connectedRoomCode) return "multiplayer";
+    return daifugoMode;
+  }, [connectedRoomCode, daifugoMode]);
+
+  const daifugoPreviewMaxPlayers = useMemo(() => {
+    if (connectedRoomCode) {
+      return Math.max(2, Math.min(8, Math.floor(connectedRoomMaxPlayers || daifugoMaxPlayers || 8)));
+    }
+    if (daifugoMode === "cpu") {
+      return Math.max(2, Math.min(8, 1 + Math.floor(daifugoCpuCount || 1)));
+    }
+    return Math.max(2, Math.min(8, Math.floor(daifugoMaxPlayers || 8)));
+  }, [connectedRoomCode, connectedRoomMaxPlayers, daifugoCpuCount, daifugoMaxPlayers, daifugoMode]);
+
+  const daifugoDisplaySeats = useMemo(() => {
+    if (gameStarted.daifugo && daifugoPlayers.length > 0) {
+      return daifugoPlayers;
+    }
+
+    if (connectedRoomCode) {
+      const maxPlayers = Math.max(2, Math.min(8, Math.floor(connectedRoomMaxPlayers || daifugoMaxPlayers || 8)));
+      const joined = roomParticipants
+        .filter((participant) => participant.role === "host" || participant.role === "guest")
+        .slice(0, maxPlayers)
+        .map((participant, index) => ({
+          id: participant.id,
+          name: String(participant.name || "").trim() || `プレイヤー${index + 1}`,
+          isCpu: false,
+          hand: [] as DaifugoCard[],
+          handCount: 0,
+          status: "playing" as DaifugoPlayerStatus,
+          connected: true,
+        }));
+      while (joined.length < maxPlayers) {
+        joined.push({
+          id: `daifugo-open-${joined.length + 1}`,
+          name: "参加者を待っています",
+          isCpu: false,
+          hand: [],
+          handCount: 0,
+          status: "disconnected",
+          connected: false,
+        });
+      }
+      return joined;
+    }
+
+    const total = daifugoMode === "cpu"
+      ? Math.max(2, Math.min(8, 1 + Math.floor(daifugoCpuCount || 1)))
+      : Math.max(2, Math.min(8, Math.floor(daifugoMaxPlayers || 2)));
+    const localName = String(playerName || "").trim() || "YOU";
+    const preview: DaifugoPlayer[] = [
+      {
+        id: "daifugo-local",
+        name: localName,
+        isCpu: false,
+        hand: [],
+        handCount: 0,
+        status: "playing",
+        connected: true,
+      },
+    ];
+    for (let i = 1; i < total; i += 1) {
+      preview.push({
+        id: daifugoMode === "cpu" ? `daifugo-cpu-${i}` : `daifugo-local-${i}`,
+        name: daifugoMode === "cpu" ? `CPU ${i}` : `PLAYER ${i + 1}`,
+        isCpu: daifugoMode === "cpu",
+        hand: [],
+        handCount: 0,
+        status: "playing",
+        connected: true,
+      });
+    }
+    return preview;
+  }, [
+    connectedRoomCode,
+    connectedRoomMaxPlayers,
+    daifugoCpuCount,
+    daifugoMaxPlayers,
+    daifugoMode,
+    daifugoPlayers,
+    gameStarted.daifugo,
+    playerName,
+    roomParticipants,
+  ]);
+
+  const daifugoDisplayLocalSeat = useMemo(() => {
+    return daifugoDisplaySeats.find((seat) => seat.id === daifugoLocalPlayerId)
+      || daifugoDisplaySeats.find((seat) => !seat.isCpu && seat.status !== "disconnected")
+      || daifugoDisplaySeats[0]
+      || null;
+  }, [daifugoDisplaySeats, daifugoLocalPlayerId]);
+
+  const daifugoDisplayOpponents = useMemo(() => {
+    if (!daifugoDisplayLocalSeat) return daifugoDisplaySeats;
+    return daifugoDisplaySeats.filter((seat) => seat.id !== daifugoDisplayLocalSeat.id);
+  }, [daifugoDisplayLocalSeat, daifugoDisplaySeats]);
+
+  const daifugoActivePlayerCount = useMemo(() => {
+    return Math.max(2, daifugoDisplaySeats.filter((seat) => seat.status !== "disconnected").length || daifugoPreviewMaxPlayers);
+  }, [daifugoDisplaySeats, daifugoPreviewMaxPlayers]);
+
+  const daifugoLayoutMode = useMemo(() => {
+    return daifugoSeatLayoutMode(daifugoActivePlayerCount);
+  }, [daifugoActivePlayerCount]);
+
+  const daifugoGameStatus = useMemo<"idle" | "playing" | "finished">(() => {
+    if (isDaifugoOver || daifugoPhase === "finished") return "finished";
+    if (gameStarted.daifugo && daifugoPhase === "playing") return "playing";
+    return "idle";
+  }, [daifugoPhase, gameStarted.daifugo, isDaifugoOver]);
+
+  const daifugoOpponentBackPreviewCount = useMemo(() => {
+    return daifugoOpponentBackCount(daifugoActivePlayerCount);
+  }, [daifugoActivePlayerCount]);
+
+  const daifugoSeatSize = useMemo(() => {
+    return daifugoSeatPanelSize(daifugoActivePlayerCount);
+  }, [daifugoActivePlayerCount]);
+
+  const daifugoSelectedCards = useMemo(() => {
+    const cardSet = new Set(daifugoSelectedCardIds);
+    const hand = daifugoDisplayLocalSeat?.hand || [];
+    return hand.filter((card) => cardSet.has(card.id));
+  }, [daifugoDisplayLocalSeat, daifugoSelectedCardIds]);
+
+  const daifugoViewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
+  const daifugoLocalHandCards = daifugoDisplayLocalSeat?.hand || [];
+  const daifugoLocalHandCount = daifugoLocalHandCards.length;
+  const daifugoHandDisplayMode = useMemo<"single" | "overlap" | "twoRows">(() => {
+    if (daifugoViewportWidth < 640) {
+      if (daifugoLocalHandCount <= 12) return "single";
+      if (daifugoLocalHandCount <= 18) return "overlap";
+      return "overlap";
+    }
+    if (daifugoViewportWidth < 1024) {
+      if (daifugoLocalHandCount <= 12) return "single";
+      if (daifugoLocalHandCount <= 18) return "overlap";
+      return "twoRows";
+    }
+    if (daifugoLocalHandCount <= 14) return "single";
+    if (daifugoLocalHandCount <= 20) return "overlap";
+    return "twoRows";
+  }, [daifugoLocalHandCount, daifugoViewportWidth]);
+  const daifugoHandRows = useMemo(() => {
+    if (daifugoHandDisplayMode !== "twoRows") return [daifugoLocalHandCards];
+    const midpoint = Math.ceil(daifugoLocalHandCards.length / 2);
+    return [daifugoLocalHandCards.slice(0, midpoint), daifugoLocalHandCards.slice(midpoint)];
+  }, [daifugoHandDisplayMode, daifugoLocalHandCards]);
+  const daifugoHandRowMaxCount = useMemo(() => {
+    return Math.max(1, ...daifugoHandRows.map((row) => row.length));
+  }, [daifugoHandRows]);
+  const daifugoHandCardWidth = useMemo(() => {
+    return calculateDaifugoCardWidth(daifugoHandRowMaxCount, daifugoViewportWidth, daifugoHandDisplayMode);
+  }, [daifugoHandDisplayMode, daifugoHandRowMaxCount, daifugoViewportWidth]);
+  const daifugoHandCardHeight = useMemo(() => {
+    return Math.round(daifugoHandCardWidth * 1.45);
+  }, [daifugoHandCardWidth]);
+  const daifugoPileCardWidth = useMemo(() => {
+    if (daifugoLayoutMode === "dense") {
+      const min = daifugoViewportWidth < 640 ? 60 : 62;
+      const max = daifugoViewportWidth < 640 ? 72 : 76;
+      const proposed = daifugoViewportWidth < 640 ? 64 : 70;
+      return Math.max(min, Math.min(max, proposed));
+    }
+    if (daifugoLayoutMode === "compact") {
+      const min = daifugoViewportWidth < 640 ? 68 : 72;
+      const max = daifugoViewportWidth < 640 ? 82 : 86;
+      const proposed = daifugoViewportWidth < 640 ? 74 : 78;
+      return Math.max(min, Math.min(max, proposed));
+    }
+    const min = daifugoViewportWidth < 640 ? 66 : 70;
+    const max = daifugoViewportWidth < 640 ? 78 : 82;
+    const proposed = daifugoViewportWidth < 640 ? 72 : 76;
+    return Math.max(min, Math.min(max, proposed));
+  }, [daifugoLayoutMode, daifugoViewportWidth]);
+  const daifugoPileCardHeight = useMemo(() => {
+    return Math.round(daifugoPileCardWidth * 1.42);
+  }, [daifugoPileCardWidth]);
+  const daifugoHandContainerWidth = useMemo(() => {
+    if (daifugoViewportWidth < 640) return Math.max(240, daifugoViewportWidth - 42);
+    if (daifugoViewportWidth < 1024) return Math.max(520, daifugoViewportWidth - 84);
+    return Math.max(760, Math.min(1120, daifugoViewportWidth - 220));
+  }, [daifugoViewportWidth]);
+  const daifugoHandMaxRotate = useMemo(() => {
+    if (daifugoHandDisplayMode === "twoRows") {
+      if (daifugoHandRowMaxCount <= 12) return 3.5;
+      return 2.6;
+    }
+    if (daifugoHandDisplayMode === "overlap") {
+      if (daifugoLocalHandCount <= 16) return 5.5;
+      return 4.5;
+    }
+    if (daifugoLocalHandCount <= 10) return 7;
+    return 6;
+  }, [daifugoHandDisplayMode, daifugoHandRowMaxCount, daifugoLocalHandCount]);
+  const daifugoHandCenterLift = useMemo(() => {
+    if (daifugoHandDisplayMode === "twoRows") return 0.35;
+    if (daifugoHandDisplayMode === "overlap") return 0.55;
+    return 0.8;
+  }, [daifugoHandDisplayMode]);
+
+  const daifugoSelectedCombo = useMemo(() => {
+    return analyzeDaifugoCombo(daifugoSelectedCards);
+  }, [daifugoSelectedCards]);
+
+  const daifugoSelectionJudge = useMemo(() => {
+    return canPlayDaifugoCombo(daifugoSelectedCombo, daifugoTableCombo, { revolution: false });
+  }, [daifugoSelectedCombo, daifugoTableCombo]);
+
+  const daifugoCanSubmit = useMemo(() => {
+    if (!canOperateDaifugoNow) return false;
+    if (daifugoSelectedCards.length <= 0) return false;
+    return daifugoSelectionJudge.ok;
+  }, [canOperateDaifugoNow, daifugoSelectedCards.length, daifugoSelectionJudge.ok]);
+
+  const daifugoTurnAssistText = useMemo(() => {
+    if (daifugoGameStatus === "idle") {
+      return "ゲーム開始後にカードが配られます";
+    }
+    if (isDaifugoOver) return "順位が確定しました";
+    if (!daifugoCurrentPlayer) return "手番待機中";
+    if (daifugoCurrentPlayer.id === daifugoLocalPlayerId) return "カードを選択してください";
+    return `${daifugoCurrentPlayer.name} が考えています...`;
+  }, [daifugoCurrentPlayer, daifugoGameStatus, daifugoLocalPlayerId, isDaifugoOver]);
+
+  const daifugoActiveEffectBadges = useMemo(() => {
+    const badges: string[] = [];
+    if (daifugoRules.kakumei && daifugoTableCombo.valid && (daifugoTableCombo.length || 0) >= 4) badges.push("革命中");
+    if (daifugoRules.eightCut && daifugoTableCards.some((card) => card.rank === 8)) badges.push("8切り");
+    if (daifugoRules.shibari && daifugoTableCards.length >= 2) {
+      const suits = new Set(daifugoTableCards.filter((card) => card.suit !== "J").map((card) => card.suit));
+      if (suits.size === 1) {
+        const oneSuit = daifugoTableCards.find((card) => card.suit !== "J")?.suit;
+        if (oneSuit === "S") badges.push("スペード縛り");
+        if (oneSuit === "H") badges.push("ハート縛り");
+        if (oneSuit === "D") badges.push("ダイヤ縛り");
+        if (oneSuit === "C") badges.push("クラブ縛り");
+      }
+    }
+    return badges;
+  }, [daifugoRules, daifugoTableCards, daifugoTableCombo]);
+
+  const isDaifugoLocalWinner = useMemo(() => {
+    return isDaifugoOver && daifugoPhase === "finished" && Number(daifugoDisplayLocalSeat?.rank || 0) === 1;
+  }, [daifugoDisplayLocalSeat?.rank, daifugoPhase, isDaifugoOver]);
+
+  const daifugoIsLocalTurn = useMemo(() => {
+    return !isDaifugoOver && daifugoPhase === "playing" && daifugoCurrentPlayer?.id === daifugoLocalPlayerId;
+  }, [daifugoCurrentPlayer?.id, daifugoLocalPlayerId, daifugoPhase, isDaifugoOver]);
+
+  const daifugoControlsEnabled = daifugoGameStatus === "playing";
+
+  const daifugoPreviewRuleBadges = useMemo(() => {
+    const badges: string[] = [];
+    if (daifugoRules.kakumei) badges.push("革命ON");
+    if (daifugoRules.shibari) badges.push("縛りON");
+    if (daifugoRules.eightCut) badges.push("8切りON");
+    if (daifugoRules.joker) badges.push("ジョーカーON");
+    if (daifugoRules.sp3Return) badges.push("スペ3返しON");
+    if (daifugoRules.miyakoOchhi) badges.push("都落ちON");
+    return badges;
+  }, [daifugoRules]);
 
   const roomTurnText = useCallback((isYourTurn: boolean) => {
     if (!connectedRoomCode) return "";
@@ -6111,9 +8414,10 @@ export default function Home() {
   }, [roomReadyById]);
 
   const roomOccupancyText = useMemo(() => {
-    const count = Math.max(0, Math.min(16, roomMatchedPlayerCount));
-    return `${String(count).padStart(2, "0")}/16`;
-  }, [roomMatchedPlayerCount]);
+    const maxPlayers = Math.max(2, Math.min(8, Math.floor(connectedRoomMaxPlayers || 8)));
+    const count = Math.max(0, Math.min(maxPlayers, roomMatchedPlayerCount));
+    return `${String(count).padStart(2, "0")}/${maxPlayers}`;
+  }, [connectedRoomMaxPlayers, roomMatchedPlayerCount]);
 
   const roomParticipantCountsByPanel = useMemo(() => {
     const counts = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, 0])) as Record<PlayablePanel, number>;
@@ -6125,7 +8429,7 @@ export default function Home() {
         if (seenCodes.has(code)) continue;
         seenCodes.add(code);
       }
-      const activePlayers = Math.max(0, Math.min(16, Number(room.activePlayers) || 0));
+      const activePlayers = Math.max(0, Math.min(8, Number(room.activePlayers) || 0));
       if (activePlayers <= 0) continue;
       for (const panel of room.panels) {
         if (!(panel in counts)) continue;
@@ -6148,10 +8452,10 @@ export default function Home() {
   }, [connectedRoomCode, panelPublicRooms, roomParticipants]);
 
   const roomOccupancyTextByPanel = useMemo(() => {
-    const byPanel = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, "00/16"])) as Record<PlayablePanel, string>;
+    const byPanel = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, "00/08"])) as Record<PlayablePanel, string>;
     for (const panel of PLAYABLE_PANELS) {
-      const count = Math.max(0, Math.min(16, roomParticipantCountsByPanel[panel] || 0));
-      byPanel[panel] = `${String(count).padStart(2, "0")}/16`;
+      const count = Math.max(0, Math.min(8, roomParticipantCountsByPanel[panel] || 0));
+      byPanel[panel] = `${String(count).padStart(2, "0")}/08`;
     }
     return byPanel;
   }, [roomParticipantCountsByPanel]);
@@ -6377,6 +8681,18 @@ export default function Home() {
     setStartCountdownSec(0);
     reset();
     setGameStarted((prev) => ({ ...prev, [panel]: true }));
+  };
+
+  const startSurvivorsFromSelect = () => {
+    const nextConfig: SurvivorsStageSettings = {
+      difficulty: survivorsStageSettings.difficulty,
+      endlessMode: false,
+      chaosMode: false,
+      coopMode: false,
+    };
+    survivorsRunConfigRef.current = nextConfig;
+    setSurvivorsRunConfig(nextConfig);
+    startPanelGame("survivors", resetSurvivors);
   };
 
   const toggleRoomReady = useCallback(() => {
@@ -6674,14 +8990,16 @@ export default function Home() {
       .filter((panel): panel is PlayablePanel => Boolean(panel));
     const rawListContext = String(row.listContext || "").trim().toLowerCase();
     const listContext: "menu" | "game" = rawListContext === "game" ? "game" : "menu";
+    const maxPlayers = Math.max(2, Math.min(8, Math.floor(Number(row.maxPlayers) || 8)));
     return {
       code,
       listContext,
       isPublic: Boolean(row.isPublic ?? true),
+      maxPlayers,
       inGame: Boolean(row.inGame),
-      activePlayers: Math.max(0, Math.min(16, Number(row.activePlayers) || 0)),
-      spectatorCount: Math.max(0, Math.min(16, Number(row.spectatorCount) || 0)),
-      totalParticipants: Math.max(0, Math.min(16, Number(row.totalParticipants) || 0)),
+      activePlayers: Math.max(0, Math.min(maxPlayers, Number(row.activePlayers) || 0)),
+      spectatorCount: Math.max(0, Number(row.spectatorCount) || 0),
+      totalParticipants: Math.max(0, Math.min(maxPlayers, Number(row.totalParticipants) || 0)),
       hostName: String(row.hostName || "").trim(),
       guestName: String(row.guestName || "").trim(),
       panels,
@@ -7170,18 +9488,142 @@ export default function Home() {
     if (typeof state.chinchiroMessage === "string") setChinchiroMessage(state.chinchiroMessage);
     if (typeof state.isChinchiroOver === "boolean") setIsChinchiroOver(state.isChinchiroOver);
 
-    if (Array.isArray(state.sevensHands)) setSevensHands(state.sevensHands as [SevensCard[], SevensCard[]]);
+    if (Array.isArray(state.sevensPlayers)) {
+      const parsed = (state.sevensPlayers as SevensPlayer[]).map((player) => ({
+        id: String(player.id || ""),
+        name: String(player.name || "Player"),
+        isCpu: Boolean(player.isCpu),
+        hand: Array.isArray(player.hand) ? (player.hand as SevensCard[]) : [],
+        status: player.status === "finished" || player.status === "eliminated" || player.status === "disconnected" ? player.status : "playing",
+        passCount: Math.max(0, Math.floor(Number(player.passCount) || 0)),
+        rank: Number.isFinite(Number(player.rank)) ? Math.floor(Number(player.rank)) : null,
+      }));
+      setSevensPlayers(parsed);
+    } else if (Array.isArray(state.sevensHands)) {
+      const legacyHands = state.sevensHands as [SevensCard[], SevensCard[]];
+      setSevensPlayers([
+        {
+          id: "local-player",
+          name: playerName || "You",
+          isCpu: false,
+          hand: Array.isArray(legacyHands[0]) ? legacyHands[0] : [],
+          status: "playing",
+          passCount: 0,
+          rank: null,
+        },
+        {
+          id: "cpu-1",
+          name: "CPU 1",
+          isCpu: true,
+          hand: Array.isArray(legacyHands[1]) ? legacyHands[1] : [],
+          status: "playing",
+          passCount: 0,
+          rank: null,
+        },
+      ]);
+    }
     if (state.sevensTable && typeof state.sevensTable === "object") {
       setSevensTable(state.sevensTable as Record<"S" | "H" | "D" | "C", SevensTableRange>);
     }
-    if (state.sevensTurn === "player" || state.sevensTurn === "cpu") setSevensTurn(state.sevensTurn as "player" | "cpu");
-    if (Array.isArray(state.sevensPassCount)) setSevensPassCount(state.sevensPassCount as [number, number]);
+    if (typeof state.sevensCurrentTurnIndex === "number") {
+      setSevensCurrentTurnIndex(Math.max(0, Math.floor(state.sevensCurrentTurnIndex)));
+    }
+    if (typeof state.sevensCpuCount === "number") {
+      setSevensCpuCount(Math.max(1, Math.min(6, Math.floor(state.sevensCpuCount))));
+    }
+    if (state.sevensCpuDifficulty === "easy" || state.sevensCpuDifficulty === "normal" || state.sevensCpuDifficulty === "hard") {
+      setSevensCpuDifficulty(state.sevensCpuDifficulty as SevensCpuDifficulty);
+    }
+    if (typeof state.sevensRoundCount === "number") {
+      setSevensRoundCount(Math.max(1, Math.min(9, Math.floor(state.sevensRoundCount))));
+    }
+    if (typeof state.sevensCurrentRound === "number") {
+      setSevensCurrentRound(Math.max(1, Math.min(9, Math.floor(state.sevensCurrentRound))));
+    }
+    if (typeof state.sevensPassLimit === "number") {
+      setSevensPassLimit(Math.max(0, Math.min(20, Math.floor(state.sevensPassLimit))));
+    }
+    if (Array.isArray(state.sevensLastResult)) {
+      setSevensLastResult(state.sevensLastResult as Array<{ name: string; rank: number; cards: number; passCount: number; status: SevensPlayerStatus }>);
+    }
     if (typeof state.sevensMessage === "string") setSevensMessage(state.sevensMessage);
     if (typeof state.isSevensOver === "boolean") setIsSevensOver(state.isSevensOver);
 
-    if (Array.isArray(state.daifugoHands)) setDaifugoHands(state.daifugoHands as [DaifugoCard[], DaifugoCard[]]);
-    if (state.daifugoTableCard === null || typeof state.daifugoTableCard === "object") {
-      setDaifugoTableCard(state.daifugoTableCard as DaifugoCard | null);
+    if (state.daifugoMode === "cpu" || state.daifugoMode === "local" || state.daifugoMode === "multiplayer") {
+      setDaifugoMode(state.daifugoMode as DaifugoMode);
+    }
+    if (typeof state.daifugoCpuCount === "number") {
+      setDaifugoCpuCount(Math.max(1, Math.min(7, Math.floor(state.daifugoCpuCount))));
+    }
+    if (typeof state.daifugoMaxPlayers === "number") {
+      setDaifugoMaxPlayers(Math.max(2, Math.min(8, Math.floor(state.daifugoMaxPlayers))));
+    }
+    if (state.daifugoCpuLevel === "easy" || state.daifugoCpuLevel === "normal" || state.daifugoCpuLevel === "hard") {
+      setDaifugoCpuLevel(state.daifugoCpuLevel as DaifugoCpuDifficulty);
+    }
+    if (state.daifugoRules && typeof state.daifugoRules === "object") {
+      const next = state.daifugoRules as Partial<DaifugoRuleSet>;
+      setDaifugoRules((prev) => ({
+        joker: typeof next.joker === "boolean" ? next.joker : prev.joker,
+        kakumei: typeof next.kakumei === "boolean" ? next.kakumei : prev.kakumei,
+        shibari: typeof next.shibari === "boolean" ? next.shibari : prev.shibari,
+        eightCut: typeof next.eightCut === "boolean" ? next.eightCut : prev.eightCut,
+        miyakoOchhi: typeof next.miyakoOchhi === "boolean" ? next.miyakoOchhi : prev.miyakoOchhi,
+        sp3Return: typeof next.sp3Return === "boolean" ? next.sp3Return : prev.sp3Return,
+      }));
+    }
+    if (Array.isArray(state.daifugoPlayers)) {
+      setDaifugoPlayers(state.daifugoPlayers as DaifugoPlayer[]);
+    } else if (Array.isArray(state.daifugoHands)) {
+      const legacyHands = state.daifugoHands as [DaifugoCard[], DaifugoCard[]];
+      const localName = String(playerName || "").trim() || "YOU";
+      setDaifugoPlayers([
+        {
+          id: "daifugo-local",
+          name: localName,
+          isCpu: false,
+          hand: Array.isArray(legacyHands[0]) ? legacyHands[0] : [],
+          handCount: Array.isArray(legacyHands[0]) ? legacyHands[0].length : 0,
+          status: "playing",
+        },
+        {
+          id: "daifugo-cpu-1",
+          name: "CPU 1",
+          isCpu: true,
+          hand: Array.isArray(legacyHands[1]) ? legacyHands[1] : [],
+          handCount: Array.isArray(legacyHands[1]) ? legacyHands[1].length : 0,
+          status: "playing",
+        },
+      ]);
+      setDaifugoHands(legacyHands);
+    }
+    if (typeof state.daifugoCurrentTurnIndex === "number") {
+      setDaifugoCurrentTurnIndex(Math.max(0, Math.floor(state.daifugoCurrentTurnIndex)));
+    }
+    if (Array.isArray(state.daifugoTableCards)) {
+      setDaifugoTableCards(state.daifugoTableCards as DaifugoCard[]);
+      const cards = state.daifugoTableCards as DaifugoCard[];
+      setDaifugoTableCard(cards[cards.length - 1] || null);
+    } else if (state.daifugoTableCard === null || typeof state.daifugoTableCard === "object") {
+      const card = state.daifugoTableCard as DaifugoCard | null;
+      setDaifugoTableCard(card);
+      setDaifugoTableCards(card ? [card] : []);
+    }
+    if (state.daifugoTableCombo && typeof state.daifugoTableCombo === "object") {
+      setDaifugoTableCombo(state.daifugoTableCombo as DaifugoComboAnalysis);
+    }
+    if (Array.isArray(state.daifugoSelectedCardIds)) {
+      setDaifugoSelectedCardIds((state.daifugoSelectedCardIds as string[]).filter(Boolean));
+    }
+    if (typeof state.daifugoLastPlayedBy === "string" || state.daifugoLastPlayedBy === null) {
+      setDaifugoLastPlayedBy((state.daifugoLastPlayedBy as string | null) || null);
+    }
+    if (typeof state.daifugoNotification === "string") setDaifugoNotification(state.daifugoNotification);
+    if (Array.isArray(state.daifugoRoundResult)) {
+      setDaifugoRoundResult(state.daifugoRoundResult as Array<{ rank: number; name: string; className: DaifugoPlayerClass; cards: number; isCpu: boolean }>);
+    }
+    if (state.daifugoPhase === "idle" || state.daifugoPhase === "dealing" || state.daifugoPhase === "exchange" || state.daifugoPhase === "playing" || state.daifugoPhase === "roundResult" || state.daifugoPhase === "finished") {
+      setDaifugoPhase(state.daifugoPhase as DaifugoGamePhase);
     }
     if (state.daifugoTurn === "player" || state.daifugoTurn === "cpu") setDaifugoTurn(state.daifugoTurn as "player" | "cpu");
     if (typeof state.daifugoPassStreak === "number") setDaifugoPassStreak(state.daifugoPassStreak);
@@ -7262,12 +9704,14 @@ export default function Home() {
     if (typeof state.pokerWager === "number") setPokerWager(Math.max(0, Math.floor(state.pokerWager)));
     if (Array.isArray(state.pokerHold)) setPokerHold(state.pokerHold as boolean[]);
     if (
-      state.pokerPhase === "betting"
+      state.pokerPhase === "waiting"
       || state.pokerPhase === "preflop"
       || state.pokerPhase === "flop"
       || state.pokerPhase === "turn"
       || state.pokerPhase === "river"
       || state.pokerPhase === "showdown"
+      || state.pokerPhase === "result"
+      || state.pokerPhase === "tournamentResult"
     ) {
       setPokerPhase(state.pokerPhase as PokerPhase);
     }
@@ -7303,14 +9747,50 @@ export default function Home() {
     if (typeof state.survivorsWave === "number") setSurvivorsWave(state.survivorsWave);
     if (typeof state.survivorsHp === "number") setSurvivorsHp(state.survivorsHp);
     if (typeof state.survivorsMaxHp === "number") setSurvivorsMaxHp(state.survivorsMaxHp);
+    if (typeof state.survivorsMp === "number") setSurvivorsMp(state.survivorsMp);
+    if (typeof state.survivorsMaxMp === "number") setSurvivorsMaxMp(state.survivorsMaxMp);
     if (typeof state.survivorsLevel === "number") setSurvivorsLevel(state.survivorsLevel);
     if (typeof state.survivorsXp === "number") setSurvivorsXp(state.survivorsXp);
     if (typeof state.survivorsTimeSec === "number") setSurvivorsTimeSec(state.survivorsTimeSec);
     if (typeof state.survivorsKills === "number") setSurvivorsKills(state.survivorsKills);
+    if (state.survivorsCharacterId === "fairy" || state.survivorsCharacterId === "hammer" || state.survivorsCharacterId === "daikon") {
+      setSurvivorsCharacterId(state.survivorsCharacterId);
+    }
+    if (state.survivorsStageSettings && typeof state.survivorsStageSettings === "object") {
+      const cfg = state.survivorsStageSettings as Partial<SurvivorsStageSettings>;
+      const nextCfg: SurvivorsStageSettings = {
+        difficulty: cfg.difficulty === "easy" || cfg.difficulty === "hard" ? cfg.difficulty : "normal",
+        endlessMode: false,
+        chaosMode: false,
+        coopMode: false,
+      };
+      setSurvivorsStageSettings(nextCfg);
+    }
+    if (state.survivorsRunConfig && typeof state.survivorsRunConfig === "object") {
+      const cfg = state.survivorsRunConfig as Partial<SurvivorsStageSettings>;
+      const nextCfg: SurvivorsStageSettings = {
+        difficulty: cfg.difficulty === "easy" || cfg.difficulty === "hard" ? cfg.difficulty : "normal",
+        endlessMode: false,
+        chaosMode: false,
+        coopMode: false,
+      };
+      survivorsRunConfigRef.current = nextCfg;
+      setSurvivorsRunConfig(nextCfg);
+    }
     if (typeof state.survivorsDamageBonus === "number") setSurvivorsDamageBonus(state.survivorsDamageBonus);
     if (typeof state.survivorsHasteBonus === "number") setSurvivorsHasteBonus(state.survivorsHasteBonus);
     if (typeof state.survivorsMultiShotBonus === "number") setSurvivorsMultiShotBonus(state.survivorsMultiShotBonus);
     if (typeof state.survivorsArmorBonus === "number") setSurvivorsArmorBonus(state.survivorsArmorBonus);
+    if (typeof state.survivorsQueuedLevelRewards === "number") setSurvivorsQueuedLevelRewards(Math.max(0, Math.floor(state.survivorsQueuedLevelRewards)));
+    if (typeof state.survivorsQueuedWaveRewards === "number") setSurvivorsQueuedWaveRewards(Math.max(0, Math.floor(state.survivorsQueuedWaveRewards)));
+    if (typeof state.isSurvivorsShopSessionActive === "boolean") setIsSurvivorsShopSessionActive(state.isSurvivorsShopSessionActive);
+    if (typeof state.survivorsCoins === "number") setSurvivorsCoins(Math.max(0, Math.floor(state.survivorsCoins)));
+    if (typeof state.survivorsShopRerollCount === "number") setSurvivorsShopRerollCount(Math.max(0, Math.floor(state.survivorsShopRerollCount)));
+    if (Array.isArray(state.survivorsShopSlots)) setSurvivorsShopSlots(state.survivorsShopSlots as SurvivorsShopSlot[]);
+    if (Array.isArray(state.survivorsShopItems)) setSurvivorsShopItems(state.survivorsShopItems as SurvivorsShopInventoryItem[]);
+    if (Array.isArray(state.survivorsShopWeapons)) setSurvivorsShopWeapons(state.survivorsShopWeapons as SurvivorsShopInventoryWeapon[]);
+    if (typeof state.survivorsShopFinishedWave === "number") setSurvivorsShopFinishedWave(Math.max(0, Math.floor(state.survivorsShopFinishedWave)));
+    if (typeof state.survivorsShopNextWave === "number") setSurvivorsShopNextWave(Math.max(1, Math.floor(state.survivorsShopNextWave)));
     if (Array.isArray(state.survivorsEnemies)) setSurvivorsEnemies(state.survivorsEnemies as SurvivorsEnemy[]);
     if (
       state.survivorsPlayer
@@ -7333,14 +9813,17 @@ export default function Home() {
     if (state.survivorsAugmentReason === "levelup" || state.survivorsAugmentReason === "wave") {
       setSurvivorsAugmentReason(state.survivorsAugmentReason);
     }
-    if (Array.isArray(state.unoDeck)) setUnoDeck(state.unoDeck as UnoCard[]);
-    if (Array.isArray(state.unoPlayerHand)) setUnoPlayerHand(state.unoPlayerHand as UnoCard[]);
-    if (Array.isArray(state.unoCpuHand)) setUnoCpuHand(state.unoCpuHand as UnoCard[]);
-    if (Array.isArray(state.unoLocalHands)) setUnoLocalHands(state.unoLocalHands as UnoCard[][]);
+    if (Array.isArray(state.unoDeck)) setUnoDeck(normalizeUnoCardList(state.unoDeck));
+    if (Array.isArray(state.unoPlayerHand)) setUnoPlayerHand(normalizeUnoCardList(state.unoPlayerHand));
+    if (Array.isArray(state.unoCpuHand)) setUnoCpuHand(normalizeUnoCardList(state.unoCpuHand));
+    if (Array.isArray(state.unoLocalHands)) setUnoLocalHands(normalizeUnoHands(state.unoLocalHands));
     if (typeof state.unoRoomCpuCount === "number") setUnoRoomCpuCount(Math.max(0, Math.min(6, Math.trunc(state.unoRoomCpuCount))));
     if (typeof state.unoLocalTurnIndex === "number") setUnoLocalTurnIndex(Math.max(0, Math.trunc(state.unoLocalTurnIndex)));
-    if (state.unoTopCard === null || typeof state.unoTopCard === "object") setUnoTopCard(state.unoTopCard as UnoCard | null);
+    if (state.unoTopCard === null || typeof state.unoTopCard === "object") {
+      setUnoTopCard(state.unoTopCard ? normalizeUnoCard(state.unoTopCard) : null);
+    }
     if (state.unoTurn === "player" || state.unoTurn === "cpu") setUnoTurn(state.unoTurn as "player" | "cpu");
+    if (state.unoTurnDirection === 1 || state.unoTurnDirection === -1) setUnoTurnDirection(state.unoTurnDirection as 1 | -1);
     if (typeof state.unoMessage === "string") setUnoMessage(state.unoMessage);
     if (typeof state.isUnoOver === "boolean") setIsUnoOver(state.isUnoOver);
   }, [connectedRoomCode, roomRole]);
@@ -7436,6 +9919,7 @@ export default function Home() {
             panel: options?.panelOverride ?? getCurrentRoomPanel(),
             name: playerName,
             roomPublic: Boolean(options?.roomPublic ?? (roomVisibility === "public")),
+            maxPlayers: Math.max(2, Math.min(8, Math.floor(roomMaxPlayersDraft || 8))),
             spectate: Boolean(options?.spectate),
             create: Boolean(options?.createRoom),
             inviteToken: String(options?.inviteToken || "").trim(),
@@ -7613,8 +10097,10 @@ export default function Home() {
             }
             const action = String(payload?.action || "");
             if (action !== "play" && action !== "draw") return;
-            const index = Number(payload?.index);
-            setPendingRemoteUnoAction({ action, index: Number.isInteger(index) ? index : undefined });
+            const cardIds = Array.isArray(payload?.cardIds)
+              ? (payload.cardIds as unknown[]).map((id) => String(id || "").trim()).filter(Boolean)
+              : [];
+            setPendingRemoteUnoAction({ action, cardIds: cardIds.length > 0 ? cardIds : undefined });
             return;
           }
 
@@ -7625,7 +10111,22 @@ export default function Home() {
             const action = String(payload?.action || "");
             if (action !== "play" && action !== "pass") return;
             const index = Number(payload?.index);
-            setPendingRemoteDaifugoAction({ action, index: Number.isInteger(index) ? index : undefined });
+            const cardIds = Array.isArray(payload?.cardIds)
+              ? (payload.cardIds as unknown[]).map((id) => String(id || "").trim()).filter(Boolean)
+              : [];
+            setPendingRemoteDaifugoAction({ action, index: Number.isInteger(index) ? index : undefined, cardIds: cardIds.length > 0 ? cardIds : undefined });
+            return;
+          }
+
+          if (type === "sevens-request-action") {
+            const from = String(payload?.from || "");
+            if (!from || from === peerIdRef.current) {
+              return;
+            }
+            const action = String(payload?.action || "");
+            if (action !== "play" && action !== "pass") return;
+            const cardKey = String(payload?.cardKey || "").trim();
+            setPendingRemoteSevensAction({ from, action, cardKey: cardKey || undefined });
             return;
           }
 
@@ -7692,6 +10193,9 @@ export default function Home() {
               if (nextRole === "spectator") {
                 setMenuMessage(t("spectatorReadOnly"));
               }
+            }
+            if (Number.isFinite(Number(payload.maxPlayers))) {
+              setConnectedRoomMaxPlayers(Math.max(2, Math.min(8, Math.floor(Number(payload.maxPlayers) || 8))));
             }
 
             if (quickJoin) {
@@ -7775,6 +10279,9 @@ export default function Home() {
             const myself = participants.find((p: RoomParticipant) => p.id === peerIdRef.current);
             if (myself?.role) {
               setRoomRole(myself.role);
+            }
+            if (Number.isFinite(Number(payload.maxPlayers))) {
+              setConnectedRoomMaxPlayers(Math.max(2, Math.min(8, Math.floor(Number(payload.maxPlayers) || 8))));
             }
             if (nextRoomCode) {
               stripInviteTokenFromAddressBar();
@@ -7866,11 +10373,15 @@ export default function Home() {
             setRoomReadyById({});
             setRoomParticipants([]);
             setRoomRole("");
+            setConnectedRoomMaxPlayers(8);
             setOthelloDrawVotes([]);
             setRoomChatMessages([]);
             setSpectatorChatMessages([]);
             setRoomStatus(t("roomStateClosed"));
-            setMenuMessage(tf("roomFullRejected", { code: String(payload.code || roomCode || "------") }));
+            setMenuMessage(tf("roomFullRejected", {
+              code: String(payload.code || roomCode || "------"),
+              max: String(Math.max(2, Math.min(8, Math.floor(Number(payload.maxPlayers) || 8)))),
+            }));
             return;
           }
 
@@ -7991,6 +10502,7 @@ export default function Home() {
       roomCode,
       roomErrorLabel,
       roomVisibility,
+      roomMaxPlayersDraft,
       roomPasswordDraft,
       stripInviteTokenFromAddressBar,
       finalizeOthelloDrawAgreement,
@@ -8224,6 +10736,7 @@ export default function Home() {
     setPendingInviteToken("");
     closeRoomSocket();
     setConnectedRoomCode("");
+    setConnectedRoomMaxPlayers(8);
     setRoomReadyById({});
     setRoomParticipants([]);
     setRoomRole("");
@@ -8443,12 +10956,31 @@ export default function Home() {
         chinchiroWager,
         chinchiroMessage,
         isChinchiroOver,
-        sevensHands,
+        sevensPlayers,
         sevensTable,
-        sevensTurn,
-        sevensPassCount,
+        sevensCurrentTurnIndex,
+        sevensCpuCount,
+        sevensCpuDifficulty,
+        sevensRoundCount,
+        sevensCurrentRound,
+        sevensPassLimit,
         sevensMessage,
         isSevensOver,
+        sevensLastResult,
+        daifugoMode,
+        daifugoCpuCount,
+        daifugoMaxPlayers,
+        daifugoCpuLevel,
+        daifugoRules,
+        daifugoPlayers,
+        daifugoCurrentTurnIndex,
+        daifugoTableCards,
+        daifugoTableCombo,
+        daifugoSelectedCardIds,
+        daifugoLastPlayedBy,
+        daifugoNotification,
+        daifugoRoundResult,
+        daifugoPhase,
         daifugoHands,
         daifugoTableCard,
         daifugoTurn,
@@ -8506,14 +11038,29 @@ export default function Home() {
         survivorsWave,
         survivorsHp,
         survivorsMaxHp,
+        survivorsMp,
+        survivorsMaxMp,
         survivorsLevel,
         survivorsXp,
         survivorsTimeSec,
         survivorsKills,
+        survivorsCharacterId,
+        survivorsStageSettings,
+        survivorsRunConfig,
         survivorsDamageBonus,
         survivorsHasteBonus,
         survivorsMultiShotBonus,
         survivorsArmorBonus,
+        survivorsQueuedLevelRewards,
+        survivorsQueuedWaveRewards,
+        isSurvivorsShopSessionActive,
+        survivorsCoins,
+        survivorsShopRerollCount,
+        survivorsShopSlots,
+        survivorsShopItems,
+        survivorsShopWeapons,
+        survivorsShopFinishedWave,
+        survivorsShopNextWave,
         survivorsEnemies,
         survivorsPlayer,
         survivorsPendingAugments,
@@ -8527,6 +11074,7 @@ export default function Home() {
         unoLocalHands,
         unoRoomCpuCount,
         unoLocalTurnIndex,
+        unoTurnDirection,
         unoTopCard,
         unoTurn,
         unoMessage,
@@ -8976,14 +11524,18 @@ export default function Home() {
       setPendingRemoteDaifugoAction(null);
       return;
     }
-    if (pendingRemoteDaifugoAction.action === "play" && Number.isInteger(pendingRemoteDaifugoAction.index)) {
-      onDaifugoPlay(Number(pendingRemoteDaifugoAction.index), { isRemote: true, side: "cpu" });
+    if (pendingRemoteDaifugoAction.action === "play") {
+      if ((pendingRemoteDaifugoAction.cardIds || []).length > 0) {
+        onDaifugoPlay(undefined, { isRemote: true, side: "cpu", cardIds: pendingRemoteDaifugoAction.cardIds });
+      } else if (Number.isInteger(pendingRemoteDaifugoAction.index)) {
+        onDaifugoPlay(Number(pendingRemoteDaifugoAction.index), { isRemote: true, side: "cpu" });
+      }
     }
     if (pendingRemoteDaifugoAction.action === "pass") {
       onDaifugoPass({ isRemote: true, side: "cpu" });
     }
     setPendingRemoteDaifugoAction(null);
-  }, [pendingRemoteDaifugoAction, roomRole]);
+  }, [onDaifugoPass, onDaifugoPlay, pendingRemoteDaifugoAction, roomRole]);
 
   const resolveGomokuPlayerSide = (order: GomokuTurnOrder): 1 | 2 => {
     if (order === "random") return Math.random() < 0.5 ? 1 : 2;
@@ -9291,7 +11843,11 @@ export default function Home() {
     const nextPlayerSide = resolveShogiPlayerSide(nextOrder);
     const nextTurn: ShogiColor = nextOrder === "random" ? (Math.random() < 0.5 ? "b" : "w") : (nextOrder === "white" ? "w" : "b");
     setShogiPlayerSide(nextMode === "cpu" ? nextPlayerSide : "b");
-    setShogiBoard(createShogiBoard());
+    const nextBoard = createShogiBoard();
+    if (nextMode === "chaos") {
+      assignShogiChaosMines(nextBoard, shogiChaosMineCount);
+    }
+    setShogiBoard(nextBoard);
     setShogiTurn(nextTurn);
     setSelectedShogi(null);
     setIsShogiOver(false);
@@ -9395,6 +11951,15 @@ export default function Home() {
     next[row][col] = movedPiece;
     next[selectedShogi.row][selectedShogi.col] = null;
 
+    // Mine trigger: captured mine piece is removed, and non-king mover is also removed.
+    if (captured?.isMine) {
+      if (moving?.type === "K") {
+        next[row][col] = movedPiece;
+      } else {
+        next[row][col] = null;
+      }
+    }
+
     setShogiBoard(next);
     setSelectedShogi(null);
 
@@ -9427,7 +11992,7 @@ export default function Home() {
         shogiBoard,
         cpuColor,
         shogiCpuLevel,
-        { isChaosMode: shogiMode === "chaos", kingAbsorbChoice: shogiChaosKingAbsorb },
+        { isChaosMode, kingAbsorbChoice: shogiChaosKingAbsorb },
       );
       if (!move) {
         return;
@@ -9441,13 +12006,21 @@ export default function Home() {
         && captured
         && moving.type === "K"
         && captured.type !== "K"
-        && shogiMode === "chaos"
+        && isChaosMode
         && shogiChaosKingAbsorb === "on",
       );
       next[move.toRow][move.toCol] = moving && isCpuKingAbsorbEnabled
         ? { ...moving, absorbedAbilities: mergeShogiKingAbsorbAbilities(moving, captured as ShogiPiece) }
         : moving;
       next[move.fromRow][move.fromCol] = null;
+
+      if (captured?.isMine) {
+        if (moving?.type === "K") {
+          // king survives mine trigger
+        } else {
+          next[move.toRow][move.toCol] = null;
+        }
+      }
 
       setShogiBoard(next);
       setSelectedShogi(null);
@@ -9976,76 +12549,394 @@ export default function Home() {
     );
   };
 
-  const resetSevens = useCallback(() => {
+  const resetSevens = useCallback((options?: { startGame?: boolean }) => {
+    const startGame = Boolean(options?.startGame);
+    if (!startGame) {
+      setSevensPlayers([]);
+      setSevensTable(createSevensTable());
+      setSevensCurrentTurnIndex(0);
+      setSevensCurrentRound(1);
+      setSevensLastResult([]);
+      setIsSevensOver(false);
+      setSevensSelectedCardIndex(null);
+      setPendingRemoteSevensAction(null);
+      setSevensMessage("ゲームを開始してください。");
+      return;
+    }
+
+    if (!connectedRoomCode && sevensEffectiveMode === "multiplayer") {
+      setSevensMessage("マルチプレイはルーム接続後に開始できます。");
+      setGameStarted((prev) => ({ ...prev, sevens: false }));
+      return;
+    }
+
+    const basePlayers: SevensPlayer[] = [];
+
+    if (connectedRoomCode) {
+      const humans = roomParticipants
+        .filter((participant) => participant.role !== "spectator")
+        .slice(0, 8);
+      if (humans.length < 2) {
+        setSevensMessage("参加者が2人以上必要です。");
+        setGameStarted((prev) => ({ ...prev, sevens: false }));
+        return;
+      }
+      humans.forEach((participant) => {
+        basePlayers.push({
+          id: participant.id,
+          name: participant.name || "Player",
+          isCpu: false,
+          hand: [],
+          status: "playing",
+          passCount: 0,
+          rank: null,
+        });
+      });
+    } else {
+      const cpuCount = Math.max(1, Math.min(6, Math.floor(sevensCpuCount)));
+      basePlayers.push({
+        id: "local-player",
+        name: playerName || "You",
+        isCpu: false,
+        hand: [],
+        status: "playing",
+        passCount: 0,
+        rank: null,
+      });
+      for (let i = 0; i < cpuCount; i += 1) {
+        basePlayers.push({
+          id: `cpu-${i + 1}`,
+          name: `CPU ${i + 1}`,
+          isCpu: true,
+          hand: [],
+          status: "playing",
+          passCount: 0,
+          rank: null,
+        });
+      }
+    }
+
     const shuffled = shuffleSevensDeck(createSevensDeck());
-    const player: SevensCard[] = [];
-    const cpu: SevensCard[] = [];
-    shuffled.forEach((card, index) => {
-      if (index % 2 === 0) player.push(card);
-      else cpu.push(card);
+    const startOffset = Math.floor(Math.random() * basePlayers.length);
+    const dealt = dealSevensHands(shuffled, basePlayers.length, startOffset);
+    let nextTable = createSevensTable();
+    let rankCounter = 1;
+
+    const seededPlayers = basePlayers.map((player, index) => {
+      const sourceHand = dealt[index] || [];
+      const sevensCards = sourceHand.filter((card) => card.rank === 7);
+      sevensCards.forEach((card) => {
+        nextTable = applySevensCard(nextTable, card);
+      });
+      const hand = sourceHand.filter((card) => card.rank !== 7);
+      if (hand.length === 0) {
+        const rank = rankCounter;
+        rankCounter += 1;
+        return { ...player, hand, status: "finished" as SevensPlayerStatus, rank };
+      }
+      return { ...player, hand: sortSevensHand(hand) };
     });
 
-    setSevensHands([sortSevensHand(player), sortSevensHand(cpu)]);
-    setSevensTable(createSevensTable());
-    setSevensTurn("player");
-    setSevensPassCount([0, 0]);
-    setIsSevensOver(false);
-    setSevensMessage(t("sevensYourTurn"));
-  }, [t]);
+    const randomSeed = Math.floor(Math.random() * seededPlayers.length);
+    const firstTurn = findNextSevensTurnIndex(seededPlayers, randomSeed - 1) ?? 0;
+    const firstPlayer = seededPlayers[firstTurn];
 
-  const onSevensPlay = (index: number) => {
-    if (isSevensOver || sevensTurn !== "player") return;
-    const playerHand = sevensHands[0];
-    const card = playerHand[index];
+    setSevensPlayers(seededPlayers);
+    setSevensTable(nextTable);
+    setSevensCurrentTurnIndex(firstTurn);
+    setSevensCurrentRound(1);
+    setSevensLastResult([]);
+    setIsSevensOver(false);
+    setSevensSelectedCardIndex(null);
+    if (!firstPlayer) {
+      setSevensMessage(t("sevensDraw"));
+      setIsSevensOver(true);
+      return;
+    }
+    if (firstPlayer.id === (connectedRoomCode ? localPeerId : "local-player")) {
+      setSevensMessage(t("sevensYourTurn"));
+    } else if (firstPlayer.isCpu) {
+      setSevensMessage(t("sevensCpuTurn"));
+    } else {
+      setSevensMessage(`${firstPlayer.name} の手番`);
+    }
+  }, [connectedRoomCode, localPeerId, playerName, roomParticipants, sevensCpuCount, sevensEffectiveMode, t]);
+
+  const onSevensPlay = useCallback((index: number, options?: { actorId?: string; isRemote?: boolean }) => {
+    if (isSevensOver) return;
+    const actorId = options?.actorId || sevensLocalPlayerId;
+    const isRemote = Boolean(options?.isRemote);
+    const current = sevensPlayers[sevensCurrentTurnIndex];
+    if (!current || current.id !== actorId) return;
+
+    if (connectedRoomCode && !isRemote && roomRole !== "host") {
+      const card = sevensLocalPlayer?.hand[index];
+      if (!card) return;
+      sendRoomEvent({ type: "sevens-request-action", action: "play", cardKey: sevensCardKey(card) });
+      setSevensMessage(t("roomWaitingHostJudge"));
+      return;
+    }
+
+    const actorIndex = sevensPlayers.findIndex((player) => player.id === actorId);
+    if (actorIndex < 0) return;
+    const actor = sevensPlayers[actorIndex];
+    const card = actor.hand[index];
     if (!card) return;
     if (!isSevensPlayable(card, sevensTable)) {
       setSevensMessage(t("sevensNoPlayable"));
       return;
     }
 
+    const nextPlayers = sevensPlayers.map((player) => ({ ...player, hand: [...player.hand] }));
+    const nextActor = nextPlayers[actorIndex];
     const nextTable = applySevensCard(sevensTable, card);
-    const nextPlayer = playerHand.filter((_, i) => i !== index);
-    const nextHands: [SevensCard[], SevensCard[]] = [nextPlayer, sevensHands[1]];
-    setSevensTable(nextTable);
-    setSevensHands(nextHands);
+    nextActor.hand.splice(index, 1);
 
-    if (nextPlayer.length === 0) {
+    const ranked = nextPlayers.filter((player) => typeof player.rank === "number").length;
+    if (nextActor.hand.length === 0 && nextActor.status === "playing") {
+      nextActor.status = "finished";
+      nextActor.rank = ranked + 1;
+    }
+
+    const active = nextPlayers.filter((player) => player.status === "playing" && player.hand.length > 0);
+    if (active.length <= 1) {
+      const remaining = active[0];
+      if (remaining) {
+        remaining.status = "finished";
+        remaining.rank = nextPlayers.filter((player) => typeof player.rank === "number").length + 1;
+      }
+      const resultRows = [...nextPlayers]
+        .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+        .map((player) => ({
+          name: player.name,
+          rank: player.rank ?? 999,
+          cards: player.hand.length,
+          passCount: player.passCount,
+          status: player.status,
+        }));
+      setSevensPlayers(nextPlayers);
+      setSevensTable(nextTable);
+      setSevensLastResult(resultRows);
       setIsSevensOver(true);
-      setSevensMessage(t("sevensPlayerWin"));
+      setSevensSelectedCardIndex(null);
+      setSevensMessage(nextActor.id === sevensLocalPlayerId ? t("sevensPlayerWin") : `${nextActor.name} が上がりました。`);
       return;
     }
 
-    setSevensTurn("cpu");
-    setSevensMessage(t("sevensCpuTurn"));
-  };
+    const nextTurn = findNextSevensTurnIndex(nextPlayers, actorIndex);
+    setSevensPlayers(nextPlayers);
+    setSevensTable(nextTable);
+    setSevensSelectedCardIndex(null);
+    if (nextTurn === null) {
+      setIsSevensOver(true);
+      setSevensMessage(t("sevensDraw"));
+      return;
+    }
+    setSevensCurrentTurnIndex(nextTurn);
+    const nextPlayer = nextPlayers[nextTurn];
+    if (!nextPlayer) return;
+    if (nextPlayer.id === sevensLocalPlayerId) setSevensMessage(t("sevensYourTurn"));
+    else if (nextPlayer.isCpu) setSevensMessage(t("sevensCpuTurn"));
+    else setSevensMessage(`${nextPlayer.name} の手番`);
+  }, [
+    connectedRoomCode,
+    isSevensOver,
+    roomRole,
+    sevensCurrentTurnIndex,
+    sevensLocalPlayer,
+    sevensLocalPlayerId,
+    sevensPlayers,
+    sevensTable,
+    sendRoomEvent,
+    t,
+  ]);
 
-  const onSevensPass = () => {
-    if (isSevensOver || sevensTurn !== "player") return;
-    if (hasSevensPlayable(sevensHands[0], sevensTable)) {
+  const onSevensPass = useCallback((options?: { actorId?: string; isRemote?: boolean }) => {
+    if (isSevensOver) return;
+    const actorId = options?.actorId || sevensLocalPlayerId;
+    const isRemote = Boolean(options?.isRemote);
+    const current = sevensPlayers[sevensCurrentTurnIndex];
+    if (!current || current.id !== actorId) return;
+
+    if (connectedRoomCode && !isRemote && roomRole !== "host") {
+      sendRoomEvent({ type: "sevens-request-action", action: "pass" });
+      setSevensMessage(t("roomWaitingHostJudge"));
+      return;
+    }
+
+    const actorIndex = sevensPlayers.findIndex((player) => player.id === actorId);
+    if (actorIndex < 0) return;
+    const actor = sevensPlayers[actorIndex];
+    if (hasSevensPlayable(actor.hand, sevensTable)) {
       setSevensMessage(t("sevensYourTurn"));
       return;
     }
-    setSevensPassCount((prev) => [prev[0] + 1, prev[1]]);
-    setSevensTurn("cpu");
-    setSevensMessage(t("sevensCpuTurn"));
-  };
 
-  const resetDaifugo = useCallback(() => {
-    const shuffled = shuffleDaifugoDeck(createDaifugoDeck());
-    const player = sortDaifugoHand(shuffled.filter((_, i) => i % 2 === 0));
-    const cpu = sortDaifugoHand(shuffled.filter((_, i) => i % 2 === 1));
-    setDaifugoHands([player, cpu]);
-    setDaifugoTableCard(null);
-    setDaifugoTurn("player");
-    setDaifugoPassStreak(0);
-    setIsDaifugoOver(false);
-    setDaifugoMessage(t("daifugoYourTurn"));
-  }, [t]);
+    const nextPlayers = sevensPlayers.map((player) => ({ ...player, hand: [...player.hand] }));
+    const nextActor = nextPlayers[actorIndex];
+    nextActor.passCount += 1;
+    if (sevensPassLimit > 0 && nextActor.passCount > sevensPassLimit && nextActor.status === "playing") {
+      nextActor.status = "eliminated";
+      nextActor.rank = nextPlayers.filter((player) => typeof player.rank === "number").length + 1;
+    }
 
-  const onDaifugoPlay = (index: number, options?: { isRemote?: boolean; side?: "player" | "cpu" }) => {
+    const active = nextPlayers.filter((player) => player.status === "playing" && player.hand.length > 0);
+    if (active.length <= 1) {
+      const remaining = active[0];
+      if (remaining) {
+        remaining.status = "finished";
+        remaining.rank = nextPlayers.filter((player) => typeof player.rank === "number").length + 1;
+      }
+      const resultRows = [...nextPlayers]
+        .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+        .map((player) => ({
+          name: player.name,
+          rank: player.rank ?? 999,
+          cards: player.hand.length,
+          passCount: player.passCount,
+          status: player.status,
+        }));
+      setSevensPlayers(nextPlayers);
+      setSevensLastResult(resultRows);
+      setIsSevensOver(true);
+      setSevensSelectedCardIndex(null);
+      setSevensMessage(t("sevensDraw"));
+      return;
+    }
+
+    const nextTurn = findNextSevensTurnIndex(nextPlayers, actorIndex);
+    setSevensPlayers(nextPlayers);
+    setSevensSelectedCardIndex(null);
+    if (nextTurn === null) {
+      setIsSevensOver(true);
+      setSevensMessage(t("sevensDraw"));
+      return;
+    }
+    setSevensCurrentTurnIndex(nextTurn);
+    const nextPlayer = nextPlayers[nextTurn];
+    if (!nextPlayer) return;
+    if (nextPlayer.id === sevensLocalPlayerId) setSevensMessage(t("sevensYourTurn"));
+    else if (nextPlayer.isCpu) setSevensMessage(t("sevensCpuTurn"));
+    else setSevensMessage(`${nextPlayer.name} の手番`);
+  }, [
+    connectedRoomCode,
+    isSevensOver,
+    roomRole,
+    sevensCurrentTurnIndex,
+    sevensLocalPlayerId,
+    sevensPassLimit,
+    sevensPlayers,
+    sevensTable,
+    sendRoomEvent,
+    t,
+  ]);
+
+  useEffect(() => {
+    if (!pendingRemoteSevensAction) return;
+    if (roomRole !== "host") {
+      setPendingRemoteSevensAction(null);
+      return;
+    }
+    const actor = sevensPlayers.find((player) => player.id === pendingRemoteSevensAction.from);
+    const current = sevensPlayers[sevensCurrentTurnIndex];
+    if (!actor || !current || current.id !== actor.id) {
+      setPendingRemoteSevensAction(null);
+      return;
+    }
+    if (pendingRemoteSevensAction.action === "play") {
+      const handIndex = actor.hand.findIndex((card) => sevensCardKey(card) === pendingRemoteSevensAction.cardKey);
+      if (handIndex >= 0) {
+        onSevensPlay(handIndex, { actorId: actor.id, isRemote: true });
+      }
+    }
+    if (pendingRemoteSevensAction.action === "pass") {
+      onSevensPass({ actorId: actor.id, isRemote: true });
+    }
+    setPendingRemoteSevensAction(null);
+  }, [onSevensPass, onSevensPlay, pendingRemoteSevensAction, roomRole, sevensCurrentTurnIndex, sevensPlayers]);
+
+  const syncDaifugoCompatState = useCallback((players: DaifugoPlayer[], tableCards: DaifugoCard[], turnIndex: number) => {
+    const first = players[0]?.hand || [];
+    const second = players[1]?.hand || [];
+    setDaifugoHands([first, second]);
+    setDaifugoTableCard(tableCards[tableCards.length - 1] || null);
+    setDaifugoTurn(turnIndex === 0 ? "player" : "cpu");
+  }, []);
+
+  const nextDaifugoTurnIndex = useCallback((players: DaifugoPlayer[], from: number) => {
+    if (players.length <= 0) return 0;
+    for (let step = 1; step <= players.length; step += 1) {
+      const idx = (from + step) % players.length;
+      const player = players[idx];
+      if (!player) continue;
+      if (player.status === "playing" && player.handCount > 0) {
+        return idx;
+      }
+    }
+    return from;
+  }, []);
+
+  const makeDaifugoPreviewPlayers = useCallback((): DaifugoPlayer[] => {
+    if (connectedRoomCode) {
+      const maxPlayers = Math.max(2, Math.min(8, Math.floor(connectedRoomMaxPlayers || daifugoMaxPlayers || 8)));
+      const participants = roomParticipants.filter((participant) => participant.role === "host" || participant.role === "guest").slice(0, maxPlayers);
+      const seats = participants.map((participant, index) => ({
+        id: participant.id,
+        name: String(participant.name || "").trim() || `プレイヤー${index + 1}`,
+        isCpu: false,
+        hand: [],
+        handCount: 0,
+        status: "playing" as DaifugoPlayerStatus,
+        connected: true,
+      }));
+      while (seats.length < maxPlayers) {
+        seats.push({
+          id: `daifugo-open-${seats.length + 1}`,
+          name: "参加者を待っています",
+          isCpu: false,
+          hand: [],
+          handCount: 0,
+          status: "disconnected",
+          connected: false,
+        });
+      }
+      return seats;
+    }
+
+    const total = daifugoMode === "cpu"
+      ? Math.max(2, Math.min(8, 1 + Math.floor(daifugoCpuCount || 1)))
+      : Math.max(2, Math.min(8, Math.floor(daifugoMaxPlayers || 2)));
+    const localName = String(playerName || "").trim() || "YOU";
+    const seats: DaifugoPlayer[] = [
+      {
+        id: "daifugo-local",
+        name: localName,
+        isCpu: false,
+        hand: [],
+        handCount: 0,
+        status: "playing",
+        connected: true,
+      },
+    ];
+    for (let i = 1; i < total; i += 1) {
+      seats.push({
+        id: daifugoMode === "cpu" ? `daifugo-cpu-${i}` : `daifugo-local-${i}`,
+        name: daifugoMode === "cpu" ? `CPU ${i}` : `PLAYER ${i + 1}`,
+        isCpu: daifugoMode === "cpu",
+        hand: [],
+        handCount: 0,
+        status: "playing",
+        connected: true,
+      });
+    }
+    return seats;
+  }, [connectedRoomCode, connectedRoomMaxPlayers, daifugoCpuCount, daifugoMaxPlayers, daifugoMode, playerName, roomParticipants]);
+
+  const applyDaifugoPlay = useCallback((selectedIds: string[], options?: { isRemote?: boolean }) => {
     const isRemote = Boolean(options?.isRemote);
-    const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
-    if (isDaifugoOver || daifugoTurn !== side) return;
+    if (isDaifugoOver || daifugoPhase !== "playing") return;
+    const actor = daifugoPlayers[daifugoCurrentTurnIndex];
+    if (!actor || actor.status !== "playing") return;
 
     if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
@@ -10057,49 +12948,191 @@ export default function Home() {
         return;
       }
       if (roomRole === "guest") {
-        sendRoomEvent({ type: "daifugo-request-action", action: "play", index });
+        sendRoomEvent({ type: "daifugo-request-action", action: "play", cardIds: selectedIds });
         setDaifugoMessage(t("roomWaitingHostJudge"));
         return;
       }
     }
 
-    const handIndex = side === "player" ? 0 : 1;
-    const enemyIndex = side === "player" ? 1 : 0;
-    const playerHand = daifugoHands[handIndex];
-    const card = playerHand[index];
-    if (!card) return;
-    if (daifugoTableCard && daifugoPower(card.rank) <= daifugoPower(daifugoTableCard.rank)) {
-      setDaifugoMessage(t("daifugoNeedHigher"));
+    const cardSet = new Set(selectedIds);
+    const selectedCards = actor.hand.filter((card) => cardSet.has(card.id));
+    const selectedCombo = analyzeDaifugoCombo(selectedCards);
+    const ruleResult = canPlayDaifugoCombo(selectedCombo, daifugoTableCombo, { revolution: false });
+    if (!ruleResult.ok) {
+      setDaifugoMessage(ruleResult.reason || "出せない組み合わせです。");
       return;
     }
 
-    const nextPlayer = playerHand.filter((_, i) => i !== index);
-    const nextHands: [DaifugoCard[], DaifugoCard[]] =
-      side === "player" ? [nextPlayer, daifugoHands[1]] : [daifugoHands[0], nextPlayer];
-    setDaifugoHands(nextHands);
-    setDaifugoTableCard(card);
+    let nextPlayers = daifugoPlayers.map((player) => ({ ...player, hand: [...player.hand] }));
+    const actorBefore = nextPlayers[daifugoCurrentTurnIndex];
+    if (!actorBefore) return;
+    const nextHand = actorBefore.hand.filter((card) => !cardSet.has(card.id));
+    const finishedCountBefore = nextPlayers.filter((player) => typeof player.rank === "number").length;
+    const nextRank = nextHand.length === 0 ? finishedCountBefore + 1 : undefined;
+    nextPlayers[daifugoCurrentTurnIndex] = {
+      ...actorBefore,
+      hand: sortDaifugoHand(nextHand),
+      handCount: nextHand.length,
+      status: nextHand.length === 0 ? "finished" : "playing",
+      rank: nextRank,
+      className: nextRank ? daifugoClassFromRank(nextRank, nextPlayers.length) : actorBefore.className,
+    };
+
+    const selectedSorted = sortDaifugoHand(selectedCards);
+    setDaifugoTableCards(selectedSorted);
+    setDaifugoTableCombo(selectedCombo);
     setDaifugoPassStreak(0);
+    setDaifugoSelectedCardIds([]);
+    setDaifugoLastPlayedBy(actor.id);
+    enqueueDaifugoNotification(`${daifugoComboName(selectedCombo.kind)}!`, 3);
 
-    if (nextPlayer.length === 0) {
-      setIsDaifugoOver(true);
-      setDaifugoMessage(side === "player" ? t("daifugoPlayerWin") : t("daifugoCpuWin"));
+    if (selectedSorted.some((card) => card.rank === 8) && daifugoRules.eightCut) {
+      nextPlayers = nextPlayers.map((player) => (player.status === "finished" ? player : { ...player, status: "playing" }));
+      setDaifugoTableCards([]);
+      setDaifugoTableCombo({ valid: false });
+      setDaifugoMessage("8切り! 続けてあなたの手番です。");
+      enqueueDaifugoNotification("8切り!", 3);
+      syncDaifugoCompatState(nextPlayers, [], daifugoCurrentTurnIndex);
+      setDaifugoPlayers(nextPlayers);
       return;
     }
 
-    const nextTurn = side === "player" ? "cpu" : "player";
-    setDaifugoTurn(nextTurn);
-    if (connectedRoomCode) {
-      const nextIsYou = daifugoRoomPlayer ? daifugoRoomPlayer === nextTurn : false;
-      setDaifugoMessage(roomTurnText(nextIsYou));
-    } else {
-      setDaifugoMessage(nextTurn === "cpu" ? t("daifugoCpuTurn") : t("daifugoYourTurn"));
+    const unfinished = nextPlayers.filter((player) => player.status !== "finished" && player.handCount > 0);
+    if (unfinished.length <= 1) {
+      const finalPlayers = nextPlayers.map((player) => {
+        if (typeof player.rank === "number") return player;
+        const rank = nextPlayers.filter((item) => typeof item.rank === "number").length + 1;
+        return {
+          ...player,
+          rank,
+          className: daifugoClassFromRank(rank, nextPlayers.length),
+          status: "finished" as DaifugoPlayerStatus,
+        };
+      });
+      const resultRows = [...finalPlayers]
+        .sort((a, b) => Number(a.rank || 99) - Number(b.rank || 99))
+        .map((player) => ({
+          rank: Number(player.rank || 0),
+          name: player.name,
+          className: player.className || "heimin",
+          cards: player.handCount,
+          isCpu: player.isCpu,
+        }));
+      setDaifugoRoundResult(resultRows);
+      setDaifugoPlayers(finalPlayers);
+      setIsDaifugoOver(true);
+      setDaifugoPhase("finished");
+      setDaifugoMessage(`${actor.name} が上がりました。ゲーム終了です。`);
+      enqueueDaifugoNotification(`${actor.name} ${nextRank ? `${nextRank}位!` : "上がり!"}`, 5);
+      const localRank = Number(finalPlayers.find((player) => player.id === daifugoLocalPlayerId)?.rank || 0);
+      if (localRank === 1) {
+        triggerDaifugoWinBurst();
+        enqueueDaifugoNotification("1位!", 5);
+        enqueueDaifugoNotification("大富豪!", 5);
+      }
+      syncDaifugoCompatState(finalPlayers, selectedSorted, daifugoCurrentTurnIndex);
+      return;
     }
-  };
 
-  const onDaifugoPass = (options?: { isRemote?: boolean; side?: "player" | "cpu" }) => {
+    const nextTurn = nextDaifugoTurnIndex(nextPlayers, daifugoCurrentTurnIndex);
+    setDaifugoCurrentTurnIndex(nextTurn);
+    setDaifugoPlayers(nextPlayers);
+    setDaifugoMessage(`${nextPlayers[nextTurn]?.name || "-"} の手番`);
+    syncDaifugoCompatState(nextPlayers, selectedSorted, nextTurn);
+  }, [
+    canOperateDaifugoNow,
+    connectedRoomCode,
+    daifugoCurrentTurnIndex,
+    daifugoPhase,
+    daifugoPlayers,
+    daifugoRules.eightCut,
+    daifugoTableCombo,
+    isDaifugoOver,
+    nextDaifugoTurnIndex,
+    roomRole,
+    sendRoomEvent,
+    syncDaifugoCompatState,
+    t,
+    daifugoLocalPlayerId,
+    enqueueDaifugoNotification,
+    triggerDaifugoWinBurst,
+  ]);
+
+  const resetDaifugo = useCallback(() => {
+    const preview = makeDaifugoPreviewPlayers();
+    const activePlayers = preview.filter((player) => player.status !== "disconnected");
+    if (activePlayers.length < 2) {
+      setDaifugoPlayers(preview);
+      setDaifugoMessage("2人以上で開始できます。");
+      return;
+    }
+
+    const deck = shuffleDaifugoDeck(createDaifugoDeck()).filter((card) => (daifugoRules.joker ? true : card.suit !== "J"));
+    const dealt = activePlayers.map((player) => ({ ...player, hand: [] as DaifugoCard[], handCount: 0, status: "playing" as DaifugoPlayerStatus, rank: undefined, className: undefined }));
+    deck.forEach((card, index) => {
+      const target = dealt[index % dealt.length];
+      if (!target) return;
+      target.hand.push(card);
+    });
+
+    const withHands = dealt.map((player) => {
+      const hand = sortDaifugoHand(player.hand);
+      return {
+        ...player,
+        hand,
+        handCount: hand.length,
+      };
+    });
+
+    const mergedPlayers = preview.map((slot) => {
+      const found = withHands.find((player) => player.id === slot.id);
+      if (!found) return { ...slot, hand: [], handCount: 0, status: slot.status };
+      return found;
+    });
+
+    setDaifugoPlayers(mergedPlayers);
+    setDaifugoCurrentTurnIndex(0);
+    setDaifugoTableCards([]);
+    setDaifugoTableCombo({ valid: false });
+    setDaifugoSelectedCardIds([]);
+    setDaifugoPassStreak(0);
+    setDaifugoLastPlayedBy(null);
+    clearDaifugoNotificationQueue();
+    if (daifugoWinBurstTimerRef.current !== null) {
+      window.clearTimeout(daifugoWinBurstTimerRef.current);
+      daifugoWinBurstTimerRef.current = null;
+    }
+    setShowDaifugoWinBurst(false);
+    setDaifugoRoundResult([]);
+    setDaifugoPhase("playing");
+    setIsDaifugoOver(false);
+    setDaifugoMessage(`${mergedPlayers[0]?.name || "YOU"} の手番`);
+    syncDaifugoCompatState(mergedPlayers, [], 0);
+  }, [clearDaifugoNotificationQueue, daifugoRules.joker, makeDaifugoPreviewPlayers, syncDaifugoCompatState]);
+
+  function onDaifugoPlay(index?: number, options?: { isRemote?: boolean; side?: "player" | "cpu"; cardIds?: string[] }) {
+    const fromOptions = Array.isArray(options?.cardIds) ? options?.cardIds || [] : [];
+    if (fromOptions.length > 0) {
+      applyDaifugoPlay(fromOptions, { isRemote: options?.isRemote });
+      return;
+    }
+    const actor = daifugoPlayers[daifugoCurrentTurnIndex];
+    if (!actor) return;
+    if (Number.isInteger(index)) {
+      const card = actor.hand[index as number];
+      if (!card) return;
+      applyDaifugoPlay([card.id], { isRemote: options?.isRemote });
+      return;
+    }
+    applyDaifugoPlay(daifugoSelectedCardIds, { isRemote: options?.isRemote });
+  }
+
+  function onDaifugoPass(options?: { isRemote?: boolean; side?: "player" | "cpu" }) {
     const isRemote = Boolean(options?.isRemote);
-    const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
-    if (isDaifugoOver || daifugoTurn !== side) return;
+    if (isDaifugoOver || daifugoPhase !== "playing") return;
+    if (daifugoTableCards.length <= 0) return;
+    const actor = daifugoPlayers[daifugoCurrentTurnIndex];
+    if (!actor) return;
 
     if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
@@ -10117,19 +13150,43 @@ export default function Home() {
       }
     }
 
-    if (!daifugoTableCard) return;
-    const streak = daifugoPassStreak + 1;
-    setDaifugoPassStreak(streak);
-    setDaifugoMessage(tf("daifugoPassInfo", { who: side === "player" ? "YOU" : "CPU" }));
-    if (streak >= 2) {
-      setDaifugoTableCard(null);
+    const nextPlayers = daifugoPlayers.map((player, index) => {
+      if (index !== daifugoCurrentTurnIndex) return { ...player };
+      return {
+        ...player,
+        status: player.handCount > 0 ? "passed" as DaifugoPlayerStatus : player.status,
+      };
+    });
+    const waitingPlayers = nextPlayers.filter((player) => player.status === "playing" && player.handCount > 0);
+    const shouldClear = waitingPlayers.length <= 1;
+
+    if (shouldClear) {
+      const cleared = nextPlayers.map((player) => {
+        if (player.status === "finished" || player.status === "disconnected") return player;
+        return { ...player, status: "playing" as DaifugoPlayerStatus };
+      });
+      const baseIndex = Math.max(0, cleared.findIndex((player) => player.id === (daifugoLastPlayedBy || actor.id)));
+      setDaifugoPlayers(cleared);
+      setDaifugoCurrentTurnIndex(baseIndex);
+      setDaifugoTableCards([]);
+      setDaifugoTableCombo({ valid: false });
       setDaifugoPassStreak(0);
-      setDaifugoTurn(side);
-      setDaifugoMessage(t("daifugoRoundClear"));
+      setDaifugoSelectedCardIds([]);
+      setDaifugoMessage("場が流れました");
+      enqueueDaifugoNotification("場が流れました", 2);
+      syncDaifugoCompatState(cleared, [], baseIndex);
       return;
     }
-    setDaifugoTurn(side === "player" ? "cpu" : "player");
-  };
+
+    const nextTurn = nextDaifugoTurnIndex(nextPlayers, daifugoCurrentTurnIndex);
+    setDaifugoPlayers(nextPlayers);
+    setDaifugoCurrentTurnIndex(nextTurn);
+    setDaifugoPassStreak((prev) => prev + 1);
+    setDaifugoMessage(`${actor.name} がPASS`);
+    enqueueDaifugoNotification("PASS", 1);
+    setDaifugoSelectedCardIds([]);
+    syncDaifugoCompatState(nextPlayers, daifugoTableCards, nextTurn);
+  }
 
   const clearFourPanelCanvas = useCallback((options?: { recordUndo?: boolean }) => {
     const canvas = fourPanelCanvasRef.current;
@@ -10500,6 +13557,19 @@ export default function Home() {
     setFitPuzzleMessage(tf("fitPuzzleProgress", { moves: nextMoves }));
   };
 
+  const pushMahjongLog = useCallback((text: string, tone: "normal" | "warn" | "success" = "normal") => {
+    const timestamp = new Date().toLocaleTimeString("ja-JP", { hour12: false });
+    setMahjongLogEvents((prev) => {
+      const next: MahjongLogEvent = {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        ts: timestamp,
+        text,
+        tone,
+      };
+      return [next, ...prev].slice(0, 180);
+    });
+  }, []);
+
   const resetMahjong = useCallback(() => {
     const start = createMahjongStartBoard();
     setMahjongBoard(start.hand);
@@ -10517,7 +13587,8 @@ export default function Home() {
     setMahjongWinSummary(null);
     setIsMahjongOver(false);
     setMahjongMessage(t("mahjongHint"));
-  }, [t]);
+    pushMahjongLog("新しい局を開始しました。", "normal");
+  }, [pushMahjongLog, t]);
 
   const onMahjongHint = () => {
     if (isMahjongOver) return;
@@ -10526,10 +13597,12 @@ export default function Home() {
       const waits = mahjongFindWinningTiles(mahjongBoard);
       if (waits.length === 0) {
         setMahjongMessage(t("mahjongNoHint"));
+        pushMahjongLog("ヒント: 有効牌なし", "warn");
         return;
       }
       const label = waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
       setMahjongMessage(tf("mahjongHintLine", { a: label }));
+      pushMahjongLog(`ヒント: 待ち ${label}`);
       return;
     }
 
@@ -10548,6 +13621,7 @@ export default function Home() {
     const best = suggestions.find((item) => item.waits.length > 0 && item.outs > 0);
     if (!best) {
       setMahjongMessage(t("mahjongRemovedAndShuffle"));
+      pushMahjongLog("ヒント: テンパイ候補なし", "warn");
       return;
     }
     const waitLabel = best.waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
@@ -10556,6 +13630,7 @@ export default function Home() {
       waits: waitLabel,
       outs: best.outs,
     }));
+    pushMahjongLog(`ヒント: ${mahjongTileLabel(best.tile)}切り -> ${waitLabel}`);
   };
 
   const onMahjongShuffle = () => {
@@ -10568,6 +13643,7 @@ export default function Home() {
       setMahjongHonba((prev) => prev + 1);
       setIsMahjongOver(true);
       setMahjongMessage(t("mahjongRyukyoku"));
+      pushMahjongLog("流局: 山牌が尽きました。", "warn");
       return;
     }
 
@@ -10583,10 +13659,12 @@ export default function Home() {
 
     if (mahjongIsWinningHand(nextHand)) {
       setMahjongMessage(tf("mahjongWinReady", { tile: mahjongTileLabel(drawTile) }));
+      pushMahjongLog(`ツモ: ${mahjongTileLabel(drawTile)}。和了可能です。`, "success");
       return;
     }
 
     setMahjongMessage(tf("mahjongDrawn", { tile: mahjongTileLabel(drawTile) }));
+    pushMahjongLog(`ツモ: ${mahjongTileLabel(drawTile)}`);
   };
 
   const onMahjongTsumo = () => {
@@ -10606,12 +13684,41 @@ export default function Home() {
     setMahjongKyotaku(0);
     setIsMahjongOver(true);
     setMahjongMessage(t("mahjongClear"));
+    pushMahjongLog("ツモ和了。", "success");
   };
 
   const onMahjongApplyScore = () => {
     if (!mahjongWinSummary) return;
     setScore(Math.max(0, Math.floor(mahjongWinSummary.point)));
     setMessage(t("mahjongAppliedScore"));
+    pushMahjongLog("スコアへ反映しました。", "success");
+  };
+
+  const onMahjongSortHand = () => {
+    if (mahjongBoard.length <= 0) return;
+    setMahjongBoard((prev) => sortMahjongTiles(prev));
+    setMahjongSelected(null);
+    pushMahjongLog("手牌を並び替えました。");
+  };
+
+  const onMahjongDeclareRiichi = () => {
+    if (isMahjongOver) return;
+    if (mahjongBoard.length !== 14) {
+      setMahjongMessage(t("mahjongNeedDrawFirst"));
+      return;
+    }
+    if (mahjongRiichiTileIndex !== null) {
+      setMahjongMessage(`${t("mahjongRiichi")}: ON`);
+      return;
+    }
+    setMahjongKyotaku(1);
+    setMahjongMessage(`${t("mahjongRiichi")}: 宣言`);
+    pushMahjongLog("リーチを宣言しました。", "success");
+  };
+
+  const onMahjongPass = () => {
+    setMahjongMessage("パスしました。");
+    pushMahjongLog("パス", "normal");
   };
 
   const onMahjongTileClick = (index: number) => {
@@ -10642,12 +13749,14 @@ export default function Home() {
     setMahjongSelected(null);
     setMahjongLastDraw(null);
     setMahjongWinSummary(null);
+    pushMahjongLog(`打牌: ${mahjongTileLabel(discardTile)}`);
 
     if (mahjongWall.length === 0) {
       setMahjongSelected(null);
       setMahjongHonba((prev) => prev + 1);
       setIsMahjongOver(true);
       setMahjongMessage(t("mahjongRyukyoku"));
+      pushMahjongLog("流局: 山牌が尽きました。", "warn");
       return;
     }
 
@@ -10660,115 +13769,917 @@ export default function Home() {
     if (mahjongRiichiTileIndex === null) {
       setMahjongRiichiTileIndex(nextRiver.length - 1);
       setMahjongKyotaku(1);
+      pushMahjongLog("リーチ宣言", "success");
     }
 
     const waitLabel = waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
     setMahjongMessage(tf("mahjongHintLine", { a: waitLabel }));
   };
 
-  const resetPoker = useCallback(() => {
-    const bank = normalizeCasinoBankroll();
-    const nextBet = clampCasinoBet(pokerBet, bank);
+  useEffect(() => {
+    if (!mahjongAutoWinEnabled) return;
+    if (isMahjongOver) return;
+    if (mahjongBoard.length !== 14) return;
+    if (!mahjongIsWinningHand(mahjongBoard)) return;
+    onMahjongTsumo();
+  }, [isMahjongOver, mahjongAutoWinEnabled, mahjongBoard, onMahjongTsumo]);
+
+  useEffect(() => {
+    if (!gameStarted.mahjong) return;
+    if (isMahjongOver) return;
+    if (mahjongBoard.length !== 13) return;
+
+    // Auto-draw at turn start so discard is available without pressing the draw button.
+    const timerId = window.setTimeout(() => {
+      onMahjongShuffle();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [gameStarted.mahjong, isMahjongOver, mahjongBoard.length, onMahjongShuffle]);
+
+  const buildTournamentPlayers = useCallback((settings: TournamentSettings) => {
+    const total = Math.max(2, Math.min(9, settings.cpuCount + 1));
+    const layout = getPokerSeatLayout(total);
+    const next: TournamentPlayer[] = [];
+    for (let i = 0; i < total; i += 1) {
+      const id = i === 0 ? "p1" : `cpu-${i}`;
+      next.push({
+        id,
+        name: i === 0 ? "guest" : `CPU ${i}`,
+        chips: settings.startingChips,
+        currentBet: 0,
+        totalBet: 0,
+        currentStreetBet: 0,
+        totalHandBet: 0,
+        status: "active",
+        seatIndex: layout[i] ?? i,
+        isDealer: false,
+        isSmallBlind: false,
+        isBigBlind: false,
+        isCpu: i !== 0,
+      });
+    }
+    return next;
+  }, []);
+
+  const syncPokerLegacyHands = useCallback((players: TournamentPlayer[], holeCardsById: Record<string, PokerCard[]>) => {
+    setPokerPlayerHand(holeCardsById.p1 || []);
+    const firstCpu = players.find((player) => player.isCpu);
+    setPokerCpuHand(firstCpu ? (holeCardsById[firstCpu.id] || []) : []);
+  }, []);
+
+  const pickNextAliveSeat = useCallback((players: TournamentPlayer[], fromSeat: number) => {
+    if (players.length <= 0) return null;
+    for (let step = 1; step <= players.length; step += 1) {
+      const target = (fromSeat + step + 9) % 9;
+      const found = players.find((player) => player.seatIndex === target && isPokerPlayerAlive(player));
+      if (found) return found.seatIndex;
+    }
+    return null;
+  }, []);
+
+  const pickNextActionSeat = useCallback((players: TournamentPlayer[], fromSeat: number) => {
+    if (players.length <= 0) return null;
+    for (let step = 1; step <= players.length; step += 1) {
+      const target = (fromSeat + step + 9) % 9;
+      const found = players.find((player) => player.seatIndex === target && isPokerPlayerActionable(player));
+      if (found) return found.seatIndex;
+    }
+    return null;
+  }, []);
+
+  const startPokerHand = useCallback((
+    sourcePlayers: TournamentPlayer[],
+    options?: {
+      dealerSeat?: number;
+      keepHandCount?: boolean;
+      keepLevel?: boolean;
+      blindStructureOverride?: BlindLevel[];
+      blindLevelIndexOverride?: number;
+    },
+  ) => {
+    const alivePlayers = sourcePlayers.filter((player) => isPokerPlayerAlive(player));
+    if (alivePlayers.length <= 1) {
+      const winner = alivePlayers[0] || sourcePlayers.find((player) => isPokerPlayerAlive(player));
+      setPokerTournamentStatus("finished");
+      setPokerNormalSessionStatus("idle");
+      setPokerPhase("tournamentResult");
+      if (winner) {
+        setPokerMessage(`TOURNAMENT WINNER: ${winner.name}`);
+      }
+      return;
+    }
+
+    const structure = options?.blindStructureOverride || pokerBlindStructure;
+    const levelIndex = typeof options?.blindLevelIndexOverride === "number"
+      ? options.blindLevelIndexOverride
+      : (options?.keepLevel ? pokerBlindLevelIndex : 0);
+    const blind = structure[levelIndex] || structure[0] || { level: 1, smallBlind: 10, bigBlind: 20, ante: 0, hands: 8 };
+    const nextHandCount = pokerHandCount + 1;
+
+    const dealerSeat = (() => {
+      const explicit = options?.dealerSeat;
+      if (typeof explicit === "number") return explicit;
+      const candidate = pickNextAliveSeat(sourcePlayers, pokerDealerSeat);
+      return candidate ?? sourcePlayers[0]?.seatIndex ?? 0;
+    })();
+
+    const players: TournamentPlayer[] = sourcePlayers.map((player) => ({
+      ...player,
+      currentBet: 0,
+      totalBet: 0,
+      currentStreetBet: 0,
+      totalHandBet: 0,
+      isDealer: false,
+      isSmallBlind: false,
+      isBigBlind: false,
+      status: (player.status === "eliminated" ? "eliminated" : "active") as PokerPlayerStatus,
+    }));
+
     const deck = shufflePokerDeck(createPokerDeck());
-    const player = deck.slice(0, 2);
-    const cpu = deck.slice(2, 4);
-    const rest = deck.slice(4);
-    setPokerBet(nextBet);
-    setPokerWager(0);
-    setPokerPlayerHand(player);
-    setPokerCpuHand(cpu);
-    setPokerCommunity([]);
-    setPokerDeck(rest);
-    setPokerHold([false, false]);
-    setPokerPhase("betting");
-    setPokerMessage(`${t("pokerHint")} (BET ${nextBet})`);
-    setPokerPlayerEval(null);
-    setPokerCpuEval(null);
-    setPokerOutcome("pending");
-  }, [normalizeCasinoBankroll, pokerBet, t]);
-
-  const onPokerDraw = () => {
-    if (pokerPhase === "showdown") return;
-
-    if (pokerPhase === "preflop") {
-      const rest = [...pokerDeck];
-      const flop = [rest.shift(), rest.shift(), rest.shift()].filter(Boolean) as PokerCard[];
-      setPokerDeck(rest);
-      setPokerCommunity(flop);
-      setPokerPhase("flop");
-      setPokerMessage("フロップ: 次へでターンカードを公開します。");
-      return;
+    const holeCardsById: Record<string, PokerCard[]> = {};
+    let cursor = 0;
+    const dealingTargets = players.filter((player) => isPokerPlayerAlive(player));
+    dealingTargets.forEach((player) => {
+      holeCardsById[player.id] = [];
+    });
+    for (let round = 0; round < 2; round += 1) {
+      dealingTargets.forEach((player) => {
+        const card = deck[cursor];
+        cursor += 1;
+        if (card) {
+          holeCardsById[player.id].push(card);
+        }
+      });
     }
 
-    if (pokerPhase === "flop") {
-      const rest = [...pokerDeck];
-      const turn = rest.shift();
-      if (!turn) return;
-      setPokerDeck(rest);
-      setPokerCommunity((prev) => [...prev, turn]);
-      setPokerPhase("turn");
-      setPokerMessage("ターン: 次へでリバーカードを公開します。");
-      return;
-    }
-
-    if (pokerPhase === "turn") {
-      const rest = [...pokerDeck];
-      const river = rest.shift();
-      if (!river) return;
-      setPokerDeck(rest);
-      setPokerCommunity((prev) => [...prev, river]);
-      setPokerPhase("river");
-      setPokerMessage("リバー: 次へでショーダウンします。");
-      return;
-    }
-
-    if (pokerPhase === "river") {
-      const playerEval = evaluatePokerBestOfSeven([...pokerPlayerHand, ...pokerCommunity]);
-      const cpuEval = evaluatePokerBestOfSeven([...pokerCpuHand, ...pokerCommunity]);
-      const cmp = comparePokerEval(playerEval, cpuEval);
-
-      setPokerPhase("showdown");
-      setPokerPlayerEval(playerEval);
-      setPokerCpuEval(cpuEval);
-
-      if (cmp > 0) {
-        setCasinoBankroll((prev) => prev + pokerWager * 2);
-        triggerCasinoWinBurst();
-        setPokerOutcome("win");
-        setPokerMessage(`${t("pokerResultWin")} (+${pokerWager})`);
-        return;
+    let potTotal = 0;
+    const commit = (seat: number, forcedAmount: number) => {
+      const index = players.findIndex((player) => player.seatIndex === seat);
+      if (index < 0) return 0;
+      const player = players[index];
+      if (!player || !isPokerPlayerAlive(player)) return 0;
+      const paid = Math.max(0, Math.min(player.chips, Math.floor(forcedAmount)));
+      player.chips -= paid;
+      player.currentStreetBet += paid;
+      player.totalHandBet += paid;
+      player.currentBet = player.currentStreetBet;
+      player.totalBet = player.totalHandBet;
+      potTotal += paid;
+      if (player.chips <= 0 && player.status !== "eliminated") {
+        player.status = "allIn";
       }
-      if (cmp < 0) {
-        setPokerOutcome("lose");
-        setPokerMessage(`${t("pokerResultLose")} (-${pokerWager})`);
-        return;
-      }
-      setCasinoBankroll((prev) => prev + pokerWager);
-      setPokerOutcome("draw");
-      setPokerMessage(`${t("pokerResultDraw")} (+${pokerWager})`);
-      return;
+      return paid;
+    };
+
+    players.forEach((player) => {
+      if (!isPokerPlayerAlive(player) || blind.ante <= 0) return;
+      commit(player.seatIndex, blind.ante);
+    });
+
+    const dealerIndex = players.findIndex((player) => player.seatIndex === dealerSeat && isPokerPlayerAlive(player));
+    if (dealerIndex >= 0) {
+      players[dealerIndex].isDealer = true;
+    }
+    const sbSeat = pickNextAliveSeat(players, dealerSeat);
+    const bbSeat = sbSeat == null ? null : pickNextAliveSeat(players, sbSeat);
+    if (sbSeat != null) {
+      const index = players.findIndex((player) => player.seatIndex === sbSeat);
+      if (index >= 0) players[index].isSmallBlind = true;
+      commit(sbSeat, blind.smallBlind);
+    }
+    if (bbSeat != null) {
+      const index = players.findIndex((player) => player.seatIndex === bbSeat);
+      if (index >= 0) players[index].isBigBlind = true;
+      commit(bbSeat, blind.bigBlind);
     }
 
-    if (pokerPhase !== "betting") return;
-    const bank = normalizeCasinoBankroll();
-    if (bank < MIN_CASINO_BET) {
-      setPokerMessage("チップが不足しています。");
-      return;
-    }
+    const openingSeat = bbSeat == null ? pickNextActionSeat(players, dealerSeat) : pickNextActionSeat(players, bbSeat);
 
-    const wager = clampCasinoBet(pokerBet, bank);
-
-    setCasinoBankroll(Math.max(0, bank - wager));
-    setPokerBet(wager);
-    setPokerWager(wager);
+    setPokerHandCount(nextHandCount);
+    setPokerPlayers(players);
+    setPokerHoleCardsByPlayerId(holeCardsById);
     setPokerCommunity([]);
-    setPokerHold([false, false]);
-    setPokerPlayerEval(null);
-    setPokerCpuEval(null);
-    setPokerOutcome("pending");
+    setPokerDeck(deck);
+    setPokerDeckCursor(cursor);
+    setPokerDealerSeat(dealerSeat);
+    setPokerCurrentTurnSeat(openingSeat);
+    setPokerCurrentHandBlinds({
+      level: blind.level,
+      smallBlind: blind.smallBlind,
+      bigBlind: blind.bigBlind,
+      ante: Math.floor(blind.bigBlind * 0.1),
+    });
+    setPokerBettingRound({
+      phase: "preflop",
+      currentHighestBet: blind.bigBlind,
+      lastRaiseSize: blind.bigBlind,
+      minimumBet: blind.bigBlind,
+    });
+    setPokerCurrentStreetBet(blind.bigBlind);
+    setPokerMinRaiseTo(blind.bigBlind * 2);
+    setPokerRaiseTo(blind.bigBlind * 2);
+    setPokerPots([{ id: "main", amount: potTotal, eligiblePlayerIds: players.filter((player) => isPokerPlayerInHand(player)).map((player) => player.id) }]);
+    setPokerActedSeats([]);
     setPokerPhase("preflop");
-    setPokerMessage("プリフロップ: 次へでフロップを公開します。");
-  };
+    setPokerTournamentStatus("running");
+    setPokerNormalSessionStatus("idle");
+    setPokerMessage(`PREFLOP: ${openingSeat == null ? "進行待ち" : `${players.find((row) => row.seatIndex === openingSeat)?.name || "-"} のアクション待ち`}`);
+    setPokerPlayerEval(null);
+    setPokerCpuEval(null);
+    setPokerOutcome("pending");
+    setPokerWager(0);
+    setPokerHold([false, false]);
+    setPokerHandResult(null);
+    setPokerActionNotice(null);
+    syncPokerLegacyHands(players, holeCardsById);
+  }, [pickNextActionSeat, pickNextAliveSeat, pokerBlindLevelIndex, pokerBlindStructure, pokerDealerSeat, pokerHandCount, syncPokerLegacyHands]);
+
+  const startPokerNormalHand = useCallback((
+    sourcePlayers: TournamentPlayer[],
+    options?: { dealerSeat?: number },
+  ) => {
+    const blind = {
+      level: 1,
+      smallBlind: Math.max(1, Math.floor(pokerSettings.normalSmallBlind || 10)),
+      bigBlind: Math.max(2, Math.floor(pokerSettings.normalBigBlind || 20)),
+      ante: 0,
+    };
+    if (blind.bigBlind < blind.smallBlind) {
+      blind.bigBlind = blind.smallBlind;
+    }
+
+    const players = sourcePlayers.map((player) => ({
+      ...player,
+      chips: player.chips > 0 ? player.chips : pokerSettings.startingChips,
+      currentBet: 0,
+      totalBet: 0,
+      currentStreetBet: 0,
+      totalHandBet: 0,
+      status: "active" as PokerPlayerStatus,
+      isDealer: false,
+      isSmallBlind: false,
+      isBigBlind: false,
+    }));
+
+    const dealerSeat = (() => {
+      const explicit = options?.dealerSeat;
+      if (typeof explicit === "number") return explicit;
+      const candidate = pickNextAliveSeat(players, pokerDealerSeat);
+      return candidate ?? players[0]?.seatIndex ?? 0;
+    })();
+
+    const deck = shufflePokerDeck(createPokerDeck());
+    const holeCardsById: Record<string, PokerCard[]> = {};
+    let cursor = 0;
+    players.forEach((player) => {
+      holeCardsById[player.id] = [];
+    });
+    for (let round = 0; round < 2; round += 1) {
+      players.forEach((player) => {
+        const card = deck[cursor];
+        cursor += 1;
+        if (card) {
+          holeCardsById[player.id].push(card);
+        }
+      });
+    }
+
+    const commit = (seat: number, forcedAmount: number) => {
+      const index = players.findIndex((player) => player.seatIndex === seat);
+      if (index < 0) return 0;
+      const player = players[index];
+      if (!player) return 0;
+      const paid = Math.max(0, Math.min(player.chips, Math.floor(forcedAmount)));
+      player.chips -= paid;
+      player.currentStreetBet += paid;
+      player.totalHandBet += paid;
+      player.currentBet = player.currentStreetBet;
+      player.totalBet = player.totalHandBet;
+      if (player.chips <= 0) {
+        player.status = "allIn";
+      }
+      return paid;
+    };
+
+    const dealerIndex = players.findIndex((player) => player.seatIndex === dealerSeat);
+    if (dealerIndex >= 0) {
+      players[dealerIndex].isDealer = true;
+    }
+    const sbSeat = pickNextAliveSeat(players, dealerSeat);
+    const bbSeat = sbSeat == null ? null : pickNextAliveSeat(players, sbSeat);
+    let potTotal = 0;
+    if (sbSeat != null) {
+      const index = players.findIndex((player) => player.seatIndex === sbSeat);
+      if (index >= 0) players[index].isSmallBlind = true;
+      potTotal += commit(sbSeat, blind.smallBlind);
+    }
+    if (bbSeat != null) {
+      const index = players.findIndex((player) => player.seatIndex === bbSeat);
+      if (index >= 0) players[index].isBigBlind = true;
+      potTotal += commit(bbSeat, blind.bigBlind);
+    }
+
+    const openingSeat = bbSeat == null ? pickNextActionSeat(players, dealerSeat) : pickNextActionSeat(players, bbSeat);
+
+    setPokerHandCount((prev) => prev + 1);
+    setPokerNormalRecord((prev) => ({ ...prev, rounds: prev.rounds + 1 }));
+    setPokerPlayers(players);
+    setPokerHoleCardsByPlayerId(holeCardsById);
+    setPokerCommunity([]);
+    setPokerDeck(deck);
+    setPokerDeckCursor(cursor);
+    setPokerDealerSeat(dealerSeat);
+    setPokerCurrentTurnSeat(openingSeat);
+    setPokerCurrentHandBlinds(blind);
+    setPokerBettingRound({
+      phase: "preflop",
+      currentHighestBet: blind.bigBlind,
+      lastRaiseSize: blind.bigBlind,
+      minimumBet: blind.bigBlind,
+    });
+    setPokerCurrentStreetBet(blind.bigBlind);
+    setPokerMinRaiseTo(blind.bigBlind * 2);
+    setPokerRaiseTo(blind.bigBlind * 2);
+    setPokerPots([{ id: "main", amount: potTotal, eligiblePlayerIds: players.map((player) => player.id) }]);
+    setPokerActedSeats([]);
+    setPokerPhase("preflop");
+    setPokerTournamentStatus("idle");
+    setPokerNormalSessionStatus("running");
+    setPokerMessage(`PREFLOP: ${openingSeat == null ? "進行待ち" : `${players.find((row) => row.seatIndex === openingSeat)?.name || "-"} のアクション待ち`}`);
+    setPokerPlayerEval(null);
+    setPokerCpuEval(null);
+    setPokerOutcome("pending");
+    setPokerHandResult(null);
+    setPokerActionNotice(null);
+    syncPokerLegacyHands(players, holeCardsById);
+  }, [pickNextActionSeat, pickNextAliveSeat, pokerDealerSeat, pokerSettings.normalBigBlind, pokerSettings.normalSmallBlind, pokerSettings.startingChips, syncPokerLegacyHands]);
+
+  const resetPoker = useCallback(() => {
+    const structure = buildBlindStructure(pokerSettings.blindSpeed);
+    const players = buildTournamentPlayers(pokerSettings);
+    setPokerBlindStructure(structure);
+    setPokerBlindLevelIndex(0);
+    setPokerHandsUntilLevelUp(structure[0]?.hands || 8);
+    setPokerHandCount(0);
+    setPokerPlayers(players);
+    setPokerTournamentStatus("idle");
+    setPokerNormalSessionStatus("idle");
+    setPokerNormalRecord({ playerWins: 0, cpuWins: 0, draws: 0, rounds: 0 });
+    setPokerPhase("waiting");
+    setPokerMessage(pokerSettings.gameMode === "tournament" ? "大会開始待ち" : "ゲーム開始待ち");
+    setPokerCommunity([]);
+    setPokerDeck([]);
+    setPokerDeckCursor(0);
+    setPokerCurrentTurnSeat(null);
+    const tournamentBlind = structure[0] || { level: 1, smallBlind: 10, bigBlind: 20, ante: 0, hands: 8 };
+    const baseBlind = pokerSettings.gameMode === "tournament"
+      ? tournamentBlind
+      : {
+        level: 1,
+        smallBlind: Math.max(1, Math.floor(pokerSettings.normalSmallBlind || 10)),
+        bigBlind: Math.max(2, Math.floor(pokerSettings.normalBigBlind || 20)),
+        ante: 0,
+        hands: 0,
+      };
+    setPokerCurrentHandBlinds({
+      level: baseBlind.level,
+      smallBlind: baseBlind.smallBlind,
+      bigBlind: baseBlind.bigBlind,
+      ante: pokerSettings.gameMode === "tournament" ? Math.floor(baseBlind.bigBlind * 0.1) : 0,
+    });
+    setPokerBettingRound({
+      phase: "preflop",
+      currentHighestBet: 0,
+      lastRaiseSize: baseBlind.bigBlind,
+      minimumBet: baseBlind.bigBlind,
+    });
+    setPokerCurrentStreetBet(0);
+    setPokerPots([{ id: "main", amount: 0, eligiblePlayerIds: players.map((player) => player.id) }]);
+    setPokerRaiseTo(baseBlind.bigBlind || 20);
+    setPokerMinRaiseTo(baseBlind.bigBlind || 20);
+    setPokerHoleCardsByPlayerId({});
+    setPokerActedSeats([]);
+    setPokerHandResult(null);
+    setPokerEliminationLog([]);
+    setPokerActionNotice(null);
+    setPokerPlayerHand([]);
+    setPokerCpuHand([]);
+    setPokerWager(0);
+    setPokerBet(0);
+  }, [buildTournamentPlayers, pokerSettings]);
+
+  const beginPokerTournament = useCallback(() => {
+    const structure = buildBlindStructure(pokerSettings.blindSpeed);
+    const players = buildTournamentPlayers(pokerSettings);
+    setPokerBlindStructure(structure);
+    setPokerBlindLevelIndex(0);
+    setPokerHandsUntilLevelUp(structure[0]?.hands || 8);
+    setPokerHandCount(0);
+    startPokerHand(players, {
+      dealerSeat: players[0]?.seatIndex ?? 0,
+      keepHandCount: true,
+      keepLevel: true,
+      blindStructureOverride: structure,
+      blindLevelIndexOverride: 0,
+    });
+  }, [buildTournamentPlayers, pokerSettings, startPokerHand]);
+
+  const beginPokerNormal = useCallback(() => {
+    const players = buildTournamentPlayers(pokerSettings);
+    setPokerBlindLevelIndex(0);
+    setPokerHandsUntilLevelUp(buildBlindStructure(pokerSettings.blindSpeed)[0]?.hands || 8);
+    setPokerHandCount(0);
+    setPokerNormalRecord({ playerWins: 0, cpuWins: 0, draws: 0, rounds: 0 });
+    startPokerNormalHand(players, { dealerSeat: players[0]?.seatIndex ?? 0 });
+  }, [buildTournamentPlayers, pokerSettings, startPokerNormalHand]);
+
+  const beginPokerGame = useCallback(() => {
+    if (pokerSettings.gameMode === "tournament") {
+      beginPokerTournament();
+      return;
+    }
+    beginPokerNormal();
+  }, [beginPokerNormal, beginPokerTournament, pokerSettings.gameMode]);
+
+  const settlePokerShowdown = useCallback((players: TournamentPlayer[], communityCards: PokerCard[], potTotal: number, actingNameHint?: string) => {
+    const contenders = players.filter((player) => isPokerPlayerInHand(player));
+    if (contenders.length <= 0) {
+      setPokerMessage("有効なプレイヤーがいません。");
+      setPokerPhase("result");
+      return players;
+    }
+    const scored = contenders
+      .map((player) => {
+        const hole = pokerHoleCardsByPlayerId[player.id] || [];
+        const evalHand = evaluatePokerBestOfSeven([...hole, ...communityCards]);
+        return { player, evalHand };
+      })
+      .sort((a, b) => comparePokerEval(b.evalHand, a.evalHand));
+    const best = scored[0];
+    if (!best) return players;
+    const winners = scored.filter((row) => comparePokerEval(row.evalHand, best.evalHand) === 0).map((row) => row.player);
+    const gainPerWinner = winners.length > 0 ? Math.floor(potTotal / winners.length) : 0;
+    const resultPlayers = players.map((player) => {
+      if (winners.some((winner) => winner.id === player.id)) {
+        return { ...player, chips: player.chips + gainPerWinner };
+      }
+      return player;
+    });
+    const winnerNameText = winners.map((player) => player.name).join(" / ");
+    const summary = winners.length > 1
+      ? `引き分け: ${winnerNameText}`
+      : `${winnerNameText} の勝利`;
+    if (pokerSettings.gameMode === "normal") {
+      const hasMe = winners.some((player) => player.id === "p1");
+      setPokerNormalRecord((prev) => {
+        if (winners.length > 1) {
+          return { ...prev, draws: prev.draws + 1 };
+        }
+        if (hasMe) {
+          return { ...prev, playerWins: prev.playerWins + 1 };
+        }
+        return { ...prev, cpuWins: prev.cpuWins + 1 };
+      });
+    }
+    setPokerPhase("result");
+    setPokerMessage(`${summary} (${best.evalHand.name})`);
+    setPokerActionNotice({ id: Date.now(), text: winners.length > 1 ? "SHOWDOWN DRAW" : "SHOWDOWN" });
+    setPokerHandResult({ winnerIds: winners.map((row) => row.id), winnerNameText, gainPerWinner, summary });
+
+    const me = scored.find((row) => row.player.id === "p1");
+    const firstCpu = scored.find((row) => row.player.id !== "p1");
+    setPokerPlayerEval(me?.evalHand || null);
+    setPokerCpuEval(firstCpu?.evalHand || null);
+    if (me && firstCpu) {
+      const cmp = comparePokerEval(me.evalHand, firstCpu.evalHand);
+      setPokerOutcome(cmp > 0 ? "win" : cmp < 0 ? "lose" : "draw");
+    }
+    if (actingNameHint) {
+      setPokerMessage((prev) => `${prev} / ${actingNameHint}`);
+    }
+    return resultPlayers;
+  }, [pokerHoleCardsByPlayerId, pokerSettings.gameMode]);
+
+  const applyPokerAction = useCallback((action: PokerActionType) => {
+    const isRunning = pokerSettings.gameMode === "tournament"
+      ? pokerTournamentStatus === "running"
+      : pokerNormalSessionStatus === "running";
+    if (!isRunning) return;
+    if (pokerCurrentTurnSeat == null) return;
+    if (!(pokerPhase === "preflop" || pokerPhase === "flop" || pokerPhase === "turn" || pokerPhase === "river")) return;
+
+    const playerIndex = pokerPlayers.findIndex((player) => player.seatIndex === pokerCurrentTurnSeat);
+    if (playerIndex < 0) return;
+    const acting = pokerPlayers[playerIndex];
+    if (!acting || !isPokerPlayerActionable(acting)) return;
+
+    const players = pokerPlayers.map((player) => ({ ...player }));
+    const actor = players[playerIndex];
+    if (!actor) return;
+    const roundState = pokerBettingRound;
+    const previousHighestBet = roundState.currentHighestBet;
+    const toCall = Math.max(0, previousHighestBet - actor.currentStreetBet);
+    let nextStreetBet = roundState.currentHighestBet;
+    let nextLastRaiseSize = roundState.lastRaiseSize;
+    let nextMinimumBet = roundState.minimumBet;
+    let nextMinRaiseTo = roundState.currentHighestBet > 0
+      ? roundState.currentHighestBet + roundState.lastRaiseSize
+      : roundState.minimumBet;
+    let nextAggressorId = roundState.lastAggressorId;
+    let reopensAction = false;
+
+    const commit = (target: TournamentPlayer, amount: number) => {
+      const safe = Math.max(0, Math.min(target.chips, Math.floor(amount)));
+      target.chips -= safe;
+      target.currentStreetBet += safe;
+      target.totalHandBet += safe;
+      target.currentBet = target.currentStreetBet;
+      target.totalBet = target.totalHandBet;
+      if (target.chips <= 0 && target.status !== "eliminated") {
+        target.status = "allIn";
+      }
+      return safe;
+    };
+
+    let actionText = "";
+    let contributed = 0;
+    if (action === "fold") {
+      actor.status = "folded";
+      actionText = `${actor.name} FOLD`;
+    } else if (action === "check") {
+      if (toCall > 0) return;
+      actionText = `${actor.name} CHECK`;
+    } else if (action === "call") {
+      if (toCall <= 0) {
+        actionText = `${actor.name} CHECK`;
+      } else {
+        contributed = commit(actor, toCall);
+        actionText = `${actor.name} CALL ${contributed}`;
+      }
+    } else if (action === "allIn") {
+      contributed = commit(actor, actor.chips);
+      if (actor.currentStreetBet > previousHighestBet) {
+        const raiseSize = actor.currentStreetBet - previousHighestBet;
+        const neededToReopen = previousHighestBet <= 0 ? nextMinimumBet : nextLastRaiseSize;
+        nextStreetBet = actor.currentStreetBet;
+        if (raiseSize >= neededToReopen) {
+          nextLastRaiseSize = raiseSize;
+          nextAggressorId = actor.id;
+          reopensAction = true;
+        }
+        nextMinRaiseTo = nextStreetBet + nextLastRaiseSize;
+      }
+      actionText = `${actor.name} ALL IN ${contributed}`;
+    } else {
+      const maxRaiseTo = actor.currentStreetBet + actor.chips;
+      const requested = Math.max(0, Math.floor(pokerRaiseTo));
+      const raiseTo = Math.min(maxRaiseTo, requested);
+      if (raiseTo <= actor.currentStreetBet) return;
+      if (previousHighestBet <= 0) {
+        const minOpenTo = nextMinimumBet;
+        if (raiseTo < minOpenTo && raiseTo < maxRaiseTo) return;
+      } else {
+        const minRaiseTo = previousHighestBet + nextLastRaiseSize;
+        if (raiseTo < minRaiseTo && raiseTo < maxRaiseTo) return;
+      }
+      const delta = raiseTo - actor.currentStreetBet;
+      contributed = commit(actor, delta);
+      if (actor.currentStreetBet > previousHighestBet) {
+        const raiseSize = actor.currentStreetBet - previousHighestBet;
+        const neededToReopen = previousHighestBet <= 0 ? nextMinimumBet : nextLastRaiseSize;
+        nextStreetBet = actor.currentStreetBet;
+        if (raiseSize >= neededToReopen) {
+          nextLastRaiseSize = raiseSize;
+          nextAggressorId = actor.id;
+          reopensAction = true;
+        }
+        nextMinRaiseTo = nextStreetBet + nextLastRaiseSize;
+      }
+      actionText = `${actor.name} ${action === "bet" ? "BET" : "RAISE"} ${actor.currentStreetBet}`;
+    }
+
+    const potTotal = players.reduce((sum, player) => sum + player.totalHandBet, 0);
+    const actedBase = Array.from(new Set([...pokerActedSeats, actor.seatIndex]));
+    const acted = reopensAction ? [actor.seatIndex] : actedBase;
+    const inHand = players.filter((player) => isPokerPlayerInHand(player));
+
+    if (inHand.length <= 1) {
+      const winner = inHand[0];
+      const resolvedPlayers = players.map((player) => {
+        if (winner && player.id === winner.id) {
+          return { ...player, chips: player.chips + potTotal };
+        }
+        return player;
+      });
+      setPokerPlayers(resolvedPlayers);
+      setPokerPots([{ id: "main", amount: potTotal, eligiblePlayerIds: inHand.map((player) => player.id) }]);
+      setPokerCurrentStreetBet(nextStreetBet);
+      setPokerMinRaiseTo(nextMinRaiseTo);
+      setPokerRaiseTo(nextMinRaiseTo);
+      setPokerBettingRound({
+        ...roundState,
+        currentHighestBet: nextStreetBet,
+        lastRaiseSize: nextLastRaiseSize,
+        minimumBet: nextMinimumBet,
+        lastAggressorId: nextAggressorId,
+      });
+      setPokerActedSeats(acted);
+      setPokerCurrentTurnSeat(null);
+      setPokerPhase("result");
+      setPokerHandResult({
+        winnerIds: winner ? [winner.id] : [],
+        winnerNameText: winner ? winner.name : "-",
+        gainPerWinner: potTotal,
+        summary: winner ? `${winner.name} がフォールド勝ち` : "勝者なし",
+      });
+      if (pokerSettings.gameMode === "normal" && winner) {
+        setPokerNormalRecord((prev) => (
+          winner.id === "p1"
+            ? { ...prev, playerWins: prev.playerWins + 1 }
+            : { ...prev, cpuWins: prev.cpuWins + 1 }
+        ));
+      }
+      setPokerMessage(winner ? `${winner.name} がフォールド勝ち` : "ハンド終了");
+      setPokerActionNotice({ id: Date.now(), text: "FOLD" });
+      return;
+    }
+
+    const actionable = players.filter((player) => player.status === "active");
+    const allMatched = actionable.every((player) => player.currentStreetBet === nextStreetBet || player.chips <= 0);
+    const allActed = actionable.every((player) => acted.includes(player.seatIndex));
+    const bettingRoundComplete = actionable.length === 0 || (allMatched && allActed);
+
+    let nextPhase: PokerPhase = pokerPhase;
+    let nextCommunity = [...pokerCommunity];
+    let nextDeckCursor = pokerDeckCursor;
+    let nextTurn = pickNextActionSeat(players, actor.seatIndex);
+    let nextActed = acted;
+    let nextPlayers = players;
+    let nextRoundPhase: BettingRoundState["phase"] = roundState.phase;
+
+    if (bettingRoundComplete) {
+      players.forEach((player) => {
+        player.currentStreetBet = 0;
+        player.currentBet = 0;
+      });
+      nextStreetBet = 0;
+      nextMinimumBet = pokerCurrentHandBlinds.bigBlind;
+      nextLastRaiseSize = pokerCurrentHandBlinds.bigBlind;
+      nextMinRaiseTo = pokerCurrentHandBlinds.bigBlind;
+      nextAggressorId = undefined;
+      nextActed = [];
+
+      if (pokerPhase === "preflop") {
+        nextCommunity = [pokerDeck[nextDeckCursor], pokerDeck[nextDeckCursor + 1], pokerDeck[nextDeckCursor + 2]].filter(Boolean) as PokerCard[];
+        nextDeckCursor += 3;
+        nextPhase = "flop";
+        nextRoundPhase = "flop";
+        setPokerActionNotice({ id: Date.now(), text: "FLOP" });
+      } else if (pokerPhase === "flop") {
+        const card = pokerDeck[nextDeckCursor];
+        if (card) nextCommunity = [...nextCommunity, card];
+        nextDeckCursor += 1;
+        nextPhase = "turn";
+        nextRoundPhase = "turn";
+        setPokerActionNotice({ id: Date.now(), text: "TURN" });
+      } else if (pokerPhase === "turn") {
+        const card = pokerDeck[nextDeckCursor];
+        if (card) nextCommunity = [...nextCommunity, card];
+        nextDeckCursor += 1;
+        nextPhase = "river";
+        nextRoundPhase = "river";
+        setPokerActionNotice({ id: Date.now(), text: "RIVER" });
+      } else if (pokerPhase === "river") {
+        nextPhase = "showdown";
+      }
+      nextTurn = pickNextActionSeat(players, pokerDealerSeat);
+    }
+
+    if (nextPhase === "showdown") {
+      nextPlayers = settlePokerShowdown(players, nextCommunity, potTotal, actionText);
+      nextTurn = null;
+      nextPhase = "result";
+    }
+
+    setPokerPlayers(nextPlayers);
+    setPokerCommunity(nextCommunity);
+    setPokerDeckCursor(nextDeckCursor);
+    setPokerCurrentStreetBet(nextStreetBet);
+    setPokerMinRaiseTo(nextMinRaiseTo);
+    setPokerRaiseTo(nextMinRaiseTo);
+    setPokerBettingRound({
+      phase: nextRoundPhase,
+      currentHighestBet: nextStreetBet,
+      lastRaiseSize: nextLastRaiseSize,
+      minimumBet: nextMinimumBet,
+      lastAggressorId: nextAggressorId,
+    });
+    setPokerPots([{ id: "main", amount: potTotal, eligiblePlayerIds: nextPlayers.filter((player) => isPokerPlayerInHand(player)).map((player) => player.id) }]);
+    setPokerActedSeats(nextActed);
+    setPokerCurrentTurnSeat(nextTurn);
+    setPokerPhase(nextPhase);
+    setPokerMessage(`${nextPhase.toUpperCase()}: ${nextTurn == null ? "判定中" : `${nextPlayers.find((row) => row.seatIndex === nextTurn)?.name || "-"} のアクション待ち`}`);
+    setPokerActionNotice({ id: Date.now(), text: actionText });
+  }, [pickNextActionSeat, pokerActedSeats, pokerBettingRound, pokerCommunity, pokerCurrentHandBlinds, pokerCurrentTurnSeat, pokerDealerSeat, pokerDeck, pokerDeckCursor, pokerNormalSessionStatus, pokerPhase, pokerPlayers, pokerRaiseTo, pokerSettings.gameMode, pokerTournamentStatus, settlePokerShowdown]);
+
+  const onPokerDraw = useCallback(() => {
+    // Keep compatibility with existing shared button/action paths.
+    if (pokerSettings.gameMode === "normal") {
+      if (pokerNormalSessionStatus === "idle") {
+        beginPokerNormal();
+        return;
+      }
+      if (pokerNormalSessionStatus === "running" && pokerPhase === "result") {
+        const normalizedPlayers = pokerPlayers.map((player) => ({
+          ...player,
+          status: "active" as PokerPlayerStatus,
+        }));
+        setPokerPlayers(normalizedPlayers);
+        startPokerNormalHand(normalizedPlayers);
+      }
+      return;
+    }
+    if (pokerTournamentStatus === "idle") {
+      beginPokerTournament();
+      return;
+    }
+    if (pokerTournamentStatus === "running" && (pokerPhase === "result" || pokerPhase === "tournamentResult")) {
+      const normalizedPlayers = pokerPlayers.map((player) => {
+        if (player.status === "eliminated") return player;
+        if (player.chips <= 0) {
+          return { ...player, status: "eliminated" as PokerPlayerStatus };
+        }
+        return player;
+      });
+      const aliveCount = normalizedPlayers.filter((player) => isPokerPlayerAlive(player)).length;
+      if (aliveCount <= 1) {
+        setPokerPhase("tournamentResult");
+        setPokerTournamentStatus("finished");
+        setPokerPlayers(normalizedPlayers);
+        return;
+      }
+
+      let nextLevelIndex = pokerBlindLevelIndex;
+      let nextHandsToLevel = pokerHandsUntilLevelUp - 1;
+      if (nextHandsToLevel <= 0) {
+        nextLevelIndex = Math.min(pokerBlindLevelIndex + 1, Math.max(0, pokerBlindStructure.length - 1));
+        nextHandsToLevel = pokerBlindStructure[nextLevelIndex]?.hands || 8;
+        setPokerActionNotice({ id: Date.now(), text: `BLIND LEVEL UP (LV.${(pokerBlindStructure[nextLevelIndex]?.level || (nextLevelIndex + 1))})` });
+      }
+      setPokerBlindLevelIndex(nextLevelIndex);
+      setPokerHandsUntilLevelUp(nextHandsToLevel);
+      setPokerPlayers(normalizedPlayers);
+      startPokerHand(normalizedPlayers, {
+        keepHandCount: true,
+        keepLevel: true,
+        blindStructureOverride: pokerBlindStructure,
+        blindLevelIndexOverride: nextLevelIndex,
+      });
+    }
+  }, [beginPokerNormal, beginPokerTournament, pokerBlindLevelIndex, pokerBlindStructure, pokerHandsUntilLevelUp, pokerNormalSessionStatus, pokerPhase, pokerPlayers, pokerSettings.gameMode, pokerTournamentStatus, startPokerHand, startPokerNormalHand]);
+
+  const pokerCurrentBlind = useMemo(() => {
+    if (pokerSettings.gameMode === "normal") {
+      return {
+        level: 1,
+        smallBlind: Math.max(1, Math.floor(pokerSettings.normalSmallBlind || 10)),
+        bigBlind: Math.max(2, Math.floor(pokerSettings.normalBigBlind || 20)),
+        ante: 0,
+        hands: 0,
+      };
+    }
+    return {
+      level: pokerCurrentHandBlinds.level,
+      smallBlind: pokerCurrentHandBlinds.smallBlind,
+      bigBlind: pokerCurrentHandBlinds.bigBlind,
+      ante: pokerCurrentHandBlinds.ante,
+      hands: pokerBlindStructure[pokerBlindLevelIndex]?.hands || 8,
+    };
+  }, [pokerBlindLevelIndex, pokerBlindStructure, pokerCurrentHandBlinds, pokerSettings.gameMode, pokerSettings.normalBigBlind, pokerSettings.normalSmallBlind]);
+
+  const pokerNextBlind = useMemo(() => {
+    if (pokerSettings.gameMode === "normal") {
+      return pokerCurrentBlind;
+    }
+    return pokerBlindStructure[Math.min(pokerBlindLevelIndex + 1, Math.max(0, pokerBlindStructure.length - 1))] || pokerCurrentBlind;
+  }, [pokerBlindLevelIndex, pokerBlindStructure, pokerCurrentBlind, pokerSettings.gameMode]);
+
+  const pokerMe = useMemo(() => {
+    return pokerPlayers.find((player) => player.id === "p1") || null;
+  }, [pokerPlayers]);
+
+  const pokerCurrentTurnPlayer = useMemo(() => {
+    if (pokerCurrentTurnSeat == null) return null;
+    return pokerPlayers.find((player) => player.seatIndex === pokerCurrentTurnSeat) || null;
+  }, [pokerCurrentTurnSeat, pokerPlayers]);
+
+  const isPokerThinking = useMemo(() => {
+    if (!pokerIsRunning) return false;
+    if (!(pokerPhase === "preflop" || pokerPhase === "flop" || pokerPhase === "turn" || pokerPhase === "river")) return false;
+    return Boolean(pokerCurrentTurnPlayer?.isCpu && pokerCurrentTurnPlayer.status === "active");
+  }, [pokerCurrentTurnPlayer, pokerIsRunning, pokerPhase]);
+
+  const pokerToCall = useMemo(() => {
+    if (!pokerMe) return 0;
+    return Math.max(0, pokerBettingRound.currentHighestBet - pokerMe.currentStreetBet);
+  }, [pokerBettingRound.currentHighestBet, pokerMe]);
+
+  const pokerAverageChips = useMemo(() => {
+    const alive = pokerPlayers.filter((player) => isPokerPlayerAlive(player));
+    if (alive.length <= 0) return 0;
+    return Math.floor(alive.reduce((sum, player) => sum + player.chips, 0) / alive.length);
+  }, [pokerPlayers]);
+
+  const pokerRanking = useMemo(() => {
+    return [...pokerPlayers].sort((a, b) => {
+      if (isPokerPlayerAlive(a) && !isPokerPlayerAlive(b)) return -1;
+      if (!isPokerPlayerAlive(a) && isPokerPlayerAlive(b)) return 1;
+      if (b.chips !== a.chips) return b.chips - a.chips;
+      return a.name.localeCompare(b.name);
+    });
+  }, [pokerPlayers]);
+
+  const pokerMyRank = useMemo(() => {
+    const index = pokerRanking.findIndex((player) => player.id === "p1");
+    return index >= 0 ? index + 1 : pokerRanking.length;
+  }, [pokerRanking]);
+
+  const pokerCanAct = useMemo(() => {
+    if (!pokerIsRunning) return false;
+    if (!(pokerPhase === "preflop" || pokerPhase === "flop" || pokerPhase === "turn" || pokerPhase === "river")) return false;
+    if (!pokerMe || pokerMe.status !== "active") return false;
+    if (pokerCurrentTurnPlayer?.id !== "p1") return false;
+    return true;
+  }, [pokerCurrentTurnPlayer, pokerIsRunning, pokerMe, pokerPhase]);
+
+  const pokerRaiseMaxTo = useMemo(() => {
+    return (pokerMe?.currentStreetBet || 0) + (pokerMe?.chips || 0);
+  }, [pokerMe]);
+
+  const pokerCanCheck = pokerCanAct && pokerToCall <= 0;
+  const pokerCanCall = pokerCanAct && pokerToCall > 0;
+  const pokerCanBet = pokerCanAct && pokerToCall <= 0;
+  const pokerCanRaise = pokerCanAct && pokerToCall > 0;
+  const pokerShowdownReveal = pokerPhase === "showdown" || pokerPhase === "result" || pokerPhase === "tournamentResult";
+  const pokerCanAdvance = pokerSettings.gameMode === "tournament"
+    ? (pokerTournamentStatus === "idle" || pokerPhase === "result" || pokerPhase === "tournamentResult")
+    : (pokerNormalSessionStatus === "idle" || pokerPhase === "result");
+
+  useEffect(() => {
+    if (!pokerIsRunning) return;
+    if (!(pokerPhase === "preflop" || pokerPhase === "flop" || pokerPhase === "turn" || pokerPhase === "river")) return;
+    const actor = pokerCurrentTurnPlayer;
+    if (!actor || !actor.isCpu || actor.status !== "active") return;
+
+    const timer = window.setTimeout(() => {
+      const hole = pokerHoleCardsByPlayerId[actor.id] || [];
+      const strength = evaluatePokerHand(hole).score[0] || 0;
+      const toCall = Math.max(0, pokerBettingRound.currentHighestBet - actor.currentStreetBet);
+      const stackRatio = actor.chips / Math.max(1, pokerCurrentHandBlinds.bigBlind * 12);
+      const canAggroBase = strength >= 1 || (hole[0]?.rank || 0) >= 12 || (hole[1]?.rank || 0) >= 12;
+      const canAggro = pokerSettings.cpuDifficulty === "easy"
+        ? canAggroBase && Math.random() < 0.85
+        : pokerSettings.cpuDifficulty === "hard"
+          ? canAggroBase || Math.random() < 0.15
+          : canAggroBase;
+
+      if (toCall <= 0) {
+        if (canAggro && Math.random() < 0.4) {
+          const minRaiseTo = Math.max(pokerMinRaiseTo, pokerCurrentHandBlinds.bigBlind);
+          setPokerRaiseTo(minRaiseTo + Math.floor(Math.random() * 3) * pokerCurrentHandBlinds.bigBlind);
+          applyPokerAction(pokerBettingRound.currentHighestBet === 0 ? "bet" : "raise");
+        } else {
+          applyPokerAction("check");
+        }
+      } else if (toCall >= actor.chips) {
+        applyPokerAction(canAggro ? "allIn" : "fold");
+      } else if (toCall > actor.chips * 0.45 && !canAggro && stackRatio < 1.2) {
+        applyPokerAction("fold");
+      } else if (canAggro && Math.random() < 0.24) {
+        setPokerRaiseTo(pokerMinRaiseTo);
+        applyPokerAction("raise");
+      } else {
+        applyPokerAction("call");
+      }
+    }, 500 + Math.floor(Math.random() * 1000));
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [applyPokerAction, pokerBettingRound.currentHighestBet, pokerCurrentHandBlinds.bigBlind, pokerCurrentTurnPlayer, pokerHoleCardsByPlayerId, pokerIsRunning, pokerMinRaiseTo, pokerPhase, pokerSettings.cpuDifficulty]);
+
+  useEffect(() => {
+    if (!pokerActionNotice) return;
+    const timer = window.setTimeout(() => {
+      setPokerActionNotice(null);
+    }, 1400);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [pokerActionNotice]);
 
   const resetSolitaire = useCallback(() => {
     const deck = shuffleSolitaireDeck(createSolitaireDeck());
@@ -11504,9 +15415,13 @@ export default function Home() {
   };
 
   const createSurvivorsEnemies = useCallback((wave: number) => {
+    const difficulty = survivorsRunConfigRef.current.difficulty;
+    const hpScale = difficulty === "easy" ? 0.86 : difficulty === "hard" ? 1.2 : 1;
+    const speedScale = difficulty === "easy" ? 0.92 : difficulty === "hard" ? 1.08 : 1;
+    const contactScale = difficulty === "easy" ? 0.9 : difficulty === "hard" ? 1.2 : 1;
     const count = Math.min(12, 3 + Math.floor((wave + 1) / 2));
     return Array.from({ length: count }, (_, index) => {
-      const hp = 16 + wave * 5 + index * 2;
+      const hp = Math.max(8, Math.round((16 + wave * 5 + index * 2) * hpScale));
       const side = Math.floor(Math.random() * 4);
       const margin = 28;
       let x = margin;
@@ -11530,13 +15445,14 @@ export default function Home() {
         maxHp: hp,
         x,
         y,
-        speed: 1.8 + Math.min(2.6, wave * 0.07) + Math.random() * 0.7,
-        contactDamage: 2 + Math.floor(wave / 5),
+        speed: (1.8 + Math.min(2.6, wave * 0.07) + Math.random() * 0.7) * speedScale,
+        contactDamage: Math.max(1, Math.round((2 + Math.floor(wave / 5)) * contactScale)),
       } satisfies SurvivorsEnemy;
     });
   }, []);
 
   const resetSurvivors = useCallback(() => {
+    const baseStats = SURVIVORS_CHARACTER_BASE_STATS[survivorsCharacterId];
     const center = {
       x: SURVIVORS_ARENA_WIDTH / 2,
       y: SURVIVORS_ARENA_HEIGHT / 2,
@@ -11545,51 +15461,192 @@ export default function Home() {
     survivorsPlayerRef.current = center;
     survivorsAutoAttackReadyAtRef.current = 0;
     survivorsContactReadyAtRef.current = 0;
+    survivorsSkillReadyAtRef.current = 0;
+    survivorsSkillActiveUntilRef.current = 0;
+    survivorsWaveTransitioningRef.current = false;
+    survivorsWaveKillsAtStartRef.current = 0;
+    survivorsShopRerollBusyRef.current = false;
+    survivorsShopStartWaveBusyRef.current = false;
+    survivorsDaikonAttackRef.current = {
+      active: false,
+      startedAt: 0,
+      durationMs: SURVIVORS_DAIKON_ATTACK_BASE_DURATION_MS,
+      frameIndex: 0,
+      targetEnemyIds: [],
+      damage: 0,
+      hitApplied: false,
+      facingLeft: false,
+      angleDeg: 0,
+      dirX: 0,
+      dirY: -1,
+      impactRange: 0,
+    };
+    survivorsSkillHoldRef.current = false;
+    survivorsRapidHoldStartedAtRef.current = null;
+    survivorsNextWaveAtSecRef.current = getSurvivorsNextWaveAtSec(1);
     setSurvivorsPlayer(center);
     setSurvivorsWave(1);
-    setSurvivorsHp(100);
-    setSurvivorsMaxHp(100);
+    setSurvivorsHp(baseStats.maxHp);
+    setSurvivorsMaxHp(baseStats.maxHp);
+    survivorsMpRef.current = baseStats.maxMp;
+    setSurvivorsMp(baseStats.maxMp);
+    setSurvivorsMaxMp(baseStats.maxMp);
     setSurvivorsLevel(1);
     setSurvivorsXp(0);
     setSurvivorsTimeSec(0);
     setSurvivorsKills(0);
-    setSurvivorsDamageBonus(0);
-    setSurvivorsHasteBonus(0);
-    setSurvivorsMultiShotBonus(0);
-    setSurvivorsArmorBonus(0);
+    setSurvivorsDamageBonus(baseStats.damageBonus);
+    setSurvivorsHasteBonus(baseStats.hasteBonus);
+    setSurvivorsMultiShotBonus(baseStats.multiShotBonus);
+    setSurvivorsArmorBonus(baseStats.armorBonus);
     setIsSurvivorsAttackMotion(false);
+    setSurvivorsAttackMotionIntensity(0);
     setSurvivorsPlayerFrame(1);
+    survivorsDaikonLastMoveDirectionRef.current = "down";
+    setSurvivorsDaikonLastMoveDirection("down");
+    setSurvivorsDaikonAttackVisual({
+      active: false,
+      frameIndex: 0,
+      facingLeft: false,
+      angleDeg: 0,
+    });
+    survivorsLastMoveDirRef.current = { x: 0, y: -1 };
+    survivorsWeaponAimAnglesRef.current = {};
+    survivorsWeaponAttackMotionRef.current = {};
+    setSurvivorsWeaponRenderPoses([]);
+    setSurvivorsProjectiles([]);
     setSurvivorsPendingAugments([]);
     setIsSurvivorsAugmentOpen(false);
     setSurvivorsAugmentReason("levelup");
-    setSurvivorsEnemies(createSurvivorsEnemies(1));
-    setSurvivorsMessage(t("survivorsHint"));
+    setSurvivorsQueuedLevelRewards(0);
+    setSurvivorsQueuedWaveRewards(0);
+    setIsSurvivorsShopSessionActive(false);
+    setSurvivorsCoins(24);
+    setSurvivorsShopRerollCount(0);
+    setSurvivorsShopSlots([]);
+    setSurvivorsShopItems([]);
+    setSurvivorsShopWeapons([
+      {
+        id: `starter-${survivorsCharacterId}`,
+        title: SURVIVORS_CHARACTER_SELECT_CONFIGS.find((row) => row.id === survivorsCharacterId)?.startingWeapon.name || "STARTER",
+        desc: "開始時装備",
+        rarity: "common",
+        count: 1,
+      },
+    ]);
+    setSurvivorsShopFinishedWave(0);
+    setSurvivorsShopNextWave(1);
+    setIsSurvivorsShopRerolling(false);
+    setIsSurvivorsStartingNextWave(false);
+    const firstWaveEnemies = createSurvivorsEnemies(1);
+    survivorsEnemiesRef.current = firstWaveEnemies;
+    setSurvivorsEnemies(firstWaveEnemies);
+    setSurvivorsMessage(`${SURVIVORS_CHARACTER_HINTS[survivorsCharacterId].name} | ${t("survivorsHint")}`);
     setIsSurvivorsOver(false);
-  }, [createSurvivorsEnemies, t]);
+  }, [createSurvivorsEnemies, survivorsCharacterId, t]);
+
+  const triggerSurvivorsSkill = useCallback(() => {
+    if (!gameStarted.survivors || isSurvivorsOver || isSurvivorsAugmentOpen) return;
+    const now = performance.now();
+    const profile = SURVIVORS_CHARACTER_PROFILES[survivorsCharacterId];
+    if (survivorsMpRef.current < profile.skillMpCost) {
+      setSurvivorsMessage(`${profile.skillName} MP不足 (${Math.floor(survivorsMpRef.current)}/${profile.skillMpCost})`);
+      return;
+    }
+    if (now < survivorsSkillReadyAtRef.current) {
+      const leftSec = Math.max(0, (survivorsSkillReadyAtRef.current - now) / 1000);
+      setSurvivorsMessage(`${profile.skillName} cooldown ${leftSec.toFixed(1)}s`);
+      return;
+    }
+    survivorsSkillActiveUntilRef.current = now + profile.skillDurationMs;
+    survivorsSkillReadyAtRef.current = now + SURVIVORS_SKILL_COOLDOWN_MS;
+    survivorsMpRef.current = Math.max(0, survivorsMpRef.current - profile.skillMpCost);
+    setSurvivorsMp(survivorsMpRef.current);
+    setSurvivorsMessage(`${profile.skillName} activated!`);
+  }, [gameStarted.survivors, isSurvivorsAugmentOpen, isSurvivorsOver, survivorsCharacterId]);
+
+  useEffect(() => {
+    survivorsEnemiesRef.current = survivorsEnemies;
+  }, [survivorsEnemies]);
+
+  useEffect(() => {
+    survivorsMpRef.current = survivorsMp;
+  }, [survivorsMp]);
+
+  useEffect(() => {
+    survivorsNextWaveAtSecRef.current = Math.max(
+      getSurvivorsNextWaveAtSec(1),
+      getSurvivorsNextWaveAtSec(survivorsWave),
+    );
+  }, [survivorsWave]);
+
+  const spawnSurvivorsProjectiles = useCallback((shots: Array<{ toX: number; toY: number; fromX: number; fromY: number }>) => {
+    if (survivorsCharacterId !== "fairy") return;
+    if (shots.length <= 0) return;
+    const createdAt = Date.now();
+    setSurvivorsProjectiles((prev) => [
+      ...prev,
+      ...shots.map((shot, index) => {
+        const dx = shot.toX - shot.fromX;
+        const dy = shot.toY - shot.fromY;
+        const distance = Math.hypot(dx, dy);
+        const durationMs = Math.max(320, Math.min(560, Math.round(distance * 1.25)));
+        const ctrlX = (shot.fromX + shot.toX) / 2;
+        const ctrlY = (shot.fromY + shot.toY) / 2;
+        const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+        return {
+          id: `fairy-shot-${createdAt}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+          fromX: shot.fromX,
+          fromY: shot.fromY,
+          ctrlX,
+          ctrlY,
+          toX: shot.toX,
+          toY: shot.toY,
+          angleDeg,
+          progress: 0,
+          durationMs,
+        } satisfies SurvivorsProjectile;
+      }),
+    ]);
+  }, [survivorsCharacterId]);
 
   const onSurvivorsAttack = (enemyId: string) => {
     if (isSurvivorsOver) return;
 
-    const damage = 8 + survivorsLevel * 3 + Math.floor(Math.random() * 4);
-    const nextEnemies = survivorsEnemies
+    const currentEnemies = survivorsEnemiesRef.current;
+    const target = currentEnemies.find((enemy) => enemy.id === enemyId);
+    if (target) {
+      spawnSurvivorsProjectiles([{
+        toX: target.x,
+        toY: target.y,
+        fromX: survivorsPlayerRef.current.x,
+        fromY: survivorsPlayerRef.current.y,
+      }]);
+    }
+
+    const now = performance.now();
+    const profile = SURVIVORS_CHARACTER_PROFILES[survivorsCharacterId];
+    const skillDamageBonus = now < survivorsSkillActiveUntilRef.current ? profile.skillDamageBonus : 0;
+    const damage = 8 + survivorsLevel * 3 + skillDamageBonus + Math.floor(Math.random() * 4);
+    const nextEnemies = currentEnemies
       .map((enemy) => (enemy.id === enemyId ? { ...enemy, hp: enemy.hp - damage } : enemy))
       .filter((enemy) => enemy.hp > 0);
 
-    const killed = survivorsEnemies.length - nextEnemies.length;
+    const killed = currentEnemies.length - nextEnemies.length;
     if (killed > 0) {
       setSurvivorsKills((prev) => prev + killed);
       setSurvivorsXp((prev) => prev + killed * (8 + survivorsWave));
     }
 
     if (nextEnemies.length <= 0) {
-      const nextWave = survivorsWave + 1;
-      setSurvivorsWave(nextWave);
-      setSurvivorsEnemies(createSurvivorsEnemies(nextWave));
-      setSurvivorsMessage(tf("survivorsWaveClear", { wave: survivorsWave }));
-      setSurvivorsHp((prev) => Math.min(survivorsMaxHp, prev + 6));
+      const refillEnemies = createSurvivorsEnemies(survivorsWave);
+      survivorsEnemiesRef.current = refillEnemies;
+      setSurvivorsEnemies(refillEnemies);
+      setSurvivorsMessage("敵を一掃！ 次ウェーブまで耐えよう");
       return;
     }
 
+    survivorsEnemiesRef.current = nextEnemies;
     setSurvivorsEnemies(nextEnemies);
   };
 
@@ -11676,8 +15733,7 @@ export default function Home() {
     return picks;
   }, [getSurvivorsAugmentWeightProfile]);
 
-  const onSurvivorsPickAugment = (augmentId: SurvivorsAugmentOption["id"]) => {
-    if (!isSurvivorsAugmentOpen) return;
+  const applySurvivorsAugment = useCallback((augmentId: SurvivorsAugmentOption["id"]) => {
     if (augmentId === "vital") {
       setSurvivorsMaxHp((prev) => prev + 16);
       setSurvivorsHp((prev) => Math.min(prev + 10, survivorsMaxHp + 16));
@@ -11690,25 +15746,256 @@ export default function Home() {
     } else if (augmentId === "guard") {
       setSurvivorsArmorBonus((prev) => prev + 1);
     }
-    setIsSurvivorsAugmentOpen(false);
+  }, [survivorsMaxHp]);
+
+  const getSurvivorsShopMeta = useCallback((option: SurvivorsAugmentOption) => {
+    const map: Record<SurvivorsAugmentOption["id"], {
+      category: SurvivorsShopProductCategory;
+      rarity: SurvivorsShopRarity;
+      price: number;
+      effects: Array<{ text: string; kind: "positive" | "negative" | "special" | "neutral" }>;
+    }> = {
+      vital: {
+        category: "item",
+        rarity: "common",
+        price: 18,
+        effects: [
+          { text: "最大HP +16", kind: "positive" },
+          { text: "即時回復 +10", kind: "positive" },
+        ],
+      },
+      power: {
+        category: "weapon",
+        rarity: "rare",
+        price: 24,
+        effects: [
+          { text: "自動攻撃ダメージ +2", kind: "positive" },
+          { text: "武器系強化", kind: "special" },
+        ],
+      },
+      haste: {
+        category: "weapon",
+        rarity: "rare",
+        price: 24,
+        effects: [
+          { text: "自動攻撃間隔 -35ms", kind: "positive" },
+          { text: "連射速度上昇", kind: "special" },
+        ],
+      },
+      multi: {
+        category: "weapon",
+        rarity: "epic",
+        price: 30,
+        effects: [
+          { text: "同時攻撃対象 +1", kind: "positive" },
+          { text: "制圧力アップ", kind: "special" },
+        ],
+      },
+      guard: {
+        category: "item",
+        rarity: "common",
+        price: 16,
+        effects: [
+          { text: "被ダメージ軽減", kind: "positive" },
+          { text: "防御系強化", kind: "special" },
+        ],
+      },
+    };
+    return map[option.id];
+  }, []);
+
+  const buildSurvivorsShopSlots = useCallback((
+    reason: SurvivorsAugmentReason,
+    wave: number,
+    prevSlots?: SurvivorsShopSlot[],
+  ): SurvivorsShopSlot[] => {
+    const pool = [...createSurvivorsAugmentChoices(reason, wave), ...createSurvivorsAugmentChoices(reason, wave)];
+    let pickIndex = 0;
+    const takeOption = () => {
+      if (pool.length <= 0) {
+        return createSurvivorsAugmentChoices(reason, wave)[0];
+      }
+      const option = pool[pickIndex % pool.length];
+      pickIndex += 1;
+      return option;
+    };
+
+    return SURVIVORS_SHOP_SLOT_IDS.map((slotId) => {
+      const prev = prevSlots?.find((row) => row.slotId === slotId);
+      if (prev?.locked && !prev.purchased) {
+        return prev;
+      }
+      const option = takeOption();
+      const meta = option ? getSurvivorsShopMeta(option) : getSurvivorsShopMeta({ id: "vital", title: "VITAL CORE", desc: "最大HP +16 / 即時回復 +10" });
+      const product = option || { id: "vital", title: "VITAL CORE", desc: "最大HP +16 / 即時回復 +10" };
+      return {
+        slotId,
+        option: product,
+        category: meta.category,
+        rarity: meta.rarity,
+        price: meta.price,
+        locked: false,
+        purchased: false,
+      } satisfies SurvivorsShopSlot;
+    });
+  }, [createSurvivorsAugmentChoices, getSurvivorsShopMeta]);
+
+  const openSurvivorsWaveShop = useCallback((reason: SurvivorsAugmentReason, finishedWave: number) => {
+    if (survivorsWaveTransitioningRef.current) return;
+    survivorsWaveTransitioningRef.current = true;
+    const killsThisWave = Math.max(0, survivorsKills - survivorsWaveKillsAtStartRef.current);
+    const reward = 18 + finishedWave * 6 + killsThisWave * 2 + (reason === "wave" ? 10 : 6);
+
+    setSurvivorsCoins((prev) => prev + reward);
+    setSurvivorsShopFinishedWave(finishedWave);
+    setSurvivorsShopNextWave(finishedWave + 1);
+    setSurvivorsShopRerollCount(0);
+    setIsSurvivorsShopRerolling(false);
+    setIsSurvivorsStartingNextWave(false);
     setSurvivorsPendingAugments([]);
-    setSurvivorsAugmentReason("levelup");
-    setSurvivorsMessage("強化を適用しました。戦闘再開！");
-  };
+    setSurvivorsShopSlots((prev) => buildSurvivorsShopSlots(reason, finishedWave, prev));
+    setIsSurvivorsAugmentOpen(true);
+    setIsSurvivorsShopSessionActive(true);
+    setSurvivorsAugmentReason(reason);
+    setSurvivorsQueuedLevelRewards(0);
+    setSurvivorsQueuedWaveRewards(0);
+    survivorsWeaponAttackMotionRef.current = {};
+    setSurvivorsProjectiles([]);
+    survivorsEnemiesRef.current = [];
+    setSurvivorsEnemies([]);
+    setSurvivorsMessage(`SHOP OPEN! +${reward}コインを獲得`);
+  }, [buildSurvivorsShopSlots, survivorsKills]);
+
+  const onSurvivorsBuyShopSlot = useCallback((slotId: string) => {
+    if (!isSurvivorsAugmentOpen || !isSurvivorsShopSessionActive) return;
+    const target = survivorsShopSlots.find((slot) => slot.slotId === slotId);
+    if (!target || target.purchased) return;
+    if (survivorsCoins < target.price) return;
+    const currentWeaponCount = survivorsShopWeapons.reduce((sum, row) => sum + row.count, 0);
+    if (target.category === "weapon" && currentWeaponCount >= SURVIVORS_SHOP_WEAPON_LIMIT) {
+      setSurvivorsMessage(`武器枠が上限です (${currentWeaponCount}/${SURVIVORS_SHOP_WEAPON_LIMIT})`);
+      return;
+    }
+
+    setSurvivorsShopSlots((prev) => prev.map((slot) => {
+      if (slot.slotId !== slotId || slot.purchased) return slot;
+      return { ...slot, purchased: true, locked: false };
+    }));
+
+    setSurvivorsCoins((prev) => Math.max(0, prev - target.price));
+    applySurvivorsAugment(target.option.id);
+
+    if (target.category === "weapon") {
+      setSurvivorsShopWeapons((prev) => {
+        const found = prev.find((row) => row.id === target.option.id);
+        if (found) {
+          return prev.map((row) => (row.id === found.id ? { ...row, count: row.count + 1 } : row));
+        }
+        return [
+          ...prev,
+          {
+            id: target.option.id,
+            title: target.option.title,
+            desc: target.option.desc,
+            rarity: target.rarity,
+            count: 1,
+          },
+        ];
+      });
+    } else {
+      setSurvivorsShopItems((prev) => {
+        const found = prev.find((row) => row.id === target.option.id);
+        if (found) {
+          return prev.map((row) => (row.id === found.id ? { ...row, count: row.count + 1 } : row));
+        }
+        return [
+          ...prev,
+          {
+            id: target.option.id,
+            title: target.option.title,
+            desc: target.option.desc,
+            count: 1,
+          },
+        ];
+      });
+    }
+
+    setSurvivorsMessage(`${target.option.title} を購入`);
+  }, [applySurvivorsAugment, isSurvivorsAugmentOpen, isSurvivorsShopSessionActive, survivorsCoins, survivorsShopSlots, survivorsShopWeapons]);
+
+  const onSurvivorsToggleShopLock = useCallback((slotId: string) => {
+    if (!isSurvivorsAugmentOpen) return;
+    setSurvivorsShopSlots((prev) => prev.map((slot) => {
+      if (slot.slotId !== slotId || slot.purchased) return slot;
+      return { ...slot, locked: !slot.locked };
+    }));
+  }, [isSurvivorsAugmentOpen]);
+
+  const survivorsShopRerollCost = Math.max(10, 12 + survivorsShopRerollCount * 6);
+
+  const onSurvivorsRerollShop = useCallback(() => {
+    if (!isSurvivorsAugmentOpen || !isSurvivorsShopSessionActive) return;
+    if (survivorsShopRerollBusyRef.current) return;
+    if (survivorsCoins < survivorsShopRerollCost) return;
+    survivorsShopRerollBusyRef.current = true;
+    setIsSurvivorsShopRerolling(true);
+    setSurvivorsCoins((prev) => Math.max(0, prev - survivorsShopRerollCost));
+    setSurvivorsShopRerollCount((prev) => prev + 1);
+    setSurvivorsShopSlots((prev) => buildSurvivorsShopSlots(survivorsAugmentReason, survivorsWave, prev));
+    window.setTimeout(() => {
+      setIsSurvivorsShopRerolling(false);
+      survivorsShopRerollBusyRef.current = false;
+    }, 140);
+  }, [buildSurvivorsShopSlots, isSurvivorsAugmentOpen, isSurvivorsShopSessionActive, survivorsAugmentReason, survivorsCoins, survivorsShopRerollCost, survivorsWave]);
+
+  const onSurvivorsStartNextWave = useCallback(() => {
+    if (!isSurvivorsAugmentOpen || !isSurvivorsShopSessionActive) return;
+    if (survivorsShopStartWaveBusyRef.current) return;
+    survivorsShopStartWaveBusyRef.current = true;
+    setIsSurvivorsStartingNextWave(true);
+
+    const nextWave = Math.max(1, survivorsShopNextWave);
+    const nextEnemies = createSurvivorsEnemies(nextWave);
+    survivorsWeaponAttackMotionRef.current = {};
+    survivorsEnemiesRef.current = nextEnemies;
+    setSurvivorsEnemies(nextEnemies);
+    setSurvivorsWave(nextWave);
+    survivorsNextWaveAtSecRef.current = getSurvivorsNextWaveAtSec(nextWave);
+    survivorsWaveKillsAtStartRef.current = survivorsKills;
+    setSurvivorsHp((prev) => Math.min(survivorsMaxHp, prev + 8));
+    setIsSurvivorsAugmentOpen(false);
+    setIsSurvivorsShopSessionActive(false);
+    survivorsWaveTransitioningRef.current = false;
+    setSurvivorsMessage(`WAVE ${nextWave} START!`);
+    window.setTimeout(() => {
+      setIsSurvivorsStartingNextWave(false);
+      survivorsShopStartWaveBusyRef.current = false;
+    }, 140);
+  }, [createSurvivorsEnemies, isSurvivorsAugmentOpen, isSurvivorsShopSessionActive, survivorsKills, survivorsMaxHp, survivorsShopNextWave]);
+
+  useEffect(() => {
+    if (!isSurvivorsAugmentOpen || !isSurvivorsShopSessionActive) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const tag = (event.target as HTMLElement | null)?.tagName?.toLowerCase() || "";
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (event.key.toLowerCase() !== "r") return;
+      event.preventDefault();
+      onSurvivorsRerollShop();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isSurvivorsAugmentOpen, isSurvivorsShopSessionActive, onSurvivorsRerollShop]);
 
   useEffect(() => {
     if (!gameStarted.survivors || isSurvivorsOver) return;
-    if (isSurvivorsAugmentOpen) return;
     if (survivorsXp < survivorsLevel * 40) return;
     setSurvivorsXp((prev) => prev - survivorsLevel * 40);
     setSurvivorsLevel((prev) => prev + 1);
     setSurvivorsMaxHp((prev) => prev + 8);
     setSurvivorsHp((prev) => prev + 8);
-    setSurvivorsAugmentReason("levelup");
-    setSurvivorsPendingAugments(createSurvivorsAugmentChoices("levelup", survivorsWave));
-    setIsSurvivorsAugmentOpen(true);
-    setSurvivorsMessage("LEVEL UP! 強化を1つ選択してください。");
-  }, [createSurvivorsAugmentChoices, gameStarted.survivors, isSurvivorsAugmentOpen, isSurvivorsOver, survivorsLevel, survivorsXp]);
+    setSurvivorsCoins((prev) => prev + 8);
+    setSurvivorsMessage("LEVEL UP! ウェーブ終了後にショップで強化を選択できます。");
+  }, [gameStarted.survivors, isSurvivorsOver, survivorsLevel, survivorsXp]);
 
   useEffect(() => {
     if (activePanel !== "survivors") return;
@@ -11723,6 +16010,14 @@ export default function Home() {
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === "Space") {
+        event.preventDefault();
+        survivorsSkillHoldRef.current = true;
+        if (survivorsCharacterId === "fairy") return;
+        if (event.repeat) return;
+        triggerSurvivorsSkill();
+        return;
+      }
       const dir = keyToDir(String(event.key || "").toLowerCase());
       if (!dir) return;
       event.preventDefault();
@@ -11730,20 +16025,52 @@ export default function Home() {
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === "Space") {
+        survivorsSkillHoldRef.current = false;
+        return;
+      }
       const dir = keyToDir(String(event.key || "").toLowerCase());
       if (!dir) return;
       survivorsInputRef.current[dir as "up" | "down" | "left" | "right"] = false;
     };
 
+    const onWindowBlur = () => {
+      survivorsSkillHoldRef.current = false;
+    };
+
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
+      survivorsSkillHoldRef.current = false;
       survivorsInputRef.current = { up: false, down: false, left: false, right: false };
     };
-  }, [activePanel, gameStarted.survivors, isSurvivorsAugmentOpen, isSurvivorsOver]);
+  }, [activePanel, gameStarted.survivors, isSurvivorsAugmentOpen, isSurvivorsOver, survivorsCharacterId, triggerSurvivorsSkill]);
+
+  useEffect(() => {
+    const img = new window.Image();
+    img.onload = () => {
+      const naturalWidth = img.naturalWidth;
+      const naturalHeight = img.naturalHeight;
+      const valid = naturalWidth % SURVIVORS_DAIKON_IDLE_SHEET_COLS === 0 && naturalHeight % SURVIVORS_DAIKON_IDLE_SHEET_ROWS === 0;
+      if (!valid) {
+        // Keep this visible in development when the sprite sheet is replaced with an invalid size.
+        console.error("大根キャラ.pngのサイズが4×2分割に対応していません");
+      }
+      setSurvivorsDaikonSpriteMeta({
+        naturalWidth,
+        naturalHeight,
+        frameWidth: valid ? naturalWidth / SURVIVORS_DAIKON_IDLE_SHEET_COLS : 0,
+        frameHeight: valid ? naturalHeight / SURVIVORS_DAIKON_IDLE_SHEET_ROWS : 0,
+        valid,
+      });
+    };
+    img.src = SURVIVORS_DAIKON_IDLE_SPRITE;
+  }, []);
 
   useEffect(() => {
     if (activePanel !== "survivors") return;
@@ -11773,22 +16100,64 @@ export default function Home() {
           Math.min(SURVIVORS_ARENA_HEIGHT - SURVIVORS_PLAYER_RADIUS, currentPlayer.y + (dy / norm) * moveSpeed),
         ),
       };
+      const actualMoveX = nextPlayer.x - currentPlayer.x;
+      const actualMoveY = nextPlayer.y - currentPlayer.y;
+      const actualMoveNorm = Math.hypot(actualMoveX, actualMoveY);
+      if (actualMoveNorm > 0.0001) {
+        survivorsLastMoveDirRef.current = {
+          x: actualMoveX / actualMoveNorm,
+          y: actualMoveY / actualMoveNorm,
+        };
+        const daikonDirection = getSurvivorsDaikonDirection(
+          survivorsLastMoveDirRef.current.x,
+          survivorsLastMoveDirRef.current.y,
+          survivorsDaikonLastMoveDirectionRef.current,
+        );
+        if (survivorsDaikonLastMoveDirectionRef.current !== daikonDirection) {
+          survivorsDaikonLastMoveDirectionRef.current = daikonDirection;
+          if (survivorsCharacterId === "daikon") {
+            setSurvivorsDaikonLastMoveDirection(daikonDirection);
+          }
+        }
+      }
       survivorsPlayerRef.current = nextPlayer;
       setSurvivorsPlayer(nextPlayer);
 
       let totalContactDamage = 0;
       let killCount = 0;
-      let pendingNextWave: number | null = null;
       let hasEnemyInRange = false;
+      const projectileShots: Array<{ toX: number; toY: number; fromX: number; fromY: number }> = [];
+      const characterProfile = SURVIVORS_CHARACTER_PROFILES[survivorsCharacterId];
+      const isSkillActive = now < survivorsSkillActiveUntilRef.current;
+      const isFairyRapidHolding = survivorsCharacterId === "fairy"
+        && survivorsSkillHoldRef.current
+        && survivorsMpRef.current > 0;
+      const holdRapidHasteMs = isFairyRapidHolding
+        ? Math.round(characterProfile.skillHasteMs * SURVIVORS_FAIRY_HOLD_HASTE_RATIO)
+        : 0;
+      const minAttackIntervalMs = isFairyRapidHolding ? SURVIVORS_FAIRY_HOLD_MIN_ATTACK_INTERVAL_MS : 110;
       const canAutoAttack = now >= survivorsAutoAttackReadyAtRef.current;
-      const attackIntervalMs = Math.max(110, 520 - Math.max(0, survivorsLevel - 1) * 16 - survivorsHasteBonus);
-      const attackRange = 220 + Math.min(160, survivorsLevel * 4);
-      const attackTargets = 1 + Math.floor(Math.max(0, survivorsLevel - 1) / 6) + survivorsMultiShotBonus;
+      const attackIntervalMs = Math.max(
+        minAttackIntervalMs,
+        520
+          - Math.max(0, survivorsLevel - 1) * 16
+          - survivorsHasteBonus
+          + characterProfile.attackIntervalAdjustMs
+          - (isSkillActive ? characterProfile.skillHasteMs : 0)
+          - holdRapidHasteMs,
+      );
+      const attackRange = characterProfile.attackRangeBase
+        + Math.min(220, survivorsLevel * characterProfile.attackRangePerLevel)
+        + (isSkillActive ? characterProfile.skillRangeBonus : 0);
+      const attackTargets = 1
+        + Math.floor(Math.max(0, survivorsLevel - 1) / 6)
+        + survivorsMultiShotBonus
+        + characterProfile.innateMultiShot
+        + (isSkillActive ? characterProfile.skillMultiShotBonus : 0);
 
-      setSurvivorsEnemies((prevEnemies) => {
-        if (prevEnemies.length <= 0) return prevEnemies;
-
-        const moved = prevEnemies.map((enemy) => {
+      const currentEnemies = survivorsEnemiesRef.current;
+      if (currentEnemies.length > 0) {
+        const moved = currentEnemies.map((enemy) => {
           const vx = nextPlayer.x - enemy.x;
           const vy = nextPlayer.y - enemy.y;
           const dist = Math.hypot(vx, vy) || 1;
@@ -11808,19 +16177,6 @@ export default function Home() {
           return { ...enemy, x, y };
         });
 
-        let nearestIndex = -1;
-        let nearestDist = Number.POSITIVE_INFINITY;
-        for (let i = 0; i < moved.length; i += 1) {
-          const enemy = moved[i];
-          const dist = Math.hypot(nextPlayer.x - enemy.x, nextPlayer.y - enemy.y);
-          if (dist < nearestDist) {
-            nearestDist = dist;
-            nearestIndex = i;
-          }
-        }
-
-        if (nearestIndex < 0) return moved;
-
         const inRangeTargets = moved
           .map((enemy, index) => ({ index, dist: Math.hypot(nextPlayer.x - enemy.x, nextPlayer.y - enemy.y) }))
           .filter((row) => row.dist <= attackRange)
@@ -11834,11 +16190,88 @@ export default function Home() {
             .slice(0, attackTargets)
             .map((row) => row.index);
           if (sorted.length > 0) {
-            const attackDamage = 4 + survivorsLevel * 1.15 + survivorsDamageBonus + Math.floor(Math.random() * 3);
-            attacked = moved.map((enemy, index) => {
-              if (!sorted.includes(index)) return enemy;
-              return { ...enemy, hp: enemy.hp - attackDamage };
-            });
+            const weaponSlots = expandSurvivorsWeaponSlots(survivorsCharacterId, survivorsShopWeapons);
+            const slotSpread = getSurvivorsWeaponSlotSpread(weaponSlots.length);
+            if (survivorsCharacterId !== "daikon") {
+              weaponSlots.forEach((slot, slotIndex) => {
+                const targetIndex = sorted[slotIndex % sorted.length];
+                const target = moved[targetIndex];
+                if (!target) return;
+                const staggerMs = Math.min(120, slotIndex * 26);
+                const motionDurationMs = Math.max(180, Math.min(460, Math.floor(attackIntervalMs * 0.82)));
+                const motionKind: SurvivorsWeaponAttackKind = survivorsCharacterId === "fairy" ? "ranged" : "melee";
+                const activeStartRatio = motionKind === "ranged" ? 0.24 : 0.2;
+                survivorsWeaponAttackMotionRef.current[slot.slotKey] = {
+                  startedAt: now + staggerMs - motionDurationMs * activeStartRatio,
+                  durationMs: motionDurationMs,
+                  kind: motionKind,
+                };
+
+                if (survivorsCharacterId === "fairy") {
+                  const aimAngle = Math.atan2(target.y - nextPlayer.y, target.x - nextPlayer.x);
+                  const slotAngle = aimAngle + (slotSpread[slotIndex] || 0);
+                  const gripDistance = slot.config.distanceFromPlayer;
+                  const gripX = nextPlayer.x + Math.cos(slotAngle) * gripDistance;
+                  const gripY = nextPlayer.y + Math.sin(slotAngle) * gripDistance;
+                  const tipDistance = Math.hypot(slot.config.tipX - slot.config.gripX, slot.config.tipY - slot.config.gripY) * slot.config.scale
+                    + Math.max(2, slot.config.attackExtension * 0.25);
+                  projectileShots.push({
+                    toX: target.x,
+                    toY: target.y,
+                    fromX: gripX + Math.cos(slotAngle) * tipDistance,
+                    fromY: gripY + Math.sin(slotAngle) * tipDistance,
+                  });
+                }
+              });
+            }
+            const attackDamage = Math.max(
+              1,
+              4
+                + survivorsLevel * 1.15
+                + survivorsDamageBonus
+                + characterProfile.attackDamageBonus
+                + (isSkillActive ? characterProfile.skillDamageBonus : 0)
+                + Math.floor(Math.random() * 3),
+            );
+            if (survivorsCharacterId === "daikon") {
+              const primaryTarget = moved[sorted[0]];
+              if (primaryTarget) {
+                const facingLeft = primaryTarget.x < nextPlayer.x;
+                const towardX = primaryTarget.x - nextPlayer.x;
+                const towardY = primaryTarget.y - nextPlayer.y;
+                const towardNorm = Math.hypot(towardX, towardY) || 1;
+                const dirX = towardX / towardNorm;
+                const dirY = towardY / towardNorm;
+                const angleDeg = (Math.atan2(towardY, towardX) * 180) / Math.PI + 90;
+                survivorsDaikonAttackRef.current = {
+                  active: true,
+                  startedAt: now,
+                  durationMs: Math.max(220, Math.min(460, Math.floor(attackIntervalMs * 0.78))),
+                  frameIndex: 0,
+                  targetEnemyIds: sorted
+                    .map((targetIndex) => moved[targetIndex]?.id)
+                    .filter((id): id is string => Boolean(id)),
+                  damage: attackDamage,
+                  hitApplied: false,
+                  facingLeft,
+                  angleDeg,
+                  dirX,
+                  dirY,
+                  impactRange: attackRange,
+                };
+                setSurvivorsDaikonAttackVisual({
+                  active: true,
+                  frameIndex: 0,
+                  facingLeft,
+                  angleDeg,
+                });
+              }
+            } else {
+              attacked = moved.map((enemy, index) => {
+                if (!sorted.includes(index)) return enemy;
+                return { ...enemy, hp: enemy.hp - attackDamage };
+              });
+            }
             survivorsAutoAttackReadyAtRef.current = now + attackIntervalMs;
           }
         }
@@ -11847,30 +16280,266 @@ export default function Home() {
         killCount = attacked.length - alive.length;
 
         if (alive.length <= 0) {
-          pendingNextWave = survivorsWave + 1;
-          return createSurvivorsEnemies(pendingNextWave);
+          survivorsEnemiesRef.current = [];
+          setSurvivorsEnemies([]);
+          if (!survivorsWaveTransitioningRef.current) {
+            openSurvivorsWaveShop("wave", survivorsWave);
+          }
+        } else {
+          survivorsEnemiesRef.current = alive;
+          setSurvivorsEnemies(alive);
+        }
+      }
+
+      if (survivorsCharacterId === "daikon" && survivorsDaikonAttackRef.current.active) {
+        const attackState = survivorsDaikonAttackRef.current;
+        const elapsedMs = Math.max(0, now - attackState.startedAt);
+        const progress = Math.max(0, Math.min(1, elapsedMs / Math.max(1, attackState.durationMs)));
+        const frameIndex = Math.min(
+          SURVIVORS_DAIKON_ATTACK_FRAME_COUNT - 1,
+          Math.floor(progress * SURVIVORS_DAIKON_ATTACK_FRAME_COUNT),
+        );
+
+        if (frameIndex !== attackState.frameIndex) {
+          attackState.frameIndex = frameIndex;
+          setSurvivorsDaikonAttackVisual((prev) => {
+            if (
+              prev.active
+              && prev.frameIndex === frameIndex
+              && prev.facingLeft === attackState.facingLeft
+              && Math.abs(prev.angleDeg - attackState.angleDeg) < 0.001
+            ) {
+              return prev;
+            }
+            return {
+              active: true,
+              frameIndex,
+              facingLeft: attackState.facingLeft,
+              angleDeg: attackState.angleDeg,
+            };
+          });
         }
 
-        return alive;
+        if (!attackState.hitApplied && frameIndex >= SURVIVORS_DAIKON_ATTACK_HIT_FRAME_INDEX) {
+          attackState.hitApplied = true;
+          const targetSet = new Set(attackState.targetEnemyIds);
+          const forwardRange = Math.max(44, attackState.impactRange * 0.9);
+          const attackedEnemies = survivorsEnemiesRef.current.map((enemy) => {
+            if (!targetSet.has(enemy.id)) return enemy;
+            const relX = enemy.x - nextPlayer.x;
+            const relY = enemy.y - nextPlayer.y;
+            const relDist = Math.hypot(relX, relY) || 1;
+            const dot = (relX / relDist) * attackState.dirX + (relY / relDist) * attackState.dirY;
+            if (dot < 0.2 || relDist > forwardRange) return enemy;
+            return { ...enemy, hp: enemy.hp - attackState.damage };
+          });
+          const aliveEnemies = attackedEnemies.filter((enemy) => enemy.hp > 0);
+          const killedNow = attackedEnemies.length - aliveEnemies.length;
+          killCount += killedNow;
+          if (aliveEnemies.length <= 0) {
+            survivorsEnemiesRef.current = [];
+            setSurvivorsEnemies([]);
+            if (!survivorsWaveTransitioningRef.current) {
+              openSurvivorsWaveShop("wave", survivorsWave);
+            }
+          } else {
+            survivorsEnemiesRef.current = aliveEnemies;
+            setSurvivorsEnemies(aliveEnemies);
+          }
+        }
+
+        if (progress >= 1) {
+          survivorsDaikonAttackRef.current = {
+            ...attackState,
+            active: false,
+            frameIndex: 0,
+            targetEnemyIds: [],
+            hitApplied: false,
+          };
+          setSurvivorsDaikonAttackVisual((prev) => (prev.active
+            ? {
+              active: false,
+              frameIndex: 0,
+              facingLeft: prev.facingLeft,
+              angleDeg: prev.angleDeg,
+            }
+            : prev));
+        }
+      }
+
+      {
+        const weaponSlots = expandSurvivorsWeaponSlots(survivorsCharacterId, survivorsShopWeapons);
+        const slotSpread = getSurvivorsWeaponSlotSpread(weaponSlots.length);
+        const sortedEnemies = survivorsEnemiesRef.current
+          .slice()
+          .sort((a, b) => {
+            const da = Math.hypot(a.x - nextPlayer.x, a.y - nextPlayer.y);
+            const db = Math.hypot(b.x - nextPlayer.x, b.y - nextPlayer.y);
+            return da - db;
+          });
+        const moveAim = Math.atan2(survivorsLastMoveDirRef.current.y, survivorsLastMoveDirRef.current.x);
+        const activeSlotKeySet = new Set(weaponSlots.map((slot) => slot.slotKey));
+        Object.keys(survivorsWeaponAimAnglesRef.current).forEach((key) => {
+          if (!activeSlotKeySet.has(key)) delete survivorsWeaponAimAnglesRef.current[key];
+        });
+        Object.keys(survivorsWeaponAttackMotionRef.current).forEach((key) => {
+          if (!activeSlotKeySet.has(key)) delete survivorsWeaponAttackMotionRef.current[key];
+        });
+
+        const nextPoses: SurvivorsWeaponRenderPose[] = weaponSlots.map((slot, slotIndex) => {
+          const target = sortedEnemies.length > 0
+            ? sortedEnemies[slotIndex % sortedEnemies.length]
+            : null;
+          const targetAngle = target
+            ? Math.atan2(target.y - nextPlayer.y, target.x - nextPlayer.x)
+            : moveAim;
+          const prevAngle = survivorsWeaponAimAnglesRef.current[slot.slotKey] ?? targetAngle;
+          const smoothAngle = normalizeAngleRad(prevAngle + getShortestAngleDeltaRad(prevAngle, targetAngle) * 0.24);
+          survivorsWeaponAimAnglesRef.current[slot.slotKey] = smoothAngle;
+
+          const orbitAngle = weaponSlots.length <= 3
+            ? smoothAngle + (slotSpread[slotIndex] || 0)
+            : smoothAngle + (slotSpread[slotIndex] || 0) * 0.75;
+          const motion = survivorsWeaponAttackMotionRef.current[slot.slotKey];
+          let extension = 0;
+          let swingOffset = 0;
+          let flashIntensity = 0;
+          if (motion) {
+            const elapsed = now - motion.startedAt;
+            if (elapsed >= motion.durationMs) {
+              delete survivorsWeaponAttackMotionRef.current[slot.slotKey];
+            } else if (elapsed >= 0) {
+              const progress = Math.max(0, Math.min(1, elapsed / Math.max(1, motion.durationMs)));
+              const windupEnd = 0.2;
+              const activeEnd = 0.62;
+              if (motion.kind === "melee") {
+                if (progress < windupEnd) {
+                  const t = progress / windupEnd;
+                  extension = slot.config.attackExtension * (-0.18 + 0.08 * t);
+                  swingOffset = (-0.28 + 0.16 * t) * (slotIndex % 2 === 0 ? 1 : -1);
+                } else if (progress < activeEnd) {
+                  const t = (progress - windupEnd) / (activeEnd - windupEnd);
+                  extension = slot.config.attackExtension * (-0.1 + 1.1 * t);
+                  swingOffset = (-0.12 + 0.34 * t) * (slotIndex % 2 === 0 ? 1 : -1);
+                } else {
+                  const t = (progress - activeEnd) / Math.max(0.001, 1 - activeEnd);
+                  extension = slot.config.attackExtension * (1 - t);
+                  swingOffset = (0.22 * (1 - t)) * (slotIndex % 2 === 0 ? 1 : -1);
+                }
+              } else {
+                if (progress < 0.24) {
+                  const t = progress / 0.24;
+                  extension = slot.config.attackExtension * (0.12 * t);
+                  flashIntensity = 0;
+                } else if (progress < 0.42) {
+                  const t = (progress - 0.24) / 0.18;
+                  extension = slot.config.attackExtension * (0.12 - 0.35 * t);
+                  flashIntensity = 1 - t * 0.2;
+                } else {
+                  const t = (progress - 0.42) / 0.58;
+                  extension = slot.config.attackExtension * (-0.23 * (1 - t));
+                  flashIntensity = Math.max(0, 0.45 - t);
+                }
+              }
+            }
+          }
+
+          const gripDistance = slot.config.distanceFromPlayer + Math.max(0, extension * 0.12);
+          const localX = Math.cos(orbitAngle) * gripDistance;
+          const localY = Math.sin(orbitAngle) * gripDistance;
+          const finalAngle = normalizeAngleRad(smoothAngle + swingOffset);
+          const leftTarget = Math.cos(finalAngle) < 0;
+          const tipDistance = Math.hypot(slot.config.tipX - slot.config.gripX, slot.config.tipY - slot.config.gripY) * slot.config.scale;
+          const muzzleX = nextPlayer.x + localX + Math.cos(finalAngle) * (tipDistance + extension);
+          const muzzleY = nextPlayer.y + localY + Math.sin(finalAngle) * (tipDistance + extension);
+          const isBehindByAngle = Math.sin(finalAngle) < 0;
+          const isBehindPlayer = slot.config.renderLayer === "behind" ? true : isBehindByAngle;
+
+          return {
+            slotKey: slot.slotKey,
+            imageSrc: slot.imageSrc,
+            localX,
+            localY,
+            rotationDeg: (finalAngle * 180) / Math.PI + slot.config.baseRotation + (leftTarget ? 180 : 0),
+            scale: slot.config.scale,
+            scaleY: leftTarget ? -1 : 1,
+            gripX: slot.config.gripX,
+            gripY: slot.config.gripY,
+            isBehindPlayer,
+            muzzleX,
+            muzzleY,
+            flashIntensity,
+          } satisfies SurvivorsWeaponRenderPose;
+        });
+        setSurvivorsWeaponRenderPoses(nextPoses);
+      }
+
+      if (projectileShots.length > 0) {
+        spawnSurvivorsProjectiles(projectileShots);
+      }
+
+      if (isFairyRapidHolding && hasEnemyInRange) {
+        const holdMpDrain = SURVIVORS_FAIRY_HOLD_MP_DRAIN_PER_SEC * (deltaMs / 1000);
+        if (holdMpDrain > 0) {
+          survivorsMpRef.current = Math.max(0, survivorsMpRef.current - holdMpDrain);
+          setSurvivorsMp(survivorsMpRef.current);
+          if (survivorsMpRef.current <= 0.05) {
+            survivorsSkillHoldRef.current = false;
+          }
+        }
+      }
+
+      const mpRegen = 12 * (deltaMs / 1000);
+      if (mpRegen > 0 && survivorsMpRef.current < survivorsMaxMp && !isFairyRapidHolding) {
+        const nextMp = Math.min(survivorsMaxMp, survivorsMpRef.current + mpRegen);
+        survivorsMpRef.current = nextMp;
+        setSurvivorsMp(nextMp);
+      }
+
+      setSurvivorsProjectiles((prev) => {
+        if (prev.length <= 0) return prev;
+        const next = prev
+          .map((projectile) => {
+            const nextProgress = projectile.progress + deltaMs / Math.max(1, projectile.durationMs);
+            return { ...projectile, progress: Math.min(1, nextProgress) };
+          })
+          .filter((projectile) => projectile.progress < 1);
+        return next;
       });
 
-      setIsSurvivorsAttackMotion((prev) => (prev === hasEnemyInRange ? prev : hasEnemyInRange));
+      const attackMotionActive = survivorsCharacterId === "daikon"
+        ? survivorsDaikonAttackRef.current.active
+        : hasEnemyInRange;
+      setIsSurvivorsAttackMotion((prev) => (prev === attackMotionActive ? prev : attackMotionActive));
+
+      if (isFairyRapidHolding && hasEnemyInRange) {
+        if (survivorsRapidHoldStartedAtRef.current === null) {
+          survivorsRapidHoldStartedAtRef.current = now;
+        }
+      } else {
+        survivorsRapidHoldStartedAtRef.current = null;
+      }
+      const rapidHoldSec = survivorsRapidHoldStartedAtRef.current === null
+        ? 0
+        : Math.max(0, (now - survivorsRapidHoldStartedAtRef.current) / 1000);
+      const rapidDecay = Math.max(0.34, 1 - rapidHoldSec * 0.18);
+      const targetMotionIntensity = survivorsCharacterId === "daikon"
+        ? (survivorsDaikonAttackRef.current.active ? 1.1 : 0)
+        : hasEnemyInRange
+          ? (isFairyRapidHolding ? 1.45 * rapidDecay : 1.05)
+          : 0;
+      setSurvivorsAttackMotionIntensity((prev) => {
+        const eased = prev + (targetMotionIntensity - prev) * 0.22;
+        return Math.abs(eased - prev) < 0.01 ? prev : eased;
+      });
 
       if (killCount > 0) {
         setSurvivorsKills((prev) => prev + killCount);
         setSurvivorsXp((prev) => prev + killCount * (8 + survivorsWave));
       }
 
-      if (pendingNextWave !== null) {
-        setSurvivorsWave(pendingNextWave);
-        setSurvivorsMessage(tf("survivorsWaveClear", { wave: survivorsWave }));
-        setSurvivorsHp((prev) => Math.min(survivorsMaxHp, prev + 8));
-        if (pendingNextWave % 3 === 0) {
-          setSurvivorsAugmentReason("wave");
-          setSurvivorsPendingAugments(createSurvivorsAugmentChoices("wave", pendingNextWave));
-          setIsSurvivorsAugmentOpen(true);
-          setSurvivorsMessage(`WAVE ${pendingNextWave} BONUS! 報酬を1つ選択してください。`);
-        }
+      if (survivorsTimeSec >= survivorsNextWaveAtSecRef.current && !survivorsWaveTransitioningRef.current) {
+        openSurvivorsWaveShop("wave", survivorsWave);
       }
 
       if (totalContactDamage > 0 && now >= survivorsContactReadyAtRef.current) {
@@ -11898,13 +16567,18 @@ export default function Home() {
     gameStarted.survivors,
     isSurvivorsAugmentOpen,
     isSurvivorsOver,
+    spawnSurvivorsProjectiles,
     survivorsDamageBonus,
     survivorsHasteBonus,
     survivorsArmorBonus,
+    survivorsCharacterId,
     survivorsLevel,
+    survivorsMaxMp,
     survivorsMaxHp,
     survivorsMultiShotBonus,
+    survivorsShopWeapons,
     survivorsWave,
+    openSurvivorsWaveShop,
     t,
     tf,
   ]);
@@ -11932,12 +16606,13 @@ export default function Home() {
 
     const tick = (now: number) => {
       const isAttacking = survivorsAttackMotionRef.current;
+      const boostedIntervalMs = Math.max(46, frameIntervalMs - survivorsAttackMotionIntensity * 24);
       if (!isAttacking) {
         if (wasAttacking) {
           setSurvivorsPlayerFrame(1);
         }
         wasAttacking = false;
-      } else if (now - lastSwapAt >= frameIntervalMs) {
+      } else if (now - lastSwapAt >= boostedIntervalMs) {
         setSurvivorsPlayerFrame((prev) => (prev === 3 ? 1 : ((prev + 1) as 1 | 2 | 3)));
         lastSwapAt = now;
         wasAttacking = true;
@@ -11947,7 +16622,7 @@ export default function Home() {
 
     animationFrameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(animationFrameId);
-  }, [activePanel, gameStarted.survivors, isSurvivorsOver]);
+  }, [activePanel, gameStarted.survivors, isSurvivorsOver, survivorsAttackMotionIntensity]);
 
   useEffect(() => {
     if (activePanel !== "chinchiro") return;
@@ -11959,101 +16634,105 @@ export default function Home() {
   useEffect(() => {
     if (activePanel !== "sevens") return;
     if (!gameStarted.sevens) return;
-    if (sevensHands[0].length === 0 && sevensHands[1].length === 0) {
-      resetSevens();
+    if (sevensPlayers.length === 0) {
+      resetSevens({ startGame: true });
     }
-  }, [activePanel, gameStarted.sevens, resetSevens, sevensHands]);
-
-  useEffect(() => {
-    if (activePanel !== "sevens" || sevensTurn !== "cpu" || isSevensOver) return;
-    if (!gameStarted.sevens) return;
-
-    const timer = setTimeout(() => {
-      const cpuHand = sevensHands[1];
-      const playableIndex = cpuHand.findIndex((card) => isSevensPlayable(card, sevensTable));
-
-      if (playableIndex >= 0) {
-        const card = cpuHand[playableIndex];
-        const nextTable = applySevensCard(sevensTable, card);
-        const nextCpu = cpuHand.filter((_, i) => i !== playableIndex);
-        setSevensTable(nextTable);
-        setSevensHands([sevensHands[0], nextCpu]);
-
-        if (nextCpu.length === 0) {
-          setIsSevensOver(true);
-          setSevensMessage(t("sevensCpuWin"));
-          return;
-        }
-
-        setSevensTurn("player");
-        setSevensMessage(t("sevensYourTurn"));
-        return;
-      }
-
-      setSevensPassCount((prev) => [prev[0], prev[1] + 1]);
-      if (!hasSevensPlayable(sevensHands[0], sevensTable)) {
-        setIsSevensOver(true);
-        setSevensMessage(t("sevensDraw"));
-        return;
-      }
-      setSevensTurn("player");
-      setSevensMessage(t("sevensYourTurn"));
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [activePanel, gameStarted.sevens, isSevensOver, sevensHands, sevensTable, sevensTurn, t]);
-
-  useEffect(() => {
-    if (activePanel !== "daifugo") return;
-    if (!gameStarted.daifugo) return;
-    if (daifugoHands[0].length === 0 && daifugoHands[1].length === 0) {
-      resetDaifugo();
-    }
-  }, [activePanel, daifugoHands, gameStarted.daifugo, resetDaifugo]);
+  }, [activePanel, gameStarted.sevens, resetSevens, sevensPlayers.length]);
 
   useEffect(() => {
     if (connectedRoomCode) return;
-    if (activePanel !== "daifugo" || daifugoTurn !== "cpu" || isDaifugoOver) return;
-    if (!gameStarted.daifugo) return;
+    if (activePanel !== "sevens" || isSevensOver) return;
+    if (!gameStarted.sevens) return;
+    const current = sevensPlayers[sevensCurrentTurnIndex];
+    if (!current || !current.isCpu || current.status !== "playing") return;
 
     const timer = setTimeout(() => {
-      const cpuHand = daifugoHands[1];
-      const playableIndex = cpuHand.findIndex((card) => !daifugoTableCard || daifugoPower(card.rank) > daifugoPower(daifugoTableCard.rank));
-
+      const playableIndex = selectSevensCpuMove(sevensCpuDifficulty, current.hand, sevensTable);
       if (playableIndex >= 0) {
-        const card = cpuHand[playableIndex];
-        const nextCpu = cpuHand.filter((_, i) => i !== playableIndex);
-        setDaifugoHands([daifugoHands[0], nextCpu]);
-        setDaifugoTableCard(card);
-        setDaifugoPassStreak(0);
-
-        if (nextCpu.length === 0) {
-          setIsDaifugoOver(true);
-          setDaifugoMessage(t("daifugoCpuWin"));
-          return;
-        }
-
-        setDaifugoTurn("player");
-        setDaifugoMessage(t("daifugoYourTurn"));
+        onSevensPlay(playableIndex, { actorId: current.id, isRemote: true });
         return;
       }
-
-      const streak = daifugoPassStreak + 1;
-      if (streak >= 2) {
-        setDaifugoTableCard(null);
-        setDaifugoPassStreak(0);
-        setDaifugoTurn("player");
-        setDaifugoMessage(t("daifugoRoundClear"));
-        return;
-      }
-
-      setDaifugoPassStreak(streak);
-      setDaifugoTurn("player");
-      setDaifugoMessage(tf("daifugoPassInfo", { who: "CPU" }));
-    }, 500);
+      onSevensPass({ actorId: current.id, isRemote: true });
+    }, 500 + Math.floor(Math.random() * 1000));
 
     return () => clearTimeout(timer);
-  }, [activePanel, connectedRoomCode, daifugoHands, daifugoPassStreak, daifugoTableCard, daifugoTurn, gameStarted.daifugo, isDaifugoOver, t, tf]);
+  }, [
+    activePanel,
+    connectedRoomCode,
+    gameStarted.sevens,
+    isSevensOver,
+    onSevensPlay,
+    onSevensPass,
+    sevensCpuDifficulty,
+    sevensCurrentTurnIndex,
+    sevensPlayers,
+    sevensTable,
+  ]);
+
+  useEffect(() => {
+    if (sevensSelectedCardIndex === null) return;
+    if (!canOperateSevensNow) {
+      setSevensSelectedCardIndex(null);
+      return;
+    }
+    if (!(sevensLocalPlayer?.hand || [])[sevensSelectedCardIndex]) {
+      setSevensSelectedCardIndex(null);
+    }
+  }, [canOperateSevensNow, sevensLocalPlayer, sevensSelectedCardIndex]);
+
+  useEffect(() => {
+    if (connectedRoomCode) return;
+    if (activePanel !== "daifugo" || isDaifugoOver) return;
+    if (!gameStarted.daifugo || daifugoPhase !== "playing") return;
+    const actor = daifugoCurrentPlayer;
+    if (!actor || !actor.isCpu || actor.status !== "playing") return;
+
+    const timer = setTimeout(() => {
+      const hand = actor.hand;
+      const candidates = buildDaifugoCpuCandidates(hand)
+        .map((cards) => ({ cards, combo: analyzeDaifugoCombo(cards) }))
+        .filter((entry) => entry.combo.valid)
+        .filter((entry) => canPlayDaifugoCombo(entry.combo, daifugoTableCombo).ok);
+
+      if (candidates.length <= 0) {
+        onDaifugoPass({ isRemote: true });
+        return;
+      }
+
+      const sorted = [...candidates].sort((a, b) => {
+        const lenA = Number(a.combo.length || 0);
+        const lenB = Number(b.combo.length || 0);
+        if (lenA !== lenB) return lenA - lenB;
+        return Number(a.combo.strength || 0) - Number(b.combo.strength || 0);
+      });
+
+      const picked = daifugoCpuLevel === "hard"
+        ? sorted[Math.max(0, sorted.length - 1)]
+        : daifugoCpuLevel === "easy"
+          ? sorted[Math.floor(Math.random() * sorted.length)]
+          : sorted[0];
+
+      const pickedIds = (picked?.cards || []).map((card) => card.id);
+      if (pickedIds.length <= 0) {
+        onDaifugoPass({ isRemote: true });
+        return;
+      }
+      onDaifugoPlay(undefined, { isRemote: true, cardIds: pickedIds });
+    }, 500 + Math.floor(Math.random() * 1000));
+
+    return () => clearTimeout(timer);
+  }, [
+    activePanel,
+    connectedRoomCode,
+    daifugoCpuLevel,
+    daifugoCurrentPlayer,
+    daifugoPhase,
+    daifugoTableCombo,
+    gameStarted.daifugo,
+    isDaifugoOver,
+    onDaifugoPass,
+    onDaifugoPlay,
+  ]);
 
   useEffect(() => {
     if (activePanel !== "fourPanel") return;
@@ -12085,11 +16764,16 @@ export default function Home() {
 
   useEffect(() => {
     if (activePanel !== "poker") return;
-    if (!gameStarted.poker) return;
-    if (pokerPlayerHand.length === 0 || pokerCpuHand.length === 0) {
+    if (pokerPlayers.length === 0) {
       resetPoker();
     }
-  }, [activePanel, gameStarted.poker, pokerCpuHand.length, pokerPlayerHand.length, resetPoker]);
+  }, [activePanel, pokerPlayers.length, resetPoker]);
+
+  useEffect(() => {
+    if (activePanel !== "poker") return;
+    resetPoker();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePanel, pokerSettings.gameMode]);
 
   useEffect(() => {
     if (activePanel !== "solitaire") return;
@@ -12108,19 +16792,29 @@ export default function Home() {
   }, [activePanel, gameStarted.survivors, resetSurvivors, survivorsEnemies.length, survivorsTimeSec, survivorsWave]);
 
   const resetUno = useCallback(() => {
+    if (unoNotificationTimerRef.current !== null) {
+      window.clearTimeout(unoNotificationTimerRef.current);
+      unoNotificationTimerRef.current = null;
+    }
+    setUnoNotification(null);
+    unoHandCountBootstrappedRef.current = false;
+    unoHandCountPrevRef.current = [];
     const deck = shuffleCards(createUnoDeck());
     if (isUnoExtendedMode) {
       const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
       const hands: UnoCard[][] = Array.from({ length: totalPlayers }, (_, i) => deck.slice(i * 7, i * 7 + 7));
-      const top = deck[totalPlayers * 7] || { color: "R", value: 0 };
+      const top = deck[totalPlayers * 7] || createUnoNumberCard("R", 0);
       const rest = deck.slice(totalPlayers * 7 + 1);
       setUnoLocalHands(hands);
       setUnoPlayerHand(hands[0] || []);
       setUnoCpuHand(hands[1] || []);
       setUnoLocalTurnIndex(0);
+      setUnoTurnDirection(1);
       setUnoTopCard(top);
       setUnoDeck(rest);
       setUnoTurn("player");
+      setUnoSelectedCardIds([]);
+      setIsUnoAnimatingPlay(false);
       setIsUnoOver(false);
       setUnoMessage(t("unoYourTurn"));
       return;
@@ -12128,13 +16822,17 @@ export default function Home() {
 
     const player = deck.slice(0, 7);
     const cpu = deck.slice(7, 14);
-    const top = deck[14] || { color: "R", value: 0 };
+    const top = deck[14] || createUnoNumberCard("R", 0);
     const rest = deck.slice(15);
     setUnoPlayerHand(player);
     setUnoCpuHand(cpu);
+    setUnoLocalHands([player, cpu]);
+    setUnoTurnDirection(1);
     setUnoTopCard(top);
     setUnoDeck(rest);
     setUnoTurn("player");
+    setUnoSelectedCardIds([]);
+    setIsUnoAnimatingPlay(false);
     setIsUnoOver(false);
     setUnoMessage(t("unoYourTurn"));
   }, [connectedRoomCode, isUnoExtendedMode, t, unoLocalTotalPlayers, unoRoomTotalPlayers]);
@@ -12146,164 +16844,222 @@ export default function Home() {
     return card;
   }, [unoDeck]);
 
-  const playUnoCard = useCallback(
-    (index: number, options?: { isRemote?: boolean; side?: "player" | "cpu" }) => {
-      if (isUnoExtendedMode) {
-        if (isUnoOver || !unoTopCard) return;
-        const isRemote = Boolean(options?.isRemote);
-        let actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
+  const toggleUnoCardSelection = useCallback((cardId: string) => {
+    if (!canOperateUnoNow || isUnoOver || isUnoAnimatingPlay) return;
+    setUnoSelectedCardIds((prev) => (
+      prev.includes(cardId)
+        ? prev.filter((id) => id !== cardId)
+        : [...prev, cardId]
+    ));
+  }, [canOperateUnoNow, isUnoAnimatingPlay, isUnoOver]);
 
-        if (connectedRoomCode && !isRemote) {
-          if (roomRole === "spectator") {
-            setUnoMessage(t("roomSpectatorReadonly"));
-            return;
-          }
-          if (!canOperateUnoNow) {
-            setUnoMessage(t("roomTurnOwnerOnly"));
-            return;
-          }
-          if (roomRole === "guest") {
-            sendRoomEvent({ type: "uno-request-action", action: "play", index });
-            setUnoMessage(t("roomWaitingHostJudge"));
-            return;
-          }
-        }
+  const playUnoCards = useCallback(async (
+    cardIds: string[],
+    options?: { isRemote?: boolean; side?: "player" | "cpu"; actorIndexOverride?: number; bypassRoomChecks?: boolean },
+  ) => {
+    if (isUnoOver || !unoTopCard || isUnoAnimatingPlay) return;
+    const uniqueCardIds = cardIds.map((id) => String(id || "").trim()).filter(Boolean);
+    if (uniqueCardIds.length <= 0) return;
+
+    const isRemote = Boolean(options?.isRemote);
+    let actorIndex = typeof options?.actorIndexOverride === "number"
+      ? Math.trunc(options.actorIndexOverride)
+      : 0;
+
+    if (isUnoExtendedMode) {
+      if (typeof options?.actorIndexOverride !== "number") {
+        actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
         if (connectedRoomCode && isRemote) {
           actorIndex = 1;
         }
-        if (actorIndex < 0 || unoLocalTurnIndex !== actorIndex) return;
-
-        const currentHand = unoLocalHands[actorIndex] || [];
-        const card = currentHand[index];
-        if (!card) return;
-        if (!canPlayCard(card, unoTopCard)) {
-          setUnoMessage(t("unoNoPlayable"));
-          return;
-        }
-
-        const nextHand = currentHand.filter((_, i) => i !== index);
-        const nextHands = [...unoLocalHands];
-        nextHands[actorIndex] = nextHand;
-        setUnoLocalHands(nextHands);
-        setUnoPlayerHand(nextHands[0] || []);
-        setUnoCpuHand(nextHands[1] || []);
-        setUnoTopCard(card);
-        const whoLabel = actorIndex === 0 ? "YOU" : actorIndex === 1 ? "OPP" : `CPU ${actorIndex - 1}`;
-        setUnoMessage(tf("unoPlayedCard", { who: whoLabel, card: unoCardLabel(card) }));
-
-        if (nextHand.length === 0) {
-          setIsUnoOver(true);
-          setUnoMessage(actorIndex === 0 ? t("unoPlayerWin") : t("unoCpuWin"));
-          return;
-        }
-
-        const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
-        const nextTurn = (actorIndex + 1) % Math.max(2, totalPlayers);
-        setUnoLocalTurnIndex(nextTurn);
-        setUnoTurn(nextTurn === 0 ? "player" : "cpu");
-        return;
       }
-
-      const isRemote = Boolean(options?.isRemote);
+    } else {
       const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
-      if (isUnoOver || unoTurn !== side || !unoTopCard) return;
-
-      if (connectedRoomCode && !isRemote) {
-        if (roomRole === "spectator") {
-          setUnoMessage(t("roomSpectatorReadonly"));
-          return;
-        }
-        if (!canOperateUnoNow) {
-          setUnoMessage(t("roomTurnOwnerOnly"));
-          return;
-        }
-        if (roomRole === "guest") {
-          sendRoomEvent({ type: "uno-request-action", action: "play", index });
-          setUnoMessage(t("roomWaitingHostJudge"));
-          return;
-        }
-      }
-
-      const currentHand = side === "player" ? unoPlayerHand : unoCpuHand;
-      const card = currentHand[index];
-      if (!card) return;
-      if (!canPlayCard(card, unoTopCard)) {
-        setUnoMessage(t("unoNoPlayable"));
-        return;
-      }
-
-      const nextHand = currentHand.filter((_, i) => i !== index);
-      if (side === "player") {
-        setUnoPlayerHand(nextHand);
-      } else {
-        setUnoCpuHand(nextHand);
-      }
-      setUnoTopCard(card);
-      setUnoMessage(tf("unoPlayedCard", { who: side === "player" ? "YOU" : "CPU", card: unoCardLabel(card) }));
-
-      if (nextHand.length === 0) {
-        setIsUnoOver(true);
-        setUnoMessage(side === "player" ? t("unoPlayerWin") : t("unoCpuWin"));
-        return;
-      }
-
-      setUnoTurn(side === "player" ? "cpu" : "player");
-    },
-    [canOperateUnoNow, connectedRoomCode, isUnoExtendedMode, isUnoOver, roomRole, sendRoomEvent, t, tf, unoCardLabel, unoCpuHand, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoPlayerHand, unoRoomHumanIndex, unoRoomTotalPlayers, unoTopCard, unoTurn],
-  );
-
-  const drawUnoForPlayer = useCallback((options?: { isRemote?: boolean; side?: "player" | "cpu" }) => {
-    if (isUnoExtendedMode) {
-      if (isUnoOver) return;
-      const isRemote = Boolean(options?.isRemote);
-      let actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
-
-      if (connectedRoomCode && !isRemote) {
-        if (roomRole === "spectator") {
-          setUnoMessage(t("roomSpectatorReadonly"));
-          return;
-        }
-        if (!canOperateUnoNow) {
-          setUnoMessage(t("roomTurnOwnerOnly"));
-          return;
-        }
-        if (roomRole === "guest") {
-          sendRoomEvent({ type: "uno-request-action", action: "draw" });
-          setUnoMessage(t("roomWaitingHostJudge"));
-          return;
-        }
-      }
+      actorIndex = side === "player" ? 0 : 1;
       if (connectedRoomCode && isRemote) {
         actorIndex = 1;
       }
-      if (actorIndex < 0 || unoLocalTurnIndex !== actorIndex) return;
+    }
 
-      const card = drawUnoCard();
-      if (!card) {
-        setUnoMessage(t("unoNoPlayable"));
-        const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
-        const nextTurn = (actorIndex + 1) % Math.max(2, totalPlayers);
-        setUnoLocalTurnIndex(nextTurn);
-        setUnoTurn(nextTurn === 0 ? "player" : "cpu");
+    if (connectedRoomCode && !isRemote && !options?.bypassRoomChecks) {
+      if (roomRole === "spectator") {
+        setUnoMessage(t("roomSpectatorReadonly"));
         return;
       }
-      const nextHands = [...unoLocalHands];
-      nextHands[actorIndex] = [...(nextHands[actorIndex] || []), card];
-      setUnoLocalHands(nextHands);
-      setUnoPlayerHand(nextHands[0] || []);
-      setUnoCpuHand(nextHands[1] || []);
-      const whoLabel = actorIndex === 0 ? "YOU" : actorIndex === 1 ? "OPP" : `CPU ${actorIndex - 1}`;
-      setUnoMessage(tf("unoDrewCard", { who: whoLabel }));
-      const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
-      const nextTurn = (actorIndex + 1) % Math.max(2, totalPlayers);
-      setUnoLocalTurnIndex(nextTurn);
-      setUnoTurn(nextTurn === 0 ? "player" : "cpu");
+      if (!canOperateUnoNow) {
+        setUnoMessage(t("roomTurnOwnerOnly"));
+        return;
+      }
+      if (roomRole === "guest") {
+        sendRoomEvent({ type: "uno-request-action", action: "play", cardIds: uniqueCardIds });
+        setUnoMessage(t("roomWaitingHostJudge"));
+        return;
+      }
+    }
+
+    const totalPlayers = isUnoExtendedMode
+      ? Math.max(2, connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers)
+      : 2;
+    const currentTurnIndex = isUnoExtendedMode
+      ? unoLocalTurnIndex
+      : (unoTurn === "player" ? 0 : 1);
+    if (actorIndex < 0 || actorIndex >= totalPlayers || currentTurnIndex !== actorIndex) {
       return;
     }
 
+    const hands = isUnoExtendedMode
+      ? unoLocalHands.map((hand) => [...hand])
+      : [
+        [...unoPlayerHand],
+        [...unoCpuHand],
+      ];
+    while (hands.length < totalPlayers) {
+      hands.push([]);
+    }
+
+    const currentHand = hands[actorIndex] || [];
+    const handById = new Map(currentHand.map((card) => [card.id, card]));
+    const selectedCards: UnoCard[] = [];
+    const duplicateCheck = new Set<string>();
+    for (const cardId of uniqueCardIds) {
+      if (duplicateCheck.has(cardId)) {
+        const reason = "同じcardIdを2回以上提出しています。";
+        setUnoMessage(reason);
+        if (connectedRoomCode && isRemote) {
+          sendRoomEvent({ type: "arcade-sync", chaos: isChaosMode, snapshot: snapshotRef.current });
+        }
+        return;
+      }
+      duplicateCheck.add(cardId);
+      const card = handById.get(cardId);
+      if (!card) {
+        const reason = "所持していないカードが提出されました。";
+        setUnoMessage(reason);
+        if (connectedRoomCode && isRemote) {
+          sendRoomEvent({ type: "arcade-sync", chaos: isChaosMode, snapshot: snapshotRef.current });
+        }
+        return;
+      }
+      selectedCards.push(card);
+    }
+
+    const validation = validateSelectedCards(selectedCards, unoTopCard);
+    if (!validation.isValid) {
+      const invalidLabel = validation.invalidCardId
+        ? unoCardLabel(handById.get(validation.invalidCardId) || selectedCards.find((card) => card.id === validation.invalidCardId) || selectedCards[0])
+        : "";
+      const message = `${validation.reason || "提出できない組み合わせです。"}${invalidLabel ? ` (${invalidLabel})` : ""}`;
+      setUnoMessage(message);
+      if (connectedRoomCode && isRemote) {
+        sendRoomEvent({ type: "arcade-sync", chaos: isChaosMode, snapshot: snapshotRef.current });
+      }
+      return;
+    }
+
+    setIsUnoAnimatingPlay(true);
+    setUnoSelectedCardIds([]);
+
+    try {
+      const removeIds = new Set(selectedCards.map((card) => card.id));
+      hands[actorIndex] = currentHand.filter((card) => !removeIds.has(card.id));
+
+      const effects = calculateCombinedEffects(selectedCards);
+      let nextDirection = unoTurnDirection;
+      if (effects.reverseCount % 2 === 1 && totalPlayers > 2) {
+        nextDirection = nextDirection === 1 ? -1 : 1;
+      }
+      const adjustedSkipCount = effects.skipCount + (totalPlayers === 2 && effects.reverseCount % 2 === 1 ? 1 : 0);
+
+      let remainingDeck = [...unoDeck];
+      if (effects.drawCount > 0) {
+        const drawTarget = wrapTurnIndex(actorIndex + nextDirection, totalPlayers);
+        const targetHand = hands[drawTarget] || [];
+        for (let i = 0; i < effects.drawCount; i += 1) {
+          const drawn = remainingDeck.shift();
+          if (!drawn) break;
+          targetHand.push(drawn);
+        }
+        hands[drawTarget] = targetHand;
+      }
+
+      if (isUnoExtendedMode) {
+        setUnoLocalHands(hands);
+      }
+      setUnoPlayerHand(hands[0] || []);
+      setUnoCpuHand(hands[1] || []);
+      setUnoDeck(remainingDeck);
+
+      for (let i = 0; i < selectedCards.length; i += 1) {
+        setUnoTopCard(selectedCards[i]);
+        if (i < selectedCards.length - 1) {
+          await waitMs(UNO_PLAY_ANIMATION_DELAY_MS);
+        }
+      }
+
+      const whoLabel = actorIndex === 0 ? "YOU" : actorIndex === 1 ? (connectedRoomCode ? "OPP" : "CPU") : `CPU ${actorIndex - (connectedRoomCode ? 1 : 0)}`;
+      const chainLabel = selectedCards.map((card) => unoCardLabel(card)).join(" -> ");
+      const remainCount = hands[actorIndex]?.length ?? 0;
+
+      if (remainCount === 0) {
+        setIsUnoOver(true);
+        setUnoMessage(actorIndex === 0 ? t("unoPlayerWin") : t("unoCpuWin"));
+        return;
+      }
+
+      const baseStep = 1 + adjustedSkipCount + (effects.drawCount > 0 ? 1 : 0);
+      const nextTurnIndex = wrapTurnIndex(actorIndex + nextDirection * baseStep, totalPlayers);
+      if (isUnoExtendedMode) {
+        setUnoLocalTurnIndex(nextTurnIndex);
+      }
+      setUnoTurn(nextTurnIndex === 0 ? "player" : "cpu");
+      setUnoTurnDirection(nextDirection);
+
+      if (remainCount === 1) {
+        setUnoMessage(`${tf("unoPlayedCard", { who: whoLabel, card: chainLabel })} UNO!`);
+        return;
+      }
+
+      setUnoMessage(tf("unoPlayedCard", { who: whoLabel, card: chainLabel }));
+    } finally {
+      setIsUnoAnimatingPlay(false);
+    }
+  }, [
+    canOperateUnoNow,
+    connectedRoomCode,
+    isChaosMode,
+    isUnoAnimatingPlay,
+    isUnoExtendedMode,
+    isUnoOver,
+    roomRole,
+    sendRoomEvent,
+    t,
+    tf,
+    unoCardLabel,
+    unoCpuHand,
+    unoDeck,
+    unoLocalHands,
+    unoLocalTotalPlayers,
+    unoLocalTurnIndex,
+    unoPlayerHand,
+    unoRoomHumanIndex,
+    unoRoomTotalPlayers,
+    unoTopCard,
+    unoTurn,
+    unoTurnDirection,
+  ]);
+
+  const playSelectedUnoCards = useCallback(() => {
+    if (!unoSelectedValidation.isValid) {
+      const reason = unoSelectedValidationMessage || "提出できる組み合わせを選択してください。";
+      setUnoMessage(reason);
+      return;
+    }
+    void playUnoCards(unoSelectedCardIds, { side: unoLocalSide });
+  }, [playUnoCards, setUnoMessage, unoLocalSide, unoSelectedCardIds, unoSelectedValidation, unoSelectedValidationMessage]);
+
+  const drawUnoForPlayer = useCallback((options?: { isRemote?: boolean; side?: "player" | "cpu"; actorIndexOverride?: number }) => {
+    if (isUnoOver || isUnoAnimatingPlay) return;
     const isRemote = Boolean(options?.isRemote);
-    const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
-    if (isUnoOver || unoTurn !== side) return;
 
     if (connectedRoomCode && !isRemote) {
       if (roomRole === "spectator") {
@@ -12321,20 +17077,71 @@ export default function Home() {
       }
     }
 
+    let actorIndex = typeof options?.actorIndexOverride === "number"
+      ? Math.trunc(options.actorIndexOverride)
+      : 0;
+    if (isUnoExtendedMode) {
+      if (typeof options?.actorIndexOverride !== "number") {
+        actorIndex = connectedRoomCode ? unoRoomHumanIndex : 0;
+        if (connectedRoomCode && isRemote) {
+          actorIndex = 1;
+        }
+      }
+    } else {
+      const side = options?.side || (connectedRoomCode && roomRole === "guest" ? "cpu" : "player");
+      actorIndex = side === "player" ? 0 : 1;
+      if (connectedRoomCode && isRemote) {
+        actorIndex = 1;
+      }
+    }
+
+    const totalPlayers = isUnoExtendedMode
+      ? Math.max(2, connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers)
+      : 2;
+    const currentTurnIndex = isUnoExtendedMode
+      ? unoLocalTurnIndex
+      : (unoTurn === "player" ? 0 : 1);
+    if (actorIndex < 0 || actorIndex >= totalPlayers || currentTurnIndex !== actorIndex) return;
+
     const card = drawUnoCard();
     if (!card) {
       setUnoMessage(t("unoNoPlayable"));
-      setUnoTurn(side === "player" ? "cpu" : "player");
+      const nextTurn = wrapTurnIndex(actorIndex + unoTurnDirection, totalPlayers);
+      if (isUnoExtendedMode) {
+        setUnoLocalTurnIndex(nextTurn);
+      }
+      setUnoTurn(nextTurn === 0 ? "player" : "cpu");
+      setUnoSelectedCardIds([]);
       return;
     }
-    if (side === "player") {
+
+    if (isUnoExtendedMode) {
+      const nextHands = unoLocalHands.map((hand) => [...hand]);
+      while (nextHands.length < totalPlayers) nextHands.push([]);
+      nextHands[actorIndex] = [...(nextHands[actorIndex] || []), card];
+      setUnoLocalHands(nextHands);
+      setUnoPlayerHand(nextHands[0] || []);
+      setUnoCpuHand(nextHands[1] || []);
+      const whoLabel = actorIndex === 0 ? "YOU" : actorIndex === 1 ? "OPP" : `CPU ${actorIndex - (connectedRoomCode ? 1 : 0)}`;
+      setUnoMessage(tf("unoDrewCard", { who: whoLabel }));
+      const nextTurn = wrapTurnIndex(actorIndex + unoTurnDirection, totalPlayers);
+      setUnoLocalTurnIndex(nextTurn);
+      setUnoTurn(nextTurn === 0 ? "player" : "cpu");
+      setUnoSelectedCardIds([]);
+      return;
+    }
+
+    if (actorIndex === 0) {
       setUnoPlayerHand((prev) => [...prev, card]);
+      setUnoMessage(tf("unoDrewCard", { who: "YOU" }));
+      setUnoTurn("cpu");
     } else {
       setUnoCpuHand((prev) => [...prev, card]);
+      setUnoMessage(tf("unoDrewCard", { who: "CPU" }));
+      setUnoTurn("player");
     }
-    setUnoMessage(tf("unoDrewCard", { who: side === "player" ? "YOU" : "CPU" }));
-    setUnoTurn(side === "player" ? "cpu" : "player");
-  }, [canOperateUnoNow, connectedRoomCode, drawUnoCard, isUnoExtendedMode, isUnoOver, roomRole, sendRoomEvent, t, tf, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoRoomHumanIndex, unoRoomTotalPlayers, unoTurn]);
+    setUnoSelectedCardIds([]);
+  }, [canOperateUnoNow, connectedRoomCode, drawUnoCard, isUnoAnimatingPlay, isUnoExtendedMode, isUnoOver, roomRole, sendRoomEvent, t, tf, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoRoomHumanIndex, unoRoomTotalPlayers, unoTurn, unoTurnDirection]);
 
   useEffect(() => {
     if (!pendingRemoteUnoAction) return;
@@ -12342,14 +17149,19 @@ export default function Home() {
       setPendingRemoteUnoAction(null);
       return;
     }
-    if (pendingRemoteUnoAction.action === "play" && Number.isInteger(pendingRemoteUnoAction.index)) {
-      playUnoCard(Number(pendingRemoteUnoAction.index), { isRemote: true, side: "cpu" });
+    if (pendingRemoteUnoAction.action === "play" && Array.isArray(pendingRemoteUnoAction.cardIds) && pendingRemoteUnoAction.cardIds.length > 0) {
+      void playUnoCards(pendingRemoteUnoAction.cardIds, {
+        isRemote: true,
+        side: "cpu",
+        actorIndexOverride: 1,
+        bypassRoomChecks: true,
+      });
     }
     if (pendingRemoteUnoAction.action === "draw") {
       drawUnoForPlayer({ isRemote: true, side: "cpu" });
     }
     setPendingRemoteUnoAction(null);
-  }, [drawUnoForPlayer, pendingRemoteUnoAction, playUnoCard, roomRole]);
+  }, [drawUnoForPlayer, pendingRemoteUnoAction, playUnoCards, roomRole]);
 
   useEffect(() => {
     if (activePanel !== "uno") return;
@@ -12363,7 +17175,7 @@ export default function Home() {
     if (!isUnoExtendedMode) return;
     if (connectedRoomCode && roomRole !== "host") return;
     if (!gameStarted.uno) return;
-    if (isUnoOver || !unoTopCard) return;
+    if (isUnoOver || !unoTopCard || isUnoAnimatingPlay) return;
     const cpuStartIndex = connectedRoomCode ? 2 : 1;
     if (unoLocalTurnIndex < cpuStartIndex) return;
 
@@ -12371,47 +17183,34 @@ export default function Home() {
     const timer = setTimeout(() => {
       const cpuIndex = unoLocalTurnIndex;
       const hand = unoLocalHands[cpuIndex] || [];
-      const playableIndex = hand.findIndex((card) => canPlayCard(card, unoTopCard));
-      if (playableIndex >= 0) {
-        const card = hand[playableIndex];
-        const nextHand = hand.filter((_, i) => i !== playableIndex);
-        const nextHands = [...unoLocalHands];
-        nextHands[cpuIndex] = nextHand;
-        setUnoLocalHands(nextHands);
-        setUnoPlayerHand(nextHands[0] || []);
-        setUnoCpuHand(nextHands[1] || []);
-        setUnoTopCard(card);
-        if (nextHand.length === 0) {
-          setIsUnoOver(true);
-          setUnoMessage(t("unoCpuWin"));
-          return;
+      const firstPlayable = hand.find((card) => canPlayCard(card, unoTopCard));
+      if (firstPlayable) {
+        const selected: UnoCard[] = [firstPlayable];
+        const remaining = hand.filter((card) => card.id !== firstPlayable.id);
+        let previous = firstPlayable;
+        while (true) {
+          const next = remaining.find((card) => canChainCards(previous, card));
+          if (!next) break;
+          selected.push(next);
+          const idx = remaining.findIndex((card) => card.id === next.id);
+          if (idx >= 0) {
+            remaining.splice(idx, 1);
+          }
+          previous = next;
         }
-        setUnoMessage(tf("unoPlayedCard", { who: `CPU ${cpuIndex}`, card: unoCardLabel(card) }));
-        const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
-        const nextTurn = (cpuIndex + 1) % Math.max(2, totalPlayers);
-        setUnoLocalTurnIndex(nextTurn);
-        setUnoTurn(nextTurn === 0 ? "player" : "cpu");
+        void playUnoCards(selected.map((card) => card.id), {
+          isRemote: true,
+          actorIndexOverride: cpuIndex,
+          bypassRoomChecks: true,
+        });
         return;
       }
 
-      const drawn = unoDeck[0];
-      if (drawn) {
-        setUnoDeck((prev) => prev.slice(1));
-        const nextHands = [...unoLocalHands];
-        nextHands[cpuIndex] = [...(nextHands[cpuIndex] || []), drawn];
-        setUnoLocalHands(nextHands);
-        setUnoPlayerHand(nextHands[0] || []);
-        setUnoCpuHand(nextHands[1] || []);
-        setUnoMessage(tf("unoDrewCard", { who: `CPU ${cpuIndex}` }));
-      }
-      const totalPlayers = connectedRoomCode ? unoRoomTotalPlayers : unoLocalTotalPlayers;
-      const nextTurn = (cpuIndex + 1) % Math.max(2, totalPlayers);
-      setUnoLocalTurnIndex(nextTurn);
-      setUnoTurn(nextTurn === 0 ? "player" : "cpu");
+      drawUnoForPlayer({ isRemote: true, side: "cpu", actorIndexOverride: cpuIndex });
     }, 550);
 
     return () => clearTimeout(timer);
-  }, [connectedRoomCode, gameStarted.uno, isUnoExtendedMode, isUnoOver, roomRole, t, tf, unoCardLabel, unoDeck, unoLocalHands, unoLocalTotalPlayers, unoLocalTurnIndex, unoRoomTotalPlayers, unoTopCard]);
+  }, [connectedRoomCode, drawUnoForPlayer, gameStarted.uno, isUnoAnimatingPlay, isUnoExtendedMode, isUnoOver, playUnoCards, roomRole, t, unoLocalHands, unoLocalTurnIndex, unoTopCard]);
 
   const cloudAuthPayload = useMemo(() => {
     if (authMode !== "cloud") return null;
@@ -13542,6 +18341,7 @@ export default function Home() {
 
     closeRoomSocket();
     setConnectedRoomCode("");
+    setConnectedRoomMaxPlayers(8);
     setRoomParticipants([]);
     setRoomRole("");
     setRoomStatus(t("roomStateIdle"));
@@ -14611,7 +19411,7 @@ export default function Home() {
                             >
                               <p className="font-mono text-[11px]">{room.code}{room.isPublic ? "" : " 🔒"}</p>
                               <p className="text-[11px] text-slate-200">{host} vs {guest}</p>
-                              <p className="text-[10px] text-slate-300">{panelText} • {room.totalParticipants}/16 • +{room.spectatorCount}</p>
+                              <p className="text-[10px] text-slate-300">{panelText} • {room.totalParticipants}/{room.maxPlayers} • +{room.spectatorCount}</p>
                             </button>
                           </li>
                         );
@@ -14646,6 +19446,18 @@ export default function Home() {
                     className="min-w-[10rem] rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
                     autoComplete="off"
                   />
+                  <label className="inline-flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-200">最大人数</span>
+                    <select
+                      value={roomMaxPlayersDraft}
+                      onChange={(event) => setRoomMaxPlayersDraft(Math.max(2, Math.min(8, Number(event.target.value) || 8)))}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                    >
+                      {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
+                        <option key={`room-max-menu-${count}`} value={count}>{count}</option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -14707,7 +19519,7 @@ export default function Home() {
                       <p>{t("roomConnected")}: {connectedRoomCode || "-"}</p>
                       <p>{t("roomRole")}: {roomRole ? roomRoleLabel(roomRole) : "-"}</p>
                       <p>{t("roomMatchedPlayers")}: {connectedRoomCode ? roomOccupancyText : "-"}</p>
-                      <p>{t("roomCapacityHint")}</p>
+                      <p>{tf("roomCapacityHint", { count: String(connectedRoomMaxPlayers) })}</p>
                       {quickMatchMode ? (
                         <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-cyan-200/30 bg-cyan-300/10 px-2 py-1 text-xs text-cyan-100">
                           <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-100/35 border-t-cyan-100" aria-hidden="true" />
@@ -14888,7 +19700,7 @@ export default function Home() {
                                 <span className="font-mono">{room.code}{room.isPublic ? "" : " 🔒"}</span>
                                 <span className="ml-2 text-slate-200">{host} vs {guest}</span>
                               </p>
-                              <p className="text-[10px] text-slate-300">{room.totalParticipants}/16 • +{room.spectatorCount}</p>
+                              <p className="text-[10px] text-slate-300">{room.totalParticipants}/{room.maxPlayers} • +{room.spectatorCount}</p>
                             </button>
                           </li>
                         );
@@ -14922,6 +19734,18 @@ export default function Home() {
                     className="min-w-[10rem] rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
                     autoComplete="off"
                   />
+                  <label className="inline-flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-200">最大人数</span>
+                    <select
+                      value={roomMaxPlayersDraft}
+                      onChange={(event) => setRoomMaxPlayersDraft(Math.max(2, Math.min(8, Number(event.target.value) || 8)))}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
+                    >
+                      {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
+                        <option key={`room-max-panel-${count}`} value={count}>{count}</option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -15719,6 +20543,19 @@ export default function Home() {
 
               <p className="text-sm text-slate-300">{shogiMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateShogiNow)}</p> : null}
+              {shogiMode === "chaos" ? <p className="mt-1 text-xs text-rose-200/95">{t("shogiMineOwnHint")}</p> : null}
+              {shogiMode === "chaos" && shogiChaosKingAbsorb === "on" ? (
+                <div className="mt-2 grid gap-2 text-xs text-slate-200 sm:grid-cols-2">
+                  <div className="rounded-md border border-cyan-300/40 bg-cyan-400/10 px-2 py-1.5">
+                    <p className="font-semibold text-cyan-100">{t("blackStone")} {t("shogiAbsorbStatusLabel")}</p>
+                    <p className="mt-0.5 text-slate-100">{shogiKingAbsorbStatus.black}</p>
+                  </div>
+                  <div className="rounded-md border border-rose-300/40 bg-rose-400/10 px-2 py-1.5">
+                    <p className="font-semibold text-rose-100">{t("whiteStone")} {t("shogiAbsorbStatusLabel")}</p>
+                    <p className="mt-0.5 text-slate-100">{shogiKingAbsorbStatus.white}</p>
+                  </div>
+                </div>
+              ) : null}
 
               {!connectedRoomCode ? (
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
@@ -15830,6 +20667,13 @@ export default function Home() {
                     const moveTarget = shogiMoveTargets.get(`${row}-${col}`);
                     const isMoveTarget = Boolean(moveTarget);
                     const isCaptureTarget = Boolean(moveTarget?.capture);
+                    const showMineMarker = Boolean(
+                      piece
+                      && piece.isMine
+                      && shogiMode === "chaos"
+                      && shogiMineViewerColor
+                      && piece.color === shogiMineViewerColor,
+                    );
                     const dark = (row + col) % 2 === 1;
                     return (
                       <button
@@ -15847,14 +20691,19 @@ export default function Home() {
                         ) : null}
                         {piece ? (
                           <span
-                            className={`mx-auto grid h-[82%] w-[76%] place-items-center border border-amber-900/80 bg-gradient-to-b from-amber-100 via-amber-200 to-amber-300 text-[clamp(10px,2.45vw,20px)] font-black leading-none text-amber-950 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_2px_4px_rgba(0,0,0,0.25)] [clip-path:polygon(18%_0%,82%_0%,100%_100%,0%_100%)] ${piece.color === "w" ? "rotate-180" : ""}`}
-                            aria-label={`${piece.color === "b" ? t("blackStone") : t("whiteStone")}${shogiPieceLabel(piece)}`}
+                            className={`mx-auto grid h-[82%] w-[76%] place-items-center border border-amber-900/80 bg-gradient-to-b from-amber-100 via-amber-200 to-amber-300 text-[clamp(10px,2.45vw,20px)] font-black leading-none text-amber-950 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_2px_4px_rgba(0,0,0,0.25)] [clip-path:polygon(18%_0%,82%_0%,100%_100%,0%_100%)] ${piece.color === "w" ? "rotate-180" : ""} ${showMineMarker ? "ring-2 ring-rose-400/90 shadow-[0_0_10px_rgba(251,113,133,0.65)]" : ""}`}
+                            aria-label={`${piece.color === "b" ? t("blackStone") : t("whiteStone")}${shogiPieceLabel(piece)}${showMineMarker ? ` ${t("shogiMinePieceLabel")}` : ""}`}
                           >
                             <span className="translate-y-[1px]">{shogiPieceLabel(piece)}</span>
                           </span>
                         ) : (
                           ""
                         )}
+                        {showMineMarker ? (
+                          <span className="pointer-events-none absolute right-[8%] top-[8%] grid h-4 w-4 place-items-center rounded-full border border-rose-100 bg-rose-500 text-[9px] font-black leading-none text-white shadow-[0_0_6px_rgba(244,63,94,0.9)]">
+                            M
+                          </span>
+                        ) : null}
                       </button>
                     );
                   }),
@@ -16668,15 +21517,15 @@ export default function Home() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => startPanelGame("sevens", resetSevens)}
-                    disabled={isPanelStartCounting("sevens")}
+                    onClick={() => startPanelGame("sevens", () => resetSevens({ startGame: true }))}
+                    disabled={isPanelStartCounting("sevens") || gameStarted.sevens}
                     className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
                   >
-                    {startButtonLabel("sevens")}
+                    {gameStarted.sevens ? "ゲーム中" : startButtonLabel("sevens")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => runWithResetGuard("sevens", resetSevens)}
+                    onClick={() => runWithResetGuard("sevens", () => resetSevens())}
                     className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
                   >
                     {t("sevensReset")}
@@ -16691,73 +21540,309 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.sevens ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
-              <fieldset className="mt-2">
+              <p className="mt-2 text-sm text-slate-300">{sevensMessage}</p>
+              <p className="mt-1 text-xs text-slate-400">状態: {sevensStatusText}</p>
+              {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateSevensNow)}</p> : null}
 
-              <p className="text-sm text-slate-300">{sevensMessage}</p>
+              <fieldset className="mt-3">
+                <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>MODE</span>
+                    <select
+                      value={sevensEffectiveMode}
+                      onChange={(event) => {
+                        const value = event.target.value === "multiplayer" ? "multiplayer" : "cpu";
+                        setSevensMode(value);
+                        if (value === "multiplayer") {
+                          setSevensMaxPlayers(Math.max(2, Math.min(8, Math.floor(roomMaxPlayersDraft || sevensMaxPlayers || 8))));
+                        }
+                        if (gameStarted.sevens) return;
+                        resetSevens();
+                      }}
+                      disabled={connectedRoomCode || gameStarted.sevens}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                    >
+                      <option value="cpu">CPU対戦</option>
+                      <option value="multiplayer">マルチプレイ</option>
+                    </select>
+                    {connectedRoomCode ? <span className="text-[11px] text-slate-400">ルーム接続中はマルチプレイ固定</span> : null}
+                  </label>
 
-              <div className="mt-4 grid gap-2 rounded-lg border border-slate-500/30 bg-slate-950/40 p-3 text-sm">
-                {(["S", "H", "D", "C"] as const).map((suit) => (
-                  <div key={suit} className="grid grid-cols-[1.5rem_1fr] items-center gap-2">
-                    <span>{suit === "S" ? "♠" : suit === "H" ? "♥" : suit === "D" ? "♦" : "♣"}</span>
-                    <div className="grid grid-cols-13 gap-1">
-                      {Array.from({ length: 13 }, (_, i) => i + 1).map((rank) => {
-                        const range = sevensTable[suit];
-                        const played = range.low !== null && range.high !== null && rank >= range.low && rank <= range.high;
-                        const text = rank === 1 ? "A" : rank === 11 ? "J" : rank === 12 ? "Q" : rank === 13 ? "K" : String(rank);
-                        return (
-                          <span
-                            key={`${suit}-${rank}`}
-                            className={`rounded px-1 py-0.5 text-center text-[10px] ${played ? "bg-cyan-400/20 text-cyan-100" : "bg-slate-800/60 text-slate-500"}`}
-                          >
-                            {text}
-                          </span>
-                        );
-                      })}
+                  {sevensEffectiveMode === "cpu" ? (
+                    <label className="grid gap-1 text-xs text-slate-300">
+                      <span>CPU COUNT</span>
+                      <select
+                        value={sevensCpuCount}
+                        onChange={(event) => setSevensCpuCount(Math.max(1, Math.min(6, Number(event.target.value) || 1)))}
+                        disabled={gameStarted.sevens}
+                        className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                      >
+                        {Array.from({ length: 6 }, (_, i) => i + 1).map((count) => (
+                          <option key={`sevens-cpu-count-${count}`} value={count}>{count}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+
+                  {sevensEffectiveMode === "cpu" ? (
+                    <label className="grid gap-1 text-xs text-slate-300">
+                      <span>CPU LEVEL</span>
+                      <select
+                        value={sevensCpuDifficulty}
+                        onChange={(event) => {
+                          const value = String(event.target.value);
+                          if (value === "easy" || value === "normal" || value === "hard") {
+                            setSevensCpuDifficulty(value);
+                          }
+                        }}
+                        disabled={gameStarted.sevens}
+                        className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                      >
+                        <option value="easy">弱い</option>
+                        <option value="normal">普通</option>
+                        <option value="hard">強い</option>
+                      </select>
+                    </label>
+                  ) : null}
+
+                  {sevensEffectiveMode === "multiplayer" ? (
+                    <label className="grid gap-1 text-xs text-slate-300">
+                      <span>MAX PLAYERS</span>
+                      <select
+                        value={sevensPreviewMaxPlayers}
+                        onChange={(event) => {
+                          const nextMax = Math.max(2, Math.min(8, Number(event.target.value) || 8));
+                          setSevensMaxPlayers(nextMax);
+                          setRoomMaxPlayersDraft(nextMax);
+                        }}
+                        disabled={connectedRoomCode || gameStarted.sevens}
+                        className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                      >
+                        {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
+                          <option key={`sevens-max-players-${count}`} value={count}>{count}</option>
+                        ))}
+                      </select>
+                      <span className="text-[11px] text-slate-400">現在 {sevensPreviewJoinedCount} / {sevensPreviewMaxPlayers} 人</span>
+                    </label>
+                  ) : null}
+
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>RULE: ROUND</span>
+                    <select
+                      value={sevensRoundCount}
+                      onChange={(event) => setSevensRoundCount(Math.max(1, Math.min(9, Number(event.target.value) || 1)))}
+                      disabled={gameStarted.sevens}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                    >
+                      {Array.from({ length: 9 }, (_, i) => i + 1).map((count) => (
+                        <option key={`sevens-round-count-${count}`} value={count}>{count}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1 text-xs text-slate-300">
+                    <span>RULE: PASS LIMIT</span>
+                    <select
+                      value={sevensPassLimit}
+                      onChange={(event) => setSevensPassLimit(Math.max(0, Math.min(20, Number(event.target.value) || 0)))}
+                      disabled={gameStarted.sevens}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                    >
+                      {Array.from({ length: 11 }, (_, i) => i).map((count) => (
+                        <option key={`sevens-pass-limit-${count}`} value={count}>{count === 0 ? "無制限" : count}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-2xl border border-emerald-200/35 bg-[radial-gradient(circle_at_top,_rgba(32,115,76,0.62),_rgba(8,42,28,0.95)_68%)] p-3 sm:p-4 lg:p-5">
+                  <div className="border-b border-emerald-100/25 pb-3 text-center">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-emerald-100/85">
+                      {sevensGameStatus === "idle" ? "PREVIEW" : `ROUND ${sevensCurrentRound} / ${sevensRoundCount}`}
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-50">{sevensGameStatus === "idle" ? "ゲームを開始してください" : sevensMessage}</p>
+                    <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-emerald-100/85">
+                      <span>Turn: {sevensTurnText}</span>
+                      <span>Cards on Table: {sevensPlacedCount} / 52</span>
+                      <span>State: {sevensStatusText}</span>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              <div className="mt-4 grid gap-2">
-                <p className="text-sm font-semibold">{t("sevensPlayerHand")} ({sevensHands[0].length})</p>
-                <div className="flex items-end overflow-x-auto pb-2 pr-2 pl-1">
-                  {sevensHands[0].map((card, index) => {
-                    const playable = isSevensPlayable(card, sevensTable);
-                    return (
-                      <span
-                        key={`${card.suit}-${card.rank}-${index}`}
-                        className="inline-flex shrink-0"
-                        style={playerHandFanStyle(index, sevensHands[0].length, { overlap: 15, spread: 2.8, maxRotate: 14, centerLift: 0.8, centerOffset: 0.95 })}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => onSevensPlay(index)}
-                          disabled={isSevensOver || sevensTurn !== "player"}
-                          className={`origin-bottom rounded-md border px-2 py-1 text-xs transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 ${playable ? "border-cyan-300/60 bg-cyan-400/10" : "border-slate-500/30 bg-slate-800/40"}`}
-                        >
-                          {renderPlayingCardFace(sevensCardLabel(card), { compact: true, muted: !playable })}
-                        </button>
-                      </span>
-                    );
-                  })}
+                  <div className="mt-4 flex flex-col gap-4 lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
+                    <aside className="order-2 rounded-xl border border-emerald-100/25 bg-black/20 p-3 lg:order-1">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100/80">Players</p>
+                      <div className="flex gap-2 overflow-x-auto pb-1 lg:grid lg:gap-2 lg:overflow-visible">
+                        {sevensDisplayOtherSeats.map((seat, idx) => {
+                          const isTurn = sevensGameStatus === "playing" && sevensCurrentPlayer?.id === seat.id && !isSevensOver;
+                          return (
+                            <section
+                              key={`${seat.id}-${idx}`}
+                              className={`min-w-[15rem] rounded-lg border p-2.5 transition ${isTurn ? "border-amber-200 bg-amber-100/20 shadow-[0_0_18px_rgba(253,230,138,0.38)]" : "border-emerald-100/20 bg-black/20"}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="grid h-10 w-10 place-items-center rounded-full border border-emerald-200/35 bg-emerald-950/75 text-sm font-bold">
+                                  {seat.isPlaceholder ? "--" : seat.isCpu ? "CP" : "P"}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-emerald-50">{seat.isPlaceholder ? "空きスロット" : seat.name}</p>
+                                  <p className="text-[11px] text-emerald-100/75">{seat.isPlaceholder ? "参加者を待っています" : seat.isCpu ? "CPU" : "Player"}</p>
+                                </div>
+                              </div>
+                              {seat.isPlaceholder ? (
+                                <p className="mt-2 text-xs text-emerald-100/75">{sevensPreviewJoinedCount} / {sevensPreviewMaxPlayers}人参加中</p>
+                              ) : (
+                                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-emerald-100/85">
+                                  <span>Cards: {seat.handCount}</span>
+                                  <span>Pass: {seat.passCount}</span>
+                                  <span>Status: {seat.status === "finished" ? "上がり" : seat.status === "eliminated" ? "失格" : isTurn ? "手番" : "待機"}</span>
+                                  <span>Rank: {seat.rank ?? "-"}</span>
+                                </div>
+                              )}
+                            </section>
+                          );
+                        })}
+                      </div>
+                    </aside>
+
+                    <div className="order-1 grid gap-4 lg:order-2">
+                      <section className="overflow-hidden rounded-xl border border-emerald-100/25 bg-black/15 p-3">
+                        <div className="overflow-x-auto overflow-y-hidden pb-2">
+                          <div className="min-w-[860px] space-y-2">
+                            <div className="grid grid-cols-[5.4rem_repeat(13,minmax(0,1fr))] gap-1.5 text-[11px] text-emerald-100/75">
+                              <div />
+                              {Array.from({ length: 13 }, (_, i) => {
+                                const rank = i + 1;
+                                const label = rank === 1 ? "A" : rank === 11 ? "J" : rank === 12 ? "Q" : rank === 13 ? "K" : String(rank);
+                                return <span key={`head-${rank}`} className="text-center font-semibold">{label}</span>;
+                              })}
+                            </div>
+
+                            {sevensSuitRows.map((row) => (
+                              <div key={row.suit} className="grid grid-cols-[5.4rem_repeat(13,minmax(0,1fr))] gap-1.5">
+                                <div className="flex items-center justify-start gap-1 rounded-md border border-emerald-100/20 bg-black/20 px-2 text-xs font-semibold text-emerald-100">
+                                  <span className={`${row.suit === "H" || row.suit === "D" ? "text-rose-200" : "text-emerald-50"}`}>{row.icon}</span>
+                                  <span>{row.label}</span>
+                                </div>
+
+                                {Array.from({ length: 13 }, (_, i) => {
+                                  const rank = i + 1;
+                                  const range = sevensTable[row.suit];
+                                  const played = range.low !== null && range.high !== null && rank >= range.low && rank <= range.high;
+                                  const rankLabel = rank === 1 ? "A" : rank === 11 ? "J" : rank === 12 ? "Q" : rank === 13 ? "K" : String(rank);
+                                  const previewSeven = sevensGameStatus === "idle" && rank === 7;
+                                  const playableSlot = sevensGameStatus === "playing" && (
+                                    ((range.low === null || range.high === null) && rank === 7)
+                                    || (range.low !== null && rank === range.low - 1)
+                                    || (range.high !== null && rank === range.high + 1)
+                                  ) && sevensPlayerCardKeys.has(`${row.suit}-${rank}`) && canOperateSevensNow;
+
+                                  return (
+                                    <div
+                                      key={`${row.suit}-${rank}`}
+                                      className={`grid h-11 place-items-center rounded-md border text-sm font-semibold ${played
+                                        ? "border-slate-100/75 bg-white text-slate-900 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.2)]"
+                                        : playableSlot
+                                          ? "border-amber-200 bg-amber-200/20 text-amber-50 shadow-[0_0_14px_rgba(253,230,138,0.4)]"
+                                          : previewSeven
+                                            ? "border-emerald-200/55 bg-emerald-200/20 text-emerald-50"
+                                            : "border-emerald-100/25 bg-black/25 text-emerald-100/40"
+                                      }`}
+                                    >
+                                      <span className={`leading-none ${row.suit === "H" || row.suit === "D" ? (played ? "text-rose-600" : "text-rose-200") : ""}`}>{rankLabel}{row.icon}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className="overflow-hidden rounded-xl border border-emerald-100/25 bg-black/20 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className={`grid h-10 w-10 place-items-center rounded-full border text-sm font-bold ${sevensGameStatus === "playing" && canOperateSevensNow ? "border-amber-200 bg-amber-100/25 text-amber-100 shadow-[0_0_14px_rgba(253,230,138,0.35)]" : "border-emerald-200/35 bg-emerald-950/65 text-emerald-50"}`}>YOU</div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-emerald-50">{sevensDisplayLocalSeat?.name || playerName || "You"}</p>
+                              <p className="text-[11px] text-emerald-100/75">Status: {sevensGameStatus === "idle" ? "待機" : sevensSelfStatus} | Cards: {sevensGameStatus === "idle" ? "--" : (sevensLocalPlayer?.hand.length ?? 0)}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            {sevensGameStatus === "playing" && sevensSelectedCardIndex !== null && sevensPlayableIndexes.has(sevensSelectedCardIndex) ? (
+                              <button
+                                type="button"
+                                onClick={() => onSevensPlay(sevensSelectedCardIndex)}
+                                disabled={!canOperateSevensNow}
+                                className="rounded-md border border-cyan-200/55 bg-cyan-400/20 px-3 py-1 font-semibold text-cyan-100 disabled:opacity-50"
+                              >
+                                このカードを出す
+                              </button>
+                            ) : null}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!window.confirm("パスしますか？")) return;
+                                onSevensPass();
+                              }}
+                              disabled={sevensGameStatus !== "playing" || !canOperateSevensNow}
+                              className="rounded-md border border-amber-200/65 bg-amber-300/75 px-3 py-1 font-semibold text-amber-950 disabled:cursor-not-allowed disabled:border-slate-400/35 disabled:bg-slate-600/55 disabled:text-slate-300"
+                            >
+                              {t("sevensPass")}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 overflow-x-auto overflow-y-hidden pb-2">
+                          {sevensGameStatus === "idle" ? (
+                            <div className="flex min-h-20 items-end gap-2 pr-2">
+                              {Array.from({ length: 7 }, (_, idx) => (
+                                <div key={`sevens-preview-back-${idx}`} className="grid h-[74px] w-[52px] place-items-center rounded-md border border-emerald-200/35 bg-slate-900/70 text-[10px] text-emerald-100/60">
+                                  CARD
+                                </div>
+                              ))}
+                              <p className="ml-2 text-xs text-emerald-100/80">ゲーム開始後にカードが配られます</p>
+                            </div>
+                          ) : (
+                            <div className="flex min-h-20 items-end pr-2">
+                              {(sevensLocalPlayer?.hand || []).map((card, index) => {
+                                const playable = sevensPlayableIndexes.has(index);
+                                const selected = sevensSelectedCardIndex === index;
+                                return (
+                                  <button
+                                    type="button"
+                                    key={`${card.suit}-${card.rank}-${index}`}
+                                    onClick={() => setSevensSelectedCardIndex((prev) => (prev === index ? null : index))}
+                                    disabled={!playable || !canOperateSevensNow}
+                                    style={{ marginLeft: index === 0 ? 0 : -8 }}
+                                    className={`shrink-0 rounded-md border p-0.5 transition ${selected ? "-translate-y-3 border-amber-200 bg-amber-100/20 shadow-[0_0_14px_rgba(253,230,138,0.42)]" : "border-transparent"} ${playable ? "cursor-pointer" : "cursor-not-allowed opacity-70"}`}
+                                  >
+                                    {renderPlayingCardFace(sevensCardLabel(card), { compact: true, muted: !playable })}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <p className="mt-2 text-[11px] text-emerald-100/75">{t("sevensPassCount")}: {sevensGameStatus === "idle" ? 0 : (sevensLocalPlayer?.passCount ?? 0)} / {sevensPassLimit === 0 ? "∞" : sevensPassLimit}</p>
+                      </section>
+
+                      {sevensGameStatus === "finished" && sevensLastResult.length > 0 ? (
+                        <section className="rounded-xl border border-emerald-100/25 bg-black/20 p-3">
+                          <p className="text-sm font-semibold text-emerald-50">Result</p>
+                          <div className="mt-2 grid gap-1 text-xs text-emerald-100/85">
+                            {sevensLastResult.map((row, index) => (
+                              <p key={`sevens-result-${row.name}-${index}`}>#{row.rank} {row.name} | cards {row.cards} | pass {row.passCount} | {row.status}</p>
+                            ))}
+                          </div>
+                        </section>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <span>{t("sevensCpuHand")}: {sevensHands[1].length}</span>
-                <span>{t("sevensPassCount")}: {sevensPassCount[0]} / {sevensPassCount[1]}</span>
-                <button
-                  type="button"
-                  onClick={onSevensPass}
-                  disabled={isSevensOver || sevensTurn !== "player"}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("sevensPass")}
-                </button>
-              </div>
               </fieldset>
-              )}
             </article>
 
             
@@ -16765,9 +21850,9 @@ export default function Home() {
         ) : null}
 
         {activePanel === "daifugo" ? (
-          <section className="grid gap-5">
-            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between gap-3">
+          <section className="grid w-full min-w-0 max-w-full gap-5 overflow-x-hidden">
+            <article className="mx-auto w-full min-w-0 max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("daifugoTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -16795,57 +21880,407 @@ export default function Home() {
                 </div>
               </div>
 
-              {!gameStarted.daifugo ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
-              <fieldset className="mt-2">
+              <div className="mt-3 flex flex-wrap items-end gap-2 text-xs text-slate-200">
+                <label className="grid gap-1">
+                  <span>MODE</span>
+                  <select
+                    value={daifugoEffectiveMode}
+                    onChange={(event) => setDaifugoMode(event.target.value as DaifugoMode)}
+                    disabled={connectedRoomCode || gameStarted.daifugo}
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                  >
+                    <option value="cpu">CPU</option>
+                    <option value="local">LOCAL</option>
+                    <option value="multiplayer">MULTI</option>
+                  </select>
+                </label>
 
-              <p className="text-sm text-slate-300">{daifugoMessage}</p>
-              {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateDaifugoNow)}</p> : null}
+                {daifugoEffectiveMode === "cpu" ? (
+                  <label className="grid gap-1">
+                    <span>CPU COUNT</span>
+                    <select
+                      value={daifugoCpuCount}
+                      onChange={(event) => setDaifugoCpuCount(Math.max(1, Math.min(7, Number(event.target.value) || 1)))}
+                      disabled={gameStarted.daifugo}
+                      className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                    >
+                      {Array.from({ length: 7 }, (_, i) => i + 1).map((count) => (
+                        <option key={`daifugo-cpu-count-${count}`} value={count}>{count}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
 
-              <div className="mt-4 grid gap-2 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4 text-sm">
-                <p className="flex items-center gap-2">
-                  <span>{t("daifugoTable")}:</span>
-                  {daifugoTableCard ? renderPlayingCardFace(daifugoCardLabel(daifugoTableCard)) : <span>-</span>}
-                </p>
-                <p>{t("daifugoCpuHand")}: {daifugoLocalSide === "player" ? daifugoHands[1].length : daifugoHands[0].length}</p>
+                <label className="grid gap-1">
+                  <span>CPU LEVEL</span>
+                  <select
+                    value={daifugoCpuLevel}
+                    onChange={(event) => setDaifugoCpuLevel(event.target.value as DaifugoCpuDifficulty)}
+                    disabled={gameStarted.daifugo}
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                  >
+                    <option value="easy">EASY</option>
+                    <option value="normal">NORMAL</option>
+                    <option value="hard">HARD</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-1">
+                  <span>MAX PLAYERS</span>
+                  <select
+                    value={daifugoPreviewMaxPlayers}
+                    onChange={(event) => setDaifugoMaxPlayers(Math.max(2, Math.min(8, Number(event.target.value) || 2)))}
+                    disabled={connectedRoomCode || gameStarted.daifugo}
+                    className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
+                  >
+                    {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
+                      <option key={`daifugo-max-${count}`} value={count}>{count}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {[{ key: "joker", label: "JOKER" }, { key: "kakumei", label: "革命" }, { key: "eightCut", label: "8切り" }, { key: "shibari", label: "縛り" }, { key: "miyakoOchhi", label: "都落ち" }, { key: "sp3Return", label: "スペ3返し" }].map((rule) => (
+                  <label key={`daifugo-rule-${rule.key}`} className="inline-flex items-center gap-1 rounded-md border border-slate-400/40 bg-slate-950/60 px-2 py-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(daifugoRules[rule.key as keyof DaifugoRuleSet])}
+                      onChange={(event) => setDaifugoRules((prev) => ({ ...prev, [rule.key]: event.target.checked }))}
+                      disabled={gameStarted.daifugo}
+                      className="accent-cyan-300"
+                    />
+                    <span>{rule.label}</span>
+                  </label>
+                ))}
+                <span className="text-[11px] text-slate-300">参加人数 {daifugoDisplaySeats.filter((seat) => seat.status !== "disconnected").length} / {daifugoPreviewMaxPlayers}</span>
               </div>
 
-              <div className="mt-4">
-                <p className="text-sm font-semibold">{t("daifugoYourHand")} ({daifugoLocalSide === "player" ? daifugoHands[0].length : daifugoHands[1].length})</p>
-                <div className="mt-2 flex items-end overflow-x-auto pb-2 pr-2 pl-1">
-                  {(daifugoLocalSide === "player" ? daifugoHands[0] : daifugoHands[1]).map((card, index, cards) => {
-                    const playable = !daifugoTableCard || daifugoPower(card.rank) > daifugoPower(daifugoTableCard.rank);
-                    return (
-                      <span
-                        key={`${card.suit}-${card.rank}-${index}`}
-                        className="inline-flex shrink-0"
-                        style={playerHandFanStyle(index, cards.length, { overlap: 15, spread: 2.7, maxRotate: 14, centerLift: 0.75, centerOffset: 0.9 })}
+              <div className="mt-4 grid w-full min-w-0 max-w-full gap-3 overflow-x-hidden rounded-2xl border border-emerald-200/35 bg-[radial-gradient(circle_at_top,_rgba(32,115,76,0.66),_rgba(8,42,28,0.97)_70%)] p-2 sm:p-3 lg:p-4">
+                <section className="rounded-xl border border-emerald-100/25 bg-black/20 p-2 sm:p-3">
+                  <div className="md:hidden">
+                    <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+                      {daifugoDisplayOpponents.map((seat) => {
+                        const isTurn = daifugoCurrentPlayer?.id === seat.id && !isDaifugoOver && daifugoPhase === "playing";
+                        const isFinished = seat.status === "finished";
+                        const isIdle = daifugoGameStatus === "idle";
+                        const truncated = seat.name.length > 10 ? `${seat.name.slice(0, 8)}…` : seat.name;
+                        return (
+                          <section
+                            key={`daifugo-mobile-seat-${seat.id}`}
+                            title={seat.name}
+                            className={`min-w-[8.4rem] shrink-0 rounded-lg border px-2 py-1.5 ${isTurn ? "border-amber-200 bg-amber-100/20 shadow-[0_0_14px_rgba(253,230,138,0.32)]" : "border-emerald-100/25 bg-black/30"}`}
+                          >
+                            <p className="truncate text-xs font-semibold text-emerald-50">{isTurn ? `▶ ${truncated}` : truncated}</p>
+                            {isFinished ? (
+                              <p className="mt-0.5 text-[10px] text-amber-100">{seat.rank || "-"}位 {daifugoClassLabel(seat.className)}</p>
+                            ) : isIdle ? (
+                              <p className="mt-0.5 text-[10px] text-emerald-100/80">待機中</p>
+                            ) : seat.status === "passed" ? (
+                              <p className="mt-0.5 text-[10px] font-semibold text-amber-100">PASS</p>
+                            ) : (
+                              <p className="mt-0.5 text-[10px] text-emerald-100/85">残り {seat.handCount}枚</p>
+                            )}
+                          </section>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className={`relative mx-auto w-full max-w-[980px] overflow-visible ${daifugoLayoutMode === "dense" ? "h-[260px] sm:h-[290px] md:h-[330px]" : daifugoLayoutMode === "compact" ? "h-[250px] sm:h-[280px] md:h-[310px]" : "h-[280px] sm:h-[310px] md:h-[340px]"}`}>
+                    <div className="pointer-events-none absolute inset-x-[8%] top-[10%] bottom-[8%] z-[1] rounded-[46%] border border-emerald-200/35 bg-emerald-900/35 shadow-[inset_0_0_0_2px_rgba(16,185,129,0.16),0_12px_22px_rgba(0,0,0,0.28)]" />
+
+                    <div className="hidden md:block">
+                      {daifugoLayoutMode === "dense" ? (
+                        <div className="absolute inset-0 z-[4] grid grid-cols-[minmax(92px,110px)_1fr_minmax(92px,110px)] grid-rows-[46px_62px_62px_62px] gap-y-2.5 items-center px-2">
+                          {daifugoDisplayOpponents.map((seat, idx) => {
+                            const cell = getDaifugoDenseSeatCell(idx, daifugoActivePlayerCount);
+                            const isTurn = daifugoCurrentPlayer?.id === seat.id && !isDaifugoOver && daifugoPhase === "playing";
+                            const isFinished = seat.status === "finished";
+                            const isIdle = daifugoGameStatus === "idle";
+                            const truncated = seat.name.length > 10 ? `${seat.name.slice(0, 8)}…` : seat.name;
+                            return (
+                              <section
+                                key={`daifugo-seat-dense-${seat.id}-${idx}`}
+                                title={seat.name}
+                                style={{ gridColumn: cell.col, gridRow: cell.row }}
+                                className={`justify-self-center w-[102px] min-h-[58px] rounded-md border px-1.5 py-1 text-left ${isTurn ? "border-amber-200 bg-amber-100/20 shadow-[0_0_12px_rgba(253,230,138,0.3)]" : "border-emerald-100/25 bg-black/30"}`}
+                              >
+                                <p className="truncate text-[12px] font-semibold leading-tight text-emerald-50">{isTurn ? `▶ ${truncated}` : truncated}</p>
+                                {isFinished ? (
+                                  <p className="mt-0.5 text-[11px] leading-tight text-amber-100">{seat.rank || "-"}位</p>
+                                ) : isIdle ? (
+                                  <p className="mt-0.5 text-[11px] leading-tight text-emerald-100/80">待機中</p>
+                                ) : seat.status === "passed" ? (
+                                  <p className="mt-0.5 text-[11px] leading-tight text-amber-100">PASS</p>
+                                ) : (
+                                  <div className="mt-0.5 flex items-center gap-1 text-[11px] leading-tight text-emerald-100/90">
+                                    <span>{renderPlayingCardBack({ compact: true })}</span>
+                                    <span>残り{seat.handCount}枚</span>
+                                  </div>
+                                )}
+                              </section>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        daifugoDisplayOpponents.map((seat, idx) => {
+                          const pos = getDaifugoSeatPosition(idx, daifugoActivePlayerCount);
+                          const isTurn = daifugoCurrentPlayer?.id === seat.id && !isDaifugoOver && daifugoPhase === "playing";
+                          const isFinished = seat.status === "finished";
+                          const isIdle = daifugoGameStatus === "idle";
+                          const mini = daifugoSeatSize === "sm";
+                          const truncated = seat.name.length > 11 ? `${seat.name.slice(0, 9)}…` : seat.name;
+                          return (
+                            <section
+                              key={`daifugo-seat-${seat.id}-${idx}`}
+                              title={seat.name}
+                              style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: "translate(-50%, -50%)" }}
+                              className={`absolute z-[4] rounded-lg border px-2 py-1.5 text-left ${mini ? "w-[7.3rem]" : daifugoSeatSize === "md" ? "w-[8.2rem]" : "w-[8.7rem] min-h-[4.9rem]"} ${isTurn ? "border-amber-200 bg-amber-100/20 shadow-[0_0_14px_rgba(253,230,138,0.32)]" : "border-emerald-100/25 bg-black/30"}`}
+                            >
+                              <p className="truncate text-[11px] font-semibold text-emerald-50">{isTurn ? `▶ ${truncated}` : truncated}</p>
+                              {isFinished ? (
+                                <p className="mt-0.5 text-[10px] text-amber-100">{seat.rank || "-"}位 {daifugoClassLabel(seat.className)}</p>
+                              ) : isIdle ? (
+                                <p className="mt-0.5 text-[10px] text-emerald-100/80">待機中</p>
+                              ) : seat.status === "passed" ? (
+                                <p className="mt-0.5 text-[10px] font-semibold text-amber-100">PASS</p>
+                              ) : (
+                                <>
+                                  <div className="mt-1 flex items-center gap-0.5 overflow-hidden">
+                                    {Array.from({ length: Math.min(daifugoOpponentBackPreviewCount, Math.max(1, seat.handCount)) }, (_, i) => (
+                                      <span key={`opp-back-${seat.id}-${i}`} style={opponentHandStackStyle(i, Math.min(3, Math.max(1, seat.handCount)))}>{renderPlayingCardBack({ compact: true })}</span>
+                                    ))}
+                                  </div>
+                                  <p className="mt-0.5 text-[10px] text-emerald-100/85">残り {seat.handCount}枚</p>
+                                </>
+                              )}
+                            </section>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div className={`absolute left-1/2 z-[5] w-[min(94%,33rem)] -translate-x-1/2 -translate-y-1/2 px-4 text-center ${daifugoLayoutMode === "dense" ? "top-[58%] py-2 rounded-2xl bg-black/20" : daifugoLayoutMode === "compact" ? "top-[53%] py-1.5 rounded-xl bg-black/10" : "top-[56%] py-1 bg-transparent"}`}>
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-emerald-100/85">{t("daifugoTable")}</p>
+                      <div className={`flex items-center justify-center ${daifugoLayoutMode === "normal" ? "mt-3 min-h-[100px] md:min-h-[114px]" : "mt-1.5 min-h-[96px] md:min-h-[108px]"}`}>
+                        {daifugoTableCards.length > 0 ? (
+                          <div className="flex items-center justify-center">
+                            {daifugoTableCards.map((card, index) => (
+                              <span
+                                key={`table-card-${card.id}-${index}`}
+                                className="inline-flex"
+                                style={{ marginLeft: index === 0 ? 0 : -Math.max(18, Math.round(daifugoPileCardWidth * 0.26)), transform: `translateY(${Math.max(0, 7 - index * 2)}px) rotate(${(index - (daifugoTableCards.length - 1) / 2) * 2.8}deg)` }}
+                              >
+                                {renderDaifugoCardFace(daifugoCardLabel(card), { width: daifugoPileCardWidth, height: daifugoPileCardHeight })}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="grid place-items-center gap-1.5">
+                            <span>{renderDaifugoCardBack({ width: daifugoPileCardWidth, height: daifugoPileCardHeight })}</span>
+                            <p className="text-xs text-emerald-100/75">ゲーム開始ボタンを押してください</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {daifugoGameStatus === "playing" ? (
+                        <div className="mt-2 grid gap-1 text-[11px] text-emerald-100/90">
+                          <p>場の種類: {daifugoTableCombo.kind ? daifugoComboName(daifugoTableCombo.kind) : "-"}</p>
+                          <p>{daifugoCurrentPlayer?.name || "-"}のターン</p>
+                          {daifugoActiveEffectBadges.length > 0 ? (
+                            <div className="flex flex-wrap items-center justify-center gap-1">
+                              {daifugoActiveEffectBadges.map((badge) => (
+                                <span key={`daifugo-active-badge-${badge}`} className="rounded-md border border-amber-200/60 bg-amber-200/20 px-2 py-0.5 text-[10px] font-semibold text-amber-100">{badge}</span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {showDaifugoWinBurst && isDaifugoLocalWinner ? (
+                      <div className="pointer-events-none absolute inset-0 z-[9] overflow-hidden">
+                        <span className="absolute left-[16%] top-[62%] h-3 w-3 animate-ping rounded-full bg-amber-300/85" />
+                        <span className="absolute left-[26%] top-[34%] h-2.5 w-2.5 animate-ping rounded-full bg-rose-300/85 [animation-delay:80ms]" />
+                        <span className="absolute left-[42%] top-[57%] h-3 w-3 animate-ping rounded-full bg-emerald-300/85 [animation-delay:160ms]" />
+                        <span className="absolute left-[54%] top-[28%] h-2.5 w-2.5 animate-ping rounded-full bg-cyan-300/85 [animation-delay:220ms]" />
+                        <span className="absolute left-[68%] top-[63%] h-3 w-3 animate-ping rounded-full bg-amber-200/85 [animation-delay:300ms]" />
+                        <span className="absolute left-[79%] top-[39%] h-2.5 w-2.5 animate-ping rounded-full bg-fuchsia-300/85 [animation-delay:380ms]" />
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-200/60 bg-amber-100/20 px-5 py-2 text-sm font-black tracking-[0.2em] text-amber-100 shadow-[0_0_20px_rgba(253,230,138,0.5)]">
+                          VICTORY
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {daifugoNotification ? (
+                      <div className="pointer-events-none absolute inset-0 z-[11] grid place-items-center">
+                        <p className="daifugo-notify-pop rounded-xl border border-amber-200/60 bg-black/60 px-5 py-2 text-xl font-black text-amber-100 shadow-[0_0_24px_rgba(253,230,138,0.48)]">{daifugoNotification}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+
+                <section className="w-full min-w-0 max-w-full rounded-xl border border-emerald-100/30 bg-black/46 p-3">
+                  <div className="flex w-full min-w-0 flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-emerald-50" title={daifugoDisplayLocalSeat?.name || "YOU"}>{daifugoDisplayLocalSeat?.name || "YOU"}</p>
+                      {daifugoGameStatus === "idle" ? (
+                        <p className="text-[11px] text-emerald-100/80">ゲーム開始後にカードが配られます</p>
+                      ) : (
+                        <p className="text-[11px] text-emerald-100/85">
+                          手札 {daifugoDisplayLocalSeat?.handCount ?? 0}枚
+                          {daifugoIsLocalTurn ? " | あなたのターン" : ` | ${daifugoCurrentPlayer?.name || "-"}のターンです`}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex w-full min-w-0 flex-wrap items-center gap-2 text-xs md:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => onDaifugoPlay(undefined, { side: daifugoLocalSide })}
+                        disabled={!daifugoControlsEnabled || !daifugoCanSubmit}
+                        className="rounded-md border border-emerald-200/70 bg-emerald-300/90 px-4 py-1.5 text-sm font-extrabold text-emerald-950 shadow-[0_4px_16px_rgba(16,185,129,0.35)] disabled:cursor-not-allowed disabled:border-slate-500/45 disabled:bg-slate-700/70 disabled:text-slate-300"
                       >
-                        <button
-                          type="button"
-                          onClick={() => onDaifugoPlay(index, { side: daifugoLocalSide })}
-                          disabled={isDaifugoOver || !canOperateDaifugoNow}
-                          className={`origin-bottom rounded-md border px-2 py-1 text-xs transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 ${playable ? "border-cyan-300/60 bg-cyan-400/10" : "border-slate-500/30 bg-slate-800/40"}`}
-                        >
-                          {renderPlayingCardFace(daifugoCardLabel(card), { compact: true, muted: !playable })}
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
+                        カードを出す
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDaifugoPass({ side: daifugoLocalSide })}
+                        disabled={!daifugoControlsEnabled || !daifugoIsLocalTurn || daifugoTableCards.length <= 0 || daifugoPhase !== "playing"}
+                        className="rounded-md border border-amber-200/65 bg-amber-300/85 px-3 py-1.5 font-semibold text-amber-950 disabled:cursor-not-allowed disabled:border-slate-500/45 disabled:bg-slate-700/70 disabled:text-slate-300"
+                      >
+                        PASS
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDaifugoSelectedCardIds([])}
+                        disabled={!daifugoControlsEnabled}
+                        className="rounded-md border border-slate-300/45 bg-slate-800/50 px-3 py-1"
+                      >
+                        選択解除
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!daifugoDisplayLocalSeat) return;
+                          setDaifugoPlayers((prev) => {
+                            const nextPlayers = prev.map((seat) => (
+                              seat.id === daifugoDisplayLocalSeat.id
+                                ? { ...seat, hand: sortDaifugoHand(seat.hand) }
+                                : seat
+                            ));
+                            syncDaifugoCompatState(nextPlayers, daifugoTableCards, daifugoCurrentTurnIndex);
+                            return nextPlayers;
+                          });
+                        }}
+                        disabled={!daifugoControlsEnabled}
+                        className="rounded-md border border-slate-300/45 bg-slate-800/50 px-3 py-1"
+                      >
+                        並び替え
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDaifugoMessage(`RULE: ${daifugoPreviewRuleBadges.join(" / ") || "標準"}`)}
+                        className="rounded-md border border-slate-300/45 bg-slate-800/50 px-3 py-1"
+                      >
+                        ルール確認
+                      </button>
+                    </div>
+                  </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={() => onDaifugoPass({ side: daifugoLocalSide })}
-                  disabled={isDaifugoOver || !canOperateDaifugoNow || !daifugoTableCard}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1"
-                >
-                  {t("daifugoPass")}
-                </button>
+                  <p className="mt-1 text-[11px] text-emerald-100/85">
+                    {daifugoSelectedCards.length <= 0
+                      ? daifugoTurnAssistText
+                      : daifugoSelectionJudge.ok
+                        ? `提出可能: ${daifugoSelectedCombo.label || "組み合わせ"}`
+                        : (daifugoSelectionJudge.reason || daifugoSelectedCombo.reason || "無効な組み合わせ")}
+                  </p>
+                </section>
+
+                <section className="w-full min-w-0 max-w-full rounded-xl border border-emerald-100/25 bg-black/28 p-3 pb-8 md:p-4 md:pb-9">
+                  <div className="w-full min-w-0 overflow-x-auto overflow-y-visible px-2 pb-5 md:px-4">
+                    {daifugoGameStatus === "idle" ? (
+                      <div className="grid min-h-[132px] w-full place-items-center text-center">
+                        <div className="flex items-end justify-center gap-2">
+                          {Array.from({ length: 5 }, (_, idx) => (
+                            <span key={`daifugo-idle-back-${idx}`}>{renderDaifugoCardBack({ width: daifugoHandCardWidth, height: daifugoHandCardHeight })}</span>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-xs text-emerald-100/80">ゲーム開始後にカードが配られます</p>
+                      </div>
+                    ) : (
+                      <div className={`mx-auto grid w-full min-w-0 ${daifugoHandDisplayMode === "twoRows" ? "min-h-[290px] grid-rows-2 gap-0 md:min-h-[332px]" : "min-h-[180px] grid-rows-1"}`}>
+                        {daifugoHandRows.map((row, rowIndex) => {
+                          const rowCount = row.length;
+                          const rowStep = calculateDaifugoCardStep({
+                            cardCount: rowCount,
+                            containerWidth: daifugoHandContainerWidth,
+                            cardWidth: daifugoHandCardWidth,
+                            mode: daifugoHandDisplayMode,
+                          });
+                          const rowPixelWidth = rowCount <= 1 ? daifugoHandCardWidth : daifugoHandCardWidth + rowStep * (rowCount - 1);
+                          const rowViewportWidth = Math.max(daifugoHandContainerWidth, rowPixelWidth);
+                          const rowHeight = daifugoHandCardHeight + 34;
+                          const rowOffset = rowIndex === 0 ? 0 : (daifugoHandRows[0]?.length || 0);
+                          return (
+                            <div
+                              key={`daifugo-hand-row-${rowIndex}`}
+                              className={`relative mx-auto w-full min-w-0 ${daifugoHandDisplayMode === "twoRows" && rowIndex > 0 ? "-mt-6 md:-mt-7" : ""}`}
+                              style={{ height: `${rowHeight}px` }}
+                            >
+                              <div className="relative mx-auto min-w-full" style={{ width: `${rowViewportWidth}px`, height: `${rowHeight}px` }}>
+                                {row.map((card, index) => {
+                                  const selected = daifugoSelectedCardIds.includes(card.id);
+                                  const baseStyle = daifugoHandCardStyle(index, rowCount, {
+                                    step: rowStep,
+                                    maxRotate: daifugoHandMaxRotate,
+                                    centerLift: daifugoHandCenterLift,
+                                  });
+                                  return (
+                                    <span
+                                      key={`my-daifugo-card-${card.id}-${rowIndex}-${index}`}
+                                      className="inline-flex"
+                                      style={{ ...baseStyle, zIndex: selected ? 60 : baseStyle.zIndex }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (!canOperateDaifugoNow || daifugoPhase !== "playing") return;
+                                          setDaifugoSelectedCardIds((prev) => (prev.includes(card.id) ? prev.filter((id) => id !== card.id) : [...prev, card.id]));
+                                        }}
+                                        disabled={!canOperateDaifugoNow || daifugoPhase !== "playing"}
+                                        className={`relative origin-bottom rounded-md border p-0.5 transition-transform duration-150 hover:-translate-y-2 ${selected ? "-translate-y-6 border-amber-200 bg-amber-100/25 shadow-[0_0_18px_rgba(253,230,138,0.52)]" : "border-cyan-300/45 bg-cyan-400/10"}`}
+                                        aria-label={`hand-card-${rowOffset + index}`}
+                                      >
+                                        {renderDaifugoCardFace(daifugoCardLabel(card), { width: daifugoHandCardWidth, height: daifugoHandCardHeight })}
+                                        {selected ? (
+                                          <span className="pointer-events-none absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-100 bg-amber-300/90 text-[11px] font-black text-amber-950">✓</span>
+                                        ) : null}
+                                      </button>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                {daifugoPhase === "finished" && daifugoRoundResult.length > 0 ? (
+                  <section className={`rounded-xl border p-3 ${isDaifugoLocalWinner ? "border-amber-200/45 bg-amber-200/10" : "border-emerald-100/25 bg-black/20"}`}>
+                    <p className={`text-sm font-semibold ${isDaifugoLocalWinner ? "text-amber-100" : "text-emerald-50"}`}>
+                      {isDaifugoLocalWinner ? "順位 | YOU WIN!" : "順位"}
+                    </p>
+                    <div className="mt-2 grid gap-1 text-xs text-emerald-100/85">
+                      {daifugoRoundResult.map((row, index) => (
+                        <p key={`daifugo-result-${row.name}-${index}`}>#{row.rank} {row.name} | {daifugoClassLabel(row.className)} | 残り {row.cards}枚 | {row.isCpu ? "CPU" : "PLAYER"}</p>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
               </div>
-              </fieldset>
-              )}
             </article>
 
             
@@ -17257,198 +22692,219 @@ export default function Home() {
         {activePanel === "mahjong" ? (
           <section className="grid gap-5">
             <article className="mx-auto w-full max-w-[110rem] rounded-2xl border border-emerald-200/25 bg-gradient-to-b from-emerald-950/70 via-emerald-900/55 to-slate-900/65 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold">{t("mahjongTitle")}</h2>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => startPanelGame("mahjong", resetMahjong)}
-                    disabled={isPanelStartCounting("mahjong")}
-                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
-                  >
-                    {startButtonLabel("mahjong")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => runWithResetGuard("mahjong", resetMahjong)}
-                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                  >
-                    {t("mahjongReset")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleBackToMenuClick}
-                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                  >
-                    {t("backToMenu")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onMahjongShuffle}
-                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                  >
-                    {t("mahjongShuffle")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onMahjongHint}
-                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                  >
-                    {t("mahjongHintButton")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onMahjongTsumo}
-                    className="rounded-md border border-emerald-200/40 px-3 py-1 text-sm"
-                  >
-                    {t("mahjongTsumo")}
-                  </button>
-                </div>
-              </div>
+              {(() => {
+                const selfName = (playerName || "YOU").trim() || "YOU";
+                const short = (name: string) => (name.length > 8 ? `${name.slice(0, 8)}…` : name);
+                const sideDiscards: [number[], number[], number[]] = [[], [], []];
+                mahjongRiver.forEach((tile, index) => {
+                  sideDiscards[index % 3].push(tile);
+                });
 
-              {!gameStarted.mahjong ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.mahjong} className={!gameStarted.mahjong ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+                const turnSeat: "bottom" | "top" = mahjongBoard.length === 14 ? "bottom" : "top";
+                const selfPlayer: MahjongPlayerView = {
+                  id: "self",
+                  name: selfName,
+                  shortName: short(selfName),
+                  icon: "🀄",
+                  score: score || 25000,
+                  rank: 1,
+                  wind: mahjongSeatWind,
+                  isDealer: mahjongSeatWind === "東",
+                  isRiichi: mahjongRiichiTileIndex !== null,
+                  isTurn: turnSeat === "bottom",
+                  isConnected: true,
+                  thinkingSec: 7,
+                  handBackCount: 0,
+                  discards: mahjongRiver,
+                  melds: [],
+                };
 
-              <p className="text-sm text-slate-300">{mahjongMessage}</p>
-              <div className="mt-2 rounded-xl border border-emerald-300/25 bg-emerald-950/35 p-3">
-                <div className="grid gap-2 text-xs text-emerald-50 sm:grid-cols-2 lg:grid-cols-7">
-                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
-                    <span className="text-emerald-100/70">{t("mahjongRound")}</span>
-                    <p className="mt-0.5 text-sm font-semibold">{mahjongRoundWind}{mahjongRoundNumber}</p>
-                  </div>
-                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
-                    <span className="text-emerald-100/70">{t("mahjongSeat")}</span>
-                    <p className="mt-0.5 text-sm font-semibold">{mahjongSeatWind}</p>
-                  </div>
-                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
-                    <span className="text-emerald-100/70">{t("mahjongHonba")}</span>
-                    <p className="mt-0.5 text-sm font-semibold">{mahjongHonba}</p>
-                  </div>
-                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
-                    <span className="text-emerald-100/70">{t("mahjongKyotaku")}</span>
-                    <p className="mt-0.5 text-sm font-semibold">{mahjongKyotaku}</p>
-                  </div>
-                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
-                    <span className="text-emerald-100/70">{t("mahjongJunme")}</span>
-                    <p className="mt-0.5 text-sm font-semibold">{mahjongRiver.length + 1}</p>
-                  </div>
-                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
-                    <span className="text-emerald-100/70">{t("mahjongDora")}</span>
-                    {mahjongDoraIndicator === null ? (
-                      <p className="mt-0.5 text-sm font-semibold">-</p>
-                    ) : (
-                      <div className="relative mt-0.5 inline-flex h-12 w-8 items-center justify-center overflow-hidden rounded border border-stone-300 bg-gradient-to-b from-white via-stone-100 to-stone-200 px-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(0,0,0,0.25)]">
-                        <span className="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-stone-300/70" />
-                        <span className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/80" />
-                        <span className="relative z-10">{renderMahjongTileArt(mahjongDoraIndicator, true)}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="rounded-md border border-emerald-200/25 bg-emerald-900/45 px-2 py-1.5">
-                    <span className="text-emerald-100/70">{t("mahjongWall")}</span>
-                    <p className="mt-0.5 text-sm font-semibold">{tf("mahjongRemaining", { count: mahjongRemainingCount(mahjongWall) })}</p>
-                  </div>
-                </div>
+                const topPlayer: MahjongPlayerView = {
+                  id: "top",
+                  name: "Player B",
+                  shortName: "Player B",
+                  icon: "🙂",
+                  score: 25000,
+                  rank: 2,
+                  wind: "南",
+                  isDealer: mahjongSeatWind !== "東" && mahjongRoundWind === "東",
+                  isRiichi: false,
+                  isTurn: turnSeat === "top",
+                  isConnected: true,
+                  thinkingSec: 8,
+                  handBackCount: 13,
+                  discards: sideDiscards[0],
+                  melds: [],
+                };
 
-                <p className="mt-3 text-sm text-emerald-100/85">{t("mahjongWall")}: {mahjongWall.length}</p>
-              </div>
+                const leftPlayer: MahjongPlayerView = {
+                  id: "left",
+                  name: "Player C",
+                  shortName: "P-C",
+                  icon: "😎",
+                  score: 25000,
+                  rank: 3,
+                  wind: "西",
+                  isDealer: false,
+                  isRiichi: false,
+                  isTurn: false,
+                  isConnected: true,
+                  thinkingSec: 8,
+                  handBackCount: 13,
+                  discards: sideDiscards[1],
+                  melds: [],
+                };
 
-              {mahjongWinSummary ? (
-                <div className="mt-3 rounded-xl border border-emerald-300/30 bg-emerald-500/10 p-3 text-sm text-emerald-50">
-                  <p className="font-semibold">{t("mahjongResultTitle")}</p>
-                  <p className="mt-1 text-emerald-100/90">
-                    {mahjongWinSummary.isYakuman
-                      ? t("mahjongResultYakuman")
-                      : tf("mahjongResultHanFu", { han: mahjongWinSummary.han, fu: mahjongWinSummary.fu })}
-                  </p>
-                  <p className="text-emerald-100/90">{tf("mahjongResultPoint", { point: mahjongWinSummary.point })}</p>
-                  <p className="mt-1 text-xs text-emerald-100/80">
-                    {mahjongWinSummary.yakuKeys.map((key) => t(key)).join(" / ")}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onMahjongApplyScore}
-                    className="mt-3 rounded-md border border-emerald-200/50 px-3 py-1 text-xs font-semibold"
-                  >
-                    {t("mahjongApplyScore")}
-                  </button>
-                </div>
-              ) : null}
+                const rightPlayer: MahjongPlayerView = {
+                  id: "right",
+                  name: "Player D",
+                  shortName: "P-D",
+                  icon: "🤖",
+                  score: 25000,
+                  rank: 4,
+                  wind: "北",
+                  isDealer: false,
+                  isRiichi: false,
+                  isTurn: false,
+                  isConnected: true,
+                  thinkingSec: 8,
+                  handBackCount: 13,
+                  discards: sideDiscards[2],
+                  melds: [],
+                };
 
-              <p className="mt-4 text-xs uppercase tracking-wide text-slate-400">{t("mahjongOpponent")}</p>
-              <div className="mt-2 rounded-xl border border-emerald-200/20 bg-emerald-900/30 p-3">
-                <p className="text-lg font-semibold text-emerald-100">13</p>
-              </div>
+                const normalizedHand = mahjongBoard.length >= 14
+                  ? [...mahjongBoard.slice(0, 13), mahjongBoard[mahjongBoard.length - 1]]
+                  : [...mahjongBoard];
+                const tsumoIndex = mahjongBoard.length >= 14 ? normalizedHand.length - 1 : null;
 
-              <p className="mt-4 text-xs uppercase tracking-wide text-slate-400">{t("mahjongHand")}</p>
-              <div className="mt-2 rounded-xl border border-emerald-200/20 bg-emerald-900/35 p-3">
-              <div className="flex flex-wrap gap-2">
-                {(mahjongBoard.length >= 14 ? mahjongBoard.slice(0, 13) : mahjongBoard).map((tile, index) => {
-                  const selected = mahjongSelected === index;
-                  return (
-                    <button
-                      key={`mahjong-hand-${index}-${tile}`}
-                      type="button"
-                      onClick={() => onMahjongTileClick(index)}
-                      disabled={isMahjongOver}
-                      className={`relative h-[4.8rem] w-10 overflow-hidden rounded-md border bg-gradient-to-b from-white via-stone-100 to-stone-200 px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(0,0,0,0.3)] transition ${selected ? "-translate-y-1 border-cyan-400 ring-2 ring-cyan-300/70" : "border-stone-300 hover:-translate-y-0.5"}`}
-                    >
-                      <span className="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-stone-300/70" />
-                      <span className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/80" />
-                      <span className="relative z-10">{renderMahjongTileArt(tile)}</span>
-                    </button>
-                  );
-                })}
-                {mahjongBoard.length >= 14 ? (
-                  <>
-                    <div className="mx-1 h-[4.8rem] w-px self-center bg-emerald-100/25" />
-                    {(() => {
-                      const index = mahjongBoard.length - 1;
-                      const tile = mahjongBoard[index];
-                      const selected = mahjongSelected === index;
-                      return (
-                        <button
-                          key={`mahjong-hand-tsumo-${index}-${tile}`}
-                          type="button"
-                          onClick={() => onMahjongTileClick(index)}
-                          disabled={isMahjongOver}
-                          className={`relative h-[4.8rem] w-10 overflow-hidden rounded-md border bg-gradient-to-b from-white via-stone-100 to-stone-200 px-1 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(0,0,0,0.3)] transition ring-2 ring-amber-300 ${selected ? "-translate-y-1 border-cyan-400 ring-cyan-300/70" : "border-stone-300 hover:-translate-y-0.5"}`}
-                        >
-                          <span className="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-stone-300/70" />
-                          <span className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/80" />
-                          <span className="relative z-10">{renderMahjongTileArt(tile)}</span>
-                        </button>
-                      );
-                    })()}
-                  </>
-                ) : null}
-              </div>
-              </div>
+                const centerInfo = {
+                  roundLabel: `${mahjongRoundWind}${mahjongRoundNumber}局`,
+                  honba: mahjongHonba,
+                  kyotaku: mahjongKyotaku,
+                  remainingTiles: mahjongRemainingCount(mahjongWall),
+                  doraIndicators: mahjongDoraIndicator === null ? [] : [mahjongDoraIndicator],
+                  uraDoraIndicators: [],
+                  wallPreviewCount: Math.min(8, Math.max(0, Math.ceil(mahjongRemainingCount(mahjongWall) / 16))),
+                  dealerName: mahjongSeatWind === "東" ? short(selfName) : "Player B",
+                  tableWind: mahjongRoundWind,
+                  turnPlayerName: turnSeat === "bottom" ? short(selfName) : "Player B",
+                };
 
-              <p className="mt-5 text-xs uppercase tracking-wide text-slate-400">{t("mahjongRiver")}</p>
-              <div className="mt-2 rounded-xl border border-emerald-200/20 bg-emerald-900/30 p-3">
-              {mahjongRiichiTileIndex !== null ? (
-                <p className="mb-2 text-[11px] font-semibold tracking-wide text-amber-200">{t("mahjongRiichi")}</p>
-              ) : null}
-              <div className="grid grid-cols-6 gap-1.5">
-                {mahjongRiver.length === 0 ? (
-                  <span className="col-span-full text-sm text-slate-400">-</span>
-                ) : (
-                  mahjongRiver.map((tile, index) => (
-                    <div
-                      key={`mahjong-river-${index}-${tile}`}
-                      className={`relative mx-auto h-14 w-9 overflow-hidden rounded border border-stone-300 bg-gradient-to-b from-white via-stone-100 to-stone-200 px-1 py-1 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_1px_2px_rgba(0,0,0,0.25)] transition ${index === mahjongRiichiTileIndex ? "rotate-90" : ""}`}
-                    >
-                      <span className="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-stone-300/70" />
-                      <span className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/80" />
-                      <span className="relative z-10">{renderMahjongTileArt(tile, true)}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-              </div>
+                const actionButtons: MahjongActionButton[] = [];
+                if (gameStarted.mahjong) {
+                  actionButtons.push({ key: "sort", label: "手牌並び替え", tone: "subtle", onClick: onMahjongSortHand });
+                  actionButtons.push({ key: "riichi", label: t("mahjongRiichi"), tone: "accent", onClick: onMahjongDeclareRiichi });
+                  actionButtons.push({ key: "pass", label: "パス", tone: "subtle", onClick: onMahjongPass });
+                  actionButtons.push({ key: "kan", label: "カン", tone: "normal", onClick: () => setMahjongMessage("カン判定は準備中です。") });
+                  actionButtons.push({ key: "pon", label: "ポン", tone: "normal", onClick: () => setMahjongMessage("ポン判定は準備中です。") });
+                  actionButtons.push({ key: "chi", label: "チー", tone: "normal", onClick: () => setMahjongMessage("チー判定は準備中です。") });
+                  if (mahjongBoard.length === 14 && mahjongIsWinningHand(mahjongBoard)) {
+                    actionButtons.push({ key: "ron", label: "ロン", tone: "primary", onClick: onMahjongTsumo });
+                    actionButtons.push({ key: "tsumo", label: t("mahjongTsumo"), tone: "primary", onClick: onMahjongTsumo });
+                  }
+                }
+                actionButtons.push({
+                  key: "autoWin",
+                  label: mahjongAutoWinEnabled ? "自動和了: ON" : "自動和了: OFF",
+                  tone: "subtle",
+                  onClick: () => setMahjongAutoWinEnabled((prev) => !prev),
+                });
+                actionButtons.push({
+                  key: "noCall",
+                  label: mahjongNoCallEnabled ? "鳴きなし: ON" : "鳴きなし: OFF",
+                  tone: "subtle",
+                  onClick: () => setMahjongNoCallEnabled((prev) => !prev),
+                });
+                actionButtons.push({
+                  key: "effects",
+                  label: mahjongReduceEffects ? "演出: 簡略" : "演出: 通常",
+                  tone: "subtle",
+                  onClick: () => setMahjongReduceEffects((prev) => !prev),
+                });
 
-              </fieldset>
+                const roundResult: MahjongResultView | null = mahjongWinSummary
+                  ? {
+                    winner: short(selfName),
+                    handTiles: normalizedHand.slice(0, 13),
+                    winTile: normalizedHand[13] ?? mahjongLastDraw,
+                    dora: mahjongDoraIndicator === null ? [] : [mahjongDoraIndicator],
+                    uraDora: [],
+                    yaku: mahjongWinSummary.yakuKeys.map((key) => t(key)),
+                    hanText: mahjongWinSummary.isYakuman ? t("mahjongResultYakuman") : `${mahjongWinSummary.han}翻`,
+                    fuText: `${mahjongWinSummary.fu}符`,
+                    scoreLabel: tf("mahjongResultPoint", { point: mahjongWinSummary.point }),
+                    scoreDeltaLines: [
+                      `和了: ${short(selfName)} +${mahjongWinSummary.point.toLocaleString()}`,
+                      "供託: 0本",
+                    ],
+                  }
+                  : null;
+
+                return (
+                  <MahjongGame
+                    title={t("mahjongTitle")}
+                    message={mahjongMessage}
+                    gameStarted={gameStarted.mahjong}
+                    selfPlayer={selfPlayer}
+                    topPlayer={topPlayer}
+                    leftPlayer={leftPlayer}
+                    rightPlayer={rightPlayer}
+                    selfHand={normalizedHand}
+                    selfSelectedIndex={mahjongSelected}
+                    selfTsumoIndex={tsumoIndex}
+                    riichiTileIndex={mahjongRiichiTileIndex}
+                    centerInfo={centerInfo}
+                    actionButtons={actionButtons}
+                    roundResult={roundResult}
+                    gameResultSummary={[]}
+                    gameResultOpen={false}
+                    logEvents={mahjongLogEvents}
+                    isLogOpen={isMahjongLogOpen}
+                    onLogToggle={() => setIsMahjongLogOpen((prev) => !prev)}
+                    isRuleSettingsOpen={isMahjongRuleSettingsOpen}
+                    onRuleSettingsToggle={() => setIsMahjongRuleSettingsOpen((prev) => !prev)}
+                    rulePreset={mahjongRulePreset}
+                    onRulePresetChange={setMahjongRulePreset}
+                    ruleCategories={MAHJONG_RULE_CATEGORIES}
+                    topActions={[
+                      {
+                        key: "start",
+                        label: startButtonLabel("mahjong"),
+                        onClick: () => startPanelGame("mahjong", resetMahjong),
+                        emphasis: "primary",
+                      },
+                      {
+                        key: "reset",
+                        label: t("mahjongReset"),
+                        onClick: () => runWithResetGuard("mahjong", resetMahjong),
+                      },
+                      {
+                        key: "menu",
+                        label: t("backToMenu"),
+                        onClick: handleBackToMenuClick,
+                      },
+                      {
+                        key: "hint",
+                        label: t("mahjongHintButton"),
+                        onClick: () => {
+                          if (!gameStarted.mahjong) return;
+                          onMahjongHint();
+                        },
+                      },
+                    ]}
+                    onSelfTileClick={(index) => {
+                      if (!gameStarted.mahjong) return;
+                      onMahjongTileClick(index);
+                    }}
+                    onCloseRoundResult={() => {
+                      setMahjongWinSummary(null);
+                      setIsMahjongOver(false);
+                    }}
+                    onCloseGameResult={() => undefined}
+                  />
+                );
+              })()}
             </article>
 
             
@@ -17456,223 +22912,411 @@ export default function Home() {
         ) : null}
 
         {activePanel === "poker" ? (
-          <section className="grid gap-5">
-            <article className="mx-auto w-full max-w-6xl rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold">{t("pokerTitle")}</h2>
+          <section className="grid gap-3">
+            <article className="mx-auto w-full max-w-[72rem] rounded-2xl border border-slate-300/20 bg-slate-900/40 p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-xl font-semibold">{pokerSettings.gameMode === "tournament" ? "ポーカー大会" : "ポーカー"}</h2>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => startPanelGame("poker", resetPoker)}
-                    disabled={isPanelStartCounting("poker")}
-                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
+                    onClick={() => startPanelGame("poker", beginPokerGame)}
+                    disabled={isPanelStartCounting("poker") || pokerIsRunning}
+                    className="h-9 rounded-md bg-cyan-400 px-3 text-sm font-semibold text-slate-950"
                   >
-                    {startButtonLabel("poker")}
+                    {pokerIsRunning
+                      ? pokerSettings.gameMode === "tournament"
+                        ? "大会進行中"
+                        : "ゲーム進行中"
+                      : startButtonLabel("poker")}
                   </button>
                   <button
                     type="button"
                     onClick={() => runWithResetGuard("poker", resetPoker)}
-                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                    className="h-9 rounded-md border border-cyan-200/40 px-3 text-sm"
                   >
-                    {t("pokerDeal")}
+                    リセット
                   </button>
                   <button
                     type="button"
                     onClick={handleBackToMenuClick}
-                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                    className="h-9 rounded-md border border-cyan-200/40 px-3 text-sm"
                   >
                     {t("backToMenu")}
                   </button>
                 </div>
               </div>
 
-              {!gameStarted.poker ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : (
-              <fieldset className="mt-2">
-
-              <div className="mb-3 grid gap-2 rounded-xl border border-cyan-200/20 bg-slate-950/35 p-3">
-                <div className="grid gap-2 text-xs text-slate-200 sm:grid-cols-3">
-                  <div className="rounded-md border border-cyan-200/25 bg-slate-900/65 px-3 py-2">
-                    <p className="text-[10px] tracking-wide text-cyan-100/70">BANK</p>
-                    <p className="mt-1 text-base font-bold text-cyan-100">{formatChip(casinoBankroll)}</p>
-                  </div>
-                  <div className="rounded-md border border-cyan-200/25 bg-slate-900/65 px-3 py-2">
-                    <p className="text-[10px] tracking-wide text-cyan-100/70">BET</p>
-                    <p className="mt-1 text-base font-bold text-cyan-100">{formatChip(pokerBet)}</p>
-                  </div>
-                  <div className="rounded-md border border-cyan-200/25 bg-slate-900/65 px-3 py-2">
-                    <p className="text-[10px] tracking-wide text-cyan-100/70">WAGER</p>
-                    <p className="mt-1 text-base font-bold text-cyan-100">{formatChip(pokerWager)}</p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setPokerBetByRatio(0.25)}
-                    className="rounded-md border border-slate-400/40 px-2 py-1"
+              <div className="mt-2 grid gap-2 rounded-xl border border-slate-300/20 bg-slate-950/35 px-3 py-2.5 text-xs md:grid-cols-5">
+                <label className="grid gap-1 text-slate-200">
+                  <span>GAME MODE</span>
+                  <select
+                    value={pokerSettings.gameMode}
+                    onChange={(event) => onPokerGameModeChange(event.target.value === "normal" ? "normal" : "tournament")}
+                    disabled={pokerIsRunning}
+                    className="h-9 rounded-md border border-slate-400/40 bg-slate-900/70 px-2"
                   >
-                    25%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPokerBetByRatio(0.5)}
-                    className="rounded-md border border-slate-400/40 px-2 py-1"
+                    <option value="normal">ノーマル</option>
+                    <option value="tournament">大会</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-slate-200">
+                  <span>CPU人数</span>
+                  <select
+                    value={pokerSettings.cpuCount}
+                    onChange={(event) => setPokerSettings((prev) => ({
+                      ...prev,
+                      cpuCount: Math.max(1, Math.min(8, Number(event.target.value) || 3)),
+                    }))}
+                    disabled={pokerIsRunning}
+                    className="h-9 rounded-md border border-slate-400/40 bg-slate-900/70 px-2"
                   >
-                    50%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPokerBetByRatio(0.75)}
-                    className="rounded-md border border-slate-400/40 px-2 py-1"
+                    {Array.from({ length: 8 }, (_, index) => index + 1).map((count) => (
+                      <option key={`poker-cpu-count-${count}`} value={count}>{count}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-slate-200">
+                  <span>CPU難易度</span>
+                  <select
+                    value={pokerSettings.cpuDifficulty}
+                    onChange={(event) => setPokerSettings((prev) => ({
+                      ...prev,
+                      cpuDifficulty: event.target.value === "easy"
+                        ? "easy"
+                        : event.target.value === "hard"
+                          ? "hard"
+                          : "normal",
+                    }))}
+                    disabled={pokerIsRunning}
+                    className="h-9 rounded-md border border-slate-400/40 bg-slate-900/70 px-2"
                   >
-                    75%
-                  </button>
-                </div>
+                    <option value="easy">やさしい</option>
+                    <option value="normal">標準</option>
+                    <option value="hard">むずかしい</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-slate-200">
+                  <span>初期チップ</span>
+                  <select
+                    value={pokerSettings.startingChips}
+                    onChange={(event) => setPokerSettings((prev) => ({
+                      ...prev,
+                      startingChips: Math.max(1000, Number(event.target.value) || 3000),
+                    }))}
+                    disabled={pokerIsRunning}
+                    className="h-9 rounded-md border border-slate-400/40 bg-slate-900/70 px-2"
+                  >
+                    {[1000, 3000, 5000, 10000].map((chips) => (
+                      <option key={`poker-starting-${chips}`} value={chips}>{formatChip(chips)}</option>
+                    ))}
+                  </select>
+                </label>
+                {pokerSettings.gameMode === "tournament" ? (
+                  <label className="grid gap-1 text-slate-200">
+                    <span>ブラインド速度</span>
+                    <select
+                      value={pokerSettings.blindSpeed}
+                      onChange={(event) => {
+                        const speed = event.target.value === "turbo"
+                          ? "turbo"
+                          : event.target.value === "slow"
+                            ? "slow"
+                            : "normal";
+                        setPokerSettings((prev) => ({ ...prev, blindSpeed: speed }));
+                      }}
+                      disabled={pokerIsRunning}
+                      className="h-9 rounded-md border border-slate-400/40 bg-slate-900/70 px-2"
+                    >
+                      <option value="turbo">高速</option>
+                      <option value="normal">標準</option>
+                      <option value="slow">低速</option>
+                    </select>
+                  </label>
+                ) : (
+                  <label className="grid gap-1 text-slate-200">
+                    <span>SMALL BLIND</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={pokerSettings.normalSmallBlind}
+                      onChange={(event) => setPokerSettings((prev) => ({
+                        ...prev,
+                        normalSmallBlind: Math.max(1, Math.floor(Number(event.target.value) || 10)),
+                        normalBigBlind: Math.max(
+                          Math.max(1, Math.floor(Number(event.target.value) || 10)),
+                          prev.normalBigBlind,
+                        ),
+                      }))}
+                      disabled={pokerIsRunning}
+                      className="h-9 rounded-md border border-slate-400/40 bg-slate-900/70 px-2"
+                    />
+                  </label>
+                )}
+                {pokerSettings.gameMode === "normal" ? (
+                  <label className="grid gap-1 text-slate-200">
+                    <span>BIG BLIND</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={pokerSettings.normalBigBlind}
+                      onChange={(event) => setPokerSettings((prev) => ({
+                        ...prev,
+                        normalBigBlind: Math.max(prev.normalSmallBlind, Math.floor(Number(event.target.value) || 20)),
+                      }))}
+                      disabled={pokerIsRunning}
+                      className="h-9 rounded-md border border-slate-400/40 bg-slate-900/70 px-2"
+                    />
+                  </label>
+                ) : null}
+              </div>
 
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-200">
-                <button
-                  type="button"
-                  onClick={() => stepPokerBet(-CASINO_BET_STEP)}
-                  className="rounded-md border border-slate-400/40 px-2 py-1"
-                >
-                  -{CASINO_BET_STEP}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => stepPokerBet(CASINO_BET_STEP)}
-                  className="rounded-md border border-slate-400/40 px-2 py-1"
-                >
-                  +{CASINO_BET_STEP}
-                </button>
-                <button
-                  type="button"
-                  onClick={allInPokerBet}
-                  className="rounded-md border border-amber-300/50 px-2 py-1 text-amber-100"
-                >
-                  ALL IN
-                </button>
-                  {isPokerRoundActive ? <span className="text-amber-200/85">進行中ラウンドには反映されません（次ラウンドから有効）</span> : null}
+              <div className="mt-2 rounded-xl border border-cyan-200/30 bg-slate-950/45 px-3 py-2 text-[11px] text-slate-100 sm:text-xs">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {pokerSettings.gameMode === "tournament" ? (
+                    <>
+                      <span className="font-semibold text-cyan-100">レベル LV.{pokerCurrentBlind.level}</span>
+                      <span>SB {formatChip(pokerCurrentBlind.smallBlind)} / BB {formatChip(pokerCurrentBlind.bigBlind)} / ANTE {formatChip(pokerCurrentBlind.ante)}</span>
+                      <span className="text-slate-300">次 LV.{pokerNextBlind.level} / SB {formatChip(pokerNextBlind.smallBlind)} / BB {formatChip(pokerNextBlind.bigBlind)}</span>
+                      <span>残り {pokerPlayers.filter((player) => isPokerPlayerAlive(player)).length}/{Math.max(2, pokerSettings.cpuCount + 1)}人</span>
+                      <span>順位 {rankText(pokerMyRank)}</span>
+                      <span>平均 {formatChip(pokerAverageChips)}</span>
+                      <span>ハンド {pokerHandCount}</span>
+                      <span className="text-amber-100">次まで {Math.max(0, pokerHandsUntilLevelUp)}ハンド</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-semibold text-cyan-100">所持チップ {formatChip(pokerMe?.chips || 0)}</span>
+                      <span>ポット {formatChip(pokerPots.reduce((sum, item) => sum + item.amount, 0))}</span>
+                      <span>現在ベット {formatChip(pokerMe?.currentStreetBet || 0)}</span>
+                      <span>必要コール {formatChip(pokerToCall)}</span>
+                      <span>フェーズ {pokerPhaseLabel}</span>
+                      <span>勝敗 {pokerNormalRecord.playerWins}勝 {pokerNormalRecord.cpuWins}敗 {pokerNormalRecord.draws}分</span>
+                      <span className="text-amber-100">ラウンド {pokerNormalRecord.rounds}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <p className="text-xs font-semibold tracking-[0.14em] text-amber-100/85">PHASE: {pokerPhaseLabel}</p>
-              <p className="text-sm text-slate-300">{pokerMessage}</p>
+              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_clamp(180px,22vw,220px)]">
+                <div className="min-w-0">
+                  <div className="relative h-[clamp(430px,56vh,520px)] overflow-hidden rounded-[1.4rem] border border-emerald-200/35 bg-[radial-gradient(circle_at_50%_45%,rgba(52,211,153,0.2),rgba(5,46,22,0.95)_58%,rgba(3,20,12,0.98))] p-2.5 sm:p-3">
+                    <div className="pointer-events-none absolute left-1/2 top-1/2 h-[clamp(330px,44vh,410px)] w-[96%] -translate-x-1/2 -translate-y-1/2 rounded-[999px] border-8 border-amber-900/65 bg-emerald-950/35 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08),0_12px_24px_rgba(2,6,23,0.45)]" />
 
-              <div className="relative mt-4 grid gap-4 overflow-hidden rounded-[2rem] border-4 border-amber-200/25 bg-[radial-gradient(circle_at_72%_22%,rgba(45,212,191,0.24),rgba(4,94,74,0.92)_58%,rgba(2,44,34,0.98))] p-5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07),0_18px_30px_rgba(2,6,23,0.45)]">
-                <p className="pointer-events-none absolute inset-0 -mt-2 flex items-center justify-center text-4xl font-black tracking-[0.32em] text-amber-100/10">POKER</p>
-                {showCasinoWinBurst ? (
-                  <div className="pointer-events-none absolute inset-0">
-                    <span className="absolute left-[23%] top-[62%] h-3 w-3 animate-ping rounded-full bg-amber-300/80" />
-                    <span className="absolute left-[52%] top-[40%] h-2.5 w-2.5 animate-ping rounded-full bg-cyan-300/80 [animation-delay:120ms]" />
-                    <span className="absolute left-[78%] top-[56%] h-3 w-3 animate-ping rounded-full bg-emerald-300/80 [animation-delay:220ms]" />
+                    <div className="absolute left-1/2 top-1/2 z-10 flex w-[min(92%,30rem)] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 text-center">
+                      <div className="rounded-md border border-amber-200/50 bg-slate-950/75 px-3 py-1">
+                        <p className="text-[10px] tracking-[0.16em] text-amber-100/80">合計ポット</p>
+                        <p className="text-xl font-black leading-tight text-amber-100">{formatChip(pokerPots.reduce((sum, item) => sum + item.amount, 0))}</p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        {Array.from({ length: 5 }).map((_, index) => {
+                          const card = pokerCommunity[index];
+                          const revealCount = pokerPhase === "flop"
+                            ? 3
+                            : pokerPhase === "turn"
+                              ? 4
+                              : pokerPhase === "river" || pokerPhase === "showdown" || pokerPhase === "result" || pokerPhase === "tournamentResult"
+                                ? 5
+                                : 0;
+                          const isRevealed = index < revealCount && Boolean(card);
+                          return (
+                            <span key={`community-seat-${index}`} className="inline-flex">
+                              {isRevealed && card ? (
+                                renderPlayingCardFace(pokerCardLabel(card))
+                              ) : (
+                                <span className="inline-flex h-12 w-9 rounded-md border border-slate-300/35 bg-slate-900/65 sm:h-14 sm:w-10 lg:h-16 lg:w-12" />
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+
+                      <div className="text-center text-sm text-slate-100">
+                        <p className="font-semibold tracking-wide">{pokerPhaseLabel}</p>
+                        <p className="text-xs text-slate-200/85">{isPokerThinking ? `${pokerCurrentTurnPlayer?.name || "CPU"} が考えています...` : pokerTurnNotice}</p>
+                        <p className="text-xs text-slate-200/75">{pokerToCall > 0 ? `必要コール ${formatChip(pokerToCall)}` : "必要コール 0"}</p>
+                      </div>
+                    </div>
+
+                    {pokerActionNotice ? (
+                      <div className="pointer-events-none absolute left-1/2 top-[11%] -translate-x-1/2 rounded-full border border-amber-200/60 bg-slate-950/75 px-3 py-1 text-[11px] font-bold tracking-wide text-amber-100 shadow-[0_0_16px_rgba(251,191,36,0.32)]">
+                        {pokerActionNoticeLabel}
+                      </div>
+                    ) : null}
+
+                    <div className="absolute inset-0 hidden sm:block">
+                      {pokerPlayers.map((player) => {
+                        const cards = pokerHoleCardsByPlayerId[player.id] || [];
+                        const isTurn = pokerCurrentTurnPlayer?.id === player.id;
+                        return (
+                          <div key={`seat-${player.id}`} className={`absolute -translate-y-1/2 ${pokerSeatPanelClass} ${POKER_SEAT_ANCHOR_CLASS[player.seatIndex] || "top-1/2 left-1/2 -translate-x-1/2"}`}>
+                            <div className={`rounded-lg border px-2 py-1.5 text-[10px] backdrop-blur ${isTurn ? "border-cyan-300 bg-slate-950/90 shadow-[0_0_10px_rgba(56,189,248,0.5)]" : "border-slate-400/35 bg-slate-950/80"} ${player.status === "eliminated" ? "opacity-45" : "opacity-100"}`}>
+                              <p className="font-semibold text-slate-100">{player.name}</p>
+                              <p className="text-slate-200/80">チップ {formatChip(player.chips)}</p>
+                              <p className="text-slate-200/80">ベット {formatChip(player.currentStreetBet)}</p>
+                              {player.id !== "p1" ? (
+                                <div className="mt-1 flex gap-1">
+                                  {(cards.length > 0 ? cards : [null, null]).slice(0, 2).map((card, idx) => (
+                                    <span key={`seat-card-${player.id}-${idx}`}>
+                                      {pokerShowdownReveal && player.status !== "folded" && card
+                                        ? renderPlayingCardFace(pokerCardLabel(card), { compact: true })
+                                        : renderPlayingCardBack({ compact: true })}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {player.isDealer ? <span className="rounded bg-amber-300/20 px-1 text-amber-100">D</span> : null}
+                                {player.isSmallBlind ? <span className="rounded bg-cyan-300/20 px-1 text-cyan-100">SB</span> : null}
+                                {player.isBigBlind ? <span className="rounded bg-sky-300/20 px-1 text-sky-100">BB</span> : null}
+                                {isTurn ? <span className="rounded bg-emerald-300/20 px-1 text-emerald-100">手番</span> : null}
+                                {player.status === "folded" ? <span className="rounded bg-rose-300/20 px-1 text-rose-100">フォールド</span> : null}
+                                {player.status === "allIn" ? <span className="rounded bg-fuchsia-300/20 px-1 text-fuchsia-100">オールイン</span> : null}
+                                {player.status === "eliminated" ? <span className="rounded bg-slate-300/20 px-1 text-slate-100">脱落</span> : null}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:hidden">
+                      {pokerPlayers.map((player) => {
+                        const isTurn = pokerCurrentTurnPlayer?.id === player.id;
+                        return (
+                          <div key={`mobile-seat-${player.id}`} className={`min-w-[9.2rem] rounded-lg border px-2 py-1.5 text-[11px] ${isTurn ? "border-cyan-300 bg-cyan-400/10" : "border-slate-400/35 bg-slate-950/65"}`}>
+                            <p className="font-semibold text-slate-100">{player.name}</p>
+                            <p className="text-slate-200/80">チップ {formatChip(player.chips)}</p>
+                            {player.id !== "p1" ? (
+                              <div className="mt-1 flex gap-1">
+                                {(pokerHoleCardsByPlayerId[player.id] || [null, null]).slice(0, 2).map((card, idx) => (
+                                  <span key={`mobile-card-${player.id}-${idx}`}>
+                                    {pokerShowdownReveal && player.status !== "folded" && card
+                                      ? renderPlayingCardFace(pokerCardLabel(card), { compact: true })
+                                      : renderPlayingCardBack({ compact: true })}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-1 flex gap-2.5">
+                                {(pokerHoleCardsByPlayerId.p1 || [null, null]).slice(0, 2).map((card, idx) => (
+                                  <span key={`mobile-self-card-${idx}`}>
+                                    {card ? renderPlayingCardFace(pokerCardLabel(card), { compact: true }) : <span className="inline-flex h-12 w-9 rounded-md border border-slate-300/35 bg-slate-900/65" />}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <aside className="min-w-0 rounded-xl border border-slate-300/20 bg-slate-950/45 p-2.5 text-xs lg:max-h-[clamp(430px,56vh,520px)] lg:overflow-y-auto">
+                  {pokerSettings.gameMode === "tournament" ? (
+                    <>
+                      <p className="text-sm font-semibold text-slate-100">{pokerTournamentStatus === "running" ? "順位" : "暫定順位"}</p>
+                      <ol className="mt-2 grid gap-1 text-slate-200/90">
+                        {pokerRanking.map((player, index) => (
+                          <li key={`ranking-${player.id}`} className={`rounded px-2 py-1.5 text-[11px] leading-tight ${player.id === "p1" ? "bg-cyan-400/15" : "bg-slate-800/60"}`}>
+                            {index + 1} {player.name} {formatChip(player.chips)} {player.status === "eliminated" ? "(脱落)" : ""}
+                          </li>
+                        ))}
+                      </ol>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-slate-100">ノーマル情報</p>
+                      <div className="mt-2 grid gap-1 text-slate-200/90">
+                        <p className="rounded bg-slate-800/60 px-2 py-1.5 text-[11px]">ラウンド {pokerNormalRecord.rounds}</p>
+                        <p className="rounded bg-slate-800/60 px-2 py-1.5 text-[11px]">勝敗 {pokerNormalRecord.playerWins}勝 {pokerNormalRecord.cpuWins}敗 {pokerNormalRecord.draws}分</p>
+                        <p className="rounded bg-slate-800/60 px-2 py-1.5 text-[11px]">SB {formatChip(pokerCurrentBlind.smallBlind)} / BB {formatChip(pokerCurrentBlind.bigBlind)}</p>
+                        <p className="rounded bg-slate-800/60 px-2 py-1.5 text-[11px]">フェーズ {pokerPhaseLabel}</p>
+                      </div>
+                    </>
+                  )}
+                </aside>
+              </div>
+
+              <div className={`mt-3 rounded-2xl border border-cyan-200/30 bg-slate-950/55 p-3 ${pokerCanAct ? "ring-1 ring-cyan-300/45" : ""}`}>
+                <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-100">あなた</p>
+                    <p className="text-xs text-slate-300">チップ {formatChip(pokerMe?.chips || 0)} / ベット {formatChip(pokerMe?.currentStreetBet || 0)} / 必要コール {formatChip(pokerToCall)}</p>
+                    <p className="text-xs text-slate-300">レイズ先 {formatChip(pokerRaiseTo)}</p>
+                    {pokerSettings.gameMode === "tournament" ? <p className="text-xs text-slate-300">現在順位 {pokerMyRank} / {Math.max(2, pokerSettings.cpuCount + 1)}</p> : <p className="text-xs text-slate-300">ラウンド {pokerNormalRecord.rounds} / 勝敗 {pokerNormalRecord.playerWins}-{pokerNormalRecord.cpuWins}-{pokerNormalRecord.draws}</p>}
+                    <p className="mt-1 text-xs text-slate-300">あなたの手札</p>
+                    <div className="mt-1 flex gap-2.5">
+                      {(pokerHoleCardsByPlayerId.p1 || [null, null]).slice(0, 2).map((card, idx) => (
+                        <span key={`my-hole-${idx}`}>
+                          {card ? renderPlayingCardFace(pokerCardLabel(card)) : <span className="inline-flex h-16 w-[clamp(48px,7vw,74px)] rounded-md border border-slate-300/35 bg-slate-900/65" />}
+                        </span>
+                      ))}
+                    </div>
+                    {pokerPlayerEval ? <p className="mt-2 text-xs text-amber-100">現在の役: {pokerHandName(pokerPlayerEval.name)}</p> : null}
+                  </div>
+
+                  <div className="min-w-0 grid gap-2">
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <button type="button" onClick={() => applyPokerAction("fold")} disabled={!pokerCanAct || pokerToCall <= 0} className="h-9 rounded-md border border-rose-300/55 px-3 text-sm text-rose-100 disabled:opacity-50">フォールド</button>
+                      <button type="button" onClick={() => applyPokerAction("check")} disabled={!pokerCanCheck} className="h-9 rounded-md border border-slate-300/55 px-3 text-sm disabled:opacity-50">チェック</button>
+                      <button type="button" onClick={() => applyPokerAction("call")} disabled={!pokerCanCall} className="h-9 rounded-md border border-emerald-300/55 bg-emerald-300/10 px-3 text-sm font-semibold text-emerald-100 disabled:opacity-50">コール {pokerCanCall ? formatChip(pokerToCall) : ""}</button>
+                      <button type="button" onClick={() => applyPokerAction("bet")} disabled={!pokerCanBet} className="h-9 rounded-md border border-cyan-300/55 bg-cyan-300/10 px-3 text-sm font-semibold text-cyan-100 disabled:opacity-50">ベット</button>
+                      <button type="button" onClick={() => applyPokerAction("raise")} disabled={!pokerCanRaise} className="h-9 rounded-md border border-sky-300/55 bg-sky-300/10 px-3 text-sm font-semibold text-sky-100 disabled:opacity-50">レイズ</button>
+                      <button type="button" onClick={() => applyPokerAction("allIn")} disabled={!pokerCanAct} className="h-9 rounded-md border border-amber-300/55 px-3 text-sm text-amber-100 disabled:opacity-50">オールイン</button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <button type="button" onClick={() => setPokerBetByRatio(0.25)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">25%</button>
+                      <button type="button" onClick={() => setPokerBetByRatio(0.5)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">50%</button>
+                      <button type="button" onClick={() => setPokerBetByRatio(0.75)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">75%</button>
+                      <button type="button" onClick={() => setPokerBetByRatio(1)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">POT</button>
+                      <button type="button" onClick={allInPokerBet} disabled={!pokerCanAct} className="h-9 rounded-md border border-amber-300/55 px-2.5 text-amber-100 disabled:opacity-50">オールイン</button>
+                      <button type="button" onClick={() => stepPokerBet(-10)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">-</button>
+                      <input
+                        type="number"
+                        min={Math.max(0, pokerMinRaiseTo)}
+                        max={Math.max(Math.max(0, pokerMinRaiseTo), pokerRaiseMaxTo)}
+                        value={Math.max(0, pokerRaiseTo)}
+                        onChange={(event) => setPokerRaiseTo(Math.max(pokerMinRaiseTo, Math.min(pokerRaiseMaxTo, Number(event.target.value) || pokerMinRaiseTo)))}
+                        disabled={!pokerCanAct}
+                        className="h-9 w-28 rounded-md border border-slate-400/40 bg-slate-900/70 px-2 text-sm"
+                      />
+                      <button type="button" onClick={() => stepPokerBet(10)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">+</button>
+                    </div>
+
+                    <input
+                      type="range"
+                      min={Math.max(0, pokerMinRaiseTo)}
+                      max={Math.max(Math.max(0, pokerMinRaiseTo), pokerRaiseMaxTo)}
+                      value={Math.max(0, pokerRaiseTo)}
+                      onChange={(event) => setPokerRaiseTo(Math.max(pokerMinRaiseTo, Math.min(pokerRaiseMaxTo, Number(event.target.value) || pokerMinRaiseTo)))}
+                      disabled={!pokerCanAct}
+                      className="w-full"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={onPokerDraw}
+                      disabled={!pokerCanAdvance}
+                      className="h-9 w-fit rounded-md border border-emerald-200/55 bg-emerald-300/85 px-3 text-sm font-semibold text-emerald-950 disabled:opacity-60"
+                    >
+                      {pokerActionLabel}
+                    </button>
+                  </div>
+                </div>
+
+                {pokerSettings.gameMode === "tournament" && pokerPhase === "tournamentResult" ? (
+                  <div className="mt-4 rounded-xl border border-amber-200/40 bg-amber-400/10 p-3 text-sm text-amber-100">
+                    <p className="text-lg font-black">大会優勝</p>
+                    <p className="mt-1">{pokerRanking[0]?.name || "-"}</p>
+                    <p className="mt-1 text-xs">優勝 獲得チップ {formatChip(pokerRanking[0]?.chips || 0)}</p>
                   </div>
                 ) : null}
-                <div>
-                  <p className="text-sm font-semibold">{t("pokerPlayerHand")}</p>
-                  <div className="mt-2 flex items-end overflow-x-auto pb-2 pr-2 pl-1">
-                    {pokerPlayerHand.map((card, index) => {
-                      const held = pokerHold[index];
-                      return (
-                        <span
-                          key={`poker-player-${card.suit}-${card.rank}-${index}`}
-                          className="inline-flex shrink-0"
-                          style={playerHandFanStyle(index, pokerPlayerHand.length, { overlap: 10, spread: 1.8, maxRotate: 9, centerLift: 0.4, centerOffset: 0.45 })}
-                        >
-                          <button
-                            type="button"
-                            aria-pressed={held}
-                            disabled
-                            className={`origin-bottom rounded-md border p-1.5 text-sm transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 aria-pressed:-translate-y-2 ${held ? "border-cyan-200 bg-cyan-400/20" : "border-slate-400/30 bg-slate-800/40"}`}
-                          >
-                            <span className="inline-flex flex-col items-center gap-1">
-                              {pokerPhase === "betting"
-                                ? <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">🂠</span>
-                                : renderPlayingCardFace(pokerCardLabel(card))}
-                              <span className={`rounded px-1.5 py-[1px] text-[10px] ${held ? "bg-cyan-300/25 text-cyan-100" : "bg-slate-700/40 text-slate-400"}`}>
-                                {held ? t("pokerHeld") : ""}
-                              </span>
-                            </span>
-                          </button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold">{t("pokerCpuHand")}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {pokerCpuHand.map((card, index) => (
-                      <div
-                        key={`poker-cpu-${card.suit}-${card.rank}-${index}`}
-                        className="rounded-md border border-slate-400/30 bg-slate-800/40 px-3 py-2 text-sm"
-                      >
-                        {pokerPhase === "showdown"
-                          ? renderPlayingCardFace(pokerCardLabel(card))
-                          : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">??</span>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold">COMMUNITY</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {Array.from({ length: 5 }).map((_, index) => {
-                      const card = pokerCommunity[index];
-                      return (
-                        <div
-                          key={`poker-community-${index}`}
-                          className="rounded-md border border-slate-400/30 bg-slate-800/40 px-3 py-2 text-sm"
-                        >
-                          {card
-                            ? renderPlayingCardFace(pokerCardLabel(card))
-                            : <span className="inline-flex h-12 w-9 items-center justify-center rounded-md border border-slate-500/50 bg-slate-700/80 text-sm font-bold text-slate-200">?</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
-
-              <div className="mt-4 grid gap-2 rounded-xl border border-amber-200/30 bg-slate-950/45 p-3 text-xs text-amber-50/95 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
-                <p className="text-[11px] font-semibold tracking-[0.2em] text-amber-100/80">BET STATUS</p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <div className="rounded-md border border-emerald-200/35 bg-emerald-400/15 px-2 py-1.5 sm:min-w-0">
-                    <p className="text-[10px] tracking-wide text-emerald-100/80">BANK</p>
-                    <p className="text-base font-extrabold tabular-nums text-emerald-100 sm:text-sm">{formatChip(casinoBankroll)}</p>
-                  </div>
-                  <div className="rounded-md border border-amber-200/35 bg-amber-400/15 px-2 py-1.5 sm:min-w-0">
-                    <p className="text-[10px] tracking-wide text-amber-100/80">BET</p>
-                    <p className="text-base font-extrabold tabular-nums text-amber-100 sm:text-sm">{formatChip(pokerBet)}</p>
-                  </div>
-                  <div className="rounded-md border border-cyan-200/35 bg-cyan-400/15 px-2 py-1.5 sm:min-w-0">
-                    <p className="text-[10px] tracking-wide text-cyan-100/80">WAGER</p>
-                    <p className="text-base font-extrabold tabular-nums text-cyan-100 sm:text-sm">{formatChip(pokerWager)}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                <button
-                  type="button"
-                  onClick={onPokerDraw}
-                  disabled={pokerPhase === "showdown"}
-                  className="rounded-md border border-emerald-200/55 bg-emerald-300/85 px-3 py-1 font-semibold text-emerald-950 shadow-[0_2px_10px_rgba(16,185,129,0.35)] disabled:opacity-60"
-                >
-                  {pokerActionLabel}
-                </button>
-
-              </div>
-
-              {pokerPhase === "showdown" && pokerPlayerEval && pokerCpuEval ? (
-                <div className="mt-4 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4 text-sm text-slate-200">
-                  <p>{t("pokerPlayerHand")}: {pokerHandName(pokerPlayerEval.name)}</p>
-                  <p>{t("pokerCpuHand")}: {pokerHandName(pokerCpuEval.name)}</p>
-                </div>
-              ) : null}
-              </fieldset>
-              )}
             </article>
 
             
@@ -17935,21 +23579,15 @@ export default function Home() {
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">{t("survivorsTitle")}</h2>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => startPanelGame("survivors", resetSurvivors)}
-                    disabled={isPanelStartCounting("survivors")}
-                    className="rounded-md bg-cyan-400 px-3 py-1 text-sm font-semibold text-slate-950"
-                  >
-                    {startButtonLabel("survivors")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => runWithResetGuard("survivors", resetSurvivors)}
-                    className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                  >
-                    {t("survivorsReset")}
-                  </button>
+                  {gameStarted.survivors ? (
+                    <button
+                      type="button"
+                      onClick={() => runWithResetGuard("survivors", resetSurvivors)}
+                      className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                    >
+                      {t("survivorsReset")}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={handleBackToMenuClick}
@@ -17961,66 +23599,348 @@ export default function Home() {
               </div>
 
               {!gameStarted.survivors ? <p className="mt-2 text-xs text-amber-200">{t("gameStartPrompt")}</p> : null}
-              <fieldset disabled={!gameStarted.survivors} className={!gameStarted.survivors ? "mt-2 pointer-events-none opacity-60" : "mt-2"}>
+              {!gameStarted.survivors ? (
+                <CharacterSelectScreen
+                  characters={SURVIVORS_CHARACTER_SELECT_CONFIGS}
+                  selectedId={survivorsCharacterId}
+                  hoveredId={survivorsCharacterHoverId}
+                  onHover={setSurvivorsCharacterHoverId}
+                  onSelect={setSurvivorsCharacterId}
+                  recordByCharacter={survivorsCharacterRecords}
+                  settings={survivorsStageSettings}
+                  onSettingsChange={setSurvivorsStageSettings}
+                  onStart={startSurvivorsFromSelect}
+                  startDisabled={isPanelStartCounting("survivors")}
+                  startLabel={startButtonLabel("survivors")}
+                  roleLabel={SURVIVORS_CHARACTER_PROFILES[survivorsCharacterId].roleLabel}
+                />
+              ) : null}
+
+              {gameStarted.survivors ? (
+                <fieldset className="mt-2">
 
               <p className="text-sm text-slate-300">{survivorsMessage}</p>
               <div className="mt-3 flex flex-wrap gap-2 text-sm">
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsWave", { wave: survivorsWave })}</span>
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsHp", { hp: survivorsHp, max: survivorsMaxHp })}</span>
+                <span className="rounded border border-slate-400/40 px-2 py-1">MP {Math.floor(survivorsMp)}/{survivorsMaxMp}</span>
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsLevel", { level: survivorsLevel })}</span>
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsTime", { sec: survivorsTimeSec })}</span>
+                <span className="rounded border border-slate-400/40 px-2 py-1">NEXT WAVE {Math.max(0, getSurvivorsNextWaveAtSec(survivorsWave) - survivorsTimeSec)}s</span>
                 <span className="rounded border border-slate-400/40 px-2 py-1">{tf("survivorsKills", { count: survivorsKills })}</span>
               </div>
 
               <p className="mt-2 text-xs text-slate-300">
-                WASD / Arrow Keys: MOVE | AUTO: {Math.max(110, 520 - Math.max(0, survivorsLevel - 1) * 16 - survivorsHasteBonus)}ms / {1 + Math.floor(Math.max(0, survivorsLevel - 1) / 6) + survivorsMultiShotBonus} targets | DMG+{survivorsDamageBonus} | ARMOR+{survivorsArmorBonus}
+                {(() => {
+                  const profile = SURVIVORS_CHARACTER_PROFILES[survivorsCharacterId];
+                  const skillUsable = survivorsCharacterId === "fairy"
+                    ? survivorsMp > 0
+                    : survivorsMp >= profile.skillMpCost;
+                  const skillLabel = survivorsCharacterId === "fairy"
+                    ? `${profile.skillName} (HOLD)`
+                    : profile.skillName;
+                  const skillCostLabel = survivorsCharacterId === "fairy"
+                    ? `${SURVIVORS_FAIRY_HOLD_MP_DRAIN_PER_SEC} MP/s`
+                    : `${profile.skillMpCost} MP`;
+                  const skillStateLabel = skillUsable ? "READY" : "MP不足";
+                  const minAttackIntervalMs = survivorsCharacterId === "fairy" ? SURVIVORS_FAIRY_HOLD_MIN_ATTACK_INTERVAL_MS : 110;
+                  const autoMs = Math.max(
+                    minAttackIntervalMs,
+                    520
+                      - Math.max(0, survivorsLevel - 1) * 16
+                      - survivorsHasteBonus
+                      + profile.attackIntervalAdjustMs
+                      - (survivorsCharacterId === "fairy"
+                        ? Math.round(profile.skillHasteMs * SURVIVORS_FAIRY_HOLD_HASTE_RATIO)
+                        : 0),
+                  );
+                  const autoTargets = 1
+                    + Math.floor(Math.max(0, survivorsLevel - 1) / 6)
+                    + survivorsMultiShotBonus
+                    + profile.innateMultiShot
+                    + (survivorsCharacterId === "fairy" ? profile.skillMultiShotBonus : 0);
+                  const autoRange = profile.attackRangeBase
+                    + Math.min(220, survivorsLevel * profile.attackRangePerLevel)
+                    + (survivorsCharacterId === "fairy" ? profile.skillRangeBonus : 0);
+                  return `WASD / Arrow Keys: MOVE | SPACE: ${skillLabel} (${skillStateLabel}) [${skillCostLabel}] | AUTO: ${autoMs}ms / ${autoTargets} targets / RANGE ${autoRange} | DMG+${survivorsDamageBonus} | ARMOR+${survivorsArmorBonus} | STYLE: ${profile.roleLabel}`;
+                })()}
               </p>
 
-              {isSurvivorsAugmentOpen ? (
-                <div className="mt-3 rounded-xl border border-amber-200/40 bg-amber-400/10 p-3">
-                  <p className="text-sm font-semibold text-amber-100">
-                    {survivorsAugmentReason === "wave" ? "WAVE BONUS - 報酬を選択" : "LEVEL UP - 強化を選択"}
-                  </p>
-                  <p className="mt-1 text-[11px] text-amber-100/80">
-                    TIER: {survivorsWave <= 5 ? "EARLY" : survivorsWave <= 10 ? "MID" : "LATE"}
-                  </p>
-                  {(() => {
-                    const profile = getSurvivorsAugmentWeightProfile(survivorsAugmentReason, survivorsWave);
-                    const total = profile.weights.vital + profile.weights.power + profile.weights.haste + profile.weights.multi + profile.weights.guard;
-                    const pct = (value: number) => Math.round((value / total) * 100);
-                    return (
-                      <p className="mt-1 text-[11px] text-amber-100/80">
-                        WEIGHT V:{pct(profile.weights.vital)}% P:{pct(profile.weights.power)}% H:{pct(profile.weights.haste)}% M:{pct(profile.weights.multi)}% G:{pct(profile.weights.guard)}%
-                      </p>
-                    );
-                  })()}
-                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                    {survivorsPendingAugments.map((option) => (
-                      <button
-                        key={`survivors-augment-${option.id}`}
-                        type="button"
-                        onClick={() => onSurvivorsPickAugment(option.id)}
-                        className="rounded-lg border border-amber-200/45 bg-slate-950/50 p-2 text-left transition hover:border-amber-200/75"
-                      >
-                        <p className="text-xs font-semibold text-amber-100">{option.title}</p>
-                        <p className="mt-1 text-xs text-slate-200">{option.desc}</p>
-                      </button>
-                    ))}
+              {isSurvivorsAugmentOpen ? (() => {
+                const profile = SURVIVORS_CHARACTER_PROFILES[survivorsCharacterId];
+                const baseStats = SURVIVORS_CHARACTER_BASE_STATS[survivorsCharacterId];
+                const nextWave = Math.max(1, survivorsShopNextWave || (survivorsWave + 1));
+                const autoRange = profile.attackRangeBase + Math.min(220, survivorsLevel * profile.attackRangePerLevel);
+                const autoIntervalMs = Math.max(
+                  survivorsCharacterId === "fairy" ? SURVIVORS_FAIRY_HOLD_MIN_ATTACK_INTERVAL_MS : 110,
+                  520
+                    - Math.max(0, survivorsLevel - 1) * 16
+                    - survivorsHasteBonus
+                    + profile.attackIntervalAdjustMs,
+                );
+                const levelBasedMaxHp = baseStats.maxHp + Math.max(0, survivorsLevel - 1) * 8;
+                const moveSpeed = 5 + Math.min(2, survivorsLevel * 0.12);
+                const moveSpeedBaseline = 5 + Math.min(2, survivorsLevel * 0.12);
+                const nextWaveEvents = getSurvivorsUpcomingWaveEvents(nextWave, 4);
+
+                const mainStats = [
+                  {
+                    key: "chaos",
+                    icon: "🜏",
+                    label: "呪い・カオス値",
+                    description: "カオスモード中は1、それ以外は0です。",
+                    tab: "main",
+                    value: survivorsRunConfig.chaosMode ? 1 : 0,
+                    baseline: 0,
+                    unit: "flat",
+                    semantic: "curse",
+                  },
+                  {
+                    key: "max-hp",
+                    icon: "❤",
+                    label: "最大HP",
+                    description: "基礎値 + レベルアップ + アイテム補正を反映します。",
+                    tab: "main",
+                    value: survivorsMaxHp,
+                    baseline: levelBasedMaxHp,
+                    unit: "flat",
+                    semantic: "normal",
+                  },
+                  {
+                    key: "damage",
+                    icon: "⚔",
+                    label: "ダメージ（%）",
+                    description: "自動攻撃ダメージ補正。武器/強化による増減を反映します。",
+                    tab: "main",
+                    value: survivorsDamageBonus,
+                    baseline: baseStats.damageBonus,
+                    unit: "percent",
+                    semantic: "normal",
+                  },
+                  {
+                    key: "attack-speed",
+                    icon: "⏱",
+                    label: "攻撃速度（%）",
+                    description: "攻撃間隔へ影響する速度補正。値が大きいほど有利です。",
+                    tab: "main",
+                    value: survivorsHasteBonus,
+                    baseline: baseStats.hasteBonus,
+                    unit: "percent",
+                    semantic: "normal",
+                  },
+                  {
+                    key: "range",
+                    icon: "🎯",
+                    label: "射程",
+                    description: "現在の通常攻撃射程です。",
+                    tab: "main",
+                    value: autoRange,
+                    baseline: autoRange,
+                    unit: "flat",
+                    semantic: "rangeMagic",
+                  },
+                  {
+                    key: "armor",
+                    icon: "🛡",
+                    label: "防御力",
+                    description: "被ダメージ軽減に使う防御補正です。",
+                    tab: "main",
+                    value: survivorsArmorBonus,
+                    baseline: baseStats.armorBonus,
+                    unit: "flat",
+                    semantic: "normal",
+                  },
+                  {
+                    key: "move-speed",
+                    icon: "👟",
+                    label: "移動速度（%）",
+                    description: "現在の移動速度。レベルによる増加を含みます。",
+                    tab: "main",
+                    value: ((moveSpeed / 5) - 1) * 100,
+                    baseline: ((moveSpeedBaseline / 5) - 1) * 100,
+                    unit: "percent",
+                    semantic: "normal",
+                  },
+                  {
+                    key: "auto-interval",
+                    icon: "🌀",
+                    label: "攻撃間隔",
+                    description: "通常攻撃の間隔です。低いほど有利です。",
+                    tab: "main",
+                    value: autoIntervalMs,
+                    baseline: autoIntervalMs - (survivorsHasteBonus - baseStats.hasteBonus),
+                    unit: "ms",
+                    semantic: "normal",
+                    reverseBetter: true,
+                  },
+                ] as SurvivorsShopStatRowView[];
+
+                const subStats = [
+                  {
+                    key: "role",
+                    icon: "📘",
+                    label: "キャラクター固有",
+                    description: "選択中キャラのロール特性です。",
+                    tab: "sub",
+                    value: 0,
+                    baseline: 0,
+                    displayValue: profile.roleLabel,
+                    semantic: "rangeMagic",
+                  },
+                  {
+                    key: "skill",
+                    icon: "✨",
+                    label: "固有スキル",
+                    description: "キャラクター固有スキル名です。",
+                    tab: "sub",
+                    value: 0,
+                    baseline: 0,
+                    displayValue: profile.skillName,
+                    semantic: "rangeMagic",
+                  },
+                  {
+                    key: "skill-cost",
+                    icon: "🔋",
+                    label: "スキル消費MP",
+                    description: "スキル発動時に消費するMP。",
+                    tab: "sub",
+                    value: profile.skillMpCost,
+                    baseline: profile.skillMpCost,
+                    unit: "flat",
+                    semantic: "normal",
+                  },
+                  {
+                    key: "skill-duration",
+                    icon: "⌛",
+                    label: "スキル持続時間",
+                    description: "固有スキルの効果時間。",
+                    tab: "sub",
+                    value: Math.round(profile.skillDurationMs / 100) / 10,
+                    baseline: Math.round(profile.skillDurationMs / 100) / 10,
+                    displayValue: `${Math.round(profile.skillDurationMs / 100) / 10}s`,
+                    semantic: "normal",
+                  },
+                  {
+                    key: "mode-chaos",
+                    icon: "☣",
+                    label: "カオスモード",
+                    description: "カオス設定の有効状態。",
+                    tab: "sub",
+                    value: survivorsRunConfig.chaosMode ? 1 : 0,
+                    baseline: 0,
+                    displayValue: survivorsRunConfig.chaosMode ? "ON" : "OFF",
+                    semantic: "curse",
+                  },
+                  {
+                    key: "mode-endless",
+                    icon: "♾",
+                    label: "エンドレス",
+                    description: "エンドレス設定の有効状態。",
+                    tab: "sub",
+                    value: survivorsRunConfig.endlessMode ? 1 : 0,
+                    baseline: 0,
+                    displayValue: survivorsRunConfig.endlessMode ? "ON" : "OFF",
+                    semantic: "normal",
+                  },
+                  {
+                    key: "mode-coop",
+                    icon: "🤝",
+                    label: "協力モード",
+                    description: "協力設定の有効状態。",
+                    tab: "sub",
+                    value: survivorsRunConfig.coopMode ? 1 : 0,
+                    baseline: 0,
+                    displayValue: survivorsRunConfig.coopMode ? "ON" : "OFF",
+                    semantic: "normal",
+                  },
+                  ...survivorsShopWeapons.map((weapon) => ({
+                    key: `sub-weapon-${weapon.id}`,
+                    icon: "🗡",
+                    label: `武器: ${weapon.title}`,
+                    description: `${weapon.desc} / 所持数 ${weapon.count}`,
+                    tab: "sub",
+                    value: weapon.count,
+                    baseline: 0,
+                    displayValue: `x${weapon.count}`,
+                    semantic: "rangeMagic",
+                  })),
+                  ...survivorsShopItems.map((item) => ({
+                    key: `sub-item-${item.id}`,
+                    icon: "🧩",
+                    label: `アイテム: ${item.title}`,
+                    description: `${item.desc} / 所持数 ${item.count}`,
+                    tab: "sub",
+                    value: item.count,
+                    baseline: 0,
+                    displayValue: `x${item.count}`,
+                    semantic: "normal",
+                  })),
+                ] as SurvivorsShopStatRowView[];
+
+                return (
+                  <WaveShopScreen
+                    finishedWave={Math.max(1, survivorsShopFinishedWave || survivorsWave)}
+                    nextWave={nextWave}
+                    coins={survivorsCoins}
+                    rerollCost={survivorsShopRerollCost}
+                    canReroll={survivorsCoins >= survivorsShopRerollCost && !isSurvivorsShopRerolling}
+                    rerolling={isSurvivorsShopRerolling}
+                    slots={survivorsShopSlots.map((slot) => {
+                      const meta = getSurvivorsShopMeta(slot.option);
+                      return {
+                        slotId: slot.slotId,
+                        product: {
+                          id: slot.option.id,
+                          title: slot.option.title,
+                          desc: slot.option.desc,
+                        },
+                        category: slot.category,
+                        rarity: slot.rarity,
+                        price: slot.price,
+                        locked: slot.locked,
+                        purchased: slot.purchased,
+                        effects: meta.effects,
+                      } satisfies SurvivorsShopSlotView;
+                    })}
+                    ownedItems={survivorsShopItems.map((item) => ({
+                      id: item.id,
+                      title: item.title,
+                      desc: item.desc,
+                      count: item.count,
+                    }) satisfies SurvivorsOwnedItemView)}
+                    ownedWeapons={survivorsShopWeapons.map((weapon) => ({
+                      id: weapon.id,
+                      title: weapon.title,
+                      desc: weapon.desc,
+                      rarity: weapon.rarity,
+                      count: weapon.count,
+                    }) satisfies SurvivorsOwnedWeaponView)}
+                    weaponLimit={SURVIVORS_SHOP_WEAPON_LIMIT}
+                    currentLevel={survivorsLevel}
+                    stats={[...mainStats, ...subStats]}
+                    waveEvents={nextWaveEvents}
+                    canStartNextWave={!isSurvivorsStartingNextWave}
+                    onBuy={onSurvivorsBuyShopSlot}
+                    onToggleLock={onSurvivorsToggleShopLock}
+                    onReroll={onSurvivorsRerollShop}
+                    onStartNextWave={onSurvivorsStartNextWave}
+                  />
+                );
+              })() : null}
+
+              {!isSurvivorsAugmentOpen ? (
+                <>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={onSurvivorsApplyScore}
+                      className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
+                    >
+                      {t("survivorsApplyScore")}
+                    </button>
                   </div>
-                </div>
-              ) : null}
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={onSurvivorsApplyScore}
-                  className="rounded-md border border-cyan-200/40 px-3 py-1 text-sm"
-                >
-                  {t("survivorsApplyScore")}
-                </button>
-              </div>
-
-              <div className="mt-4 overflow-hidden rounded-xl border border-cyan-200/30 bg-[radial-gradient(circle_at_35%_30%,rgba(16,185,129,0.2),rgba(15,23,42,0.95)_62%)] p-2">
+                  <div className="mt-4 overflow-hidden rounded-xl border border-cyan-200/30 bg-[radial-gradient(circle_at_35%_30%,rgba(16,185,129,0.2),rgba(15,23,42,0.95)_62%)] p-2">
                 <div
                   className="relative mx-auto w-full max-w-[860px]"
                   style={{
@@ -18028,6 +23948,38 @@ export default function Home() {
                   }}
                 >
                   <div className="pointer-events-none absolute inset-0 rounded-lg border border-cyan-200/20" />
+                  <div className="pointer-events-none absolute left-2 top-2 z-30 w-[min(38vw,220px)] rounded-md border border-slate-300/30 bg-slate-950/70 p-2">
+                    <p className="mb-1 text-[10px] font-semibold tracking-wide text-emerald-100">
+                      HP {Math.max(0, survivorsHp)}/{survivorsMaxHp}
+                    </p>
+                    <div className="h-2.5 w-full overflow-hidden rounded bg-slate-800/80">
+                      <div
+                        className="h-full bg-emerald-300 transition-[width] duration-150"
+                        style={{
+                          width: `${Math.max(0, Math.min(100, (survivorsHp / Math.max(1, survivorsMaxHp)) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="mt-1.5 mb-1 text-[10px] font-semibold tracking-wide text-sky-100">
+                      MP {Math.floor(Math.max(0, survivorsMp))}/{survivorsMaxMp}
+                    </p>
+                    <div className="h-2.5 w-full overflow-hidden rounded bg-slate-800/80">
+                      <div
+                        className="h-full bg-sky-300 transition-[width] duration-150"
+                        style={{
+                          width: `${Math.max(0, Math.min(100, (survivorsMp / Math.max(1, survivorsMaxMp)) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded bg-slate-800/80">
+                      <div
+                        className="h-full bg-cyan-300/90 transition-[width] duration-150"
+                        style={{
+                          width: `${Math.max(0, Math.min(100, (survivorsXp / Math.max(1, survivorsLevel * 40)) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
                   <div
                     className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
                     style={{
@@ -18035,17 +23987,212 @@ export default function Home() {
                       top: `${(survivorsPlayer.y / SURVIVORS_ARENA_HEIGHT) * 100}%`,
                     }}
                   >
-                    <div className="absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-300/28 blur-[2.5px]" />
-                    <img
-                      src={`/motionPng/Survivors/hammer${survivorsPlayerFrame}.png`}
-                      alt="survivor player"
-                      className="relative h-11 w-11 select-none object-contain drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]"
-                      draggable={false}
-                    />
+                    {!(SURVIVORS_CHARACTER_RENDER_RULES[survivorsCharacterId].usesFullBodyAttackAnimation && survivorsDaikonAttackVisual.active)
+                      ? survivorsWeaponRenderPoses
+                        .filter((pose) => pose.isBehindPlayer)
+                        .map((pose) => (
+                          <div
+                            key={`weapon-behind-${pose.slotKey}`}
+                            className="pointer-events-none absolute"
+                            style={{
+                              left: `calc(50% + ${pose.localX}px)`,
+                              top: `calc(50% + ${pose.localY}px)`,
+                              transform: `rotate(${pose.rotationDeg}deg) scale(${pose.scale})`,
+                              transformOrigin: "0 0",
+                              zIndex: 10,
+                            }}
+                          >
+                            <img
+                              src={pose.imageSrc}
+                              alt={`weapon ${pose.slotKey}`}
+                              className="pointer-events-none select-none object-contain opacity-90"
+                              style={{
+                                width: "40px",
+                                height: "40px",
+                                maxWidth: "none",
+                                transform: `translate(${-pose.gripX}px, ${-pose.gripY}px) scaleY(${pose.scaleY})`,
+                                filter: "drop-shadow(0 0 8px rgba(15,23,42,0.55))",
+                              }}
+                              draggable={false}
+                            />
+                          </div>
+                        ))
+                      : null}
+
+                    {survivorsCharacterId === "daikon" ? (
+                      <>
+                        {!survivorsDaikonAttackVisual.active ? (() => {
+                          const directionSprite = SURVIVORS_DAIKON_DIRECTION_SPRITES[survivorsDaikonLastMoveDirection];
+                          if (!survivorsDaikonSpriteMeta.valid) {
+                            return null;
+                          }
+                          const col = Math.max(0, Math.min(SURVIVORS_DAIKON_IDLE_SHEET_COLS - 1, directionSprite.column));
+                          const row = Math.max(0, Math.min(SURVIVORS_DAIKON_IDLE_SHEET_ROWS - 1, directionSprite.row));
+                          return (
+                            <div className="relative h-14 w-14 select-none overflow-hidden drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]">
+                              <div
+                                className="absolute inset-0 bg-no-repeat"
+                                style={{
+                                  backgroundImage: `url(${SURVIVORS_DAIKON_IDLE_SPRITE})`,
+                                  backgroundSize: `${SURVIVORS_DAIKON_IDLE_SHEET_COLS * 100}% ${SURVIVORS_DAIKON_IDLE_SHEET_ROWS * 100}%`,
+                                  backgroundPosition: `${(col / Math.max(1, SURVIVORS_DAIKON_IDLE_SHEET_COLS - 1)) * 100}% ${(row / Math.max(1, SURVIVORS_DAIKON_IDLE_SHEET_ROWS - 1)) * 100}%`,
+                                }}
+                              />
+                            </div>
+                          );
+                        })() : null}
+                        {process.env.NODE_ENV !== "production" ? (() => {
+                          const frame = SURVIVORS_DAIKON_DIRECTION_SPRITES[survivorsDaikonLastMoveDirection];
+                          return (
+                            <div className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded bg-black/65 px-2 py-1 text-[10px] leading-tight text-lime-200">
+                              <div>{`Direction: ${survivorsDaikonLastMoveDirection}`}</div>
+                              <div>{`Frame: ${frame.frameNumber}`}</div>
+                              <div>{`FrameIndex: ${frame.frameIndex}`}</div>
+                              <div>{`Column: ${frame.column}`}</div>
+                              <div>{`Row: ${frame.row}`}</div>
+                              {!survivorsDaikonSpriteMeta.valid ? <div>Sprite: invalid 4x2 size</div> : null}
+                            </div>
+                          );
+                        })() : null}
+                        {survivorsDaikonAttackVisual.active ? (() => {
+                          const frameRect = SURVIVORS_DAIKON_ATTACK_FRAME_RECTS[
+                            Math.max(0, Math.min(SURVIVORS_DAIKON_ATTACK_FRAME_RECTS.length - 1, survivorsDaikonAttackVisual.frameIndex))
+                          ];
+                          const weaponFloatOffsetPx = SURVIVORS_DAIKON_ATTACK_WEAPON_FLOAT_PX[
+                            Math.max(0, Math.min(SURVIVORS_DAIKON_ATTACK_WEAPON_FLOAT_PX.length - 1, survivorsDaikonAttackVisual.frameIndex))
+                          ];
+                          return (
+                            <div
+                              className="pointer-events-none absolute left-1/2 top-1/2"
+                              style={{
+                                width: `${frameRect.width}px`,
+                                height: `${SURVIVORS_DAIKON_ATTACK_SHEET_HEIGHT}px`,
+                                overflow: "hidden",
+                                transform: `translate(-50%, -50%) translateY(${weaponFloatOffsetPx}px) rotate(${survivorsDaikonAttackVisual.angleDeg}deg) scaleX(${survivorsDaikonAttackVisual.facingLeft ? -1 : 1}) scale(${SURVIVORS_DAIKON_ATTACK_RENDER_SCALE})`,
+                                transformOrigin: "center",
+                                filter: "drop-shadow(0 0 10px rgba(163,230,53,0.55))",
+                              }}
+                            >
+                              <img
+                                src={SURVIVORS_DAIKON_ATTACK_MOTION_SPRITE}
+                                alt="daikon attack motion"
+                                className="pointer-events-none absolute left-0 top-0 select-none"
+                                style={{
+                                  width: "1536px",
+                                  height: `${SURVIVORS_DAIKON_ATTACK_SHEET_HEIGHT}px`,
+                                  maxWidth: "none",
+                                  left: `${-frameRect.x}px`,
+                                }}
+                                draggable={false}
+                              />
+                            </div>
+                          );
+                        })() : null}
+                      </>
+                    ) : (
+                      <img
+                        src={SURVIVORS_PLAYER_SPRITES[survivorsCharacterId][survivorsPlayerFrame]}
+                        alt={`survivor player ${survivorsCharacterId}`}
+                        className="relative h-14 w-14 select-none object-contain drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]"
+                        draggable={false}
+                      />
+                    )}
+                    {!(SURVIVORS_CHARACTER_RENDER_RULES[survivorsCharacterId].usesFullBodyAttackAnimation && survivorsDaikonAttackVisual.active)
+                      ? survivorsWeaponRenderPoses
+                        .filter((pose) => !pose.isBehindPlayer)
+                        .map((pose) => (
+                          <div
+                            key={`weapon-front-${pose.slotKey}`}
+                            className="pointer-events-none absolute"
+                            style={{
+                              left: `calc(50% + ${pose.localX}px)`,
+                              top: `calc(50% + ${pose.localY}px)`,
+                              transform: `rotate(${pose.rotationDeg}deg) scale(${pose.scale})`,
+                              transformOrigin: "0 0",
+                              zIndex: 26,
+                            }}
+                          >
+                            <img
+                              src={pose.imageSrc}
+                              alt={`weapon ${pose.slotKey}`}
+                              className="pointer-events-none select-none object-contain"
+                              style={{
+                                width: "40px",
+                                height: "40px",
+                                maxWidth: "none",
+                                transform: `translate(${-pose.gripX}px, ${-pose.gripY}px) scaleY(${pose.scaleY})`,
+                                filter: "drop-shadow(0 0 10px rgba(45,212,191,0.42))",
+                              }}
+                              draggable={false}
+                            />
+                          </div>
+                        ))
+                      : null}
+                    {!(SURVIVORS_CHARACTER_RENDER_RULES[survivorsCharacterId].usesFullBodyAttackAnimation && survivorsDaikonAttackVisual.active)
+                      ? survivorsWeaponRenderPoses
+                        .filter((pose) => pose.flashIntensity > 0.01)
+                        .map((pose) => (
+                          <div
+                            key={`weapon-flash-${pose.slotKey}`}
+                            className="pointer-events-none absolute rounded-full bg-cyan-200"
+                            style={{
+                              left: `calc(50% + ${pose.muzzleX - survivorsPlayer.x}px)`,
+                              top: `calc(50% + ${pose.muzzleY - survivorsPlayer.y}px)`,
+                              width: `${6 + pose.flashIntensity * 8}px`,
+                              height: `${6 + pose.flashIntensity * 8}px`,
+                              transform: "translate(-50%, -50%)",
+                              opacity: 0.2 + pose.flashIntensity * 0.8,
+                              boxShadow: "0 0 14px rgba(125,211,252,0.85)",
+                              zIndex: 30,
+                            }}
+                          />
+                        ))
+                      : null}
                     <div className="pointer-events-none absolute left-1/2 top-[-18px] -translate-x-1/2 rounded bg-slate-950/75 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-cyan-100">
                       YOU
                     </div>
                   </div>
+                  {survivorsProjectiles.map((projectile) => {
+                    const progress = Math.max(0, Math.min(1, projectile.progress));
+                    const x = projectile.fromX + (projectile.toX - projectile.fromX) * progress;
+                    const y = projectile.fromY + (projectile.toY - projectile.fromY) * progress;
+                    const prevProgress = Math.max(0, progress - 0.06);
+                    const prevX = projectile.fromX + (projectile.toX - projectile.fromX) * prevProgress;
+                    const prevY = projectile.fromY + (projectile.toY - projectile.fromY) * prevProgress;
+                    const dx = x - projectile.fromX;
+                    const dy = y - projectile.fromY;
+                    const trailDx = x - prevX;
+                    const trailDy = y - prevY;
+                    const trailLength = Math.max(6, Math.hypot(trailDx, trailDy) * 3.4);
+                    const trailAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
+                    return (
+                      <div key={projectile.id} className="pointer-events-none absolute inset-0 z-40">
+                        <div
+                          className="absolute h-[3px] origin-left rounded-full bg-cyan-200/90"
+                          style={{
+                            left: `${(projectile.fromX / SURVIVORS_ARENA_WIDTH) * 100}%`,
+                            top: `${(projectile.fromY / SURVIVORS_ARENA_HEIGHT) * 100}%`,
+                            transform: `translateY(-50%) rotate(${trailAngle}deg)`,
+                            width: `${Math.max(4, trailLength)}px`,
+                            opacity: 0.65 * (1 - progress * 0.5),
+                            boxShadow: "0 0 10px rgba(125,211,252,0.65)",
+                          }}
+                        />
+                        <img
+                          src="/motionPng/Survivors/hakusai-attack.png"
+                          alt="fairy attack projectile"
+                          className="absolute h-9 w-9 select-none object-contain drop-shadow-[0_0_14px_rgba(125,211,252,0.9)]"
+                          style={{
+                            left: `${(x / SURVIVORS_ARENA_WIDTH) * 100}%`,
+                            top: `${(y / SURVIVORS_ARENA_HEIGHT) * 100}%`,
+                            transform: `translate(-50%, -50%) rotate(${projectile.angleDeg}deg) scale(${1.12 - progress * 0.2})`,
+                            opacity: 1 - progress * 0.5,
+                          }}
+                          draggable={false}
+                        />
+                      </div>
+                    );
+                  })}
                   {survivorsEnemies.map((enemy) => (
                     <div
                       key={`survivors-dot-${enemy.id}`}
@@ -18056,37 +24203,15 @@ export default function Home() {
                       }}
                     >
                       <div className="h-7 w-7 rounded-full border border-rose-100/70 bg-rose-400/80 shadow-[0_0_16px_rgba(251,113,133,0.45)]" />
-                      <div className="mt-1 h-1.5 w-8 overflow-hidden rounded bg-slate-950/70">
-                        <div
-                          className="h-full bg-rose-200"
-                          style={{
-                            width: `${Math.max(0, Math.min(100, (enemy.hp / enemy.maxHp) * 100))}%`,
-                          }}
-                        />
-                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
+                  </div>
+                </>
+              ) : null}
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {survivorsEnemies.map((enemy, index) => (
-                  <button
-                    key={enemy.id}
-                    type="button"
-                    onClick={() => onSurvivorsAttack(enemy.id)}
-                    disabled={isSurvivorsOver}
-                    className="rounded-lg border border-rose-200/40 bg-rose-400/10 p-3 text-left disabled:opacity-60"
-                  >
-                    <p className="text-sm font-semibold">ENEMY {index + 1}</p>
-                    <p className="mt-1 text-xs text-slate-300">HP {Math.max(0, enemy.hp)} / {enemy.maxHp}</p>
-                    <p className="mt-1 text-xs text-slate-400">POS {Math.round(enemy.x)}, {Math.round(enemy.y)}</p>
-                    <p className="mt-2 text-xs text-rose-200">{t("survivorsAttack")} (BURST)</p>
-                  </button>
-                ))}
-              </div>
-
-              </fieldset>
+                </fieldset>
+              ) : null}
             </article>
 
             
@@ -18170,37 +24295,6 @@ export default function Home() {
               <p className="text-sm text-slate-300">{unoMessage}</p>
               {connectedRoomCode ? <p className="mt-1 text-xs text-cyan-200">{roomTurnText(canOperateUnoNow)}</p> : null}
 
-              {canOperateUnoNow && !isUnoOver && unoActivationState.requiresRuleChoice ? (
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-300">
-                  <span>{t("unoChooseMatchRule")}</span>
-                  <button
-                    type="button"
-                    onClick={() => setUnoActivationFilter("color")}
-                    disabled={!unoActivationState.canChooseColor}
-                    className={`rounded border px-2 py-1 ${unoActivationFilter === "color" ? "border-cyan-200 bg-cyan-400/20 text-cyan-100" : "border-slate-400/40"}`}
-                  >
-                    {t("unoMatchByColor")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setUnoActivationFilter("number")}
-                    disabled={!unoActivationState.canChooseNumber}
-                    className={`rounded border px-2 py-1 ${unoActivationFilter === "number" ? "border-cyan-200 bg-cyan-400/20 text-cyan-100" : "border-slate-400/40"}`}
-                  >
-                    {t("unoMatchByNumber")}
-                  </button>
-                  {unoActivationFilter ? (
-                    <button
-                      type="button"
-                      onClick={() => setUnoActivationFilter(null)}
-                      className="rounded border border-slate-400/40 px-2 py-1"
-                    >
-                      {t("unoMatchRuleReset")}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-
               {isUnoTableMode ? (
                 <div className="mt-4 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
                   <div className="relative min-h-[560px] rounded-xl border border-cyan-300/30 bg-slate-900/70">
@@ -18236,7 +24330,6 @@ export default function Home() {
                         explicitCount: hand.length,
                       }))
                     ).map(({ hand, cpuIdx, x, y, orientation, label, isTurnSeat, explicitCount }) => {
-                      const seatIndex = cpuIdx + 1;
                       const isSideSeat = orientation !== "top";
                       const compactTable = isUnoRoomTableMode || unoLocalTotalPlayers >= 5;
                       const denseTable = compactTable;
@@ -18265,7 +24358,14 @@ export default function Home() {
                       return (
                         <div key={`uno-table-cpu-${cpuIdx}`} className="absolute" style={seatStyle}>
                           <div className={`rounded-lg border px-2 py-1 ${isTurnSeat ? "border-cyan-200/70 bg-cyan-400/12" : "border-slate-400/35 bg-slate-900/45"}`}>
-                            <p className={`text-center font-semibold text-slate-200 ${ultraDenseTable ? "text-[11px]" : "text-xs"}`}>{label}: {displayCount}</p>
+                            <p className={`text-center font-semibold text-slate-200 ${ultraDenseTable ? "text-[11px]" : "text-xs"}`}>
+                              {label}: {displayCount}
+                              {(explicitCount ?? hand.length) === 1 && !isUnoOver ? (
+                                <span className="ml-1 inline-flex rounded-full border border-amber-200/70 bg-rose-500/75 px-1.5 py-0.5 text-[10px] font-black tracking-wide text-amber-50">
+                                  UNO
+                                </span>
+                              ) : null}
+                            </p>
                           </div>
                           {isSideSeat ? (
                             <div className={`mt-1 flex justify-center overflow-y-auto pb-1 ${ultraDenseTable ? "max-h-[165px]" : "max-h-[210px]"}`}>
@@ -18316,27 +24416,40 @@ export default function Home() {
                     })}
 
                     <div className="absolute bottom-3 left-1/2 z-10 w-[88%] max-w-[760px] -translate-x-1/2">
-                      <p className={`text-center text-sm font-semibold ${unoLocalTurnIndex === 0 ? "text-cyan-200" : "text-slate-100"}`}>{t("unoYourHand")}</p>
+                      <p className={`text-center text-sm font-semibold ${unoLocalTurnIndex === 0 ? "text-cyan-200" : "text-slate-100"}`}>
+                        {t("unoYourHand")}
+                        {unoVisibleHand.length === 1 && !isUnoOver ? (
+                          <span className="ml-2 inline-flex rounded-full border border-amber-200/70 bg-rose-500/75 px-2 py-0.5 text-[11px] font-black tracking-wide text-amber-50">
+                            UNO
+                          </span>
+                        ) : null}
+                      </p>
                       <div className="mt-1 overflow-x-auto pb-1">
                         <div className="relative left-1/2 flex w-max -translate-x-1/2 items-end px-2">
                           {unoVisibleHand.map((card, index) => {
                             const playable = unoTopCard ? canPlayCard(card, unoTopCard) : true;
-                            const lockedByRuleChoice = unoActivationState.requiresRuleChoice && !unoActivationFilter;
-                            const cardActive = playable && !lockedByRuleChoice && unoActivationState.activeIndices.has(index);
+                            const selectionOrder = unoSelectionOrderById[card.id] || 0;
+                            const selected = selectionOrder > 0;
+                            const invalidSelected = selected && !unoSelectedValidation.isValid && unoSelectedValidation.invalidCardId === card.id;
                             return (
                               <span
-                                key={`${card.color}-${card.value}-${index}`}
+                                key={card.id}
                                 className="inline-flex shrink-0"
                                 style={playerHandFanStyle(index, unoVisibleHand.length, { overlap: 13, spread: 2.4, maxRotate: 13, centerLift: 0.65, centerOffset: 0.85 })}
                               >
                                 <button
                                   type="button"
-                                  onClick={() => playUnoCard(index, { side: unoLocalSide })}
-                                  disabled={!canOperateUnoNow || isUnoOver || !cardActive}
-                                  className={`origin-bottom rounded-md border p-1.5 text-sm transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 ${cardActive ? "border-cyan-300/70 bg-cyan-400/20" : playable ? "border-amber-300/50 bg-amber-400/10" : "border-slate-400/30 bg-slate-800/40"}`}
+                                  onClick={() => toggleUnoCardSelection(card.id)}
+                                  disabled={!canOperateUnoNow || isUnoOver || isUnoAnimatingPlay}
+                                  className={`origin-bottom rounded-md border p-1.5 text-sm transition-transform duration-150 ${selected ? "-translate-y-3 border-cyan-200 bg-cyan-400/25 shadow-[0_0_16px_rgba(34,211,238,0.35)]" : "hover:-translate-y-2 focus-visible:-translate-y-2"} ${invalidSelected ? "border-rose-300 bg-rose-500/20" : playable ? "border-amber-300/50 bg-amber-400/10" : "border-slate-400/30 bg-slate-800/40"}`}
                                 >
-                                  <span className="inline-flex items-center">
+                                  <span className="relative inline-flex items-center">
                                     {renderUnoCardFace(card)}
+                                    {selectionOrder > 0 ? (
+                                      <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-cyan-100 bg-cyan-400 px-1 text-[11px] font-black text-slate-950 shadow">
+                                        {selectionOrder}
+                                      </span>
+                                    ) : null}
                                   </span>
                                 </button>
                               </span>
@@ -18352,7 +24465,14 @@ export default function Home() {
                   <div className="mt-4 grid gap-3 rounded-lg border border-slate-500/30 bg-slate-950/40 p-4">
                     {connectedRoomCode ? (
                       <>
-                        <p className="text-sm">{t("unoCpuHand")}: {unoLocalSide === "player" ? unoCpuHand.length : unoPlayerHand.length}</p>
+                        <p className="text-sm">
+                          {t("unoCpuHand")}: {unoLocalSide === "player" ? unoCpuHand.length : unoPlayerHand.length}
+                          {(unoLocalSide === "player" ? unoCpuHand.length : unoPlayerHand.length) === 1 && !isUnoOver ? (
+                            <span className="ml-2 inline-flex rounded-full border border-amber-200/70 bg-rose-500/75 px-1.5 py-0.5 text-[10px] font-black tracking-wide text-amber-50">
+                              UNO
+                            </span>
+                          ) : null}
+                        </p>
                         <div className="overflow-x-auto pb-1">
                           <div className="relative left-1/2 flex min-h-[78px] w-max -translate-x-1/2 items-end pr-2 pl-1">
                             {Array.from({ length: unoLocalSide === "player" ? unoCpuHand.length : unoPlayerHand.length }).map((_, index) => (
@@ -18371,7 +24491,14 @@ export default function Home() {
                       <div className="grid gap-2">
                         {unoLocalCpuHands.map((hand, cpuIdx) => (
                           <div key={`uno-cpu-hand-${cpuIdx}`} className="grid gap-1">
-                            <p className="text-sm">CPU {cpuIdx + 1}手札: {hand.length}</p>
+                            <p className="text-sm">
+                              CPU {cpuIdx + 1}手札: {hand.length}
+                              {hand.length === 1 && !isUnoOver ? (
+                                <span className="ml-2 inline-flex rounded-full border border-amber-200/70 bg-rose-500/75 px-1.5 py-0.5 text-[10px] font-black tracking-wide text-amber-50">
+                                  UNO
+                                </span>
+                              ) : null}
+                            </p>
                             <div className="overflow-x-auto pb-1">
                               <div className="relative left-1/2 flex min-h-[70px] w-max -translate-x-1/2 items-end pr-2 pl-1">
                                 {Array.from({ length: hand.length }).map((_, cardIndex) => (
@@ -18399,27 +24526,40 @@ export default function Home() {
                   </div>
 
                   <div className="mt-4">
-                    <p className="text-sm font-semibold">{t("unoYourHand")}</p>
+                    <p className="text-sm font-semibold">
+                      {t("unoYourHand")}
+                      {unoVisibleHand.length === 1 && !isUnoOver ? (
+                        <span className="ml-2 inline-flex rounded-full border border-amber-200/70 bg-rose-500/75 px-2 py-0.5 text-[11px] font-black tracking-wide text-amber-50">
+                          UNO
+                        </span>
+                      ) : null}
+                    </p>
                     <div className="mt-2 overflow-x-auto pb-2">
                       <div className="relative left-1/2 flex w-max -translate-x-1/2 items-end px-2">
                         {unoVisibleHand.map((card, index) => {
                           const playable = unoTopCard ? canPlayCard(card, unoTopCard) : true;
-                          const lockedByRuleChoice = unoActivationState.requiresRuleChoice && !unoActivationFilter;
-                          const cardActive = playable && !lockedByRuleChoice && unoActivationState.activeIndices.has(index);
+                          const selectionOrder = unoSelectionOrderById[card.id] || 0;
+                          const selected = selectionOrder > 0;
+                          const invalidSelected = selected && !unoSelectedValidation.isValid && unoSelectedValidation.invalidCardId === card.id;
                           return (
                             <span
-                              key={`${card.color}-${card.value}-${index}`}
+                              key={card.id}
                               className="inline-flex shrink-0"
                               style={playerHandFanStyle(index, unoVisibleHand.length, { overlap: 13, spread: 2.4, maxRotate: 13, centerLift: 0.65, centerOffset: 0.85 })}
                             >
                               <button
                                 type="button"
-                                onClick={() => playUnoCard(index, { side: unoLocalSide })}
-                                disabled={!canOperateUnoNow || isUnoOver || !cardActive}
-                                className={`origin-bottom rounded-md border p-1.5 text-sm transition-transform duration-150 hover:-translate-y-2 focus-visible:-translate-y-2 ${cardActive ? "border-cyan-300/70 bg-cyan-400/20" : playable ? "border-amber-300/50 bg-amber-400/10" : "border-slate-400/30 bg-slate-800/40"}`}
+                                onClick={() => toggleUnoCardSelection(card.id)}
+                                disabled={!canOperateUnoNow || isUnoOver || isUnoAnimatingPlay}
+                                className={`origin-bottom rounded-md border p-1.5 text-sm transition-transform duration-150 ${selected ? "-translate-y-3 border-cyan-200 bg-cyan-400/25 shadow-[0_0_16px_rgba(34,211,238,0.35)]" : "hover:-translate-y-2 focus-visible:-translate-y-2"} ${invalidSelected ? "border-rose-300 bg-rose-500/20" : playable ? "border-amber-300/50 bg-amber-400/10" : "border-slate-400/30 bg-slate-800/40"}`}
                               >
-                                <span className="inline-flex items-center">
+                                <span className="relative inline-flex items-center">
                                   {renderUnoCardFace(card)}
+                                  {selectionOrder > 0 ? (
+                                    <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-cyan-100 bg-cyan-400 px-1 text-[11px] font-black text-slate-950 shadow">
+                                      {selectionOrder}
+                                    </span>
+                                  ) : null}
                                 </span>
                               </button>
                             </span>
@@ -18434,15 +24574,60 @@ export default function Home() {
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                 <button
                   type="button"
+                  onClick={playSelectedUnoCards}
+                  disabled={!canOperateUnoNow || isUnoOver || isUnoAnimatingPlay || !unoSelectedValidation.isValid}
+                  className="rounded-md bg-cyan-400 px-3 py-1 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  選択したカードを出す
+                </button>
+                <button
+                  type="button"
                   onClick={() => drawUnoForPlayer({ side: unoLocalSide })}
-                  disabled={!canOperateUnoNow || isUnoOver}
+                  disabled={!canOperateUnoNow || isUnoOver || isUnoAnimatingPlay}
                   className="rounded-md border border-cyan-200/40 px-3 py-1"
                 >
                   {t("unoDrawCard")}
                 </button>
+                {unoSelectedCardIds.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setUnoSelectedCardIds([])}
+                    disabled={isUnoAnimatingPlay}
+                    className="rounded-md border border-slate-300/40 px-3 py-1"
+                  >
+                    選択解除
+                  </button>
+                ) : null}
               </div>
+              {unoSelectedCardIds.length > 0 && !unoSelectedValidation.isValid ? (
+                <p className="mt-2 text-sm text-rose-300">
+                  {unoSelectedValidationMessage || "提出できない組み合わせです。"}
+                </p>
+              ) : null}
+              {isUnoAnimatingPlay ? (
+                <p className="mt-1 text-xs text-cyan-200">カード提出アニメーション中です...</p>
+              ) : null}
+              {unoVisibleHand.length === 1 && !isUnoOver ? (
+                <p className="mt-1 text-xs font-semibold text-amber-100">残り1枚！ UNO状態です</p>
+              ) : null}
               </fieldset>
               )}
+
+              {unoNotification && !isUnoOver ? (
+                <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-4">
+                  <div className="uno-notification-pop mx-auto w-full max-w-[min(92vw,560px)] rounded-2xl border border-amber-200/75 bg-[radial-gradient(circle_at_50%_35%,rgba(255,245,157,0.95),rgba(251,146,60,0.9)_45%,rgba(190,24,93,0.92)_100%)] px-6 py-5 text-center shadow-[0_22px_60px_rgba(0,0,0,0.55)]">
+                    <p className="text-[clamp(1.9rem,7vw,4.2rem)] font-black leading-none tracking-[0.08em] text-white [text-shadow:-3px_-3px_0_#111,3px_-3px_0_#111,-3px_3px_0_#111,3px_3px_0_#111,0_10px_18px_rgba(0,0,0,0.5)]">
+                      UNO!
+                    </p>
+                    <p className="mt-2 text-[clamp(1rem,3.2vw,1.5rem)] font-extrabold text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.48)]">
+                      {unoNotification.playerName} が UNO！
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-amber-50/95 [text-shadow:0_1px_4px_rgba(0,0,0,0.45)]">
+                      {unoNotification.subText}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
             </article>
 
             

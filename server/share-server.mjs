@@ -15,7 +15,12 @@ const PORT = Number(process.env.SHARE_PORT || 4173);
 const ROOM_PATH = process.env.ROOM_PATH || "/room";
 const CLOUD_API_BASE = process.env.SHARE_CLOUD_API_BASE || "http://127.0.0.1:8787";
 const WEB_APP_BASE = String(process.env.SHARE_WEB_APP_BASE || "").trim();
-const MAX_ROOM_PLAYERS = Number(process.env.ROOM_MAX_PLAYERS || 16);
+const HARD_MAX_ROOM_PLAYERS = 8;
+const MIN_ROOM_PLAYERS = 2;
+const DEFAULT_ROOM_MAX_PLAYERS = Math.max(
+  MIN_ROOM_PLAYERS,
+  Math.min(HARD_MAX_ROOM_PLAYERS, Number(process.env.ROOM_MAX_PLAYERS || HARD_MAX_ROOM_PLAYERS) || HARD_MAX_ROOM_PLAYERS),
+);
 const CHAT_RATE_MIN_INTERVAL_MS = Number(process.env.ROOM_CHAT_MIN_INTERVAL_MS || 700);
 const CHAT_RATE_WINDOW_MS = Number(process.env.ROOM_CHAT_WINDOW_MS || 12000);
 const CHAT_RATE_MAX_IN_WINDOW = Number(process.env.ROOM_CHAT_MAX_IN_WINDOW || 8);
@@ -75,6 +80,7 @@ function roomMetaOf(code) {
       parentRoomCode: "",
       listContext: "menu",
       isPublic: true,
+      maxPlayers: DEFAULT_ROOM_MAX_PLAYERS,
       accessPassword: "",
       inGame: false,
       allowedPeerIds: new Set(),
@@ -186,6 +192,15 @@ function normalizeRoomPassword(raw) {
   return String(raw || "").trim().slice(0, 32);
 }
 
+function normalizeRoomMaxPlayers(raw, fallback = DEFAULT_ROOM_MAX_PLAYERS) {
+  const base = Number.isFinite(fallback) ? Number(fallback) : DEFAULT_ROOM_MAX_PLAYERS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return Math.max(MIN_ROOM_PLAYERS, Math.min(HARD_MAX_ROOM_PLAYERS, Math.floor(base)));
+  }
+  return Math.max(MIN_ROOM_PLAYERS, Math.min(HARD_MAX_ROOM_PLAYERS, Math.floor(parsed)));
+}
+
 function normalizePlayablePanel(raw) {
   const panel = String(raw || "").trim();
   if (!panel || panel === "menu" || panel === "scores") return "";
@@ -234,11 +249,13 @@ function pickQuickJoinRoomCode() {
   let bestCode = "";
   for (const [code, members] of rooms.entries()) {
     const size = members?.size || 0;
-    if (size <= 0 || size >= MAX_ROOM_PLAYERS) continue;
+    if (size <= 0) continue;
     const meta = roomMetaOf(code);
+    const capacity = normalizeRoomMaxPlayers(meta.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS);
+    if (size >= capacity) continue;
     if (!meta.isPublic || meta.inGame) continue;
     const activePlayers = activePlayerCount(code);
-    if (activePlayers < 1 || activePlayers >= MAX_ROOM_PLAYERS) continue;
+    if (activePlayers < 1 || activePlayers >= capacity) continue;
     bestCode = code;
     break;
   }
@@ -598,6 +615,7 @@ function listPublicRooms(limit = 80, listContext = "all") {
 
     const meta = roomMetaOf(code);
     const roomListContext = meta.listContext === "game" ? "game" : "menu";
+    const capacity = normalizeRoomMaxPlayers(meta.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS);
     if (listContext === "menu" && roomListContext !== "menu") continue;
     if (listContext === "game" && roomListContext !== "game") continue;
 
@@ -637,11 +655,12 @@ function listPublicRooms(limit = 80, listContext = "all") {
       code,
       listContext: roomListContext,
       isPublic: Boolean(meta.isPublic),
+      maxPlayers: capacity,
       hasPassword: Boolean(meta.accessPassword),
       inGame: Boolean(meta.inGame),
-      activePlayers: Math.max(0, Math.min(MAX_ROOM_PLAYERS, mergedActivePlayers)),
+      activePlayers: Math.max(0, Math.min(capacity, mergedActivePlayers)),
       spectatorCount: mergedSpectatorCount,
-      totalParticipants: Math.max(0, Math.min(MAX_ROOM_PLAYERS, mergedTotalParticipants)),
+      totalParticipants: Math.max(0, Math.min(capacity, mergedTotalParticipants)),
       hostName: String(host?.name || meta.hostNameSnapshot || "").trim(),
       guestName: String(guest?.name || "").trim(),
       panels: [...panelSet],
@@ -841,12 +860,17 @@ function joinRoom(ws, payload) {
   evictDuplicatePeerConnections(ws);
   const members = roomOf(code);
   const requestedSpectate = asSpectateBoolean(payload?.spectate);
-  if (!ws.roomCode && members.size >= MAX_ROOM_PLAYERS) {
-    sendJson(ws, { type: "room-full", code });
+  const meta = roomMetaOf(code);
+  const roomCapacity = normalizeRoomMaxPlayers(meta.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS);
+  if (!ws.roomCode && members.size >= roomCapacity) {
+    sendJson(ws, { type: "room-full", code, maxPlayers: roomCapacity });
     return { ok: false, joined: false };
   }
 
-  const meta = roomMetaOf(code);
+  if (ws.peerId && meta.hostPeerId === ws.peerId && !meta.inGame) {
+    meta.maxPlayers = normalizeRoomMaxPlayers(payload?.maxPlayers, meta.maxPlayers);
+  }
+
   const requestedRoomPassword = normalizeRoomPassword(payload?.roomPassword);
   const inviteToken = String(payload?.inviteToken || "").trim();
   if (!ws.roomCode && meta.accessPassword && ws.peerId !== meta.hostPeerId) {
@@ -932,6 +956,7 @@ function joinRoom(ws, payload) {
     if (explicitCreate) {
       meta.listContext = requestedListContext || (ws.currentPanel ? "game" : "menu");
       meta.accessPassword = requestedRoomPassword;
+      meta.maxPlayers = normalizeRoomMaxPlayers(payload?.maxPlayers, meta.maxPlayers);
     }
   }
 
@@ -975,6 +1000,7 @@ function broadcastRoomState(code) {
     participants: roomParticipants(code),
     hostPeerId: meta.hostPeerId || "",
     isPublic: Boolean(meta.isPublic),
+    maxPlayers: normalizeRoomMaxPlayers(meta.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS),
     inGame: Boolean(meta.inGame),
     rematchVotes: [...meta.rematchVotes],
   });
@@ -1049,11 +1075,12 @@ function canVoteRematch(meta, ws) {
 
 function broadcastRematchVoteState(code) {
   const meta = roomMetaOf(code);
+  const required = Math.max(2, activePlayerCount(code));
   broadcastRoom(code, {
     type: "rematch-vote-state",
     room: code,
     votes: [...meta.rematchVotes],
-    required: 2,
+    required,
   });
 }
 
@@ -1477,7 +1504,7 @@ wss.on("connection", (ws) => {
       meta.rematchVotes.add(ws.peerId);
       broadcastRematchVoteState(code);
 
-      const requiredVotes = 2;
+      const requiredVotes = Math.max(2, activePlayerCount(code));
       if (activePlayerCount(code) >= requiredVotes && meta.rematchVotes.size >= requiredVotes) {
         meta.rematchVotes = new Set();
         const nextGame = String(payload?.game || "").trim();
@@ -1504,6 +1531,29 @@ wss.on("connection", (ws) => {
       meta.rematchVotes.delete(ws.peerId);
       broadcastRematchVoteState(code);
       return;
+    }
+
+    if (type === "uno-request-action") {
+      const action = String(payload?.action || "").trim();
+      if (action !== "play" && action !== "draw") {
+        sendError(ws, "UNO_ACTION_INVALID");
+        return;
+      }
+      if (action === "play") {
+        const cardIds = Array.isArray(payload?.cardIds)
+          ? payload.cardIds.map((id) => String(id || "").trim()).filter(Boolean)
+          : [];
+        if (cardIds.length <= 0) {
+          sendError(ws, "UNO_CARD_IDS_REQUIRED");
+          return;
+        }
+        const unique = new Set(cardIds);
+        if (unique.size !== cardIds.length) {
+          sendError(ws, "UNO_DUPLICATE_CARD_ID");
+          return;
+        }
+        payload.cardIds = cardIds;
+      }
     }
 
     let mutationResult = { ok: true };
