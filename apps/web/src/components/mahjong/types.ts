@@ -1,5 +1,17 @@
 export type MahjongSeatPosition = "bottom" | "top" | "left" | "right";
 
+export type MahjongDiscardSeat = "bottom" | "top" | "left" | "right";
+
+export type MahjongDiscardAnimationView = {
+  id: string;
+  seat: MahjongDiscardSeat;
+  tile: number;
+  sourceIndex: number | null;
+  isTsumogiri: boolean;
+  durationMs: number;
+  startedAt: number;
+};
+
 export type MahjongTileCode =
   | "1m" | "2m" | "3m" | "4m" | "5m" | "6m" | "7m" | "8m" | "9m"
   | "1p" | "2p" | "3p" | "4p" | "5p" | "6p" | "7p" | "8p" | "9p"
@@ -17,13 +29,23 @@ export type MahjongActionKey =
   | "pon"
   | "chi"
   | "kan"
+  | "kita"
   | "riichi"
   | "kyuushu"
   | "pass"
+  | "cancel"
   | "sort"
   | "autoWin"
   | "noCall"
-  | "effects";
+  | "effects"
+  | "diag";
+
+export type MahjongActionOption = {
+  key: string;
+  label: string;
+  tiles?: number[];
+  onClick: () => void;
+};
 
 export type MahjongPlayerView = {
   id: string;
@@ -55,6 +77,9 @@ export type MahjongActionButton = {
   key: MahjongActionKey;
   label: string;
   tone: "primary" | "accent" | "normal" | "subtle";
+  priority?: number;
+  emphasis?: "critical" | "high" | "normal";
+  options?: MahjongActionOption[];
   onClick: () => void;
 };
 

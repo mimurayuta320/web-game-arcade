@@ -27,6 +27,8 @@ type RowData = {
   tileHeight: number;
 };
 
+const PINZU_COMPARE_CODES: MahjongTileCode[] = ["7p", "8p", "9p"];
+
 export default function MahjongTilesDebugPage() {
   const [tileRectMap, setTileRectMap] = useState<Record<MahjongTileCode, MahjongSpriteRect> | null>(null);
 
@@ -58,6 +60,32 @@ export default function MahjongTilesDebugPage() {
     });
   }, [tileRectMap]);
 
+  const pinzuCompareRows = useMemo<RowData[]>(() => {
+    if (!tileRectMap) return [];
+    return PINZU_COMPARE_CODES.map((tileId) => {
+      const grid = MAHJONG_TILE_GRID_MAP[tileId];
+      const sourceX = MAHJONG_SPRITE_CONFIG.startX + grid.column * MAHJONG_SPRITE_CONFIG.stepX;
+      const sourceY = MAHJONG_SPRITE_CONFIG.startY + grid.row * MAHJONG_SPRITE_CONFIG.stepY;
+      return {
+        tileId,
+        row: grid.row,
+        column: grid.column,
+        sourceX,
+        sourceY,
+        tileWidth: MAHJONG_SPRITE_CONFIG.tileWidth,
+        tileHeight: MAHJONG_SPRITE_CONFIG.tileHeight,
+      };
+    });
+  }, [tileRectMap]);
+
+  const pinzuStepCheck = useMemo(() => {
+    if (pinzuCompareRows.length !== 3) return { leftDelta: null, rightDelta: null, equalToStepX: false };
+    const leftDelta = pinzuCompareRows[1].sourceX - pinzuCompareRows[0].sourceX;
+    const rightDelta = pinzuCompareRows[2].sourceX - pinzuCompareRows[1].sourceX;
+    const equalToStepX = leftDelta === MAHJONG_SPRITE_CONFIG.stepX && rightDelta === MAHJONG_SPRITE_CONFIG.stepX;
+    return { leftDelta, rightDelta, equalToStepX };
+  }, [pinzuCompareRows]);
+
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100">
       <div className="mx-auto w-full max-w-7xl space-y-4">
@@ -65,6 +93,37 @@ export default function MahjongTilesDebugPage() {
         <p className="text-sm text-slate-300">
           startX={MAHJONG_SPRITE_CONFIG.startX}, startY={MAHJONG_SPRITE_CONFIG.startY}, tileWidth={MAHJONG_SPRITE_CONFIG.tileWidth}, tileHeight={MAHJONG_SPRITE_CONFIG.tileHeight}, stepX={MAHJONG_SPRITE_CONFIG.stepX}, stepY={MAHJONG_SPRITE_CONFIG.stepY}
         </p>
+
+        <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
+          <h2 className="text-lg font-semibold text-slate-100">7筒 / 8筒 / 9筒 比較</h2>
+          <p className="mt-1 text-xs text-slate-300">
+            sourceX計算式: sourceX = startX + column * stepX, sourceY = startY + row * stepY
+          </p>
+          <p className={`mt-1 text-xs ${pinzuStepCheck.equalToStepX ? "text-emerald-300" : "text-rose-300"}`}>
+            ΔX(7p→8p)={pinzuStepCheck.leftDelta ?? "-"}, ΔX(8p→9p)={pinzuStepCheck.rightDelta ?? "-"}, stepX={MAHJONG_SPRITE_CONFIG.stepX}
+          </p>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+            {pinzuCompareRows.map((item) => (
+              <article key={`pinzu-${item.tileId}`} className="rounded-lg border border-slate-700 bg-slate-950/70 p-3">
+                <div className="flex items-start gap-3">
+                  <div className="inline-flex h-[92px] w-[64px] items-center justify-center rounded border border-slate-700 bg-slate-950 p-1">
+                    <MahjongTile tile={item.tileId} compact />
+                  </div>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs font-mono text-slate-200">
+                    <dt>牌ID</dt><dd>{item.tileId}</dd>
+                    <dt>row</dt><dd>{item.row}</dd>
+                    <dt>column</dt><dd>{item.column}</dd>
+                    <dt>sourceX</dt><dd>{item.sourceX}</dd>
+                    <dt>sourceY</dt><dd>{item.sourceY}</dd>
+                    <dt>tileWidth</dt><dd>{item.tileWidth}</dd>
+                    <dt>tileHeight</dt><dd>{item.tileHeight}</dd>
+                  </dl>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
 
         <section className="overflow-x-auto rounded-xl border border-slate-700 bg-slate-900/70 p-3">
           <table className="w-full min-w-[940px] border-collapse text-left text-sm">

@@ -11,6 +11,7 @@ type MahjongTileProps = {
   tile: number | MahjongTileCode;
   compact?: boolean;
   faceDown?: boolean;
+  orientation?: "bottom" | "top" | "left" | "right";
   className?: string;
   selected?: boolean;
   tsumo?: boolean;
@@ -24,6 +25,7 @@ export default function MahjongTile({
   tile,
   compact = false,
   faceDown = false,
+  orientation = "bottom",
   className,
   selected = false,
   tsumo = false,
@@ -141,7 +143,13 @@ export default function MahjongTile({
 
   const tileFace = (
     <>
-      <canvas ref={canvasRef} className={styles.tileCanvas} aria-hidden="true" data-ready={ready ? "1" : "0"} />
+      {faceDown ? (
+        <div className={styles.tileBackFace} aria-hidden="true">
+          <span className={styles.tileBackCore} />
+        </div>
+      ) : (
+        <canvas ref={canvasRef} className={styles.tileCanvas} aria-hidden="true" data-ready={ready ? "1" : "0"} />
+      )}
       {debugEnabled && debugRect ? (
         <span className={styles.tileDebugLabel}>
           {`${tileCode} x:${debugRect.x} y:${debugRect.y}`}
@@ -157,15 +165,16 @@ export default function MahjongTile({
         className={`${baseClass} ${stateClass}`.trim()}
         onClick={onClick}
         disabled={disabled}
+        data-tile-orientation={orientation}
       >
-        {tileFace}
+        <span className={styles.tileFace}>{tileFace}</span>
       </button>
     );
   }
 
   return (
-    <div className={`${baseClass} ${stateClass}`.trim()}>
-      {tileFace}
+    <div className={`${baseClass} ${stateClass}`.trim()} data-tile-orientation={orientation}>
+      <span className={styles.tileFace}>{tileFace}</span>
     </div>
   );
 }

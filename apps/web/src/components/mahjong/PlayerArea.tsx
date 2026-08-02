@@ -1,56 +1,80 @@
-import CenterInfo from "./CenterInfo";
-import DiscardArea from "./DiscardArea";
 import MeldArea from "./MeldArea";
 import OpponentHand from "./OpponentHand";
 import PlayerHand from "./PlayerHand";
 import PlayerInfo from "./PlayerInfo";
+import type { ReactNode } from "react";
 import styles from "./mahjong.module.css";
-import type { MahjongCenterInfoView, MahjongPlayerView, MahjongSeatPosition } from "./types";
+import type { MahjongDiscardAnimationView, MahjongPlayerView, MahjongSeatPosition } from "./types";
 
 type PlayerAreaProps = {
   position: MahjongSeatPosition;
   player: MahjongPlayerView;
-  selfHand?: number[];
+  selfConcealedHand?: number[];
+  selfDrawnTile?: number | null;
   selfSelectedIndex?: number | null;
-  selfTsumoIndex?: number | null;
+  selfActionPanel?: ReactNode;
+  selfSelectableTileIndexes?: number[] | null;
+  selfDiscardAnimation?: MahjongDiscardAnimationView | null;
   onSelfTileClick?: (index: number) => void;
-  centerInfo?: MahjongCenterInfoView;
-  riichiTileIndex?: number | null;
-  compactCenter?: boolean;
 };
 
 export default function PlayerArea({
   position,
   player,
-  selfHand,
+  selfConcealedHand,
+  selfDrawnTile,
   selfSelectedIndex,
-  selfTsumoIndex,
+  selfActionPanel,
+  selfSelectableTileIndexes,
+  selfDiscardAnimation,
   onSelfTileClick,
-  centerInfo,
-  riichiTileIndex,
 }: PlayerAreaProps) {
   const isBottom = position === "bottom";
-  const areaClass = `${styles.playerArea} ${position === "left" || position === "right" ? styles.playerAreaSide : ""}`.trim();
+  const areaClass = [
+    styles.playerArea,
+    position === "left" || position === "right" ? styles.playerAreaSide : "",
+    position === "top" ? styles.playerAreaTop : "",
+    position === "bottom" ? styles.playerAreaBottom : "",
+    position === "left" ? styles.playerAreaLeft : "",
+    position === "right" ? styles.playerAreaRight : "",
+  ].filter(Boolean).join(" ");
+
+  const infoNode = <PlayerInfo player={player} />;
+  const handNode = isBottom && selfConcealedHand
+    ? (
+      <PlayerHand
+        concealedHand={selfConcealedHand}
+        drawnTile={selfDrawnTile ?? null}
+        selectedIndex={selfSelectedIndex ?? null}
+        selectableIndexes={selfSelectableTileIndexes ?? null}
+        discardAnimatingIndex={selfDiscardAnimation?.sourceIndex ?? null}
+        discardAnimatingTsumogiri={selfDiscardAnimation?.isTsumogiri ?? false}
+        onTileClick={(index) => onSelfTileClick?.(index)}
+      />
+    )
+    : <OpponentHand count={player.handBackCount} rotate={position === "left" || position === "right"} position={position} />;
+  const meldNode = <MeldArea melds={player.melds} position={position} />;
+  const isTop = position === "top";
+  const isSide = position === "left" || position === "right";
 
   return (
     <section className={areaClass}>
-      <PlayerInfo player={player} />
-      {isBottom && selfHand ? (
-        <PlayerHand
-          hand={selfHand}
-          selectedIndex={selfSelectedIndex ?? null}
-          tsumoIndex={selfTsumoIndex ?? null}
-          onTileClick={(index) => onSelfTileClick?.(index)}
-        />
+      {isTop || isSide ? (
+        <>
+          {infoNode}
+          {handNode}
+          {meldNode}
+        </>
       ) : (
-        <OpponentHand count={player.handBackCount} rotate={position === "left" || position === "right"} />
+        <>
+          <div className={styles.selfArea}>
+            <div className={styles.selfActionDock}>{selfActionPanel}</div>
+            <div className={styles.selfInfoDock}>{infoNode}</div>
+            <div className={styles.selfHandDock}>{handNode}</div>
+          </div>
+          <div className={styles.selfMeldDock}>{meldNode}</div>
+        </>
       )}
-      <MeldArea melds={player.melds} />
-      <DiscardArea
-        tiles={player.discards}
-        riichiTileIndex={position === "bottom" ? riichiTileIndex ?? null : null}
-      />
-      {position === "top" && centerInfo ? <CenterInfo info={centerInfo} /> : null}
     </section>
   );
 }

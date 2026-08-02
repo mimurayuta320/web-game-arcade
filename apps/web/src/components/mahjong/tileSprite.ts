@@ -32,7 +32,9 @@ export type MahjongSpriteConfig = {
 
 // Measured from 麻雀牌.png tile frame positions (integer pixels).
 export const MAHJONG_SPRITE_CONFIG: MahjongSpriteConfig = {
-  startX: 10,
+  // startX is intentionally +1 to avoid including extra left blank pixel
+  // and to keep right-edge clipping consistent on rightmost tiles (e.g. 9p).
+  startX: 11,
   startY: 23,
   tileWidth: 155,
   tileHeight: 227,

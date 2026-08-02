@@ -3,6 +3,7 @@
 import { PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LegacyFitPuzzle from "./components/LegacyFitPuzzle";
 import MahjongGame from "../components/mahjong/MahjongGame";
+import GameInfoBar from "../components/poker/GameInfoBar";
 import CharacterSelectScreen from "../components/survivors/CharacterSelectScreen";
 import WaveShopScreen, {
   SurvivorsOwnedItemView,
@@ -18,7 +19,9 @@ import type {
 } from "../components/survivors/types";
 import type {
   MahjongActionButton,
+  MahjongDiscardAnimationView,
   MahjongLogEvent,
+  MahjongMeldView,
   MahjongPlayerView,
   MahjongResultView,
   MahjongRuleCategory,
@@ -2338,11 +2341,70 @@ type MahjongMeld = {
   tile: MahjongCell;
 };
 type MahjongWinSummary = {
+  winType: "tsumo" | "ron";
+  winningTile: MahjongCell;
   yakuKeys: Array<keyof typeof LOGIN_I18N.ja>;
   han: number;
   fu: number;
   point: number;
   isYakuman: boolean;
+};
+
+type MahjongWinEvaluation = {
+  ok: boolean;
+  reason: string;
+  candidateHand: MahjongCell[];
+  tileCount: number;
+  furiten: boolean;
+  summary: MahjongWinSummary | null;
+};
+
+type MahjongLatestDiscardMeta = {
+  tile: MahjongCell;
+  by: string;
+  sideRiverSeatIndex: number;
+  sideRiverDiscardIndex: number;
+  discardId: string;
+  discardTimestamp: number;
+};
+
+type MahjongMode = "yonma" | "sanma";
+type MahjongNorthRule = "normal" | "nuki-dora";
+type MahjongTsumoPaymentRule = "loss" | "no-loss" | "split-north";
+type MahjongRuleConfig = {
+  mode: MahjongMode;
+  playerCount: 3 | 4;
+  seats: Array<"east" | "south" | "west" | "north">;
+  removedTiles: MahjongCell[];
+  allowChi: boolean;
+  startingPoints: number;
+  returnPoints: number;
+  northRule: MahjongNorthRule;
+  tsumoPaymentRule: MahjongTsumoPaymentRule;
+  maxRoundPerWind: 3 | 4;
+};
+
+const MAHJONG_RULE_CONFIG_BASE: Record<MahjongMode, Omit<MahjongRuleConfig, "northRule" | "tsumoPaymentRule">> = {
+  yonma: {
+    mode: "yonma",
+    playerCount: 4,
+    seats: ["east", "south", "west", "north"],
+    removedTiles: [],
+    allowChi: true,
+    startingPoints: 25000,
+    returnPoints: 30000,
+    maxRoundPerWind: 4,
+  },
+  sanma: {
+    mode: "sanma",
+    playerCount: 3,
+    seats: ["east", "south", "west"],
+    removedTiles: [1, 2, 3, 4, 5, 6, 7],
+    allowChi: false,
+    startingPoints: 35000,
+    returnPoints: 40000,
+    maxRoundPerWind: 3,
+  },
 };
 
 const FOUR_PANEL_RANDOM_TITLES = [
@@ -2956,6 +3018,16 @@ const FIT_PUZZLE_SIZE = 3;
 const MAHJONG_TYPE_COUNT = 34;
 const MAHJONG_START_HAND_COUNT = 13;
 const MAHJONG_WAIT_HINT_LIMIT = 8;
+const MAHJONG_CPU_DRAW_DELAY_MIN_MS = 300;
+const MAHJONG_CPU_DRAW_DELAY_MAX_MS = 500;
+const MAHJONG_CPU_DISCARD_DELAY_MIN_MS = 700;
+const MAHJONG_CPU_DISCARD_DELAY_MAX_MS = 1200;
+const MAHJONG_CPU_CALL_DISCARD_DELAY_MIN_MS = 500;
+const MAHJONG_CPU_CALL_DISCARD_DELAY_MAX_MS = 900;
+const MAHJONG_CPU_RIICHI_DISCARD_DELAY_MIN_MS = 300;
+const MAHJONG_CPU_RIICHI_DISCARD_DELAY_MAX_MS = 600;
+const MAHJONG_DISCARD_ANIMATION_MIN_MS = 200;
+const MAHJONG_DISCARD_ANIMATION_DEFAULT_MS = 280;
 const MAHJONG_TILE_LABELS = [
   "M1",
   "M2",
@@ -2993,6 +3065,45 @@ const MAHJONG_TILE_LABELS = [
   "R",
 ] as const;
 const MAHJONG_ORPHAN_TILE_IDS = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33] as const;
+const MAHJONG_TILE_CODE_TO_ID: Record<string, MahjongCell> = {
+  "1m": 0,
+  "2m": 1,
+  "3m": 2,
+  "4m": 3,
+  "5m": 4,
+  "6m": 5,
+  "7m": 6,
+  "8m": 7,
+  "9m": 8,
+  "1p": 9,
+  "2p": 10,
+  "3p": 11,
+  "4p": 12,
+  "5p": 13,
+  "6p": 14,
+  "7p": 15,
+  "8p": 16,
+  "9p": 17,
+  "1s": 18,
+  "2s": 19,
+  "3s": 20,
+  "4s": 21,
+  "5s": 22,
+  "6s": 23,
+  "7s": 24,
+  "8s": 25,
+  "9s": 26,
+  east: 27,
+  south: 28,
+  west: 29,
+  north: 30,
+  white: 31,
+  green: 32,
+  red: 33,
+  "0m": 4,
+  "0p": 13,
+  "0s": 22,
+};
 const MAHJONG_RULE_CATEGORIES: MahjongRuleCategory[] = [
   {
     id: "playerCount",
@@ -3059,16 +3170,39 @@ function sortMahjongTiles(tiles: number[]): number[] {
   return [...tiles].sort((a, b) => a - b);
 }
 
+function normalizeMahjongTileValue(value: unknown): MahjongCell | null {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < MAHJONG_TYPE_COUNT) {
+    return value;
+  }
+  if (typeof value !== "string") return null;
+
+  const key = value.trim().toLowerCase();
+  if (!key) return null;
+  if (Object.prototype.hasOwnProperty.call(MAHJONG_TILE_CODE_TO_ID, key)) {
+    return MAHJONG_TILE_CODE_TO_ID[key];
+  }
+
+  const asNumber = Number.parseInt(key, 10);
+  if (Number.isInteger(asNumber) && asNumber >= 0 && asNumber < MAHJONG_TYPE_COUNT) {
+    return asNumber;
+  }
+
+  return null;
+}
+
 function normalizeMahjongTileList(source: unknown): number[] {
   if (!Array.isArray(source)) return [];
   return source
     .flat(Infinity)
-    .filter((value): value is number => Number.isInteger(value) && value >= 0 && value < MAHJONG_TYPE_COUNT);
+    .map((value) => normalizeMahjongTileValue(value))
+    .filter((value): value is number => value !== null);
 }
 
-function createMahjongWall(): number[] {
+function createMahjongWall(config: { removedTiles: MahjongCell[] } = MAHJONG_RULE_CONFIG_BASE.yonma): number[] {
+  const removed = new Set(config.removedTiles);
   const wall: number[] = [];
   for (let tile = 0; tile < MAHJONG_TYPE_COUNT; tile += 1) {
+    if (removed.has(tile)) continue;
     for (let copy = 0; copy < 4; copy += 1) {
       wall.push(tile);
     }
@@ -3076,17 +3210,45 @@ function createMahjongWall(): number[] {
   return shuffleNumberList(wall);
 }
 
-function createMahjongStartBoard(): { hand: MahjongCell[]; wall: MahjongCell[] } {
-  const wall = createMahjongWall();
+function createMahjongStartBoard(config: { playerCount: number; removedTiles: MahjongCell[] } = MAHJONG_RULE_CONFIG_BASE.yonma): { hand: MahjongCell[]; wall: MahjongCell[] } {
+  const wall = createMahjongWall(config);
+  const reserveForOpponents = Math.max(0, Math.floor(config.playerCount - 1)) * MAHJONG_START_HAND_COUNT;
   const hand = sortMahjongTiles(wall.slice(0, MAHJONG_START_HAND_COUNT));
   return {
     hand,
-    wall: wall.slice(MAHJONG_START_HAND_COUNT),
+    wall: wall.slice(MAHJONG_START_HAND_COUNT + reserveForOpponents),
   };
 }
 
 function mahjongRemainingCount(wall: MahjongCell[]): number {
   return wall.length;
+}
+
+function summarizeMahjongRuleWall(config: { playerCount: number; removedTiles: MahjongCell[] }): {
+  totalTiles: number;
+  excludedTiles: MahjongCell[];
+  tileCounts: Record<string, number>;
+  playersDealtTiles: number;
+} {
+  const excludedSet = new Set(config.removedTiles);
+  const excludedTiles = [...excludedSet].sort((a, b) => a - b);
+  const tileCounts: Record<string, number> = {};
+  let totalTiles = 0;
+
+  for (let tile = 0; tile < MAHJONG_TYPE_COUNT; tile += 1) {
+    const count = excludedSet.has(tile) ? 0 : 4;
+    tileCounts[mahjongTileLabel(tile)] = count;
+    totalTiles += count;
+  }
+
+  const playersDealtTiles = Math.max(0, Math.floor(config.playerCount)) * MAHJONG_START_HAND_COUNT;
+
+  return {
+    totalTiles,
+    excludedTiles,
+    tileCounts,
+    playersDealtTiles,
+  };
 }
 
 function mahjongCountTiles(tiles: MahjongCell[]): number[] {
@@ -3225,6 +3387,135 @@ function mahjongFindBestDiscards(hand: MahjongCell[]): Array<{ index: number; ti
   });
 }
 
+function mahjongFindRiichiDiscardIndexes(hand: MahjongCell[]): number[] {
+  if (hand.length !== 14) return [];
+  return mahjongFindBestDiscards(hand)
+    .filter((item) => item.waits.length > 0)
+    .map((item) => item.index);
+}
+
+function mahjongConcealedCountAfterDiscard(meldCount: number): number {
+  return 13 - Math.max(0, meldCount) * 3;
+}
+
+function mahjongConcealedCountAfterDraw(meldCount: number): number {
+  return mahjongConcealedCountAfterDiscard(meldCount) + 1;
+}
+
+function mahjongSplitSelfHand(
+  hand: MahjongCell[],
+  drawnTileFlag: MahjongCell | null,
+  meldCount: number,
+): {
+  concealedHand: MahjongCell[];
+  drawnTile: MahjongCell | null;
+} {
+  const expectedAfterDraw = mahjongConcealedCountAfterDraw(meldCount);
+  const hasDrawnTile = hand.length === expectedAfterDraw && hand.length > 0;
+  if (!hasDrawnTile) {
+    return {
+      concealedHand: [...hand],
+      drawnTile: null,
+    };
+  }
+
+  const tailTile = hand[hand.length - 1] ?? null;
+  const drawnTile = tailTile === null ? drawnTileFlag : tailTile;
+  return {
+    concealedHand: hand.slice(0, -1),
+    drawnTile,
+  };
+}
+
+function mahjongSeatFromSideRiverIndex(index: number, isSanma: boolean): "top" | "left" | "right" {
+  if (index <= 0) return "top";
+  if (index === 1) return isSanma ? "right" : "left";
+  return "right";
+}
+
+function mahjongRemoveTilesOnce(hand: MahjongCell[], targets: MahjongCell[]): MahjongCell[] | null {
+  const next = [...hand];
+  for (const tile of targets) {
+    const index = next.indexOf(tile);
+    if (index < 0) return null;
+    next.splice(index, 1);
+  }
+  return next;
+}
+
+function mahjongFindKakanCandidates(hand: MahjongCell[], melds: MahjongMeldView[]): MahjongCell[] {
+  if (hand.length <= 0 || melds.length <= 0) return [];
+  const counts = mahjongCountTiles(hand);
+  const seen = new Set<MahjongCell>();
+  const candidates: MahjongCell[] = [];
+  melds.forEach((meld) => {
+    if (meld.type !== "pon") return;
+    const base = meld.tiles[0];
+    if (typeof base !== "number") return;
+    if (seen.has(base)) return;
+    seen.add(base);
+    if ((counts[base] || 0) > 0) {
+      candidates.push(base);
+    }
+  });
+  return candidates;
+}
+
+function mahjongCanPon(hand: MahjongCell[], discard: MahjongCell | null): boolean {
+  if (discard === null) return false;
+  const count = hand.reduce((sum, tile) => sum + (tile === discard ? 1 : 0), 0);
+  return count >= 2;
+}
+
+function mahjongCanMinkan(hand: MahjongCell[], discard: MahjongCell | null): boolean {
+  if (discard === null) return false;
+  const count = hand.reduce((sum, tile) => sum + (tile === discard ? 1 : 0), 0);
+  return count >= 3;
+}
+
+function mahjongFindChiCandidates(hand: MahjongCell[], discard: MahjongCell | null): MahjongCell[][] {
+  if (discard === null) return [];
+  if (discard >= 27) return [];
+
+  const suitBase = Math.floor(discard / 9) * 9;
+  const rank = discard % 9;
+  const candidates: MahjongCell[][] = [];
+  const count = mahjongCountTiles(hand);
+
+  const patterns: Array<[number, number]> = [
+    [rank - 2, rank - 1],
+    [rank - 1, rank + 1],
+    [rank + 1, rank + 2],
+  ];
+
+  patterns.forEach(([a, b]) => {
+    if (a < 0 || b > 8) return;
+    const t1 = (suitBase + a) as MahjongCell;
+    const t2 = (suitBase + b) as MahjongCell;
+    if ((count[t1] || 0) > 0 && (count[t2] || 0) > 0) {
+      candidates.push([t1, discard, t2].sort((x, y) => x - y) as MahjongCell[]);
+    }
+  });
+
+  return candidates;
+}
+
+function mahjongFindAnkanCandidates(hand: MahjongCell[]): MahjongCell[] {
+  const count = mahjongCountTiles(hand);
+  const candidates: MahjongCell[] = [];
+  for (let tile = 0; tile < MAHJONG_TYPE_COUNT; tile += 1) {
+    if (count[tile] >= 4) candidates.push(tile as MahjongCell);
+  }
+  return candidates;
+}
+
+function mahjongCanAbortiveDraw(hand: MahjongCell[], river: MahjongCell[]): boolean {
+  if (hand.length !== 14) return false;
+  if (river.length > 0) return false;
+  const unique = new Set(hand.filter((tile) => mahjongIsTerminalOrHonor(tile)));
+  return unique.size >= 9;
+}
+
 function mahjongIsHonor(tile: MahjongCell): boolean {
   return tile >= 27;
 }
@@ -3246,11 +3537,16 @@ function mahjongTileSuit(tile: MahjongCell): "m" | "p" | "s" | "z" {
   return "z";
 }
 
-function mahjongExtractStandardPattern(hand: MahjongCell[]): { pairTile: MahjongCell; melds: MahjongMeld[] } | null {
-  if (hand.length !== 14) return null;
+function mahjongExtractPattern(
+  hand: MahjongCell[],
+  meldTarget: number,
+): { pairTile: MahjongCell; melds: MahjongMeld[] } | null {
+  if (meldTarget < 0) return null;
+  if (hand.length !== meldTarget * 3 + 2) return null;
   const counts = mahjongCountTiles(hand);
 
   const recurse = (work: number[], melds: MahjongMeld[]): MahjongMeld[] | null => {
+    if (melds.length > meldTarget) return null;
     let first = -1;
     for (let i = 0; i < work.length; i += 1) {
       if (work[i] > 0) {
@@ -3258,7 +3554,9 @@ function mahjongExtractStandardPattern(hand: MahjongCell[]): { pairTile: Mahjong
         break;
       }
     }
-    if (first < 0) return melds;
+    if (first < 0) {
+      return melds.length === meldTarget ? melds : null;
+    }
 
     if (work[first] >= 3) {
       work[first] -= 3;
@@ -3288,12 +3586,16 @@ function mahjongExtractStandardPattern(hand: MahjongCell[]): { pairTile: Mahjong
     counts[pairTile] -= 2;
     const melds = recurse(counts, []);
     counts[pairTile] += 2;
-    if (melds && melds.length === 4) {
+    if (melds && melds.length === meldTarget) {
       return { pairTile, melds };
     }
   }
 
   return null;
+}
+
+function mahjongExtractStandardPattern(hand: MahjongCell[]): { pairTile: MahjongCell; melds: MahjongMeld[] } | null {
+  return mahjongExtractPattern(hand, 4);
 }
 
 function mahjongEstimatePoint(han: number, fu: number, isYakuman: boolean): number {
@@ -3312,14 +3614,47 @@ function mahjongEstimatePoint(han: number, fu: number, isYakuman: boolean): numb
   return Math.ceil((basePoint * 4) / 100) * 100;
 }
 
-function mahjongSummarizeWin(hand: MahjongCell[]): MahjongWinSummary | null {
-  if (!mahjongIsWinningHand(hand)) return null;
+function mahjongIsSelfFuriten(baseHand13: MahjongCell[], river: MahjongCell[]): boolean {
+  if (baseHand13.length !== 13) return false;
+  if (river.length <= 0) return false;
+  const waits = new Set(mahjongFindWinningTiles(baseHand13));
+  return river.some((tile) => waits.has(tile));
+}
 
-  const yakuKeys: Array<keyof typeof LOGIN_I18N.ja> = ["mahjongYakuMenzenTsumo"];
+function mahjongSummarizeWin(
+  hand: MahjongCell[],
+  context: {
+    winType: "tsumo" | "ron";
+    winningTile: MahjongCell;
+    isRiichi: boolean;
+    meldCount?: number;
+    isMenzen?: boolean;
+  },
+): MahjongWinSummary | null {
+  const meldCount = Math.max(0, Math.floor(context.meldCount ?? 0));
+  const closedMeldTarget = 4 - meldCount;
+  if (closedMeldTarget < 0) return null;
+  if (hand.length !== closedMeldTarget * 3 + 2) return null;
 
-  if (mahjongIsThirteenOrphans(hand)) {
+  const isMenzen = context.isMenzen !== false;
+  const yakuKeys: Array<keyof typeof LOGIN_I18N.ja> = [];
+  let han = 0;
+
+  if (context.isRiichi) {
+    han += 1;
+    yakuKeys.push("mahjongRiichi");
+  }
+
+  if (context.winType === "tsumo" && isMenzen) {
+    han += 1;
+    yakuKeys.push("mahjongYakuMenzenTsumo");
+  }
+
+  if (meldCount === 0 && mahjongIsThirteenOrphans(hand)) {
     yakuKeys.push("mahjongYakuKokushi");
     return {
+      winType: context.winType,
+      winningTile: context.winningTile,
       yakuKeys,
       han: 13,
       fu: 0,
@@ -3328,8 +3663,8 @@ function mahjongSummarizeWin(hand: MahjongCell[]): MahjongWinSummary | null {
     };
   }
 
-  if (mahjongIsSevenPairs(hand)) {
-    let han = 3;
+  if (meldCount === 0 && mahjongIsSevenPairs(hand)) {
+    han += 2;
     yakuKeys.push("mahjongYakuChiitoitsu");
 
     const hasHonor = hand.some((tile) => mahjongIsHonor(tile));
@@ -3343,6 +3678,8 @@ function mahjongSummarizeWin(hand: MahjongCell[]): MahjongWinSummary | null {
     }
 
     return {
+      winType: context.winType,
+      winningTile: context.winningTile,
       yakuKeys,
       han,
       fu: 25,
@@ -3351,15 +3688,20 @@ function mahjongSummarizeWin(hand: MahjongCell[]): MahjongWinSummary | null {
     };
   }
 
-  const pattern = mahjongExtractStandardPattern(hand);
+  const pattern = mahjongExtractPattern(hand, closedMeldTarget);
   if (!pattern) return null;
-
-  let han = 1;
 
   const allSimple = hand.every((tile) => !mahjongIsTerminalOrHonor(tile));
   if (allSimple) {
     han += 1;
     yakuKeys.push("mahjongYakuTanyao");
+  }
+
+  const allSequences = pattern.melds.length > 0 && pattern.melds.every((meld) => meld.type === "sequence");
+  const pairIsValueHonor = pattern.pairTile >= 31 || pattern.pairTile === 27;
+  if (allSequences && !pairIsValueHonor) {
+    han += 1;
+    yakuKeys.push("mahjongYakuPinfu");
   }
 
   const allTriplets = pattern.melds.every((meld) => meld.type === "triplet");
@@ -3368,8 +3710,10 @@ function mahjongSummarizeWin(hand: MahjongCell[]): MahjongWinSummary | null {
     yakuKeys.push("mahjongYakuToitoi");
   }
 
-  const dragonTripletCount = pattern.melds.filter((meld) => meld.type === "triplet" && meld.tile >= 31 && meld.tile <= 33).length;
-  for (let i = 0; i < dragonTripletCount; i += 1) {
+  const yakuhaiTripletCount = pattern.melds.filter(
+    (meld) => meld.type === "triplet" && (meld.tile === 27 || (meld.tile >= 31 && meld.tile <= 33)),
+  ).length;
+  for (let i = 0; i < yakuhaiTripletCount; i += 1) {
     han += 1;
     yakuKeys.push("mahjongYakuYakuhai");
   }
@@ -3395,12 +3739,126 @@ function mahjongSummarizeWin(hand: MahjongCell[]): MahjongWinSummary | null {
 
   fu = Math.max(20, Math.ceil(fu / 10) * 10);
 
+  if (han <= 0) {
+    return null;
+  }
+
   return {
+    winType: context.winType,
+    winningTile: context.winningTile,
     yakuKeys,
     han,
     fu,
     point: mahjongEstimatePoint(han, fu, false),
     isYakuman: false,
+  };
+}
+
+function evaluateMahjongWinAction(params: {
+  baseHand: MahjongCell[];
+  winType: "tsumo" | "ron";
+  winningTile?: MahjongCell | null;
+  isRiichi: boolean;
+  river: MahjongCell[];
+  meldCount?: number;
+  isMenzen?: boolean;
+  bonusHan?: number;
+}): MahjongWinEvaluation {
+  const meldCount = Math.max(0, Math.floor(params.meldCount ?? 0));
+  const closedMeldTarget = 4 - meldCount;
+  const neededClosedTiles = 14 - meldCount * 3;
+  const winningTile = params.winningTile ?? null;
+
+  const candidateHand = params.winType === "ron"
+    ? (winningTile === null ? [...params.baseHand] : [...params.baseHand, winningTile])
+    : [...params.baseHand];
+
+  const furiten = params.winType === "ron" && mahjongIsSelfFuriten(params.baseHand, params.river);
+
+  if (candidateHand.length !== neededClosedTiles) {
+    return {
+      ok: false,
+      reason: `tile-count-mismatch:${candidateHand.length}/${neededClosedTiles}`,
+      candidateHand,
+      tileCount: candidateHand.length,
+      furiten,
+      summary: null,
+    };
+  }
+
+  if (params.winType === "ron" && winningTile === null) {
+    return {
+      ok: false,
+      reason: "missing-ron-tile",
+      candidateHand,
+      tileCount: candidateHand.length,
+      furiten,
+      summary: null,
+    };
+  }
+
+  if (furiten) {
+    return {
+      ok: false,
+      reason: "furiten-self-river",
+      candidateHand,
+      tileCount: candidateHand.length,
+      furiten,
+      summary: null,
+    };
+  }
+
+  const shapeOk = closedMeldTarget >= 0 && (
+    (meldCount === 0 && mahjongIsWinningHand(candidateHand))
+    || (meldCount > 0 && mahjongExtractPattern(candidateHand, closedMeldTarget) !== null)
+  );
+
+  if (!shapeOk) {
+    return {
+      ok: false,
+      reason: "not-winning-shape",
+      candidateHand,
+      tileCount: candidateHand.length,
+      furiten,
+      summary: null,
+    };
+  }
+
+  const summary = mahjongSummarizeWin(candidateHand, {
+    winType: params.winType,
+    winningTile: (params.winType === "tsumo" ? params.baseHand[params.baseHand.length - 1] : winningTile) ?? 0,
+    isRiichi: params.isRiichi,
+    meldCount,
+    isMenzen: params.isMenzen,
+  });
+
+  if (!summary || summary.han <= 0) {
+    return {
+      ok: false,
+      reason: "no-yaku",
+      candidateHand,
+      tileCount: candidateHand.length,
+      furiten,
+      summary: null,
+    };
+  }
+
+  const bonusHan = Math.max(0, Math.floor(params.bonusHan ?? 0));
+  const finalSummary = bonusHan > 0
+    ? {
+      ...summary,
+      han: summary.han + bonusHan,
+      point: mahjongEstimatePoint(summary.han + bonusHan, summary.fu, summary.isYakuman),
+    }
+    : summary;
+
+  return {
+    ok: true,
+    reason: "ok",
+    candidateHand,
+    tileCount: candidateHand.length,
+    furiten,
+    summary: finalSummary,
   };
 }
 
@@ -6146,6 +6604,20 @@ export default function Home() {
   const [mahjongBoard, setMahjongBoard] = useState<MahjongCell[]>(() => [...(mahjongStartRef.current?.hand || [])]);
   const [mahjongWall, setMahjongWall] = useState<MahjongCell[]>(() => [...(mahjongStartRef.current?.wall || [])]);
   const [mahjongRiver, setMahjongRiver] = useState<MahjongCell[]>([]);
+  const [mahjongSideRivers, setMahjongSideRivers] = useState<[MahjongCell[], MahjongCell[], MahjongCell[]]>([[], [], []]);
+  const [mahjongSelfMelds, setMahjongSelfMelds] = useState<MahjongMeldView[]>([]);
+  const [mahjongSideMelds, setMahjongSideMelds] = useState<[MahjongMeldView[], MahjongMeldView[], MahjongMeldView[]]>([[], [], []]);
+  const [mahjongOpponentTurnIndex, setMahjongOpponentTurnIndex] = useState(0);
+  const [mahjongLatestOpponentDiscard, setMahjongLatestOpponentDiscard] = useState<MahjongCell | null>(null);
+  const [mahjongLatestOpponentDiscardBy, setMahjongLatestOpponentDiscardBy] = useState<string | null>(null);
+  const [mahjongLatestDiscardMeta, setMahjongLatestDiscardMeta] = useState<MahjongLatestDiscardMeta | null>(null);
+  const [mahjongMode, setMahjongMode] = useState<MahjongMode>("yonma");
+  const [mahjongNorthRule, setMahjongNorthRule] = useState<MahjongNorthRule>("normal");
+  const [mahjongAllowChi, setMahjongAllowChi] = useState(true);
+  const [mahjongStartingPoints, setMahjongStartingPoints] = useState(25000);
+  const [mahjongReturnPoints, setMahjongReturnPoints] = useState(30000);
+  const [mahjongTsumoPaymentRule, setMahjongTsumoPaymentRule] = useState<MahjongTsumoPaymentRule>("loss");
+  const [mahjongNukiDoraTiles, setMahjongNukiDoraTiles] = useState<MahjongCell[]>([]);
   const [mahjongSelected, setMahjongSelected] = useState<number | null>(null);
   const [mahjongLastDraw, setMahjongLastDraw] = useState<MahjongCell | null>(null);
   const [mahjongRoundWind, setMahjongRoundWind] = useState<"東" | "南" | "西" | "北">("東");
@@ -6154,8 +6626,12 @@ export default function Home() {
   const [mahjongHonba, setMahjongHonba] = useState(0);
   const [mahjongKyotaku, setMahjongKyotaku] = useState(0);
   const [mahjongRiichiTileIndex, setMahjongRiichiTileIndex] = useState<number | null>(null);
+  const [mahjongRiichiPending, setMahjongRiichiPending] = useState(false);
+  const [mahjongAutoDiscarding, setMahjongAutoDiscarding] = useState(false);
+  const [mahjongActionDeadlineAt, setMahjongActionDeadlineAt] = useState<number | null>(null);
   const [mahjongDoraIndicator, setMahjongDoraIndicator] = useState<MahjongCell | null>(() => mahjongStartRef.current?.wall[4] ?? null);
   const [mahjongWinSummary, setMahjongWinSummary] = useState<MahjongWinSummary | null>(null);
+  const [mahjongWinSubmitting, setMahjongWinSubmitting] = useState(false);
   const [mahjongMessage, setMahjongMessage] = useState<string>(LOGIN_I18N.ja.mahjongHint);
   const [isMahjongOver, setIsMahjongOver] = useState(false);
   const [isMahjongRuleSettingsOpen, setIsMahjongRuleSettingsOpen] = useState(true);
@@ -6164,7 +6640,57 @@ export default function Home() {
   const [mahjongAutoWinEnabled, setMahjongAutoWinEnabled] = useState(false);
   const [mahjongNoCallEnabled, setMahjongNoCallEnabled] = useState(false);
   const [mahjongReduceEffects, setMahjongReduceEffects] = useState(false);
+  const [mahjongCallSubmitting, setMahjongCallSubmitting] = useState(false);
+  const [mahjongDiscardAnimation, setMahjongDiscardAnimation] = useState<MahjongDiscardAnimationView | null>(null);
   const [mahjongLogEvents, setMahjongLogEvents] = useState<MahjongLogEvent[]>([]);
+  const mahjongActionDebugKeyRef = useRef("");
+  const mahjongAutoDiscardLockRef = useRef(false);
+  const mahjongAutoDrawPendingRef = useRef(false);
+  const mahjongCallLockRef = useRef(false);
+  const onMahjongTileClickRef = useRef<(index: number, options?: { force?: boolean }) => void>(() => {});
+  const mahjongDiscardAnimationTimerRef = useRef<number | null>(null);
+  const mahjongCpuTimerIdsRef = useRef<number[]>([]);
+  const mahjongCpuTurnTokenRef = useRef(0);
+  const mahjongCpuTurnPendingRef = useRef(false);
+  const mahjongGameStartedRef = useRef(false);
+  const mahjongIsOverRef = useRef(false);
+  const connectedRoomCodeRef = useRef("");
+  const mahjongRuleConfig = useMemo<MahjongRuleConfig>(() => {
+    const base = MAHJONG_RULE_CONFIG_BASE[mahjongMode];
+    return {
+      ...base,
+      allowChi: mahjongMode === "sanma" ? mahjongAllowChi : true,
+      northRule: mahjongMode === "sanma" ? mahjongNorthRule : "normal",
+      startingPoints: Math.max(10000, Math.floor(mahjongStartingPoints || base.startingPoints)),
+      returnPoints: Math.max(10000, Math.floor(mahjongReturnPoints || base.returnPoints)),
+      tsumoPaymentRule: mahjongMode === "sanma" ? mahjongTsumoPaymentRule : "loss",
+    };
+  }, [mahjongAllowChi, mahjongMode, mahjongNorthRule, mahjongReturnPoints, mahjongStartingPoints, mahjongTsumoPaymentRule]);
+  const mahjongBonusHan = useMemo(() => {
+    if (mahjongRuleConfig.mode !== "sanma") return 0;
+    if (mahjongRuleConfig.northRule !== "nuki-dora") return 0;
+    return mahjongNukiDoraTiles.length;
+  }, [mahjongNukiDoraTiles.length, mahjongRuleConfig.mode, mahjongRuleConfig.northRule]);
+
+  const clearMahjongDiscardAnimationTimer = useCallback(() => {
+    if (mahjongDiscardAnimationTimerRef.current === null) return;
+    window.clearTimeout(mahjongDiscardAnimationTimerRef.current);
+    mahjongDiscardAnimationTimerRef.current = null;
+  }, []);
+
+  const beginMahjongDiscardAnimation = useCallback((
+    animation: MahjongDiscardAnimationView,
+    commit: () => void,
+  ) => {
+    clearMahjongDiscardAnimationTimer();
+    setMahjongDiscardAnimation(animation);
+    const duration = Math.max(MAHJONG_DISCARD_ANIMATION_MIN_MS, Math.min(350, Math.floor(animation.durationMs || MAHJONG_DISCARD_ANIMATION_DEFAULT_MS)));
+    mahjongDiscardAnimationTimerRef.current = window.setTimeout(() => {
+      mahjongDiscardAnimationTimerRef.current = null;
+      setMahjongDiscardAnimation(null);
+      commit();
+    }, duration);
+  }, [clearMahjongDiscardAnimationTimer]);
   const [pokerDeck, setPokerDeck] = useState<PokerCard[]>([]);
   const [pokerPlayerHand, setPokerPlayerHand] = useState<PokerCard[]>([]);
   const [pokerCpuHand, setPokerCpuHand] = useState<PokerCard[]>([]);
@@ -6332,7 +6858,7 @@ export default function Home() {
   const [startCountdownSec, setStartCountdownSec] = useState(0);
   const [roomCode, setRoomCode] = useState("");
   const [roomVisibility, setRoomVisibility] = useState<"public" | "private">("public");
-  const [roomMaxPlayersDraft, setRoomMaxPlayersDraft] = useState(8);
+  const [roomMaxPlayersDraft, setRoomMaxPlayersDraft] = useState(16);
   const [roomPasswordDraft, setRoomPasswordDraft] = useState("");
   const [isRoomControlsOpen, setIsRoomControlsOpen] = useState(true);
   const [roomStatus, setRoomStatus] = useState("未接続");
@@ -6342,7 +6868,7 @@ export default function Home() {
   const [pendingLobbyReturnCode, setPendingLobbyReturnCode] = useState("");
   const [roomReadyById, setRoomReadyById] = useState<Record<string, boolean>>({});
   const [roomRole, setRoomRole] = useState("");
-  const [connectedRoomMaxPlayers, setConnectedRoomMaxPlayers] = useState(8);
+  const [connectedRoomMaxPlayers, setConnectedRoomMaxPlayers] = useState(16);
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
   const [menuPublicRooms, setMenuPublicRooms] = useState<PublicRoomSummary[]>([]);
   const [panelPublicRooms, setPanelPublicRooms] = useState<PublicRoomSummary[]>([]);
@@ -8414,7 +8940,7 @@ export default function Home() {
   }, [roomReadyById]);
 
   const roomOccupancyText = useMemo(() => {
-    const maxPlayers = Math.max(2, Math.min(8, Math.floor(connectedRoomMaxPlayers || 8)));
+    const maxPlayers = Math.max(2, Math.min(16, Math.floor(connectedRoomMaxPlayers || 16)));
     const count = Math.max(0, Math.min(maxPlayers, roomMatchedPlayerCount));
     return `${String(count).padStart(2, "0")}/${maxPlayers}`;
   }, [connectedRoomMaxPlayers, roomMatchedPlayerCount]);
@@ -8429,7 +8955,7 @@ export default function Home() {
         if (seenCodes.has(code)) continue;
         seenCodes.add(code);
       }
-      const activePlayers = Math.max(0, Math.min(8, Number(room.activePlayers) || 0));
+      const activePlayers = Math.max(0, Math.min(16, Number(room.activePlayers) || 0));
       if (activePlayers <= 0) continue;
       for (const panel of room.panels) {
         if (!(panel in counts)) continue;
@@ -8452,10 +8978,10 @@ export default function Home() {
   }, [connectedRoomCode, panelPublicRooms, roomParticipants]);
 
   const roomOccupancyTextByPanel = useMemo(() => {
-    const byPanel = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, "00/08"])) as Record<PlayablePanel, string>;
+    const byPanel = Object.fromEntries(PLAYABLE_PANELS.map((panel) => [panel, "00/16"])) as Record<PlayablePanel, string>;
     for (const panel of PLAYABLE_PANELS) {
-      const count = Math.max(0, Math.min(8, roomParticipantCountsByPanel[panel] || 0));
-      byPanel[panel] = `${String(count).padStart(2, "0")}/08`;
+      const count = Math.max(0, Math.min(16, roomParticipantCountsByPanel[panel] || 0));
+      byPanel[panel] = `${String(count).padStart(2, "0")}/16`;
     }
     return byPanel;
   }, [roomParticipantCountsByPanel]);
@@ -8990,7 +9516,7 @@ export default function Home() {
       .filter((panel): panel is PlayablePanel => Boolean(panel));
     const rawListContext = String(row.listContext || "").trim().toLowerCase();
     const listContext: "menu" | "game" = rawListContext === "game" ? "game" : "menu";
-    const maxPlayers = Math.max(2, Math.min(8, Math.floor(Number(row.maxPlayers) || 8)));
+    const maxPlayers = Math.max(2, Math.min(16, Math.floor(Number(row.maxPlayers) || 16)));
     return {
       code,
       listContext,
@@ -9648,13 +10174,15 @@ export default function Home() {
     if (typeof state.fitPuzzleMessage === "string") setFitPuzzleMessage(state.fitPuzzleMessage);
     if (typeof state.isFitPuzzleOver === "boolean") setIsFitPuzzleOver(state.isFitPuzzleOver);
 
-    if (Array.isArray(state.mahjongBoard)) {
-      const parsedHand = sortMahjongTiles(normalizeMahjongTileList(state.mahjongBoard));
-      if (parsedHand.length === 13 || parsedHand.length === 14) {
-        setMahjongBoard(parsedHand);
+    const shouldApplyMahjongHiddenState = !connectedRoomCode;
+
+    if (shouldApplyMahjongHiddenState && Array.isArray(state.mahjongBoard)) {
+      const parsedHand = normalizeMahjongTileList(state.mahjongBoard);
+      if (parsedHand.length > 0) {
+        setMahjongBoard(parsedHand as MahjongCell[]);
       }
     }
-    if (Array.isArray(state.mahjongWall)) {
+    if (shouldApplyMahjongHiddenState && Array.isArray(state.mahjongWall)) {
       const parsedWall = normalizeMahjongTileList(state.mahjongWall);
       setMahjongWall(parsedWall);
     }
@@ -9662,11 +10190,52 @@ export default function Home() {
       const parsedRiver = normalizeMahjongTileList(state.mahjongRiver);
       setMahjongRiver(parsedRiver);
     }
+    if (shouldApplyMahjongHiddenState && Array.isArray(state.mahjongSideRivers) && state.mahjongSideRivers.length >= 3) {
+      const s0 = normalizeMahjongTileList(state.mahjongSideRivers[0]);
+      const s1 = normalizeMahjongTileList(state.mahjongSideRivers[1]);
+      const s2 = normalizeMahjongTileList(state.mahjongSideRivers[2]);
+      setMahjongSideRivers([s0, s1, s2]);
+    }
+    if (shouldApplyMahjongHiddenState && typeof state.mahjongOpponentTurnIndex === "number") {
+      const nextIndex = Math.max(0, Math.min(2, Math.floor(state.mahjongOpponentTurnIndex)));
+      setMahjongOpponentTurnIndex(nextIndex);
+    }
+    if (shouldApplyMahjongHiddenState && (state.mahjongLatestOpponentDiscard === null || typeof state.mahjongLatestOpponentDiscard === "number" || typeof state.mahjongLatestOpponentDiscard === "string")) {
+      const parsed = state.mahjongLatestOpponentDiscard === null
+        ? null
+        : normalizeMahjongTileValue(state.mahjongLatestOpponentDiscard);
+      setMahjongLatestOpponentDiscard(parsed);
+    }
+    if (shouldApplyMahjongHiddenState && (typeof state.mahjongLatestOpponentDiscardBy === "string" || state.mahjongLatestOpponentDiscardBy === null)) {
+      setMahjongLatestOpponentDiscardBy(state.mahjongLatestOpponentDiscardBy as string | null);
+    }
+    if (state.mahjongMode === "yonma" || state.mahjongMode === "sanma") {
+      setMahjongMode(state.mahjongMode as MahjongMode);
+    }
+    if (state.mahjongNorthRule === "normal" || state.mahjongNorthRule === "nuki-dora") {
+      setMahjongNorthRule(state.mahjongNorthRule as MahjongNorthRule);
+    }
+    if (typeof state.mahjongAllowChi === "boolean") {
+      setMahjongAllowChi(state.mahjongAllowChi);
+    }
+    if (typeof state.mahjongStartingPoints === "number") {
+      setMahjongStartingPoints(Math.max(10000, Math.floor(state.mahjongStartingPoints)));
+    }
+    if (typeof state.mahjongReturnPoints === "number") {
+      setMahjongReturnPoints(Math.max(10000, Math.floor(state.mahjongReturnPoints)));
+    }
+    if (state.mahjongTsumoPaymentRule === "loss" || state.mahjongTsumoPaymentRule === "no-loss" || state.mahjongTsumoPaymentRule === "split-north") {
+      setMahjongTsumoPaymentRule(state.mahjongTsumoPaymentRule as MahjongTsumoPaymentRule);
+    }
+    if (Array.isArray(state.mahjongNukiDoraTiles)) {
+      setMahjongNukiDoraTiles(normalizeMahjongTileList(state.mahjongNukiDoraTiles) as MahjongCell[]);
+    }
     if (state.mahjongSelected === null || typeof state.mahjongSelected === "number") {
       setMahjongSelected(state.mahjongSelected as number | null);
     }
-    if (state.mahjongLastDraw === null || typeof state.mahjongLastDraw === "number") {
-      setMahjongLastDraw(state.mahjongLastDraw as MahjongCell | null);
+    if (state.mahjongLastDraw === null || typeof state.mahjongLastDraw === "number" || typeof state.mahjongLastDraw === "string") {
+      const parsedLastDraw = state.mahjongLastDraw === null ? null : normalizeMahjongTileValue(state.mahjongLastDraw);
+      setMahjongLastDraw(parsedLastDraw);
     }
     if (state.mahjongRoundWind === "東" || state.mahjongRoundWind === "南" || state.mahjongRoundWind === "西" || state.mahjongRoundWind === "北") {
       setMahjongRoundWind(state.mahjongRoundWind);
@@ -9687,11 +10256,29 @@ export default function Home() {
     if (state.mahjongRiichiTileIndex === null || typeof state.mahjongRiichiTileIndex === "number") {
       setMahjongRiichiTileIndex(state.mahjongRiichiTileIndex as number | null);
     }
-    if (state.mahjongDoraIndicator === null || typeof state.mahjongDoraIndicator === "number") {
-      setMahjongDoraIndicator(state.mahjongDoraIndicator as MahjongCell | null);
+    if (state.mahjongDoraIndicator === null || typeof state.mahjongDoraIndicator === "number" || typeof state.mahjongDoraIndicator === "string") {
+      const parsedDora = state.mahjongDoraIndicator === null ? null : normalizeMahjongTileValue(state.mahjongDoraIndicator);
+      setMahjongDoraIndicator(parsedDora);
     }
     if (state.mahjongWinSummary === null || typeof state.mahjongWinSummary === "object") {
-      setMahjongWinSummary(state.mahjongWinSummary as MahjongWinSummary | null);
+      const rawSummary = state.mahjongWinSummary as Partial<MahjongWinSummary> | null;
+      if (!rawSummary) {
+        setMahjongWinSummary(null);
+      } else {
+        const parsedWinningTile = normalizeMahjongTileValue(rawSummary.winningTile);
+        setMahjongWinSummary({
+          winType: rawSummary.winType === "ron" ? "ron" : "tsumo",
+          winningTile: parsedWinningTile ?? 0,
+          yakuKeys: Array.isArray(rawSummary.yakuKeys) ? rawSummary.yakuKeys : [],
+          han: Number.isFinite(rawSummary.han as number) ? Number(rawSummary.han) : 0,
+          fu: Number.isFinite(rawSummary.fu as number) ? Number(rawSummary.fu) : 0,
+          point: Number.isFinite(rawSummary.point as number) ? Number(rawSummary.point) : 0,
+          isYakuman: Boolean(rawSummary.isYakuman),
+        });
+      }
+    }
+    if (typeof state.mahjongWinSubmitting === "boolean") {
+      setMahjongWinSubmitting(state.mahjongWinSubmitting);
     }
     if (typeof state.mahjongMessage === "string") setMahjongMessage(state.mahjongMessage);
     if (typeof state.isMahjongOver === "boolean") setIsMahjongOver(state.isMahjongOver);
@@ -9828,6 +10415,30 @@ export default function Home() {
     if (typeof state.isUnoOver === "boolean") setIsUnoOver(state.isUnoOver);
   }, [connectedRoomCode, roomRole]);
 
+  const applyMahjongRoomConfig = useCallback((raw: unknown) => {
+    if (!raw || typeof raw !== "object") return;
+    const config = raw as Record<string, unknown>;
+
+    if (config.mode === "yonma" || config.mode === "sanma") {
+      setMahjongMode(config.mode as MahjongMode);
+    }
+    if (typeof config.allowChi === "boolean") {
+      setMahjongAllowChi(config.allowChi);
+    }
+    if (config.northRule === "normal" || config.northRule === "nuki-dora") {
+      setMahjongNorthRule(config.northRule as MahjongNorthRule);
+    }
+    if (config.tsumoPaymentRule === "loss" || config.tsumoPaymentRule === "no-loss" || config.tsumoPaymentRule === "split-north") {
+      setMahjongTsumoPaymentRule(config.tsumoPaymentRule as MahjongTsumoPaymentRule);
+    }
+    if (typeof config.startingPoints === "number") {
+      setMahjongStartingPoints(Math.max(10000, Math.min(100000, Math.floor(config.startingPoints))));
+    }
+    if (typeof config.returnPoints === "number") {
+      setMahjongReturnPoints(Math.max(10000, Math.min(100000, Math.floor(config.returnPoints))));
+    }
+  }, []);
+
   const connectRoom = useCallback(
     (
       requestedCode: string,
@@ -9919,7 +10530,7 @@ export default function Home() {
             panel: options?.panelOverride ?? getCurrentRoomPanel(),
             name: playerName,
             roomPublic: Boolean(options?.roomPublic ?? (roomVisibility === "public")),
-            maxPlayers: Math.max(2, Math.min(8, Math.floor(roomMaxPlayersDraft || 8))),
+            maxPlayers: Math.max(2, Math.min(16, Math.floor(roomMaxPlayersDraft || 16))),
             spectate: Boolean(options?.spectate),
             create: Boolean(options?.createRoom),
             inviteToken: String(options?.inviteToken || "").trim(),
@@ -10195,7 +10806,7 @@ export default function Home() {
               }
             }
             if (Number.isFinite(Number(payload.maxPlayers))) {
-              setConnectedRoomMaxPlayers(Math.max(2, Math.min(8, Math.floor(Number(payload.maxPlayers) || 8))));
+              setConnectedRoomMaxPlayers(Math.max(2, Math.min(16, Math.floor(Number(payload.maxPlayers) || 16))));
             }
 
             if (quickJoin) {
@@ -10276,12 +10887,13 @@ export default function Home() {
             } else {
               setOthelloDrawVotes([]);
             }
+            applyMahjongRoomConfig(payload.mahjongRoomConfig);
             const myself = participants.find((p: RoomParticipant) => p.id === peerIdRef.current);
             if (myself?.role) {
               setRoomRole(myself.role);
             }
             if (Number.isFinite(Number(payload.maxPlayers))) {
-              setConnectedRoomMaxPlayers(Math.max(2, Math.min(8, Math.floor(Number(payload.maxPlayers) || 8))));
+              setConnectedRoomMaxPlayers(Math.max(2, Math.min(16, Math.floor(Number(payload.maxPlayers) || 16))));
             }
             if (nextRoomCode) {
               stripInviteTokenFromAddressBar();
@@ -10295,6 +10907,11 @@ export default function Home() {
                 setMenuMessage(t("quickMatchSearching"));
               }
             }
+            return;
+          }
+
+          if (type === "mahjong-room-config") {
+            applyMahjongRoomConfig(payload?.config);
             return;
           }
 
@@ -10373,14 +10990,14 @@ export default function Home() {
             setRoomReadyById({});
             setRoomParticipants([]);
             setRoomRole("");
-            setConnectedRoomMaxPlayers(8);
+            setConnectedRoomMaxPlayers(16);
             setOthelloDrawVotes([]);
             setRoomChatMessages([]);
             setSpectatorChatMessages([]);
             setRoomStatus(t("roomStateClosed"));
             setMenuMessage(tf("roomFullRejected", {
               code: String(payload.code || roomCode || "------"),
-              max: String(Math.max(2, Math.min(8, Math.floor(Number(payload.maxPlayers) || 8)))),
+              max: String(Math.max(2, Math.min(16, Math.floor(Number(payload.maxPlayers) || 16)))),
             }));
             return;
           }
@@ -10489,6 +11106,7 @@ export default function Home() {
     },
     [
       applyArcadeSnapshot,
+      applyMahjongRoomConfig,
       closeRoomSocket,
       getCurrentRoomClientId,
       playerName,
@@ -10736,7 +11354,7 @@ export default function Home() {
     setPendingInviteToken("");
     closeRoomSocket();
     setConnectedRoomCode("");
-    setConnectedRoomMaxPlayers(8);
+    setConnectedRoomMaxPlayers(16);
     setRoomReadyById({});
     setRoomParticipants([]);
     setRoomRole("");
@@ -10842,6 +11460,37 @@ export default function Home() {
     sendRoomEvent({ type: "presence", roomPublic: roomVisibility === "public" });
     sendRoomEvent({ type: "sync-room-state" });
   }, [activePanel, connectedRoomCode, roomVisibility, sendRoomEvent]);
+
+  useEffect(() => {
+    if (!connectedRoomCode) return;
+    sendRoomEvent({ type: "mahjong-room-config-request" });
+  }, [connectedRoomCode, sendRoomEvent]);
+
+  useEffect(() => {
+    if (!connectedRoomCode) return;
+    if (roomRole !== "host") return;
+    sendRoomEvent({
+      type: "mahjong-room-config-set",
+      config: {
+        mode: mahjongMode,
+        allowChi: mahjongAllowChi,
+        northRule: mahjongNorthRule,
+        tsumoPaymentRule: mahjongTsumoPaymentRule,
+        startingPoints: mahjongStartingPoints,
+        returnPoints: mahjongReturnPoints,
+      },
+    });
+  }, [
+    connectedRoomCode,
+    mahjongAllowChi,
+    mahjongMode,
+    mahjongNorthRule,
+    mahjongReturnPoints,
+    mahjongStartingPoints,
+    mahjongTsumoPaymentRule,
+    roomRole,
+    sendRoomEvent,
+  ]);
 
   useEffect(() => {
     if (!connectedRoomCode) return;
@@ -11003,6 +11652,17 @@ export default function Home() {
         mahjongBoard,
         mahjongWall,
         mahjongRiver,
+        mahjongSideRivers,
+        mahjongOpponentTurnIndex,
+        mahjongLatestOpponentDiscard,
+        mahjongLatestOpponentDiscardBy,
+        mahjongMode,
+        mahjongNorthRule,
+        mahjongAllowChi,
+        mahjongStartingPoints,
+        mahjongReturnPoints,
+        mahjongTsumoPaymentRule,
+        mahjongNukiDoraTiles,
         mahjongSelected,
         mahjongLastDraw,
         mahjongRoundWind,
@@ -11013,6 +11673,7 @@ export default function Home() {
         mahjongRiichiTileIndex,
         mahjongDoraIndicator,
         mahjongWinSummary,
+        mahjongWinSubmitting,
         mahjongMessage,
         isMahjongOver,
         pokerDeck,
@@ -11108,6 +11769,12 @@ export default function Home() {
         numeronAssistCharges: _numeronAssistCharges,
         isNumeronOver: _isNumeronOver,
         numeronMessage: _numeronMessage,
+        mahjongBoard: _mahjongBoard,
+        mahjongWall: _mahjongWall,
+        mahjongSideRivers: _mahjongSideRivers,
+        mahjongOpponentTurnIndex: _mahjongOpponentTurnIndex,
+        mahjongLatestOpponentDiscard: _mahjongLatestOpponentDiscard,
+        mahjongLatestOpponentDiscardBy: _mahjongLatestOpponentDiscardBy,
         ...roomSafeState
       } = baseState;
       sendRoomEvent({
@@ -13570,11 +14237,66 @@ export default function Home() {
     });
   }, []);
 
+  const clearMahjongCpuTimers = useCallback(() => {
+    const timers = mahjongCpuTimerIdsRef.current;
+    if (timers.length <= 0) return;
+    timers.forEach((id) => window.clearTimeout(id));
+    mahjongCpuTimerIdsRef.current = [];
+  }, []);
+
+  const cancelMahjongCpuTurn = useCallback((reason: string) => {
+    const hadTimers = mahjongCpuTimerIdsRef.current.length > 0;
+    clearMahjongCpuTimers();
+    mahjongCpuTurnTokenRef.current += 1;
+    mahjongCpuTurnPendingRef.current = false;
+    if (hadTimers) {
+      pushMahjongLog(`[cpu-turn] cancelled reason=${reason}`, "warn");
+    }
+  }, [clearMahjongCpuTimers, pushMahjongLog]);
+
+  const isMahjongCpuTurnStillValid = useCallback(() => {
+    return activePanelRef.current === "mahjong"
+      && mahjongGameStartedRef.current
+      && !mahjongIsOverRef.current
+      && !connectedRoomCodeRef.current;
+  }, []);
+
+  const randomDelayMs = useCallback((min: number, max: number) => {
+    const lo = Math.max(0, Math.floor(min));
+    const hi = Math.max(lo, Math.floor(max));
+    return lo + Math.floor(Math.random() * (hi - lo + 1));
+  }, []);
+
+  const queueMahjongCpuStep = useCallback((
+    token: number,
+    delayMs: number,
+    run: () => void,
+  ) => {
+    const timerId = window.setTimeout(() => {
+      mahjongCpuTimerIdsRef.current = mahjongCpuTimerIdsRef.current.filter((id) => id !== timerId);
+      if (mahjongCpuTurnTokenRef.current !== token) return;
+      if (!isMahjongCpuTurnStillValid()) return;
+      run();
+    }, delayMs);
+    mahjongCpuTimerIdsRef.current.push(timerId);
+  }, [isMahjongCpuTurnStillValid]);
+
   const resetMahjong = useCallback(() => {
-    const start = createMahjongStartBoard();
+    cancelMahjongCpuTurn("reset");
+    clearMahjongDiscardAnimationTimer();
+    setMahjongDiscardAnimation(null);
+    const start = createMahjongStartBoard(mahjongRuleConfig);
     setMahjongBoard(start.hand);
     setMahjongWall(start.wall);
     setMahjongRiver([]);
+    setMahjongSideRivers([[], [], []]);
+    setMahjongSelfMelds([]);
+    setMahjongSideMelds([[], [], []]);
+    setMahjongOpponentTurnIndex(0);
+    setMahjongLatestOpponentDiscard(null);
+    setMahjongLatestOpponentDiscardBy(null);
+    setMahjongLatestDiscardMeta(null);
+    setMahjongNukiDoraTiles([]);
     setMahjongSelected(null);
     setMahjongLastDraw(null);
     setMahjongRoundWind("東");
@@ -13583,17 +14305,62 @@ export default function Home() {
     setMahjongHonba(0);
     setMahjongKyotaku(0);
     setMahjongRiichiTileIndex(null);
+    setMahjongRiichiPending(false);
+    setMahjongAutoDiscarding(false);
+    mahjongCpuTurnPendingRef.current = false;
+    mahjongAutoDrawPendingRef.current = false;
+    mahjongAutoDiscardLockRef.current = false;
+    setMahjongActionDeadlineAt(null);
     setMahjongDoraIndicator(start.wall[4] ?? null);
     setMahjongWinSummary(null);
+    setMahjongWinSubmitting(false);
+    setMahjongCallSubmitting(false);
+    mahjongCallLockRef.current = false;
     setIsMahjongOver(false);
+    setScore(Math.max(0, mahjongRuleConfig.startingPoints));
     setMahjongMessage(t("mahjongHint"));
-    pushMahjongLog("新しい局を開始しました。", "normal");
-  }, [pushMahjongLog, t]);
+    pushMahjongLog(`${mahjongRuleConfig.playerCount}人麻雀で新しい局を開始しました。`, "normal");
+
+    if (mahjongRuleConfig.mode === "sanma") {
+      const summary = summarizeMahjongRuleWall(mahjongRuleConfig);
+      const deadWallCount = 14;
+      const doraIndicatorCount = 1;
+      const excludedLabels = summary.excludedTiles.map((tile) => mahjongTileLabel(tile));
+      const tileCountsText = Object.entries(summary.tileCounts)
+        .map(([label, count]) => `${label}:${count}`)
+        .join(" ");
+
+      pushMahjongLog(`[sanma-check] 総牌数=${summary.totalTiles}`, "normal");
+      pushMahjongLog(`[sanma-check] 除外牌=${excludedLabels.join(",") || "なし"}`, "normal");
+      pushMahjongLog(`[sanma-check] 各牌枚数=${tileCountsText}`, "normal");
+      pushMahjongLog(`[sanma-check] ドラ表示牌枚数=${doraIndicatorCount}`, "normal");
+      pushMahjongLog(`[sanma-check] 王牌枚数(想定)=${deadWallCount}`, "normal");
+      pushMahjongLog(`[sanma-check] 配牌枚数(全員)=${summary.playersDealtTiles}`, "normal");
+      pushMahjongLog(`[sanma-check] 配牌後の残り牌数(現在実装wall)=${start.wall.length}`, "normal");
+      pushMahjongLog(`[sanma-check] 山牌に残っている牌枚数=${start.wall.length}`, "normal");
+      pushMahjongLog(
+        `[sanma-check] 枚数整合=${summary.totalTiles}=${summary.playersDealtTiles}+${start.wall.length}+${Math.max(0, summary.totalTiles - summary.playersDealtTiles - start.wall.length)}`,
+        "success",
+      );
+    }
+  }, [cancelMahjongCpuTurn, clearMahjongDiscardAnimationTimer, mahjongRuleConfig, pushMahjongLog, setScore, t]);
+
+  const logMahjongWinEval = useCallback((kind: "ron" | "tsumo", evalResult: MahjongWinEvaluation) => {
+    const yakuLabel = evalResult.summary?.yakuKeys.join(",") || "-";
+    const han = evalResult.summary?.han ?? 0;
+    const fu = evalResult.summary?.fu ?? 0;
+    pushMahjongLog(
+      `[win-check] type=${kind} tiles=${evalResult.tileCount} furiten=${evalResult.furiten ? "1" : "0"} ok=${evalResult.ok ? "1" : "0"} reason=${evalResult.reason} yaku=${yakuLabel} han=${han} fu=${fu}`,
+      evalResult.ok ? "success" : "warn",
+    );
+  }, [pushMahjongLog]);
 
   const onMahjongHint = () => {
     if (isMahjongOver) return;
+    const concealedAfterDiscard = mahjongConcealedCountAfterDiscard(mahjongSelfMelds.length);
+    const concealedAfterDraw = mahjongConcealedCountAfterDraw(mahjongSelfMelds.length);
 
-    if (mahjongBoard.length === 13) {
+    if (mahjongBoard.length === concealedAfterDiscard) {
       const waits = mahjongFindWinningTiles(mahjongBoard);
       if (waits.length === 0) {
         setMahjongMessage(t("mahjongNoHint"));
@@ -13606,12 +14373,23 @@ export default function Home() {
       return;
     }
 
-    if (mahjongBoard.length !== 14) {
+    if (mahjongBoard.length !== concealedAfterDraw) {
       setMahjongMessage(t("mahjongBlocked"));
       return;
     }
 
-    if (mahjongIsWinningHand(mahjongBoard)) {
+    const hintTsumoEval = evaluateMahjongWinAction({
+      baseHand: mahjongBoard,
+      winType: "tsumo",
+      winningTile: mahjongLastDraw,
+      isRiichi: mahjongRiichiTileIndex !== null,
+      river: mahjongRiver,
+      meldCount: mahjongSelfMelds.length,
+      isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+      bonusHan: mahjongBonusHan,
+    });
+
+    if (hintTsumoEval.ok) {
       const readyTile = mahjongLastDraw !== null ? mahjongTileLabel(mahjongLastDraw) : "*";
       setMahjongMessage(tf("mahjongWinReady", { tile: readyTile }));
       return;
@@ -13635,8 +14413,15 @@ export default function Home() {
 
   const onMahjongShuffle = () => {
     if (isMahjongOver) return;
-    if (mahjongBoard.length === 14) {
+    const meldCount = mahjongSelfMelds.length;
+    const expectedAfterDraw = mahjongConcealedCountAfterDraw(meldCount);
+    const expectedAfterDiscard = mahjongConcealedCountAfterDiscard(meldCount);
+    if (mahjongBoard.length === expectedAfterDraw) {
       setMahjongMessage(t("mahjongNeedDiscardFirst"));
+      return;
+    }
+    if (mahjongBoard.length !== expectedAfterDiscard) {
+      setMahjongMessage(t("mahjongBlocked"));
       return;
     }
     if (mahjongWall.length <= 0) {
@@ -13649,15 +14434,33 @@ export default function Home() {
 
     const drawTile = mahjongWall[0];
     const nextWall = mahjongWall.slice(1);
-    const nextHand = [...sortMahjongTiles(mahjongBoard), drawTile];
+    const nextHand = [...mahjongBoard, drawTile];
+    const beforeHandState = mahjongSplitSelfHand(mahjongBoard, mahjongLastDraw, meldCount);
 
     setMahjongBoard(nextHand);
     setMahjongWall(nextWall);
+    setMahjongLatestOpponentDiscard(null);
+    setMahjongLatestOpponentDiscardBy(null);
+    setMahjongLatestDiscardMeta(null);
+    setMahjongActionDeadlineAt(null);
     setMahjongSelected(null);
     setMahjongLastDraw(drawTile);
     setMahjongWinSummary(null);
+    setMahjongWinSubmitting(false);
 
-    if (mahjongIsWinningHand(nextHand)) {
+    const tsumoEval = evaluateMahjongWinAction({
+      baseHand: nextHand,
+      winType: "tsumo",
+      winningTile: drawTile,
+      isRiichi: mahjongRiichiTileIndex !== null,
+      river: mahjongRiver,
+      meldCount,
+      isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+      bonusHan: mahjongBonusHan,
+    });
+    logMahjongWinEval("tsumo", tsumoEval);
+
+    if (tsumoEval.ok) {
       setMahjongMessage(tf("mahjongWinReady", { tile: mahjongTileLabel(drawTile) }));
       pushMahjongLog(`ツモ: ${mahjongTileLabel(drawTile)}。和了可能です。`, "success");
       return;
@@ -13665,26 +14468,79 @@ export default function Home() {
 
     setMahjongMessage(tf("mahjongDrawn", { tile: mahjongTileLabel(drawTile) }));
     pushMahjongLog(`ツモ: ${mahjongTileLabel(drawTile)}`);
+    pushMahjongLog(
+      `[self-draw] concealedBefore=${beforeHandState.concealedHand.length} draw=${mahjongTileLabel(drawTile)} drawnTile=${mahjongTileLabel(drawTile)} concealedView=${beforeHandState.concealedHand.map((tile) => mahjongTileLabel(tile)).join("/") || "-"} sortTarget=-`,
+      "normal",
+    );
   };
 
   const onMahjongTsumo = () => {
-    if (isMahjongOver) return;
-    if (mahjongBoard.length !== 14) {
+    if (mahjongAutoDiscarding) return;
+    if (isMahjongOver || mahjongWinSubmitting) return;
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) {
       setMahjongMessage(t("mahjongNeedDrawFirst"));
       return;
     }
 
-    if (!mahjongIsWinningHand(mahjongBoard)) {
+    const tsumoEval = evaluateMahjongWinAction({
+      baseHand: mahjongBoard,
+      winType: "tsumo",
+      winningTile: mahjongLastDraw,
+      isRiichi: mahjongRiichiTileIndex !== null,
+      river: mahjongRiver,
+      meldCount: mahjongSelfMelds.length,
+      isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+      bonusHan: mahjongBonusHan,
+    });
+    logMahjongWinEval("tsumo", tsumoEval);
+
+    if (!tsumoEval.ok || !tsumoEval.summary) {
       setMahjongMessage(t("mahjongCannotWinYet"));
       return;
     }
 
-    const summary = mahjongSummarizeWin(mahjongBoard);
-    setMahjongWinSummary(summary);
+    setMahjongWinSubmitting(true);
+    setMahjongWinSummary(tsumoEval.summary);
     setMahjongKyotaku(0);
+    setMahjongActionDeadlineAt(null);
+    setMahjongRiichiPending(false);
     setIsMahjongOver(true);
     setMahjongMessage(t("mahjongClear"));
     pushMahjongLog("ツモ和了。", "success");
+    setMahjongWinSubmitting(false);
+  };
+
+  const onMahjongRon = () => {
+    if (mahjongAutoDiscarding) return;
+    if (isMahjongOver || mahjongWinSubmitting) return;
+    const baseHand = [...mahjongBoard];
+    const winningTile = mahjongLatestOpponentDiscard;
+    const ronEval = evaluateMahjongWinAction({
+      baseHand,
+      winType: "ron",
+      winningTile,
+      isRiichi: mahjongRiichiTileIndex !== null,
+      river: mahjongRiver,
+      meldCount: mahjongSelfMelds.length,
+      isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+      bonusHan: mahjongBonusHan,
+    });
+    logMahjongWinEval("ron", ronEval);
+
+    if (!ronEval.ok || !ronEval.summary) {
+      setMahjongMessage(`ロン不可: ${ronEval.reason}`);
+      return;
+    }
+
+    setMahjongWinSubmitting(true);
+    setMahjongWinSummary(ronEval.summary);
+    setMahjongKyotaku(0);
+    setMahjongActionDeadlineAt(null);
+    setMahjongRiichiPending(false);
+    setIsMahjongOver(true);
+    setMahjongMessage(`ロン和了 (${mahjongLatestOpponentDiscardBy || "相手"})`);
+    pushMahjongLog(`ロン和了: 放銃 ${mahjongLatestOpponentDiscardBy || "相手"}`, "success");
+    setMahjongWinSubmitting(false);
   };
 
   const onMahjongApplyScore = () => {
@@ -13696,108 +14552,1090 @@ export default function Home() {
 
   const onMahjongSortHand = () => {
     if (mahjongBoard.length <= 0) return;
-    setMahjongBoard((prev) => sortMahjongTiles(prev));
+    setMahjongBoard((prev) => {
+      const handState = mahjongSplitSelfHand(prev, mahjongLastDraw, mahjongSelfMelds.length);
+      const sortedConcealed = sortMahjongTiles(handState.concealedHand);
+      return handState.drawnTile === null ? sortedConcealed : [...sortedConcealed, handState.drawnTile];
+    });
     setMahjongSelected(null);
     pushMahjongLog("手牌を並び替えました。");
   };
 
   const onMahjongDeclareRiichi = () => {
+    if (mahjongAutoDiscarding) {
+      setMahjongMessage("自動ツモ切り処理中です。完了までお待ちください。");
+      return;
+    }
     if (isMahjongOver) return;
-    if (mahjongBoard.length !== 14) {
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) {
       setMahjongMessage(t("mahjongNeedDrawFirst"));
+      return;
+    }
+    const candidates = mahjongFindRiichiDiscardIndexes(mahjongBoard);
+    if (candidates.length <= 0) {
+      setMahjongMessage("リーチ可能な捨て牌がありません。");
       return;
     }
     if (mahjongRiichiTileIndex !== null) {
       setMahjongMessage(`${t("mahjongRiichi")}: ON`);
       return;
     }
-    setMahjongKyotaku(1);
-    setMahjongMessage(`${t("mahjongRiichi")}: 宣言`);
-    pushMahjongLog("リーチを宣言しました。", "success");
+    setMahjongRiichiPending(true);
+    setMahjongSelected(null);
+    setMahjongMessage(`${t("mahjongRiichi")}: 捨て牌を選択してください`);
+    pushMahjongLog("リーチ宣言: 対象牌を選択してください。", "success");
   };
 
   const onMahjongPass = () => {
+    if (mahjongAutoDiscarding || mahjongCallSubmitting) return;
+    setMahjongActionDeadlineAt(null);
+    setMahjongRiichiPending(false);
+    if (mahjongLatestOpponentDiscard !== null) {
+      pushMahjongLog(`ロン見逃し: ${mahjongTileLabel(mahjongLatestOpponentDiscard)}`, "warn");
+      setMahjongLatestOpponentDiscard(null);
+      setMahjongLatestOpponentDiscardBy(null);
+      setMahjongLatestDiscardMeta(null);
+    }
     setMahjongMessage("パスしました。");
     pushMahjongLog("パス", "normal");
   };
 
-  const onMahjongTileClick = (index: number) => {
+  const claimLatestOpponentDiscard = useCallback((): MahjongLatestDiscardMeta | null => {
+    if (mahjongLatestOpponentDiscard === null || !mahjongLatestDiscardMeta) {
+      return null;
+    }
+    if (mahjongLatestDiscardMeta.tile !== mahjongLatestOpponentDiscard) {
+      return null;
+    }
+    if (mahjongLatestOpponentDiscardBy && mahjongLatestDiscardMeta.by !== mahjongLatestOpponentDiscardBy) {
+      return null;
+    }
+    return mahjongLatestDiscardMeta;
+  }, [mahjongLatestDiscardMeta, mahjongLatestOpponentDiscard, mahjongLatestOpponentDiscardBy]);
+
+  const consumeLatestDiscardFromRiver = useCallback((meta: MahjongLatestDiscardMeta): boolean => {
+    const seat = Math.max(0, Math.min(2, meta.sideRiverSeatIndex));
+    const sourceRiver = mahjongSideRivers[seat] || [];
+    if (sourceRiver.length <= 0) {
+      return false;
+    }
+
+    const index = Math.max(0, Math.min(sourceRiver.length - 1, meta.sideRiverDiscardIndex));
+    if (sourceRiver[index] !== meta.tile) {
+      return false;
+    }
+
+    const next: [MahjongCell[], MahjongCell[], MahjongCell[]] = [
+      [...mahjongSideRivers[0]],
+      [...mahjongSideRivers[1]],
+      [...mahjongSideRivers[2]],
+    ];
+    next[seat].splice(index, 1);
+    setMahjongSideRivers(next);
+    return true;
+  }, [mahjongSideRivers]);
+
+  const clearLatestDiscardWindow = useCallback(() => {
+    setMahjongActionDeadlineAt(null);
+    setMahjongLatestOpponentDiscard(null);
+    setMahjongLatestOpponentDiscardBy(null);
+    setMahjongLatestDiscardMeta(null);
+  }, []);
+
+  const beginCallSubmission = useCallback((): boolean => {
+    if (mahjongCallLockRef.current) return false;
+    mahjongCallLockRef.current = true;
+    setMahjongCallSubmitting(true);
+    return true;
+  }, []);
+
+  const endCallSubmission = useCallback(() => {
+    mahjongCallLockRef.current = false;
+    setMahjongCallSubmitting(false);
+  }, []);
+
+  const onMahjongPon = useCallback(() => {
+    if (isMahjongOver || mahjongAutoDiscarding || mahjongCallSubmitting) return;
+    if (!beginCallSubmission()) return;
+    try {
+      const meta = claimLatestOpponentDiscard();
+      if (!meta) {
+        setMahjongMessage("ポン対象の捨て牌が見つかりません。");
+        clearLatestDiscardWindow();
+        return;
+      }
+      if (!mahjongCanPon(mahjongBoard, meta.tile)) {
+        setMahjongMessage("ポン不可: 手牌が不足しています。");
+        return;
+      }
+
+      const removed = mahjongRemoveTilesOnce(mahjongBoard, [meta.tile, meta.tile]);
+      if (!removed) {
+        setMahjongMessage("ポン不可: 手牌の整合が取れませんでした。");
+        return;
+      }
+      if (!consumeLatestDiscardFromRiver(meta)) {
+        setMahjongMessage("ポン不可: 対象捨て牌がすでに消費されています。");
+        return;
+      }
+
+      const meld: MahjongMeldView = {
+        id: `pon-${meta.discardId}`,
+        type: "pon",
+        tiles: [meta.tile, meta.tile, meta.tile],
+        calledTileIndex: 0,
+      };
+      setMahjongSelfMelds((prev) => [...prev, meld]);
+      setMahjongBoard(sortMahjongTiles(removed));
+      setMahjongSelected(null);
+      clearLatestDiscardWindow();
+      setMahjongRiichiPending(false);
+      setMahjongLastDraw(null);
+      setMahjongMessage(`ポン: ${mahjongTileLabel(meta.tile)}。打牌してください。`);
+      pushMahjongLog(`ポン成立: ${mahjongTileLabel(meta.tile)} (from ${meta.by})`, "success");
+    } finally {
+      endCallSubmission();
+    }
+  }, [
+    beginCallSubmission,
+    claimLatestOpponentDiscard,
+    clearLatestDiscardWindow,
+    consumeLatestDiscardFromRiver,
+    endCallSubmission,
+    isMahjongOver,
+    mahjongAutoDiscarding,
+    mahjongBoard,
+    mahjongCallSubmitting,
+    pushMahjongLog,
+  ]);
+
+  const onMahjongChi = useCallback((tiles: MahjongCell[]) => {
+    if (isMahjongOver || mahjongAutoDiscarding || mahjongCallSubmitting) return;
+    if (!beginCallSubmission()) return;
+    try {
+      const meta = claimLatestOpponentDiscard();
+      if (!meta) {
+        setMahjongMessage("チー対象の捨て牌が見つかりません。");
+        clearLatestDiscardWindow();
+        return;
+      }
+      const chiOptions = mahjongFindChiCandidates(mahjongBoard, meta.tile);
+      const targetOption = chiOptions.find((option) => option.length === tiles.length && option.every((tile, idx) => tile === tiles[idx]));
+      if (!targetOption) {
+        setMahjongMessage("チー不可: 候補が無効です。");
+        return;
+      }
+
+      const consumeTiles = targetOption.filter((tile) => tile !== meta.tile);
+      const removed = mahjongRemoveTilesOnce(mahjongBoard, consumeTiles);
+      if (!removed) {
+        setMahjongMessage("チー不可: 手牌が不足しています。");
+        return;
+      }
+      if (!consumeLatestDiscardFromRiver(meta)) {
+        setMahjongMessage("チー不可: 対象捨て牌がすでに消費されています。");
+        return;
+      }
+
+      const calledTileIndex = targetOption.findIndex((tile) => tile === meta.tile);
+      const meld: MahjongMeldView = {
+        id: `chi-${meta.discardId}`,
+        type: "chi",
+        tiles: [...targetOption],
+        calledTileIndex: calledTileIndex >= 0 ? calledTileIndex : 1,
+      };
+      setMahjongSelfMelds((prev) => [...prev, meld]);
+      setMahjongBoard(sortMahjongTiles(removed));
+      setMahjongSelected(null);
+      clearLatestDiscardWindow();
+      setMahjongRiichiPending(false);
+      setMahjongLastDraw(null);
+      setMahjongMessage(`チー: ${targetOption.map((tile) => mahjongTileLabel(tile)).join("・")}。打牌してください。`);
+      pushMahjongLog(`チー成立: ${targetOption.map((tile) => mahjongTileLabel(tile)).join("・")} (from ${meta.by})`, "success");
+    } finally {
+      endCallSubmission();
+    }
+  }, [
+    beginCallSubmission,
+    claimLatestOpponentDiscard,
+    clearLatestDiscardWindow,
+    consumeLatestDiscardFromRiver,
+    endCallSubmission,
+    isMahjongOver,
+    mahjongAutoDiscarding,
+    mahjongBoard,
+    mahjongCallSubmitting,
+    pushMahjongLog,
+  ]);
+
+  const onMahjongKan = useCallback((mode: "ankan" | "minkan" | "kakan", tile: MahjongCell) => {
+    if (isMahjongOver || mahjongAutoDiscarding || mahjongCallSubmitting) return;
+    if (!beginCallSubmission()) return;
+    try {
+      let nextHand: MahjongCell[] | null = null;
+      const nextMelds = [...mahjongSelfMelds];
+
+      if (mode === "ankan") {
+        nextHand = mahjongRemoveTilesOnce(mahjongBoard, [tile, tile, tile, tile]);
+        if (!nextHand) {
+          setMahjongMessage("暗槓不可: 手牌が不足しています。");
+          return;
+        }
+        nextMelds.push({
+          id: `ankan-${Date.now()}-${tile}`,
+          type: "ankan",
+          tiles: [tile, tile, tile, tile],
+          concealed: true,
+        });
+      }
+
+      if (mode === "minkan") {
+        const meta = claimLatestOpponentDiscard();
+        if (!meta || meta.tile !== tile) {
+          setMahjongMessage("明槓不可: 対象捨て牌が一致しません。");
+          clearLatestDiscardWindow();
+          return;
+        }
+        nextHand = mahjongRemoveTilesOnce(mahjongBoard, [tile, tile, tile]);
+        if (!nextHand) {
+          setMahjongMessage("明槓不可: 手牌が不足しています。");
+          return;
+        }
+        if (!consumeLatestDiscardFromRiver(meta)) {
+          setMahjongMessage("明槓不可: 対象捨て牌がすでに消費されています。");
+          return;
+        }
+        nextMelds.push({
+          id: `minkan-${meta.discardId}`,
+          type: "minkan",
+          tiles: [tile, tile, tile, tile],
+          calledTileIndex: 0,
+        });
+        clearLatestDiscardWindow();
+      }
+
+      if (mode === "kakan") {
+        const ponIndex = nextMelds.findIndex((meld) => meld.type === "pon" && meld.tiles[0] === tile);
+        if (ponIndex < 0) {
+          setMahjongMessage("加槓不可: 対象ポンがありません。");
+          return;
+        }
+        nextHand = mahjongRemoveTilesOnce(mahjongBoard, [tile]);
+        if (!nextHand) {
+          setMahjongMessage("加槓不可: 手牌が不足しています。");
+          return;
+        }
+        const base = nextMelds[ponIndex];
+        nextMelds[ponIndex] = {
+          ...base,
+          type: "kakan",
+          tiles: [...base.tiles, tile],
+          calledTileIndex: base.calledTileIndex,
+        };
+      }
+
+      if (!nextHand) {
+        setMahjongMessage("カン不可: 内部状態が不正です。");
+        return;
+      }
+      if (mahjongWall.length <= 0) {
+        setMahjongHonba((prev) => prev + 1);
+        setIsMahjongOver(true);
+        setMahjongMessage(t("mahjongRyukyoku"));
+        pushMahjongLog("流局: カン後の嶺上牌がありません。", "warn");
+        return;
+      }
+
+      const rinshanTile = mahjongWall[0];
+      const nextWall = mahjongWall.slice(1);
+      setMahjongSelfMelds(nextMelds);
+      setMahjongBoard([...sortMahjongTiles(nextHand), rinshanTile]);
+      setMahjongWall(nextWall);
+      setMahjongSelected(null);
+      setMahjongLastDraw(rinshanTile);
+      setMahjongRiichiPending(false);
+      setMahjongActionDeadlineAt(null);
+      setMahjongLatestOpponentDiscard(null);
+      setMahjongLatestOpponentDiscardBy(null);
+      setMahjongLatestDiscardMeta(null);
+      setMahjongMessage(`カン成立 (${mode})。嶺上牌 ${mahjongTileLabel(rinshanTile)} をツモ。打牌してください。`);
+      pushMahjongLog(`カン成立: ${mode} ${mahjongTileLabel(tile)} / 嶺上 ${mahjongTileLabel(rinshanTile)}`, "success");
+    } finally {
+      endCallSubmission();
+    }
+  }, [
+    beginCallSubmission,
+    claimLatestOpponentDiscard,
+    clearLatestDiscardWindow,
+    consumeLatestDiscardFromRiver,
+    endCallSubmission,
+    isMahjongOver,
+    mahjongAutoDiscarding,
+    mahjongBoard,
+    mahjongCallSubmitting,
+    mahjongSelfMelds,
+    mahjongWall,
+    pushMahjongLog,
+    t,
+  ]);
+
+  const onMahjongCancelAction = () => {
+    if (mahjongAutoDiscarding) return;
+    if (!mahjongRiichiPending) return;
+    setMahjongRiichiPending(false);
+    setMahjongSelected(null);
+    setMahjongMessage("リーチ選択をキャンセルしました。");
+    pushMahjongLog("リーチ選択をキャンセル", "normal");
+  };
+
+  const onMahjongNukiDora = () => {
+    if (isMahjongOver) return;
+    if (mahjongRuleConfig.mode !== "sanma" || mahjongRuleConfig.northRule !== "nuki-dora") return;
+
+    const northTile = 30;
+    const handState = mahjongSplitSelfHand(mahjongBoard, mahjongLastDraw, mahjongSelfMelds.length);
+    const concealedHand = [...handState.concealedHand];
+    const northIndex = concealedHand.indexOf(northTile);
+    const drawnIsNorth = handState.drawnTile === northTile;
+    if (northIndex < 0 && !drawnIsNorth) {
+      setMahjongMessage("北牌がありません。");
+      return;
+    }
+    if (mahjongWall.length <= 0) {
+      setMahjongHonba((prev) => prev + 1);
+      setIsMahjongOver(true);
+      setMahjongMessage(t("mahjongRyukyoku"));
+      pushMahjongLog("北抜き不可: 山牌不足で流局。", "warn");
+      return;
+    }
+
+    if (northIndex >= 0) {
+      concealedHand.splice(northIndex, 1);
+    }
+    const replacementTile = mahjongWall[0];
+    const nextWall = mahjongWall.slice(1);
+    const nextHand = [...sortMahjongTiles(concealedHand), replacementTile];
+
+    setMahjongBoard(nextHand);
+    setMahjongWall(nextWall);
+    setMahjongLastDraw(replacementTile);
+    setMahjongNukiDoraTiles((prev) => [...prev, northTile]);
+    setMahjongSelected(null);
+    setMahjongMessage(`北抜き: ${mahjongTileLabel(replacementTile)} を補充`);
+    pushMahjongLog(`北抜き: ${mahjongTileLabel(replacementTile)} を補充`, "success");
+  };
+
+  const onMahjongRunWinDiagnostics = useCallback(() => {
+    const toTiles = (codes: string[]): MahjongCell[] => normalizeMahjongTileList(codes) as MahjongCell[];
+    const findMissingExpectedYaku = (
+      summary: MahjongWinSummary | null,
+      expectedYakuKeys: Array<keyof typeof LOGIN_I18N.ja> | undefined,
+    ): Array<keyof typeof LOGIN_I18N.ja> => {
+      if (!expectedYakuKeys || expectedYakuKeys.length <= 0) return [];
+      const actual = new Set(summary?.yakuKeys || []);
+      return expectedYakuKeys.filter((key) => !actual.has(key));
+    };
+
+    type MahjongDiagCase = {
+      name: string;
+      params: {
+        baseHand: MahjongCell[];
+        winType: "tsumo" | "ron";
+        winningTile?: MahjongCell | null;
+        isRiichi: boolean;
+        river: MahjongCell[];
+        meldCount?: number;
+        isMenzen?: boolean;
+      };
+      expectOk: boolean;
+      expectReason?: string;
+      expectedYakuKeys?: Array<keyof typeof LOGIN_I18N.ja>;
+      secondary?: {
+        params: {
+          baseHand: MahjongCell[];
+          winType: "tsumo" | "ron";
+          winningTile?: MahjongCell | null;
+          isRiichi: boolean;
+          river: MahjongCell[];
+          meldCount?: number;
+          isMenzen?: boolean;
+        };
+        expectOk: boolean;
+        expectReason?: string;
+        expectedYakuKeys?: Array<keyof typeof LOGIN_I18N.ja>;
+      };
+    };
+
+    const cases: MahjongDiagCase[] = [
+      {
+        name: "1) Menzen Tsumo",
+        params: {
+          baseHand: toTiles(["2m", "3m", "4m", "6m", "7m", "8m", "3p", "4p", "5p", "5p", "4s", "5s", "6s", "5p"]),
+          winType: "tsumo",
+          winningTile: toTiles(["5p"])[0],
+          isRiichi: false,
+          river: [],
+          meldCount: 0,
+          isMenzen: true,
+        },
+        expectOk: true,
+        expectedYakuKeys: ["mahjongYakuMenzenTsumo"],
+      },
+      {
+        name: "2) Riichi Tsumo",
+        params: {
+          baseHand: toTiles(["2m", "3m", "4m", "6m", "7m", "8m", "3p", "4p", "5p", "5p", "4s", "5s", "6s", "5p"]),
+          winType: "tsumo",
+          winningTile: toTiles(["5p"])[0],
+          isRiichi: true,
+          river: [],
+          meldCount: 0,
+          isMenzen: true,
+        },
+        expectOk: true,
+        expectedYakuKeys: ["mahjongRiichi", "mahjongYakuMenzenTsumo"],
+      },
+      {
+        name: "3) Yakuhai Ron",
+        params: {
+          baseHand: toTiles(["east", "east", "1m", "2m", "3m", "1p", "2p", "3p", "1s", "2s", "3s", "9m", "9m"]),
+          winType: "ron",
+          winningTile: toTiles(["east"])[0],
+          isRiichi: false,
+          river: [],
+          meldCount: 0,
+          isMenzen: true,
+        },
+        expectOk: true,
+        expectedYakuKeys: ["mahjongYakuYakuhai"],
+      },
+      {
+        name: "4) Pinfu Ron",
+        params: {
+          baseHand: toTiles(["1m", "2m", "4m", "5m", "6m", "2p", "3p", "4p", "6s", "7s", "8s", "5p", "5p"]),
+          winType: "ron",
+          winningTile: toTiles(["3m"])[0],
+          isRiichi: false,
+          river: [],
+          meldCount: 0,
+          isMenzen: true,
+        },
+        expectOk: true,
+        expectedYakuKeys: ["mahjongYakuPinfu"],
+      },
+      {
+        name: "5) No Yaku Reject",
+        params: {
+          baseHand: toTiles(["1m", "2m", "3m", "7m", "8m", "9m", "1p", "2p", "3p", "7s", "8s", "east", "east"]),
+          winType: "ron",
+          winningTile: toTiles(["9s"])[0],
+          isRiichi: false,
+          river: [],
+          meldCount: 0,
+          isMenzen: true,
+        },
+        expectOk: false,
+        expectReason: "no-yaku",
+      },
+      {
+        name: "6) Furiten (Ron Block / Tsumo Allow)",
+        params: {
+          baseHand: toTiles(["1m", "2m", "4m", "5m", "6m", "2p", "3p", "4p", "6s", "7s", "8s", "5p", "5p"]),
+          winType: "ron",
+          winningTile: toTiles(["3m"])[0],
+          isRiichi: false,
+          river: toTiles(["3m"]),
+          meldCount: 0,
+          isMenzen: true,
+        },
+        expectOk: false,
+        expectReason: "furiten-self-river",
+        secondary: {
+          params: {
+            baseHand: toTiles(["1m", "2m", "4m", "5m", "6m", "2p", "3p", "4p", "6s", "7s", "8s", "5p", "5p", "3m"]),
+            winType: "tsumo",
+            winningTile: toTiles(["3m"])[0],
+            isRiichi: false,
+            river: toTiles(["3m"]),
+            meldCount: 0,
+            isMenzen: true,
+          },
+          expectOk: true,
+        },
+      },
+      {
+        name: "7) Open Yakuhai (Ron / Tsumo)",
+        params: {
+          baseHand: toTiles(["east", "east", "1m", "2m", "3m", "4p", "5p", "6p", "5s", "5s"]),
+          winType: "ron",
+          winningTile: toTiles(["east"])[0],
+          isRiichi: false,
+          river: [],
+          meldCount: 1,
+          isMenzen: false,
+        },
+        expectOk: true,
+        expectedYakuKeys: ["mahjongYakuYakuhai"],
+        secondary: {
+          params: {
+            baseHand: toTiles(["east", "east", "east", "1m", "2m", "3m", "4p", "5p", "6p", "5s", "5s"]),
+            winType: "tsumo",
+            winningTile: toTiles(["east"])[0],
+            isRiichi: false,
+            river: [],
+            meldCount: 1,
+            isMenzen: false,
+          },
+          expectOk: true,
+          expectedYakuKeys: ["mahjongYakuYakuhai"],
+        },
+      },
+      {
+        name: "8) Chiitoitsu Ron",
+        params: {
+          baseHand: toTiles(["1m", "1m", "2m", "2m", "3p", "3p", "4p", "4p", "5s", "5s", "6s", "6s", "east"]),
+          winType: "ron",
+          winningTile: toTiles(["east"])[0],
+          isRiichi: false,
+          river: [],
+          meldCount: 0,
+          isMenzen: true,
+        },
+        expectOk: true,
+        expectedYakuKeys: ["mahjongYakuChiitoitsu"],
+      },
+      {
+        name: "9) Kokushi Ron",
+        params: {
+          baseHand: toTiles(["1m", "9m", "1p", "9p", "1s", "9s", "east", "south", "west", "north", "white", "green", "red"]),
+          winType: "ron",
+          winningTile: toTiles(["1m"])[0],
+          isRiichi: false,
+          river: [],
+          meldCount: 0,
+          isMenzen: true,
+        },
+        expectOk: true,
+        expectedYakuKeys: ["mahjongYakuKokushi"],
+      },
+      {
+        name: "10) Red Five Normalize Tsumo",
+        params: {
+          baseHand: toTiles(["2m", "3m", "4m", "6m", "7m", "8m", "3p", "4p", "0p", "5p", "4s", "5s", "6s", "5p"]),
+          winType: "tsumo",
+          winningTile: toTiles(["5p"])[0],
+          isRiichi: false,
+          river: [],
+          meldCount: 0,
+          isMenzen: true,
+        },
+        expectOk: true,
+      },
+    ];
+
+    let passCount = 0;
+    cases.forEach((item) => {
+      const result = evaluateMahjongWinAction(item.params);
+      const okMatches = result.ok === item.expectOk;
+      const reasonMatches = item.expectReason ? result.reason === item.expectReason : true;
+      const missingYaku = findMissingExpectedYaku(result.summary, item.expectedYakuKeys);
+      const yakuMatches = missingYaku.length === 0;
+
+      let secondaryPass = true;
+      let secondaryLabel = "";
+      if (item.secondary) {
+        const secondaryResult = evaluateMahjongWinAction(item.secondary.params);
+        const secondaryOkMatches = secondaryResult.ok === item.secondary.expectOk;
+        const secondaryReasonMatches = item.secondary.expectReason ? secondaryResult.reason === item.secondary.expectReason : true;
+        const secondaryMissingYaku = findMissingExpectedYaku(secondaryResult.summary, item.secondary.expectedYakuKeys);
+        const secondaryYakuMatches = secondaryMissingYaku.length === 0;
+        secondaryPass = secondaryOkMatches && secondaryReasonMatches && secondaryYakuMatches;
+        secondaryLabel = ` secondary(ok=${secondaryResult.ok ? 1 : 0},reason=${secondaryResult.reason},yaku=${secondaryResult.summary?.yakuKeys.join(",") || "-"}${secondaryMissingYaku.length > 0 ? `,missingYaku=${secondaryMissingYaku.join(",")}` : ""})`;
+      }
+
+      const pass = okMatches && reasonMatches && yakuMatches && secondaryPass;
+
+      if (pass) {
+        passCount += 1;
+      }
+
+      const yakuLabel = result.summary?.yakuKeys.join(",") || "-";
+      const missingLabel = missingYaku.length > 0 ? ` missingYaku=${missingYaku.join(",")}` : "";
+      pushMahjongLog(
+        `[diag] ${pass ? "PASS" : "FAIL"} ${item.name} ok=${result.ok ? 1 : 0} reason=${result.reason} yaku=${yakuLabel}${missingLabel}${secondaryLabel}`,
+        pass ? "success" : "warn",
+      );
+    });
+
+    pushMahjongLog(`[diag] summary ${passCount}/${cases.length} passed`, passCount === cases.length ? "success" : "warn");
+    setMahjongMessage(`和了判定テスト: ${passCount}/${cases.length} PASS`);
+  }, [pushMahjongLog]);
+
+  const onMahjongTileClick = (index: number, options?: { force?: boolean }) => {
+    if (mahjongAutoDiscarding && !options?.force) {
+      setMahjongMessage("自動ツモ切り処理中です。完了までお待ちください。");
+      return;
+    }
+    if (mahjongDiscardAnimation && !options?.force) {
+      setMahjongMessage("打牌演出中です。少しお待ちください。");
+      return;
+    }
     if (isMahjongOver) return;
 
-    if (mahjongBoard.length !== 14) {
+    const expectedAfterDraw = mahjongConcealedCountAfterDraw(mahjongSelfMelds.length);
+    if (mahjongBoard.length !== expectedAfterDraw) {
       setMahjongMessage(t("mahjongNeedDrawFirst"));
       return;
     }
 
-    if (index < 0 || index >= mahjongBoard.length) {
+    const handState = mahjongSplitSelfHand(mahjongBoard, mahjongLastDraw, mahjongSelfMelds.length);
+    const concealedHand = handState.concealedHand;
+    const drawnTile = handState.drawnTile;
+    const drawnIndex = drawnTile === null ? null : concealedHand.length;
+    const handLengthForSelection = concealedHand.length + (drawnTile === null ? 0 : 1);
+
+    if (index < 0 || index >= handLengthForSelection) {
       setMahjongMessage(t("mahjongNoHint"));
       return;
     }
 
-    if (mahjongSelected !== index) {
+    const riichiSelectableIndexes = mahjongRiichiPending ? mahjongFindRiichiDiscardIndexes(mahjongBoard) : [];
+    const isRiichiSelectable = !mahjongRiichiPending || riichiSelectableIndexes.includes(index);
+    if (!isRiichiSelectable) {
+      setMahjongMessage("この牌ではリーチできません。対象牌を選んでください。");
+      return;
+    }
+
+    if (!mahjongRiichiPending && mahjongRiichiTileIndex !== null) {
+      if (drawnIndex === null || index !== drawnIndex) {
+        setMahjongMessage("リーチ中はツモ牌のみ打牌できます。ツモ切りを実行してください。");
+        return;
+      }
+    }
+
+    if (!mahjongRiichiPending && mahjongSelected !== index) {
       setMahjongSelected(index);
       setMahjongMessage(t("mahjongSwitched"));
       return;
     }
 
-    const discardTile = mahjongBoard[index];
-    const nextBoard = sortMahjongTiles(mahjongBoard.filter((_, i) => i !== index));
+    pushMahjongLog(
+      `[self-discard] concealedBefore=${concealedHand.length} drawn=${drawnTile === null ? "-" : mahjongTileLabel(drawnTile)} drawnFlag=${mahjongLastDraw === null ? "-" : mahjongTileLabel(mahjongLastDraw)} visibleConcealed=${concealedHand.map((tile) => mahjongTileLabel(tile)).join("/") || "-"}`,
+      "normal",
+    );
+
+    let discardTile: MahjongCell;
+    let nextBoard: MahjongCell[];
+    if (drawnTile !== null && drawnIndex !== null && index === drawnIndex) {
+      // Tsumogiri: discard only the drawn tile and keep concealed hand order.
+      discardTile = drawnTile;
+      nextBoard = [...concealedHand];
+    } else {
+      discardTile = concealedHand[index] as MahjongCell;
+      const nextConcealed = concealedHand.filter((_, i) => i !== index);
+      if (drawnTile !== null) {
+        // Discard from concealed hand: absorb drawn tile into concealed hand.
+        nextConcealed.push(drawnTile);
+      }
+      nextBoard = sortMahjongTiles(nextConcealed);
+    }
     const nextRiver = [...mahjongRiver, discardTile];
+    const isTsumogiri = drawnTile !== null && drawnIndex !== null && index === drawnIndex;
+    const sortTargetLabel = drawnTile !== null && (drawnIndex === null || index !== drawnIndex)
+      ? [...concealedHand.filter((_, i) => i !== index), drawnTile].map((tile) => mahjongTileLabel(tile)).join("/")
+      : "-";
 
-    setMahjongBoard(nextBoard);
-    setMahjongRiver(nextRiver);
-    setMahjongSelected(null);
-    setMahjongLastDraw(null);
-    setMahjongWinSummary(null);
-    pushMahjongLog(`打牌: ${mahjongTileLabel(discardTile)}`);
-
-    if (mahjongWall.length === 0) {
+    const commitSelfDiscard = () => {
+      setMahjongBoard(nextBoard);
+      setMahjongRiver(nextRiver);
+      setMahjongLatestOpponentDiscard(null);
+      setMahjongLatestOpponentDiscardBy(null);
+      setMahjongLatestDiscardMeta(null);
+      setMahjongActionDeadlineAt(null);
       setMahjongSelected(null);
-      setMahjongHonba((prev) => prev + 1);
-      setIsMahjongOver(true);
-      setMahjongMessage(t("mahjongRyukyoku"));
-      pushMahjongLog("流局: 山牌が尽きました。", "warn");
-      return;
-    }
+      setMahjongLastDraw(null);
+      setMahjongWinSummary(null);
+      setMahjongWinSubmitting(false);
+      pushMahjongLog(`打牌: ${mahjongTileLabel(discardTile)}`);
+      pushMahjongLog(
+        `[self-discard] discarded=${mahjongTileLabel(discardTile)} concealedAfter=${nextBoard.length} drawnAfter=- sortTarget=${sortTargetLabel || "-"}`,
+        "normal",
+      );
 
-    const waits = mahjongFindWinningTiles(nextBoard);
-    if (waits.length === 0) {
-      setMahjongMessage(t("mahjongRemoved"));
-      return;
-    }
+      if (mahjongWall.length === 0) {
+        setMahjongSelected(null);
+        setMahjongHonba((prev) => prev + 1);
+        setIsMahjongOver(true);
+        setMahjongMessage(t("mahjongRyukyoku"));
+        pushMahjongLog("流局: 山牌が尽きました。", "warn");
+        return;
+      }
 
-    if (mahjongRiichiTileIndex === null) {
-      setMahjongRiichiTileIndex(nextRiver.length - 1);
-      setMahjongKyotaku(1);
-      pushMahjongLog("リーチ宣言", "success");
-    }
+      if (!connectedRoomCode) {
+        cancelMahjongCpuTurn("new-turn");
+      const opponentNames = mahjongRuleConfig.playerCount === 3
+        ? (["Player B", "Player C"] as const)
+        : (["Player B", "Player C", "Player D"] as const);
+      const sideRiverIndexOrder = mahjongRuleConfig.playerCount === 3 ? [0, 2] : [0, 1, 2];
+      const opponentCycleLength = opponentNames.length;
+      const opponentTurnSlot = Math.max(0, mahjongOpponentTurnIndex % opponentCycleLength);
+      const opponentSeat = sideRiverIndexOrder[opponentTurnSlot] ?? 0;
+      const actorName = opponentNames[opponentTurnSlot] || "相手";
+      const opponentDiscard = mahjongWall[0] ?? null;
+      const drawDelayMs = randomDelayMs(MAHJONG_CPU_DRAW_DELAY_MIN_MS, MAHJONG_CPU_DRAW_DELAY_MAX_MS);
+      const discardDelayMs = randomDelayMs(MAHJONG_CPU_DISCARD_DELAY_MIN_MS, MAHJONG_CPU_DISCARD_DELAY_MAX_MS);
+      const callDiscardDelayMs = randomDelayMs(MAHJONG_CPU_CALL_DISCARD_DELAY_MIN_MS, MAHJONG_CPU_CALL_DISCARD_DELAY_MAX_MS);
+      const riichiDiscardDelayMs = randomDelayMs(MAHJONG_CPU_RIICHI_DISCARD_DELAY_MIN_MS, MAHJONG_CPU_RIICHI_DISCARD_DELAY_MAX_MS);
 
-    const waitLabel = waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
-    setMahjongMessage(tf("mahjongHintLine", { a: waitLabel }));
+      if (opponentDiscard === null) {
+        pushMahjongLog("[cpu-turn] skip: 山牌不足", "warn");
+      } else {
+        mahjongCpuTurnPendingRef.current = true;
+        const token = mahjongCpuTurnTokenRef.current + 1;
+        mahjongCpuTurnTokenRef.current = token;
+        const turnStartAt = Date.now();
+        let drawAt = 0;
+        let decideAt = 0;
+
+        pushMahjongLog(
+          `[cpu-turn] actor=${actorName} start=${turnStartAt} drawDelay=${drawDelayMs} discardDelay=${discardDelayMs} callDelay=${callDiscardDelayMs} riichiDelay=${riichiDiscardDelayMs} timers=${mahjongCpuTimerIdsRef.current.length}`,
+          "normal",
+        );
+
+        queueMahjongCpuStep(token, drawDelayMs, () => {
+          drawAt = Date.now();
+          setMahjongMessage(`${actorName} がツモ中...`);
+          pushMahjongLog(`[cpu-turn] actor=${actorName} drawAt=${drawAt} tile=${mahjongTileLabel(opponentDiscard)}`, "normal");
+        });
+
+        queueMahjongCpuStep(token, drawDelayMs + discardDelayMs, () => {
+          decideAt = Date.now();
+          const cpuDiscardSeat = mahjongSeatFromSideRiverIndex(opponentSeat, mahjongRuleConfig.playerCount === 3);
+          const discardAnimationMs = mahjongReduceEffects ? MAHJONG_DISCARD_ANIMATION_MIN_MS : MAHJONG_DISCARD_ANIMATION_DEFAULT_MS;
+          setMahjongDiscardAnimation({
+            id: `cpu-${Date.now()}-${opponentSeat}`,
+            seat: cpuDiscardSeat,
+            tile: opponentDiscard,
+            sourceIndex: null,
+            isTsumogiri: false,
+            durationMs: discardAnimationMs,
+            startedAt: Date.now(),
+          });
+          setMahjongMessage(`${actorName} が打牌中...`);
+
+          queueMahjongCpuStep(token, discardAnimationMs, () => {
+            const wallAfterOpponent = mahjongWall.slice(1);
+            setMahjongWall(wallAfterOpponent);
+            setMahjongOpponentTurnIndex((prev) => (prev + 1) % opponentCycleLength);
+
+            setMahjongSideRivers((prev) => {
+              const next: [MahjongCell[], MahjongCell[], MahjongCell[]] = [
+                [...prev[0]],
+                [...prev[1]],
+                [...prev[2]],
+              ];
+              const discardIndex = next[opponentSeat].length;
+              next[opponentSeat].push(opponentDiscard);
+              setMahjongLatestDiscardMeta({
+                tile: opponentDiscard,
+                by: actorName,
+                sideRiverSeatIndex: opponentSeat,
+                sideRiverDiscardIndex: discardIndex,
+                discardId: `${Date.now()}-${opponentSeat}-${discardIndex}`,
+                discardTimestamp: Date.now(),
+              });
+              return next;
+            });
+            setMahjongDiscardAnimation(null);
+            setMahjongLatestOpponentDiscard(opponentDiscard);
+            setMahjongLatestOpponentDiscardBy(actorName);
+            pushMahjongLog(`${actorName} 打牌: ${mahjongTileLabel(opponentDiscard)}`);
+
+            const ronEval = evaluateMahjongWinAction({
+              baseHand: nextBoard,
+              winType: "ron",
+              winningTile: opponentDiscard,
+              isRiichi: mahjongRiichiTileIndex !== null,
+              river: nextRiver,
+              meldCount: mahjongSelfMelds.length,
+              isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+              bonusHan: mahjongBonusHan,
+            });
+            logMahjongWinEval("ron", ronEval);
+
+            const canRon = ronEval.ok;
+            const isRiichiLocked = mahjongRiichiTileIndex !== null;
+            const canPon = !isRiichiLocked && mahjongCanPon(nextBoard, opponentDiscard);
+            const canMinkan = !isRiichiLocked && mahjongCanMinkan(nextBoard, opponentDiscard);
+            const canChi = !isRiichiLocked && mahjongRuleConfig.allowChi && mahjongFindChiCandidates(nextBoard, opponentDiscard).length > 0;
+            const hasResponseAction = canRon || canPon || canMinkan || canChi;
+
+            if (hasResponseAction) {
+              const tags = [
+                canRon ? "ロン" : null,
+                canMinkan ? "カン" : null,
+                canPon ? "ポン" : null,
+                canChi ? "チー" : null,
+              ].filter(Boolean).join(" / ");
+              setMahjongActionDeadlineAt(Date.now() + 8000);
+              setMahjongMessage(`${tags} 可能: ${mahjongTileLabel(opponentDiscard)} (${actorName})`);
+            } else {
+              setMahjongActionDeadlineAt(null);
+              setMahjongLatestOpponentDiscard(null);
+              setMahjongLatestOpponentDiscardBy(null);
+              setMahjongLatestDiscardMeta(null);
+            }
+
+            const discardAt = Date.now();
+            mahjongCpuTurnPendingRef.current = false;
+            pushMahjongLog(
+              `[cpu-turn] actor=${actorName} decideAt=${decideAt} discardAt=${discardAt} elapsed=${discardAt - turnStartAt} timers=${mahjongCpuTimerIdsRef.current.length}`,
+              "normal",
+            );
+          });
+        });
+      }
+      }
+
+      const waits = mahjongFindWinningTiles(nextBoard);
+      if (waits.length === 0) {
+        setMahjongMessage(t("mahjongRemoved"));
+        return;
+      }
+
+      if (mahjongRiichiPending && mahjongRiichiTileIndex === null) {
+        setMahjongRiichiTileIndex(nextRiver.length - 1);
+        setMahjongKyotaku(1);
+        setMahjongRiichiPending(false);
+        pushMahjongLog("リーチ宣言", "success");
+      }
+
+      const waitLabel = waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
+      setMahjongMessage(tf("mahjongHintLine", { a: waitLabel }));
+    };
+
+    const discardAnimationMs = mahjongReduceEffects ? MAHJONG_DISCARD_ANIMATION_MIN_MS : MAHJONG_DISCARD_ANIMATION_DEFAULT_MS;
+    beginMahjongDiscardAnimation({
+      id: `self-${Date.now()}-${index}`,
+      seat: "bottom",
+      tile: discardTile,
+      sourceIndex: index,
+      isTsumogiri,
+      durationMs: discardAnimationMs,
+      startedAt: Date.now(),
+    }, commitSelfDiscard);
   };
+
+  useEffect(() => {
+    onMahjongTileClickRef.current = onMahjongTileClick;
+  }, [onMahjongTileClick]);
+
+  useEffect(() => {
+    mahjongGameStartedRef.current = gameStarted.mahjong;
+    mahjongIsOverRef.current = isMahjongOver;
+    connectedRoomCodeRef.current = connectedRoomCode;
+  }, [connectedRoomCode, gameStarted.mahjong, isMahjongOver]);
+
+  useEffect(() => {
+    if (activePanel !== "mahjong" || !gameStarted.mahjong || isMahjongOver || Boolean(connectedRoomCode)) {
+      cancelMahjongCpuTurn("state-change");
+    }
+  }, [activePanel, cancelMahjongCpuTurn, connectedRoomCode, gameStarted.mahjong, isMahjongOver]);
+
+  useEffect(() => {
+    return () => {
+      cancelMahjongCpuTurn("unmount");
+      clearMahjongDiscardAnimationTimer();
+    };
+  }, [cancelMahjongCpuTurn, clearMahjongDiscardAnimationTimer]);
+
+  useEffect(() => {
+    if (activePanel !== "mahjong") return;
+    if (!gameStarted.mahjong) return;
+
+    const tsumoEval = evaluateMahjongWinAction({
+      baseHand: mahjongBoard,
+      winType: "tsumo",
+      winningTile: mahjongLastDraw,
+      isRiichi: mahjongRiichiTileIndex !== null,
+      river: mahjongRiver,
+      meldCount: mahjongSelfMelds.length,
+      isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+      bonusHan: mahjongBonusHan,
+    });
+    const ronEval = evaluateMahjongWinAction({
+      baseHand: mahjongBoard,
+      winType: "ron",
+      winningTile: mahjongLatestOpponentDiscard,
+      isRiichi: mahjongRiichiTileIndex !== null,
+      river: mahjongRiver,
+      meldCount: mahjongSelfMelds.length,
+      isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+      bonusHan: mahjongBonusHan,
+    });
+
+    const debugKey = [
+      mahjongBoard.length,
+      tsumoEval.ok ? 1 : 0,
+      tsumoEval.reason,
+      ronEval.ok ? 1 : 0,
+      ronEval.reason,
+      mahjongLatestOpponentDiscard ?? "none",
+    ].join("|");
+
+    if (mahjongActionDebugKeyRef.current === debugKey) return;
+    mahjongActionDebugKeyRef.current = debugKey;
+
+    pushMahjongLog(
+      `[actions] canTsumo=${tsumoEval.ok ? "1" : "0"}(${tsumoEval.reason}) canRon=${ronEval.ok ? "1" : "0"}(${ronEval.reason}) latestDiscard=${mahjongLatestOpponentDiscard === null ? "-" : mahjongTileLabel(mahjongLatestOpponentDiscard)}`,
+      "normal",
+    );
+  }, [
+    activePanel,
+    gameStarted.mahjong,
+    mahjongBoard,
+    mahjongBonusHan,
+    mahjongLastDraw,
+    mahjongSelfMelds,
+    mahjongRiichiTileIndex,
+    mahjongRiver,
+    mahjongLatestOpponentDiscard,
+    pushMahjongLog,
+  ]);
 
   useEffect(() => {
     if (!mahjongAutoWinEnabled) return;
     if (isMahjongOver) return;
-    if (mahjongBoard.length !== 14) return;
-    if (!mahjongIsWinningHand(mahjongBoard)) return;
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) return;
+    const canAutoWin = evaluateMahjongWinAction({
+      baseHand: mahjongBoard,
+      winType: "tsumo",
+      winningTile: mahjongLastDraw,
+      isRiichi: mahjongRiichiTileIndex !== null,
+      river: mahjongRiver,
+      meldCount: mahjongSelfMelds.length,
+      isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+      bonusHan: mahjongBonusHan,
+    }).ok;
+    if (!canAutoWin) return;
     onMahjongTsumo();
-  }, [isMahjongOver, mahjongAutoWinEnabled, mahjongBoard, onMahjongTsumo]);
+  }, [isMahjongOver, mahjongAutoWinEnabled, mahjongBoard, mahjongBonusHan, mahjongLastDraw, mahjongSelfMelds, mahjongRiichiTileIndex, mahjongRiver, onMahjongTsumo]);
 
   useEffect(() => {
     if (!gameStarted.mahjong) return;
     if (isMahjongOver) return;
-    if (mahjongBoard.length !== 13) return;
+    if (mahjongLatestOpponentDiscard !== null) return;
+    if (mahjongCpuTurnPendingRef.current) return;
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDiscard(mahjongSelfMelds.length)) return;
+    if (mahjongAutoDrawPendingRef.current) return;
+
+    mahjongAutoDrawPendingRef.current = true;
 
     // Auto-draw at turn start so discard is available without pressing the draw button.
     const timerId = window.setTimeout(() => {
-      onMahjongShuffle();
+      try {
+        onMahjongShuffle();
+      } finally {
+        mahjongAutoDrawPendingRef.current = false;
+      }
     }, 0);
 
     return () => {
       window.clearTimeout(timerId);
+      mahjongAutoDrawPendingRef.current = false;
     };
-  }, [gameStarted.mahjong, isMahjongOver, mahjongBoard.length, onMahjongShuffle]);
+  }, [gameStarted.mahjong, isMahjongOver, mahjongBoard.length, mahjongLatestOpponentDiscard, mahjongSelfMelds.length, onMahjongShuffle]);
+
+  useEffect(() => {
+    if (!gameStarted.mahjong) return;
+    if (mahjongActionDeadlineAt === null) return;
+    if (mahjongLatestOpponentDiscard === null) return;
+
+    const remain = mahjongActionDeadlineAt - Date.now();
+    if (remain <= 0) {
+      onMahjongPass();
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      onMahjongPass();
+    }, remain + 16);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [gameStarted.mahjong, mahjongActionDeadlineAt, mahjongLatestOpponentDiscard, onMahjongPass]);
+
+  useEffect(() => {
+    if (!gameStarted.mahjong) return;
+    if (isMahjongOver || mahjongWinSubmitting) return;
+    if (mahjongRiichiTileIndex === null) return;
+    if (mahjongRiichiPending) return;
+    if (mahjongLatestOpponentDiscard !== null) return;
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) return;
+    if (mahjongLastDraw === null) return;
+    if (mahjongAutoDiscardLockRef.current) return;
+
+    const tsumoEval = evaluateMahjongWinAction({
+      baseHand: mahjongBoard,
+      winType: "tsumo",
+      winningTile: mahjongLastDraw,
+      isRiichi: true,
+      river: mahjongRiver,
+      meldCount: mahjongSelfMelds.length,
+      isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+      bonusHan: mahjongBonusHan,
+    });
+
+    if (tsumoEval.ok) {
+      setMahjongMessage(tf("mahjongWinReady", { tile: mahjongTileLabel(mahjongLastDraw) }));
+      return;
+    }
+
+    const ankanCandidates = mahjongFindAnkanCandidates(mahjongBoard);
+    const canAbortiveDraw = mahjongCanAbortiveDraw(mahjongBoard, mahjongRiver);
+    if (ankanCandidates.length > 0 || canAbortiveDraw) {
+      const extraChoices = [
+        ankanCandidates.length > 0 ? "暗槓" : null,
+        canAbortiveDraw ? "九種九牌" : null,
+      ].filter(Boolean).join(" / ");
+      setMahjongMessage(`リーチ中: ${extraChoices} を選択できます。`);
+      return;
+    }
+
+    mahjongAutoDiscardLockRef.current = true;
+    setMahjongAutoDiscarding(true);
+    setMahjongMessage(`リーチ中ツモ切り: ${mahjongTileLabel(mahjongLastDraw)}`);
+
+    const timerId = window.setTimeout(() => {
+      try {
+        const drawIndex = mahjongBoard.length - 1;
+        onMahjongTileClickRef.current(drawIndex, { force: true });
+      } finally {
+        setMahjongAutoDiscarding(false);
+        mahjongAutoDiscardLockRef.current = false;
+      }
+    }, 140);
+
+    return () => {
+      window.clearTimeout(timerId);
+      setMahjongAutoDiscarding(false);
+      mahjongAutoDiscardLockRef.current = false;
+    };
+  }, [
+    gameStarted.mahjong,
+    isMahjongOver,
+    mahjongWinSubmitting,
+    mahjongRiichiTileIndex,
+    mahjongRiichiPending,
+    mahjongLatestOpponentDiscard,
+    mahjongBoard,
+    mahjongLastDraw,
+    mahjongRiver,
+    mahjongBonusHan,
+    mahjongSelfMelds,
+    tf,
+  ]);
 
   const buildTournamentPlayers = useCallback((settings: TournamentSettings) => {
     const total = Math.max(2, Math.min(9, settings.cpuCount + 1));
@@ -18341,7 +20179,7 @@ export default function Home() {
 
     closeRoomSocket();
     setConnectedRoomCode("");
-    setConnectedRoomMaxPlayers(8);
+    setConnectedRoomMaxPlayers(16);
     setRoomParticipants([]);
     setRoomRole("");
     setRoomStatus(t("roomStateIdle"));
@@ -19450,10 +21288,10 @@ export default function Home() {
                     <span className="font-semibold text-slate-200">最大人数</span>
                     <select
                       value={roomMaxPlayersDraft}
-                      onChange={(event) => setRoomMaxPlayersDraft(Math.max(2, Math.min(8, Number(event.target.value) || 8)))}
+                      onChange={(event) => setRoomMaxPlayersDraft(Math.max(2, Math.min(16, Number(event.target.value) || 16)))}
                       className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
                     >
-                      {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
+                      {Array.from({ length: 15 }, (_, i) => i + 2).map((count) => (
                         <option key={`room-max-menu-${count}`} value={count}>{count}</option>
                       ))}
                     </select>
@@ -19738,10 +21576,10 @@ export default function Home() {
                     <span className="font-semibold text-slate-200">最大人数</span>
                     <select
                       value={roomMaxPlayersDraft}
-                      onChange={(event) => setRoomMaxPlayersDraft(Math.max(2, Math.min(8, Number(event.target.value) || 8)))}
+                      onChange={(event) => setRoomMaxPlayersDraft(Math.max(2, Math.min(16, Number(event.target.value) || 16)))}
                       className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-1 text-xs"
                     >
-                      {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
+                      {Array.from({ length: 15 }, (_, i) => i + 2).map((count) => (
                         <option key={`room-max-panel-${count}`} value={count}>{count}</option>
                       ))}
                     </select>
@@ -22690,23 +24528,24 @@ export default function Home() {
         ) : null}
 
         {activePanel === "mahjong" ? (
-          <section className="grid gap-5">
-            <article className="mx-auto w-full max-w-[110rem] rounded-2xl border border-emerald-200/25 bg-gradient-to-b from-emerald-950/70 via-emerald-900/55 to-slate-900/65 p-5">
+          <section className="grid gap-3">
+            <article className="mx-auto w-full max-w-[96rem] rounded-2xl border border-emerald-200/25 bg-gradient-to-b from-emerald-950/70 via-emerald-900/55 to-slate-900/65 p-3 sm:p-4">
               {(() => {
                 const selfName = (playerName || "YOU").trim() || "YOU";
                 const short = (name: string) => (name.length > 8 ? `${name.slice(0, 8)}…` : name);
-                const sideDiscards: [number[], number[], number[]] = [[], [], []];
-                mahjongRiver.forEach((tile, index) => {
-                  sideDiscards[index % 3].push(tile);
-                });
+                const sideDiscards = mahjongSideRivers;
+                const isSanma = mahjongRuleConfig.playerCount === 3;
+                const opponentNames = isSanma ? ["Player B", "Player C"] : ["Player B", "Player C", "Player D"];
+                const opponentWindBySeat = isSanma ? (["南", "西"] as const) : (["南", "西", "北"] as const);
+                const opponentTurnName = opponentNames[Math.max(0, mahjongOpponentTurnIndex % opponentNames.length)] || "Player B";
 
-                const turnSeat: "bottom" | "top" = mahjongBoard.length === 14 ? "bottom" : "top";
+                const turnSeat: "bottom" | "top" = mahjongBoard.length === mahjongConcealedCountAfterDraw(mahjongSelfMelds.length) ? "bottom" : "top";
                 const selfPlayer: MahjongPlayerView = {
                   id: "self",
                   name: selfName,
                   shortName: short(selfName),
                   icon: "🀄",
-                  score: score || 25000,
+                  score: score || mahjongRuleConfig.startingPoints,
                   rank: 1,
                   wind: mahjongSeatWind,
                   isDealer: mahjongSeatWind === "東",
@@ -22716,17 +24555,17 @@ export default function Home() {
                   thinkingSec: 7,
                   handBackCount: 0,
                   discards: mahjongRiver,
-                  melds: [],
+                  melds: mahjongSelfMelds,
                 };
 
                 const topPlayer: MahjongPlayerView = {
                   id: "top",
-                  name: "Player B",
-                  shortName: "Player B",
+                  name: opponentNames[0] || "Player B",
+                  shortName: opponentNames[0] || "Player B",
                   icon: "🙂",
-                  score: 25000,
+                  score: mahjongRuleConfig.startingPoints,
                   rank: 2,
-                  wind: "南",
+                  wind: opponentWindBySeat[0] || "南",
                   isDealer: mahjongSeatWind !== "東" && mahjongRoundWind === "東",
                   isRiichi: false,
                   isTurn: turnSeat === "top",
@@ -22734,15 +24573,15 @@ export default function Home() {
                   thinkingSec: 8,
                   handBackCount: 13,
                   discards: sideDiscards[0],
-                  melds: [],
+                  melds: mahjongSideMelds[0],
                 };
 
-                const leftPlayer: MahjongPlayerView = {
+                const leftPlayer: MahjongPlayerView | null = isSanma ? null : {
                   id: "left",
                   name: "Player C",
                   shortName: "P-C",
                   icon: "😎",
-                  score: 25000,
+                  score: mahjongRuleConfig.startingPoints,
                   rank: 3,
                   wind: "西",
                   isDealer: false,
@@ -22752,34 +24591,49 @@ export default function Home() {
                   thinkingSec: 8,
                   handBackCount: 13,
                   discards: sideDiscards[1],
-                  melds: [],
+                  melds: mahjongSideMelds[1],
                 };
 
                 const rightPlayer: MahjongPlayerView = {
                   id: "right",
-                  name: "Player D",
-                  shortName: "P-D",
+                  name: isSanma ? "Player C" : "Player D",
+                  shortName: isSanma ? "Player C" : "P-D",
                   icon: "🤖",
-                  score: 25000,
-                  rank: 4,
-                  wind: "北",
+                  score: mahjongRuleConfig.startingPoints,
+                  rank: isSanma ? 3 : 4,
+                  wind: isSanma ? "西" : "北",
                   isDealer: false,
                   isRiichi: false,
                   isTurn: false,
                   isConnected: true,
                   thinkingSec: 8,
                   handBackCount: 13,
-                  discards: sideDiscards[2],
-                  melds: [],
+                  discards: sideDiscards[isSanma ? 2 : 2],
+                  melds: mahjongSideMelds[2],
                 };
 
-                const normalizedHand = mahjongBoard.length >= 14
-                  ? [...mahjongBoard.slice(0, 13), mahjongBoard[mahjongBoard.length - 1]]
-                  : [...mahjongBoard];
-                const tsumoIndex = mahjongBoard.length >= 14 ? normalizedHand.length - 1 : null;
+                let latestDiscardSeat: "top" | "right" | "bottom" | "left" | null = null;
+                if (mahjongLatestOpponentDiscardBy) {
+                  const byIndex = opponentNames.indexOf(mahjongLatestOpponentDiscardBy);
+                  if (byIndex === 0) {
+                    latestDiscardSeat = "top";
+                  } else if (byIndex === 1) {
+                    latestDiscardSeat = isSanma ? "right" : "left";
+                  } else if (byIndex === 2) {
+                    latestDiscardSeat = "right";
+                  }
+                } else if (mahjongRiver.length > 0) {
+                  latestDiscardSeat = "bottom";
+                }
+
+                const handState = mahjongSplitSelfHand(mahjongBoard, mahjongLastDraw, mahjongSelfMelds.length);
+                const normalizedHand = handState.drawnTile === null
+                  ? [...handState.concealedHand]
+                  : [...handState.concealedHand, handState.drawnTile];
+                const riichiSelectableIndexes = mahjongRiichiPending ? mahjongFindRiichiDiscardIndexes(normalizedHand) : null;
 
                 const centerInfo = {
-                  roundLabel: `${mahjongRoundWind}${mahjongRoundNumber}局`,
+                  roundLabel: `${mahjongRoundWind}${Math.min(mahjongRuleConfig.maxRoundPerWind, mahjongRoundNumber)}局`,
                   honba: mahjongHonba,
                   kyotaku: mahjongKyotaku,
                   remainingTiles: mahjongRemainingCount(mahjongWall),
@@ -22788,22 +24642,163 @@ export default function Home() {
                   wallPreviewCount: Math.min(8, Math.max(0, Math.ceil(mahjongRemainingCount(mahjongWall) / 16))),
                   dealerName: mahjongSeatWind === "東" ? short(selfName) : "Player B",
                   tableWind: mahjongRoundWind,
-                  turnPlayerName: turnSeat === "bottom" ? short(selfName) : "Player B",
+                  turnPlayerName: turnSeat === "bottom" ? short(selfName) : opponentTurnName,
                 };
+
+                const mahjongRuleSummaryLines = [
+                  `人数: ${mahjongRuleConfig.playerCount}人麻雀`,
+                  `北牌: ${mahjongRuleConfig.northRule === "nuki-dora" ? "抜きドラ" : "通常牌"}`,
+                  `チー: ${mahjongRuleConfig.allowChi ? "許可" : "禁止"}`,
+                  `持ち点/返し点: ${mahjongRuleConfig.startingPoints.toLocaleString()} / ${mahjongRuleConfig.returnPoints.toLocaleString()}`,
+                  `ツモ支払い: ${mahjongRuleConfig.tsumoPaymentRule === "no-loss" ? "ツモ損なし" : mahjongRuleConfig.tsumoPaymentRule === "split-north" ? "北家分折半" : "ツモ損あり"}`,
+                ];
+
+                const tsumoEval = evaluateMahjongWinAction({
+                  baseHand: normalizedHand,
+                  winType: "tsumo",
+                  winningTile: mahjongLastDraw,
+                  isRiichi: mahjongRiichiTileIndex !== null,
+                  river: mahjongRiver,
+                  meldCount: mahjongSelfMelds.length,
+                  isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+                  bonusHan: mahjongBonusHan,
+                });
+                const ronEval = evaluateMahjongWinAction({
+                  baseHand: normalizedHand,
+                  winType: "ron",
+                  winningTile: mahjongLatestOpponentDiscard,
+                  isRiichi: mahjongRiichiTileIndex !== null,
+                  river: mahjongRiver,
+                  meldCount: mahjongSelfMelds.length,
+                  isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+                  bonusHan: mahjongBonusHan,
+                });
+
+                const canTsumo = gameStarted.mahjong && tsumoEval.ok;
+                const canRon = gameStarted.mahjong && ronEval.ok;
+                const isRiichiLocked = mahjongRiichiTileIndex !== null;
+                const concealedAfterDraw = mahjongConcealedCountAfterDraw(mahjongSelfMelds.length);
+                const canRiichi = gameStarted.mahjong
+                  && !isMahjongOver
+                  && !mahjongAutoDiscarding
+                  && mahjongBoard.length === concealedAfterDraw
+                  && mahjongRiichiTileIndex === null
+                  && mahjongFindRiichiDiscardIndexes(normalizedHand).length > 0;
+                const canKita = gameStarted.mahjong
+                  && !mahjongAutoDiscarding
+                  && mahjongRuleConfig.mode === "sanma"
+                  && mahjongRuleConfig.northRule === "nuki-dora"
+                  && normalizedHand.includes(30);
+                const canAbortiveDraw = gameStarted.mahjong && !mahjongAutoDiscarding && mahjongCanAbortiveDraw(normalizedHand, mahjongRiver);
+                const hasValidLatestDiscard = gameStarted.mahjong
+                  && mahjongLatestOpponentDiscard !== null
+                  && mahjongLatestDiscardMeta !== null
+                  && mahjongLatestDiscardMeta.tile === mahjongLatestOpponentDiscard
+                  && (!mahjongLatestOpponentDiscardBy || mahjongLatestDiscardMeta.by === mahjongLatestOpponentDiscardBy);
+                const responseWindowOpen = hasValidLatestDiscard;
+                const canPon = responseWindowOpen && !isRiichiLocked && !mahjongNoCallEnabled && mahjongCanPon(normalizedHand, mahjongLatestOpponentDiscard);
+                const chiCandidates = responseWindowOpen && !isRiichiLocked && mahjongRuleConfig.allowChi && !mahjongNoCallEnabled
+                  ? mahjongFindChiCandidates(normalizedHand, mahjongLatestOpponentDiscard)
+                  : [];
+                const canChi = chiCandidates.length > 0;
+                const canMinkan = responseWindowOpen && !isRiichiLocked && !mahjongNoCallEnabled && mahjongCanMinkan(normalizedHand, mahjongLatestOpponentDiscard);
+                const ankanCandidates = !mahjongAutoDiscarding && mahjongBoard.length === concealedAfterDraw ? mahjongFindAnkanCandidates(normalizedHand) : [];
+                const kakanCandidates = !mahjongAutoDiscarding && mahjongBoard.length === concealedAfterDraw ? mahjongFindKakanCandidates(normalizedHand, mahjongSelfMelds) : [];
+                const canKan = canMinkan || ankanCandidates.length > 0 || kakanCandidates.length > 0;
+                const shouldShowPass = responseWindowOpen && !mahjongAutoDiscarding;
+                const shouldShowCancel = mahjongRiichiPending && !mahjongAutoDiscarding;
 
                 const actionButtons: MahjongActionButton[] = [];
                 if (gameStarted.mahjong) {
-                  actionButtons.push({ key: "sort", label: "手牌並び替え", tone: "subtle", onClick: onMahjongSortHand });
-                  actionButtons.push({ key: "riichi", label: t("mahjongRiichi"), tone: "accent", onClick: onMahjongDeclareRiichi });
-                  actionButtons.push({ key: "pass", label: "パス", tone: "subtle", onClick: onMahjongPass });
-                  actionButtons.push({ key: "kan", label: "カン", tone: "normal", onClick: () => setMahjongMessage("カン判定は準備中です。") });
-                  actionButtons.push({ key: "pon", label: "ポン", tone: "normal", onClick: () => setMahjongMessage("ポン判定は準備中です。") });
-                  actionButtons.push({ key: "chi", label: "チー", tone: "normal", onClick: () => setMahjongMessage("チー判定は準備中です。") });
-                  if (mahjongBoard.length === 14 && mahjongIsWinningHand(mahjongBoard)) {
-                    actionButtons.push({ key: "ron", label: "ロン", tone: "primary", onClick: onMahjongTsumo });
-                    actionButtons.push({ key: "tsumo", label: t("mahjongTsumo"), tone: "primary", onClick: onMahjongTsumo });
+                  if (canRon) {
+                    actionButtons.push({ key: "ron", label: "ロン", tone: "primary", priority: 1, emphasis: "critical", onClick: onMahjongRon });
                   }
+                  if (canTsumo) {
+                    actionButtons.push({ key: "tsumo", label: "ツモ", tone: "primary", priority: 2, emphasis: "critical", onClick: onMahjongTsumo });
+                  }
+                  if (canRiichi) {
+                    actionButtons.push({ key: "riichi", label: t("mahjongRiichi"), tone: "accent", priority: 3, emphasis: "high", onClick: onMahjongDeclareRiichi });
+                  }
+
+                  if (canKan) {
+                    const kanOptions = [
+                      ...ankanCandidates.map((tile) => ({
+                        key: `ankan-${tile}`,
+                        label: `暗槓 ${mahjongTileLabel(tile)}`,
+                        tiles: [tile, tile, tile, tile],
+                        onClick: () => onMahjongKan("ankan", tile),
+                      })),
+                      ...(canMinkan && mahjongLatestOpponentDiscard !== null
+                        ? [{
+                          key: `minkan-${mahjongLatestOpponentDiscard}`,
+                          label: `明槓 ${mahjongTileLabel(mahjongLatestOpponentDiscard)}`,
+                          tiles: [mahjongLatestOpponentDiscard, mahjongLatestOpponentDiscard, mahjongLatestOpponentDiscard, mahjongLatestOpponentDiscard],
+                          onClick: () => onMahjongKan("minkan", mahjongLatestOpponentDiscard),
+                        }]
+                        : []),
+                      ...kakanCandidates.map((tile) => ({
+                        key: `kakan-${tile}`,
+                        label: `加槓 ${mahjongTileLabel(tile)}`,
+                        tiles: [tile, tile, tile, tile],
+                        onClick: () => onMahjongKan("kakan", tile),
+                      })),
+                    ];
+                    actionButtons.push({
+                      key: "kan",
+                      label: "カン",
+                      tone: "normal",
+                      priority: 4,
+                      options: kanOptions.length > 1 ? kanOptions : undefined,
+                      onClick: kanOptions.length === 1 ? kanOptions[0].onClick : () => setMahjongMessage("カン候補を選択してください。"),
+                    });
+                  }
+
+                  if (canPon) {
+                    actionButtons.push({
+                      key: "pon",
+                      label: "ポン",
+                      tone: "normal",
+                      priority: 5,
+                      onClick: onMahjongPon,
+                    });
+                  }
+
+                  if (canChi) {
+                    const chiOptions = chiCandidates.map((tiles, idx) => ({
+                      key: `chi-${idx}`,
+                      label: tiles.map((tile) => mahjongTileLabel(tile)).join("・"),
+                      tiles,
+                      onClick: () => onMahjongChi(tiles),
+                    }));
+                    actionButtons.push({
+                      key: "chi",
+                      label: "チー",
+                      tone: "normal",
+                      priority: 6,
+                      options: chiOptions.length > 1 ? chiOptions : undefined,
+                      onClick: chiOptions.length === 1 ? chiOptions[0].onClick : () => setMahjongMessage("チー候補を選択してください。"),
+                    });
+                  }
+
+                  if (canKita) {
+                    actionButtons.push({ key: "kita", label: "抜きドラ", tone: "accent", priority: 7, onClick: onMahjongNukiDora });
+                  }
+
+                  if (canAbortiveDraw) {
+                    actionButtons.push({ key: "kyuushu", label: "九種九牌", tone: "normal", priority: 8, onClick: () => setMahjongMessage("九種九牌を宣言（実行は準備中）") });
+                  }
+
+                  if (shouldShowPass) {
+                    actionButtons.push({ key: "pass", label: "パス", tone: "subtle", priority: 9, onClick: onMahjongPass });
+                  }
+
+                  if (shouldShowCancel) {
+                    actionButtons.push({ key: "cancel", label: "キャンセル", tone: "subtle", priority: 10, onClick: onMahjongCancelAction });
+                  }
+
                 }
+                actionButtons.push({ key: "sort", label: "手牌並び替え", tone: "subtle", onClick: onMahjongSortHand });
+                actionButtons.push({ key: "diag", label: "判定テスト", tone: "subtle", onClick: onMahjongRunWinDiagnostics });
                 actionButtons.push({
                   key: "autoWin",
                   label: mahjongAutoWinEnabled ? "自動和了: ON" : "自動和了: OFF",
@@ -22826,17 +24821,24 @@ export default function Home() {
                 const roundResult: MahjongResultView | null = mahjongWinSummary
                   ? {
                     winner: short(selfName),
+                    loser: mahjongWinSummary.winType === "ron" ? (mahjongLatestOpponentDiscardBy || "相手") : undefined,
                     handTiles: normalizedHand.slice(0, 13),
-                    winTile: normalizedHand[13] ?? mahjongLastDraw,
+                    winTile: mahjongWinSummary.winningTile,
                     dora: mahjongDoraIndicator === null ? [] : [mahjongDoraIndicator],
                     uraDora: [],
-                    yaku: mahjongWinSummary.yakuKeys.map((key) => t(key)),
+                    yaku: [
+                      ...mahjongWinSummary.yakuKeys.map((key) => t(key)),
+                      ...(mahjongBonusHan > 0 ? [`抜きドラ x${mahjongBonusHan}`] : []),
+                    ],
                     hanText: mahjongWinSummary.isYakuman ? t("mahjongResultYakuman") : `${mahjongWinSummary.han}翻`,
                     fuText: `${mahjongWinSummary.fu}符`,
                     scoreLabel: tf("mahjongResultPoint", { point: mahjongWinSummary.point }),
                     scoreDeltaLines: [
                       `和了: ${short(selfName)} +${mahjongWinSummary.point.toLocaleString()}`,
                       "供託: 0本",
+                      ...(mahjongRuleConfig.mode === "sanma"
+                        ? [`ツモ支払い方式: ${mahjongRuleConfig.tsumoPaymentRule === "no-loss" ? "ツモ損なし" : mahjongRuleConfig.tsumoPaymentRule === "split-north" ? "北家分折半" : "ツモ損あり"}`]
+                        : []),
                     ],
                   }
                   : null;
@@ -22846,27 +24848,138 @@ export default function Home() {
                     title={t("mahjongTitle")}
                     message={mahjongMessage}
                     gameStarted={gameStarted.mahjong}
+                    playerCount={mahjongRuleConfig.playerCount}
                     selfPlayer={selfPlayer}
                     topPlayer={topPlayer}
                     leftPlayer={leftPlayer}
                     rightPlayer={rightPlayer}
-                    selfHand={normalizedHand}
+                    selfConcealedHand={handState.concealedHand}
+                    selfDrawnTile={handState.drawnTile}
                     selfSelectedIndex={mahjongSelected}
-                    selfTsumoIndex={tsumoIndex}
                     riichiTileIndex={mahjongRiichiTileIndex}
+                    latestDiscardSeat={latestDiscardSeat}
+                    latestDiscardTargetable={responseWindowOpen}
+                    discardAnimation={mahjongDiscardAnimation}
                     centerInfo={centerInfo}
                     actionButtons={actionButtons}
+                    actionDeadlineAt={mahjongActionDeadlineAt}
+                    selfSelectableTileIndexes={riichiSelectableIndexes}
+                    enableActionSound={!mahjongReduceEffects}
                     roundResult={roundResult}
                     gameResultSummary={[]}
                     gameResultOpen={false}
                     logEvents={mahjongLogEvents}
                     isLogOpen={isMahjongLogOpen}
                     onLogToggle={() => setIsMahjongLogOpen((prev) => !prev)}
-                    isRuleSettingsOpen={isMahjongRuleSettingsOpen}
-                    onRuleSettingsToggle={() => setIsMahjongRuleSettingsOpen((prev) => !prev)}
-                    rulePreset={mahjongRulePreset}
-                    onRulePresetChange={setMahjongRulePreset}
-                    ruleCategories={MAHJONG_RULE_CATEGORIES}
+                    ruleControls={
+                      <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="rounded-md border border-emerald-300/25 bg-emerald-950/40 p-2">
+                          <p className="mb-1 font-semibold text-emerald-100">プレイ人数</p>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={gameStarted.mahjong}
+                              onClick={() => {
+                                setMahjongMode("yonma");
+                                setMahjongAllowChi(true);
+                                setMahjongNorthRule("normal");
+                                setMahjongStartingPoints(25000);
+                                setMahjongReturnPoints(30000);
+                                setMahjongTsumoPaymentRule("loss");
+                              }}
+                              className={`rounded-md border px-2 py-1 ${mahjongMode === "yonma" ? "border-cyan-200/80 bg-cyan-400/25 text-cyan-50" : "border-slate-300/35"}`}
+                            >
+                              4人麻雀
+                            </button>
+                            <button
+                              type="button"
+                              disabled={gameStarted.mahjong}
+                              onClick={() => {
+                                setMahjongMode("sanma");
+                                setMahjongAllowChi(false);
+                                setMahjongNorthRule("nuki-dora");
+                                setMahjongStartingPoints(35000);
+                                setMahjongReturnPoints(40000);
+                                setMahjongTsumoPaymentRule("split-north");
+                              }}
+                              className={`rounded-md border px-2 py-1 ${mahjongMode === "sanma" ? "border-cyan-200/80 bg-cyan-400/25 text-cyan-50" : "border-slate-300/35"}`}
+                            >
+                              3人麻雀
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="rounded-md border border-emerald-300/25 bg-emerald-950/40 p-2">
+                          <p className="mb-1 font-semibold text-emerald-100">北牌ルール</p>
+                          <select
+                            value={mahjongNorthRule}
+                            disabled={gameStarted.mahjong || mahjongMode !== "sanma"}
+                            onChange={(event) => setMahjongNorthRule(event.target.value === "normal" ? "normal" : "nuki-dora")}
+                            className="w-full rounded-md border border-slate-300/40 bg-slate-950/70 px-2 py-1"
+                          >
+                            <option value="normal">北を通常牌として扱う</option>
+                            <option value="nuki-dora">北を抜きドラとして扱う</option>
+                          </select>
+                        </div>
+
+                        <div className="rounded-md border border-emerald-300/25 bg-emerald-950/40 p-2">
+                          <p className="mb-1 font-semibold text-emerald-100">チー</p>
+                          <label className="inline-flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={mahjongAllowChi}
+                              disabled={gameStarted.mahjong || mahjongMode !== "sanma"}
+                              onChange={(event) => setMahjongAllowChi(event.target.checked)}
+                            />
+                            <span>{mahjongAllowChi ? "許可" : "禁止"}</span>
+                          </label>
+                        </div>
+
+                        <div className="rounded-md border border-emerald-300/25 bg-emerald-950/40 p-2">
+                          <p className="mb-1 font-semibold text-emerald-100">持ち点 / 返し点</p>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={10000}
+                              step={1000}
+                              value={mahjongStartingPoints}
+                              disabled={gameStarted.mahjong}
+                              onChange={(event) => setMahjongStartingPoints(Math.max(10000, Number(event.target.value) || 10000))}
+                              className="w-24 rounded-md border border-slate-300/40 bg-slate-950/70 px-2 py-1"
+                            />
+                            <span>/</span>
+                            <input
+                              type="number"
+                              min={10000}
+                              step={1000}
+                              value={mahjongReturnPoints}
+                              disabled={gameStarted.mahjong}
+                              onChange={(event) => setMahjongReturnPoints(Math.max(10000, Number(event.target.value) || 10000))}
+                              className="w-24 rounded-md border border-slate-300/40 bg-slate-950/70 px-2 py-1"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="rounded-md border border-emerald-300/25 bg-emerald-950/40 p-2">
+                          <p className="mb-1 font-semibold text-emerald-100">ツモ支払い方式</p>
+                          <select
+                            value={mahjongTsumoPaymentRule}
+                            disabled={gameStarted.mahjong || mahjongMode !== "sanma"}
+                            onChange={(event) => {
+                              const next = event.target.value;
+                              setMahjongTsumoPaymentRule(next === "no-loss" ? "no-loss" : next === "split-north" ? "split-north" : "loss");
+                            }}
+                            className="w-full rounded-md border border-slate-300/40 bg-slate-950/70 px-2 py-1"
+                          >
+                            <option value="loss">ツモ損あり</option>
+                            <option value="no-loss">ツモ損なし</option>
+                            <option value="split-north">北家分を折半</option>
+                          </select>
+                        </div>
+                      </div>
+                    }
+                    ruleSummaryLines={mahjongRuleSummaryLines}
+                    isDevelopmentMode={process.env.NODE_ENV !== "production"}
                     topActions={[
                       {
                         key: "start",
@@ -22899,6 +25012,12 @@ export default function Home() {
                     }}
                     onCloseRoundResult={() => {
                       setMahjongWinSummary(null);
+                      setMahjongWinSubmitting(false);
+                      setMahjongLatestOpponentDiscard(null);
+                      setMahjongLatestOpponentDiscardBy(null);
+                      setMahjongLatestDiscardMeta(null);
+                      setMahjongActionDeadlineAt(null);
+                      setMahjongRiichiPending(false);
                       setIsMahjongOver(false);
                     }}
                     onCloseGameResult={() => undefined}
@@ -23072,32 +25191,34 @@ export default function Home() {
                 ) : null}
               </div>
 
-              <div className="mt-2 rounded-xl border border-cyan-200/30 bg-slate-950/45 px-3 py-2 text-[11px] text-slate-100 sm:text-xs">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {pokerSettings.gameMode === "tournament" ? (
-                    <>
-                      <span className="font-semibold text-cyan-100">レベル LV.{pokerCurrentBlind.level}</span>
-                      <span>SB {formatChip(pokerCurrentBlind.smallBlind)} / BB {formatChip(pokerCurrentBlind.bigBlind)} / ANTE {formatChip(pokerCurrentBlind.ante)}</span>
-                      <span className="text-slate-300">次 LV.{pokerNextBlind.level} / SB {formatChip(pokerNextBlind.smallBlind)} / BB {formatChip(pokerNextBlind.bigBlind)}</span>
-                      <span>残り {pokerPlayers.filter((player) => isPokerPlayerAlive(player)).length}/{Math.max(2, pokerSettings.cpuCount + 1)}人</span>
-                      <span>順位 {rankText(pokerMyRank)}</span>
-                      <span>平均 {formatChip(pokerAverageChips)}</span>
-                      <span>ハンド {pokerHandCount}</span>
-                      <span className="text-amber-100">次まで {Math.max(0, pokerHandsUntilLevelUp)}ハンド</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="font-semibold text-cyan-100">所持チップ {formatChip(pokerMe?.chips || 0)}</span>
-                      <span>ポット {formatChip(pokerPots.reduce((sum, item) => sum + item.amount, 0))}</span>
-                      <span>現在ベット {formatChip(pokerMe?.currentStreetBet || 0)}</span>
-                      <span>必要コール {formatChip(pokerToCall)}</span>
-                      <span>フェーズ {pokerPhaseLabel}</span>
-                      <span>勝敗 {pokerNormalRecord.playerWins}勝 {pokerNormalRecord.cpuWins}敗 {pokerNormalRecord.draws}分</span>
-                      <span className="text-amber-100">ラウンド {pokerNormalRecord.rounds}</span>
-                    </>
-                  )}
+              {pokerSettings.gameMode === "tournament" ? (
+                <div className="mt-2 rounded-xl border border-cyan-200/30 bg-slate-950/45 px-3 py-2 text-[11px] text-slate-100 sm:text-xs">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-semibold text-cyan-100">レベル LV.{pokerCurrentBlind.level}</span>
+                    <span>SB {formatChip(pokerCurrentBlind.smallBlind)} / BB {formatChip(pokerCurrentBlind.bigBlind)} / ANTE {formatChip(pokerCurrentBlind.ante)}</span>
+                    <span className="text-slate-300">次 LV.{pokerNextBlind.level} / SB {formatChip(pokerNextBlind.smallBlind)} / BB {formatChip(pokerNextBlind.bigBlind)}</span>
+                    <span>残り {pokerPlayers.filter((player) => isPokerPlayerAlive(player)).length}/{Math.max(2, pokerSettings.cpuCount + 1)}人</span>
+                    <span>順位 {rankText(pokerMyRank)}</span>
+                    <span>平均 {formatChip(pokerAverageChips)}</span>
+                    <span>ハンド {pokerHandCount}</span>
+                    <span className="text-amber-100">次まで {Math.max(0, pokerHandsUntilLevelUp)}ハンド</span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <GameInfoBar
+                  language={language}
+                  chips={pokerMe?.chips || 0}
+                  pot={pokerPots.reduce((sum, item) => sum + item.amount, 0)}
+                  currentBet={pokerMe?.currentStreetBet || 0}
+                  toCall={pokerToCall}
+                  phaseLabel={pokerPhaseLabel}
+                  phaseKey={pokerPhase}
+                  wins={pokerNormalRecord.playerWins}
+                  losses={pokerNormalRecord.cpuWins}
+                  draws={pokerNormalRecord.draws}
+                  round={pokerNormalRecord.rounds}
+                />
+              )}
 
               <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_clamp(180px,22vw,220px)]">
                 <div className="min-w-0">
@@ -23261,12 +25382,12 @@ export default function Home() {
 
                   <div className="min-w-0 grid gap-2">
                     <div className="flex flex-wrap gap-2 text-xs">
-                      <button type="button" onClick={() => applyPokerAction("fold")} disabled={!pokerCanAct || pokerToCall <= 0} className="h-9 rounded-md border border-rose-300/55 px-3 text-sm text-rose-100 disabled:opacity-50">フォールド</button>
-                      <button type="button" onClick={() => applyPokerAction("check")} disabled={!pokerCanCheck} className="h-9 rounded-md border border-slate-300/55 px-3 text-sm disabled:opacity-50">チェック</button>
-                      <button type="button" onClick={() => applyPokerAction("call")} disabled={!pokerCanCall} className="h-9 rounded-md border border-emerald-300/55 bg-emerald-300/10 px-3 text-sm font-semibold text-emerald-100 disabled:opacity-50">コール {pokerCanCall ? formatChip(pokerToCall) : ""}</button>
-                      <button type="button" onClick={() => applyPokerAction("bet")} disabled={!pokerCanBet} className="h-9 rounded-md border border-cyan-300/55 bg-cyan-300/10 px-3 text-sm font-semibold text-cyan-100 disabled:opacity-50">ベット</button>
-                      <button type="button" onClick={() => applyPokerAction("raise")} disabled={!pokerCanRaise} className="h-9 rounded-md border border-sky-300/55 bg-sky-300/10 px-3 text-sm font-semibold text-sky-100 disabled:opacity-50">レイズ</button>
-                      <button type="button" onClick={() => applyPokerAction("allIn")} disabled={!pokerCanAct} className="h-9 rounded-md border border-amber-300/55 px-3 text-sm text-amber-100 disabled:opacity-50">オールイン</button>
+                      <button type="button" onClick={() => applyPokerAction("fold")} disabled={!pokerCanAct || pokerToCall <= 0} className="h-8 rounded-md border border-rose-300/55 px-2.5 text-xs text-rose-100 disabled:opacity-50">フォールド</button>
+                      <button type="button" onClick={() => applyPokerAction("check")} disabled={!pokerCanCheck} className="h-8 rounded-md border border-slate-300/55 px-2.5 text-xs disabled:opacity-50">チェック</button>
+                      <button type="button" onClick={() => applyPokerAction("call")} disabled={!pokerCanCall} className="h-8 rounded-md border border-emerald-300/55 bg-emerald-300/10 px-2.5 text-xs font-semibold text-emerald-100 disabled:opacity-50">コール {pokerCanCall ? formatChip(pokerToCall) : ""}</button>
+                      <button type="button" onClick={() => applyPokerAction("bet")} disabled={!pokerCanBet} className="h-8 rounded-md border border-cyan-300/55 bg-cyan-300/10 px-2.5 text-xs font-semibold text-cyan-100 disabled:opacity-50">ベット</button>
+                      <button type="button" onClick={() => applyPokerAction("raise")} disabled={!pokerCanRaise} className="h-8 rounded-md border border-sky-300/55 bg-sky-300/10 px-2.5 text-xs font-semibold text-sky-100 disabled:opacity-50">レイズ</button>
+                      <button type="button" onClick={() => applyPokerAction("allIn")} disabled={!pokerCanAct} className="h-8 rounded-md border border-amber-300/55 px-2.5 text-xs text-amber-100 disabled:opacity-50">オールイン</button>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -23274,7 +25395,7 @@ export default function Home() {
                       <button type="button" onClick={() => setPokerBetByRatio(0.5)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">50%</button>
                       <button type="button" onClick={() => setPokerBetByRatio(0.75)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">75%</button>
                       <button type="button" onClick={() => setPokerBetByRatio(1)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">POT</button>
-                      <button type="button" onClick={allInPokerBet} disabled={!pokerCanAct} className="h-9 rounded-md border border-amber-300/55 px-2.5 text-amber-100 disabled:opacity-50">オールイン</button>
+                      <button type="button" onClick={allInPokerBet} disabled={!pokerCanAct} className="h-8 rounded-md border border-amber-300/55 px-2 text-xs text-amber-100 disabled:opacity-50">オールイン</button>
                       <button type="button" onClick={() => stepPokerBet(-10)} disabled={!pokerCanAct} className="h-9 rounded-md border border-slate-400/40 px-2.5 disabled:opacity-50">-</button>
                       <input
                         type="number"

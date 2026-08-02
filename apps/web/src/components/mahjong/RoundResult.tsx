@@ -18,10 +18,10 @@ export default function RoundResult({ result, onClose }: RoundResultProps) {
           <p className="text-xs text-emerald-100/80">和了手牌</p>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {result.handTiles.map((tile, index) => (
-              <MahjongTile key={`res-hand-${index}-${tile}`} tile={tile} compact />
+              <MahjongTile key={`res-hand-${index}-${tile}`} tile={tile} compact orientation="bottom" />
             ))}
             {result.winTile !== null && result.winTile !== undefined ? (
-              <MahjongTile tile={result.winTile} compact tsumo />
+              <MahjongTile tile={result.winTile} compact orientation="bottom" tsumo />
             ) : null}
           </div>
         </div>
@@ -30,13 +30,13 @@ export default function RoundResult({ result, onClose }: RoundResultProps) {
           <div>
             <p className="text-xs text-emerald-100/80">ドラ</p>
             <div className="mt-1 flex flex-wrap gap-1">
-              {result.dora.map((tile, index) => <MahjongTile key={`res-dora-${index}-${tile}`} tile={tile} compact />)}
+              {result.dora.map((tile, index) => <MahjongTile key={`res-dora-${index}-${tile}`} tile={tile} compact orientation="bottom" className={styles.doraTile} />)}
             </div>
           </div>
           <div>
             <p className="text-xs text-emerald-100/80">裏ドラ</p>
             <div className="mt-1 flex flex-wrap gap-1">
-              {result.uraDora.map((tile, index) => <MahjongTile key={`res-ura-${index}-${tile}`} tile={tile} compact />)}
+              {result.uraDora.map((tile, index) => <MahjongTile key={`res-ura-${index}-${tile}`} tile={tile} compact orientation="bottom" className={styles.doraTile} />)}
             </div>
           </div>
         </div>

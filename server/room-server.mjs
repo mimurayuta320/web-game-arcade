@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 
 const HOST = process.env.ROOM_HOST || "0.0.0.0";
 const PORT = Number(process.env.ROOM_PORT || 8788);
-const HARD_MAX_ROOM_PLAYERS = 8;
+const HARD_MAX_ROOM_PLAYERS = 16;
 const MIN_ROOM_PLAYERS = 2;
 const DEFAULT_ROOM_MAX_PLAYERS = Math.max(
   MIN_ROOM_PLAYERS,
@@ -22,6 +22,15 @@ const INVITE_TOKEN_TTL_MS = Number(process.env.ROOM_INVITE_TOKEN_TTL_MS || 5 * 6
 const ROOM_STALE_MEMBER_TTL_MS = Number(process.env.ROOM_STALE_MEMBER_TTL_MS || 5500);
 const ROOM_STALE_SWEEP_INTERVAL_MS = Number(process.env.ROOM_STALE_SWEEP_INTERVAL_MS || 1000);
 const ROOM_DEBUG_STATE = String(process.env.ROOM_DEBUG_STATE || "1").trim() !== "0";
+
+const MAHJONG_ROOM_CONFIG_DEFAULT = {
+  mode: "yonma",
+  allowChi: true,
+  northRule: "normal",
+  tsumoPaymentRule: "loss",
+  startingPoints: 25000,
+  returnPoints: 30000,
+};
 
 const rooms = new Map();
 const roomMeta = new Map();
@@ -108,6 +117,42 @@ function normalizeRoomMaxPlayers(raw, fallback = DEFAULT_ROOM_MAX_PLAYERS) {
   return Math.max(MIN_ROOM_PLAYERS, Math.min(HARD_MAX_ROOM_PLAYERS, Math.floor(parsed)));
 }
 
+function normalizeMahjongMode(raw, fallback = MAHJONG_ROOM_CONFIG_DEFAULT.mode) {
+  const value = String(raw || "").trim();
+  if (value === "yonma" || value === "sanma") return value;
+  return fallback;
+}
+
+function normalizeMahjongNorthRule(raw, fallback = MAHJONG_ROOM_CONFIG_DEFAULT.northRule) {
+  const value = String(raw || "").trim();
+  if (value === "normal" || value === "nuki-dora") return value;
+  return fallback;
+}
+
+function normalizeMahjongTsumoPaymentRule(raw, fallback = MAHJONG_ROOM_CONFIG_DEFAULT.tsumoPaymentRule) {
+  const value = String(raw || "").trim();
+  if (value === "loss" || value === "no-loss" || value === "split-north") return value;
+  return fallback;
+}
+
+function normalizeMahjongScorePoint(raw, fallback) {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(10000, Math.min(100000, Math.floor(parsed)));
+}
+
+function normalizeMahjongRoomConfig(raw, fallback = MAHJONG_ROOM_CONFIG_DEFAULT) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  return {
+    mode: normalizeMahjongMode(src.mode, fallback.mode),
+    allowChi: typeof src.allowChi === "boolean" ? src.allowChi : fallback.allowChi,
+    northRule: normalizeMahjongNorthRule(src.northRule, fallback.northRule),
+    tsumoPaymentRule: normalizeMahjongTsumoPaymentRule(src.tsumoPaymentRule, fallback.tsumoPaymentRule),
+    startingPoints: normalizeMahjongScorePoint(src.startingPoints, fallback.startingPoints),
+    returnPoints: normalizeMahjongScorePoint(src.returnPoints, fallback.returnPoints),
+  };
+}
+
 function roomMetaOf(code) {
   if (!roomMeta.has(code)) {
     roomMeta.set(code, {
@@ -126,6 +171,7 @@ function roomMetaOf(code) {
       drawVotes: new Set(),
       inviteTokens: new Map(),
       privateAccessPeerIds: new Set(),
+      mahjongRoomConfig: { ...MAHJONG_ROOM_CONFIG_DEFAULT },
     });
   }
   return roomMeta.get(code);
@@ -607,6 +653,7 @@ function broadcastRoomState(code) {
     inGame: Boolean(meta.inGame),
     rematchVotes: [...meta.rematchVotes],
     drawVotes: [...meta.drawVotes],
+    mahjongRoomConfig: normalizeMahjongRoomConfig(meta.mahjongRoomConfig, MAHJONG_ROOM_CONFIG_DEFAULT),
   });
   broadcastRoomsList();
 }
@@ -1251,6 +1298,34 @@ wss.on("connection", (ws) => {
         }
         payload.cardIds = cardIds;
       }
+    }
+
+    if (type === "mahjong-room-config-set") {
+      const meta = roomMetaOf(code);
+      if (!isHost(meta, ws.peerId)) {
+        sendError(ws, "HOST_ONLY");
+        return;
+      }
+      meta.mahjongRoomConfig = normalizeMahjongRoomConfig(payload?.config, meta.mahjongRoomConfig || MAHJONG_ROOM_CONFIG_DEFAULT);
+      const config = normalizeMahjongRoomConfig(meta.mahjongRoomConfig, MAHJONG_ROOM_CONFIG_DEFAULT);
+      broadcastToRoom(code, {
+        type: "mahjong-room-config",
+        room: code,
+        config,
+      });
+      broadcastRoomState(code);
+      return;
+    }
+
+    if (type === "mahjong-room-config-request") {
+      const meta = roomMetaOf(code);
+      const config = normalizeMahjongRoomConfig(meta.mahjongRoomConfig, MAHJONG_ROOM_CONFIG_DEFAULT);
+      sendJson(ws, {
+        type: "mahjong-room-config",
+        room: code,
+        config,
+      });
+      return;
     }
 
     let mutationResult = { ok: true };
