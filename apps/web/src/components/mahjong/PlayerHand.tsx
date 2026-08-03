@@ -1,65 +1,65 @@
 import styles from "./mahjong.module.css";
 import MahjongTile from "./MahjongTile";
+import type { MahjongTileInstanceView } from "./types";
 
 type PlayerHandProps = {
-  concealedHand: number[];
-  drawnTile: number | null;
-  selectedIndex: number | null;
+  concealedHand: MahjongTileInstanceView[];
+  drawnTile: MahjongTileInstanceView | null;
+  selectedTileId: string | null;
   disabled?: boolean;
-  selectableIndexes?: number[] | null;
-  discardAnimatingIndex?: number | null;
+  selectableTileIds?: string[] | null;
+  discardAnimatingTileId?: string | null;
   discardAnimatingTsumogiri?: boolean;
-  onTileClick: (index: number) => void;
+  onTileClick: (payload: { tileId: string; source: "concealed" | "drawn" }) => void;
 };
 
 export default function PlayerHand({
   concealedHand,
   drawnTile,
-  selectedIndex,
+  selectedTileId,
   disabled,
-  selectableIndexes,
-  discardAnimatingIndex = null,
+  selectableTileIds,
+  discardAnimatingTileId = null,
   discardAnimatingTsumogiri = false,
   onTileClick,
 }: PlayerHandProps) {
-  const selectableSet = selectableIndexes ? new Set(selectableIndexes) : null;
-  const drawnIndex = drawnTile === null ? null : concealedHand.length;
+  const selectableSet = selectableTileIds ? new Set(selectableTileIds) : null;
 
   return (
     <div className={styles.handSelf}>
       <div className={styles.normalTiles}>
         {concealedHand.map((tile, index) => (
           <MahjongTile
-            key={`self-tile-${index}-${tile}`}
-            tile={tile}
+            key={tile.instanceId}
+            tile={tile.tile}
             orientation="bottom"
-            selected={selectedIndex === index}
+            selected={selectedTileId === tile.instanceId}
             className={[
-              selectableSet ? (selectableSet.has(index) ? styles.tileSelectable : styles.tileDimmed) : "",
-              discardAnimatingIndex === index ? styles.tileDiscardLaunching : "",
+              selectableSet ? (selectableSet.has(tile.instanceId) ? styles.tileSelectable : styles.tileDimmed) : "",
+              discardAnimatingTileId === tile.instanceId ? styles.tileDiscardLaunching : "",
             ].filter(Boolean).join(" ")}
-            onClick={() => onTileClick(index)}
-            disabled={disabled || (selectableSet ? !selectableSet.has(index) : false)}
+            onClick={() => onTileClick({ tileId: tile.instanceId, source: "concealed" })}
+            disabled={disabled || (selectableSet ? !selectableSet.has(tile.instanceId) : false)}
           />
         ))}
       </div>
 
-      {drawnTile !== null && drawnIndex !== null ? (
+      {drawnTile !== null ? (
         <div className={styles.drawnTile}>
           <MahjongTile
-            key={`self-drawn-${drawnIndex}-${drawnTile}`}
-            tile={drawnTile}
+            key={drawnTile.instanceId}
+            tile={drawnTile.tile}
             orientation="bottom"
-            selected={selectedIndex === drawnIndex}
+            selected={selectedTileId === drawnTile.instanceId}
             tsumo
             className={[
-              selectableSet ? (selectableSet.has(drawnIndex) ? styles.tileSelectable : styles.tileDimmed) : "",
-              discardAnimatingIndex === drawnIndex
+              selectableSet ? (selectableSet.has(drawnTile.instanceId) ? styles.tileSelectable : styles.tileDimmed) : "",
+              discardAnimatingTileId === drawnTile.instanceId
                 ? (discardAnimatingTsumogiri ? styles.tileDiscardLaunchingTsumo : styles.tileDiscardLaunching)
                 : "",
             ].filter(Boolean).join(" ")}
-            onClick={() => onTileClick(drawnIndex)}
-            disabled={disabled || (selectableSet ? !selectableSet.has(drawnIndex) : false)}
+            onClick={() => onTileClick({ tileId: drawnTile.instanceId, source: "drawn" })}
+            disabled={disabled || (selectableSet ? !selectableSet.has(drawnTile.instanceId) : false)}
           />
         </div>
       ) : null}

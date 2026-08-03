@@ -4,18 +4,18 @@ import PlayerHand from "./PlayerHand";
 import PlayerInfo from "./PlayerInfo";
 import type { ReactNode } from "react";
 import styles from "./mahjong.module.css";
-import type { MahjongDiscardAnimationView, MahjongPlayerView, MahjongSeatPosition } from "./types";
+import type { MahjongDiscardAnimationView, MahjongPlayerView, MahjongSeatPosition, MahjongTileInstanceView } from "./types";
 
 type PlayerAreaProps = {
   position: MahjongSeatPosition;
   player: MahjongPlayerView;
-  selfConcealedHand?: number[];
-  selfDrawnTile?: number | null;
-  selfSelectedIndex?: number | null;
+  selfConcealedHand?: MahjongTileInstanceView[];
+  selfDrawnTile?: MahjongTileInstanceView | null;
+  selfSelectedTileId?: string | null;
   selfActionPanel?: ReactNode;
-  selfSelectableTileIndexes?: number[] | null;
+  selfSelectableTileIds?: string[] | null;
   selfDiscardAnimation?: MahjongDiscardAnimationView | null;
-  onSelfTileClick?: (index: number) => void;
+  onSelfTileClick?: (payload: { tileId: string; source: "concealed" | "drawn" }) => void;
 };
 
 export default function PlayerArea({
@@ -23,9 +23,9 @@ export default function PlayerArea({
   player,
   selfConcealedHand,
   selfDrawnTile,
-  selfSelectedIndex,
+  selfSelectedTileId,
   selfActionPanel,
-  selfSelectableTileIndexes,
+  selfSelectableTileIds,
   selfDiscardAnimation,
   onSelfTileClick,
 }: PlayerAreaProps) {
@@ -45,14 +45,14 @@ export default function PlayerArea({
       <PlayerHand
         concealedHand={selfConcealedHand}
         drawnTile={selfDrawnTile ?? null}
-        selectedIndex={selfSelectedIndex ?? null}
-        selectableIndexes={selfSelectableTileIndexes ?? null}
-        discardAnimatingIndex={selfDiscardAnimation?.sourceIndex ?? null}
+        selectedTileId={selfSelectedTileId ?? null}
+        selectableTileIds={selfSelectableTileIds ?? null}
+        discardAnimatingTileId={null}
         discardAnimatingTsumogiri={selfDiscardAnimation?.isTsumogiri ?? false}
-        onTileClick={(index) => onSelfTileClick?.(index)}
+        onTileClick={(payload) => onSelfTileClick?.(payload)}
       />
     )
-    : <OpponentHand count={player.handBackCount} rotate={position === "left" || position === "right"} position={position} />;
+    : <OpponentHand count={player.handBackCount} drawnBack={player.drawnBackActive === true} rotate={position === "left" || position === "right"} position={position} />;
   const meldNode = <MeldArea melds={player.melds} position={position} />;
   const isTop = position === "top";
   const isSide = position === "left" || position === "right";

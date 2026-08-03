@@ -5,11 +5,12 @@ import type { CSSProperties } from "react";
 
 type OpponentHandProps = {
   count: number;
+  drawnBack?: boolean;
   rotate?: boolean;
   position: MahjongSeatPosition;
 };
 
-export default function OpponentHand({ count, rotate = false, position }: OpponentHandProps) {
+export default function OpponentHand({ count, drawnBack = false, rotate = false, position }: OpponentHandProps) {
   const isSide = rotate || position === "left" || position === "right";
   const safeCount = Math.max(0, count);
   const side = position === "left" ? "left" : position === "right" ? "right" : null;
@@ -27,11 +28,18 @@ export default function OpponentHand({ count, rotate = false, position }: Oppone
 
   return (
     <div className={rowClass} style={rowStyle}>
-      {Array.from({ length: safeCount }, (_, index) => (
-        <div key={`opponent-back-${index}`} className={tileWrapClass}>
+      {Array.from({ length: safeCount }, (_, index) => {
+        const isDrawnBackTile = drawnBack && index === safeCount - 1;
+        const wrapClass = [
+          tileWrapClass,
+          isDrawnBackTile ? (isSide ? styles.sideDrawnBackSlot : styles.drawnBackSlot) : "",
+        ].filter(Boolean).join(" ");
+        return (
+        <div key={`opponent-back-${index}`} className={wrapClass}>
           <OpponentTileBack position={position} side={isSide ? side : null} />
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

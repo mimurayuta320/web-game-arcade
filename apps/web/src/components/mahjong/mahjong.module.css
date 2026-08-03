@@ -865,10 +865,11 @@
 
 .handSelf {
   --self-tile-gap: clamp(2px, 0.45vw, 6px);
-  --self-tsumo-gap: clamp(7px, 0.9vw, 13px);
+  --self-tsumo-gap: 10px;
   --self-tile-width-max: clamp(34px, 4.2vw, 58px);
   --self-tile-width-fit: calc((100% - 58px) / 14);
   --self-tile-width: min(var(--self-tile-width-max), var(--self-tile-width-fit));
+  --self-drawn-tile-width: max(16px, min(var(--self-tile-width-max), 6vw));
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -893,10 +894,16 @@
 }
 
 .drawnTile {
-  margin-left: var(--self-tsumo-gap);
+  margin-left: 10px;
+  width: var(--self-drawn-tile-width);
+  min-width: var(--self-drawn-tile-width);
   flex: 0 0 auto;
   display: flex;
   align-items: flex-end;
+}
+
+.drawnTile .tileBtn {
+  width: 100%;
 }
 
 .handOpponent {
@@ -952,6 +959,14 @@
   display: grid;
   place-items: center;
   overflow: visible;
+}
+
+.drawnBackSlot {
+  margin-left: 10px;
+}
+
+.sideDrawnBackSlot {
+  margin-top: 10px;
 }
 
 .opponentTileBackFlatLeft {
@@ -1791,6 +1806,7 @@
     --self-tsumo-gap: clamp(5px, 0.72vw, 10px);
     --self-tile-width-max: clamp(32px, 4vw, 52px);
     --self-tile-width-fit: calc((100% - 48px) / 14);
+    --self-drawn-tile-width: max(14px, min(var(--self-tile-width-max), 5.4vw));
   }
 
   .actionsWrap {
@@ -1869,6 +1885,7 @@
     --self-tsumo-gap: 4px;
     --self-tile-width-max: clamp(26px, 3.8vw, 40px);
     --self-tile-width-fit: calc((100% - 34px) / 14);
+    --self-drawn-tile-width: max(12px, min(var(--self-tile-width-max), 4.6vw));
   }
 
   .playerInfo {
@@ -1952,6 +1969,7 @@
     --self-tsumo-gap: 4px;
     --self-tile-width-max: clamp(24px, 3.6vw, 36px);
     --self-tile-width-fit: calc((100% - 32px) / 14);
+    --self-drawn-tile-width: max(12px, min(var(--self-tile-width-max), 4.3vw));
   }
 
   .playerAreaSide .playerBadges {

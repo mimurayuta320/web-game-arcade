@@ -2,7 +2,7 @@ import MahjongCenter from "./MahjongCenter";
 import PlayerArea from "./PlayerArea";
 import type { ReactNode } from "react";
 import styles from "./mahjong.module.css";
-import type { MahjongCenterInfoView, MahjongDiscardAnimationView, MahjongPlayerView } from "./types";
+import type { MahjongCenterInfoView, MahjongDiscardAnimationView, MahjongPlayerView, MahjongTileInstanceView } from "./types";
 
 type MahjongTableProps = {
   playerCount: 3 | 4;
@@ -10,17 +10,17 @@ type MahjongTableProps = {
   topPlayer: MahjongPlayerView;
   leftPlayer: MahjongPlayerView | null;
   rightPlayer: MahjongPlayerView | null;
-  selfConcealedHand: number[];
-  selfDrawnTile: number | null;
-  selfSelectedIndex: number | null;
+  selfConcealedHand: MahjongTileInstanceView[];
+  selfDrawnTile: MahjongTileInstanceView | null;
+  selfSelectedTileId: string | null;
   selfActionPanel?: ReactNode;
-  selfSelectableTileIndexes?: number[] | null;
+  selfSelectableTileIds?: string[] | null;
   riichiTileIndex: number | null;
   latestDiscardSeat: "top" | "right" | "bottom" | "left" | null;
   latestDiscardTargetable?: boolean;
   discardAnimation?: MahjongDiscardAnimationView | null;
   centerInfo: MahjongCenterInfoView;
-  onSelfTileClick: (index: number) => void;
+  onSelfTileClick: (payload: { tileId: string; source: "concealed" | "drawn" }) => void;
 };
 
 export default function MahjongTable({
@@ -31,9 +31,9 @@ export default function MahjongTable({
   rightPlayer,
   selfConcealedHand,
   selfDrawnTile,
-  selfSelectedIndex,
+  selfSelectedTileId,
   selfActionPanel,
-  selfSelectableTileIndexes,
+  selfSelectableTileIds,
   riichiTileIndex,
   latestDiscardSeat,
   latestDiscardTargetable = false,
@@ -89,9 +89,9 @@ export default function MahjongTable({
             player={selfPlayer}
             selfConcealedHand={selfConcealedHand}
             selfDrawnTile={selfDrawnTile}
-            selfSelectedIndex={selfSelectedIndex}
+            selfSelectedTileId={selfSelectedTileId}
             selfActionPanel={selfActionPanel}
-            selfSelectableTileIndexes={selfSelectableTileIndexes}
+            selfSelectableTileIds={selfSelectableTileIds}
             selfDiscardAnimation={discardAnimation && discardAnimation.seat === "bottom" ? discardAnimation : null}
             onSelfTileClick={onSelfTileClick}
           />

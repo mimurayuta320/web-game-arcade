@@ -13,6 +13,7 @@ import type {
   MahjongLogEvent,
   MahjongPlayerView,
   MahjongResultView,
+  MahjongTileInstanceView,
 } from "./types";
 
 type MahjongGameProps = {
@@ -24,9 +25,9 @@ type MahjongGameProps = {
   topPlayer: MahjongPlayerView;
   leftPlayer: MahjongPlayerView | null;
   rightPlayer: MahjongPlayerView | null;
-  selfConcealedHand: number[];
-  selfDrawnTile: number | null;
-  selfSelectedIndex: number | null;
+  selfConcealedHand: MahjongTileInstanceView[];
+  selfDrawnTile: MahjongTileInstanceView | null;
+  selfSelectedTileId: string | null;
   riichiTileIndex: number | null;
   latestDiscardSeat: "top" | "right" | "bottom" | "left" | null;
   latestDiscardTargetable?: boolean;
@@ -34,7 +35,7 @@ type MahjongGameProps = {
   centerInfo: MahjongCenterInfoView;
   actionButtons: MahjongActionButton[];
   actionDeadlineAt?: number | null;
-  selfSelectableTileIndexes?: number[] | null;
+  selfSelectableTileIds?: string[] | null;
   enableActionSound?: boolean;
   roundResult: MahjongResultView | null;
   gameResultSummary: string[];
@@ -46,7 +47,7 @@ type MahjongGameProps = {
   ruleSummaryLines?: string[];
   isDevelopmentMode?: boolean;
   topActions: Array<{ key: string; label: string; onClick: () => void; emphasis?: "primary" | "default" }>;
-  onSelfTileClick: (index: number) => void;
+  onSelfTileClick: (payload: { tileId: string; source: "concealed" | "drawn" }) => void;
   onCloseRoundResult: () => void;
   onCloseGameResult: () => void;
 };
@@ -62,7 +63,7 @@ export default function MahjongGame({
   rightPlayer,
   selfConcealedHand,
   selfDrawnTile,
-  selfSelectedIndex,
+  selfSelectedTileId,
   riichiTileIndex,
   latestDiscardSeat,
   latestDiscardTargetable = false,
@@ -70,7 +71,7 @@ export default function MahjongGame({
   centerInfo,
   actionButtons,
   actionDeadlineAt = null,
-  selfSelectableTileIndexes = null,
+  selfSelectableTileIds = null,
   enableActionSound = false,
   roundResult,
   gameResultSummary,
@@ -265,9 +266,9 @@ export default function MahjongGame({
           rightPlayer={rightPlayer}
           selfConcealedHand={selfConcealedHand}
           selfDrawnTile={selfDrawnTile}
-          selfSelectedIndex={selfSelectedIndex}
+          selfSelectedTileId={selfSelectedTileId}
           selfActionPanel={gamePhase === "playing" ? <MahjongActionPanel actions={handActionButtons} actionDeadlineAt={actionDeadlineAt} /> : null}
-          selfSelectableTileIndexes={selfSelectableTileIndexes}
+          selfSelectableTileIds={selfSelectableTileIds}
           riichiTileIndex={riichiTileIndex}
           latestDiscardSeat={latestDiscardSeat}
           latestDiscardTargetable={latestDiscardTargetable}

@@ -61,6 +61,7 @@ export type MahjongPlayerView = {
   isConnected: boolean;
   thinkingSec: number;
   handBackCount: number;
+  drawnBackActive?: boolean;
   discards: number[];
   melds: MahjongMeldView[];
 };
@@ -71,6 +72,11 @@ export type MahjongMeldView = {
   tiles: number[];
   calledTileIndex?: number;
   concealed?: boolean;
+};
+
+export type MahjongTileInstanceView = {
+  instanceId: string;
+  tile: number;
 };
 
 export type MahjongActionButton = {
