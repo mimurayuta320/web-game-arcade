@@ -14,6 +14,7 @@ export default function OpponentHand({ count, drawnBack = false, rotate = false,
   const isSide = rotate || position === "left" || position === "right";
   const safeCount = Math.max(0, count);
   const side = position === "left" ? "left" : position === "right" ? "right" : null;
+  const tileBackPosition = position === "bottom" ? "top" : position;
 
   const rowClass = [
     styles.handRow,
@@ -36,7 +37,7 @@ export default function OpponentHand({ count, drawnBack = false, rotate = false,
         ].filter(Boolean).join(" ");
         return (
         <div key={`opponent-back-${index}`} className={wrapClass}>
-          <OpponentTileBack position={position} side={isSide ? side : null} />
+          <OpponentTileBack position={tileBackPosition} side={isSide ? side : null} />
         </div>
         );
       })}

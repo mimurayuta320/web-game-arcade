@@ -819,6 +819,7 @@ const LOGIN_I18N = {
     mahjongResultYakuman: "役満",
     mahjongYakuMenzenTsumo: "門前清自摸和",
     mahjongYakuTanyao: "断么九",
+    mahjongYakuPinfu: "平和",
     mahjongYakuToitoi: "対々和",
     mahjongYakuYakuhai: "役牌",
     mahjongYakuChiitoitsu: "七対子",
@@ -1530,6 +1531,7 @@ const LOGIN_I18N = {
     mahjongResultYakuman: "역만",
     mahjongYakuMenzenTsumo: "멘젠 쯔모",
     mahjongYakuTanyao: "탕야오",
+    mahjongYakuPinfu: "핑후",
     mahjongYakuToitoi: "또이또이",
     mahjongYakuYakuhai: "역패",
     mahjongYakuChiitoitsu: "치또이츠",
@@ -3961,7 +3963,7 @@ function createFitPuzzleShuffledTiles(stepCount = 80): number[] {
 
 const BOARD_SIZE = 8;
 const GOMOKU_SIZE = 15;
-const UNO_COLORS: UnoColor[] = ["R", "G", "B", "Y"];
+const UNO_COLORS: Array<Exclude<UnoColor, "W">> = ["R", "G", "B", "Y"];
 const UNO_PLAY_ANIMATION_DELAY_MS = 140;
 let unoCardSerial = 0;
 
@@ -8658,14 +8660,14 @@ export default function Home() {
     return Math.max(2, Math.min(8, Math.floor(daifugoMaxPlayers || 8)));
   }, [connectedRoomCode, connectedRoomMaxPlayers, daifugoCpuCount, daifugoMaxPlayers, daifugoMode]);
 
-  const daifugoDisplaySeats = useMemo(() => {
+  const daifugoDisplaySeats = useMemo<DaifugoPlayer[]>(() => {
     if (gameStarted.daifugo && daifugoPlayers.length > 0) {
       return daifugoPlayers;
     }
 
     if (connectedRoomCode) {
       const maxPlayers = Math.max(2, Math.min(8, Math.floor(connectedRoomMaxPlayers || daifugoMaxPlayers || 8)));
-      const joined = roomParticipants
+      const joined: DaifugoPlayer[] = roomParticipants
         .filter((participant) => participant.role === "host" || participant.role === "guest")
         .slice(0, maxPlayers)
         .map((participant, index) => ({
@@ -10061,7 +10063,7 @@ export default function Home() {
     if (typeof state.isChinchiroOver === "boolean") setIsChinchiroOver(state.isChinchiroOver);
 
     if (Array.isArray(state.sevensPlayers)) {
-      const parsed = (state.sevensPlayers as SevensPlayer[]).map((player) => ({
+      const parsed: SevensPlayer[] = (state.sevensPlayers as SevensPlayer[]).map((player): SevensPlayer => ({
         id: String(player.id || ""),
         name: String(player.name || "Player"),
         isCpu: Boolean(player.isCpu),
@@ -23614,7 +23616,7 @@ export default function Home() {
                         if (gameStarted.sevens) return;
                         resetSevens();
                       }}
-                      disabled={connectedRoomCode || gameStarted.sevens}
+                      disabled={Boolean(connectedRoomCode) || gameStarted.sevens}
                       className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                     >
                       <option value="cpu">CPU対戦</option>
@@ -23670,7 +23672,7 @@ export default function Home() {
                           setSevensMaxPlayers(nextMax);
                           setRoomMaxPlayersDraft(nextMax);
                         }}
-                        disabled={connectedRoomCode || gameStarted.sevens}
+                        disabled={Boolean(connectedRoomCode) || gameStarted.sevens}
                         className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                       >
                         {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
@@ -23941,7 +23943,7 @@ export default function Home() {
                   <select
                     value={daifugoEffectiveMode}
                     onChange={(event) => setDaifugoMode(event.target.value as DaifugoMode)}
-                    disabled={connectedRoomCode || gameStarted.daifugo}
+                    disabled={Boolean(connectedRoomCode) || gameStarted.daifugo}
                     className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                   >
                     <option value="cpu">CPU</option>
@@ -23985,7 +23987,7 @@ export default function Home() {
                   <select
                     value={daifugoPreviewMaxPlayers}
                     onChange={(event) => setDaifugoMaxPlayers(Math.max(2, Math.min(8, Number(event.target.value) || 2)))}
-                    disabled={connectedRoomCode || gameStarted.daifugo}
+                    disabled={Boolean(connectedRoomCode) || gameStarted.daifugo}
                     className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                   >
                     {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
