@@ -47,12 +47,14 @@ export default function MahjongTable({
     <div className={styles.table}>
       <div className={styles.ring} />
       <div className={gridClassName} data-player-count={playerCount}>
+        <div className={styles.cellTopLeft} aria-hidden="true" />
         <div className={styles.seatTop}>
           <PlayerArea
             position="top"
             player={topPlayer}
           />
         </div>
+        <div className={styles.cellTopRight} aria-hidden="true" />
         {leftPlayer ? (
           <div className={styles.seatLeft}>
             <PlayerArea
@@ -83,6 +85,7 @@ export default function MahjongTable({
             />
           </div>
         ) : null}
+        <div className={styles.cellBottomLeft} aria-hidden="true" />
         <div className={styles.seatBottom}>
           <PlayerArea
             position="bottom"
@@ -90,11 +93,13 @@ export default function MahjongTable({
             selfConcealedHand={selfConcealedHand}
             selfDrawnTile={selfDrawnTile}
             selfSelectedTileId={selfSelectedTileId}
-            selfActionPanel={selfActionPanel}
             selfSelectableTileIds={selfSelectableTileIds}
             selfDiscardAnimation={discardAnimation && discardAnimation.seat === "bottom" ? discardAnimation : null}
             onSelfTileClick={onSelfTileClick}
           />
+        </div>
+        <div className={styles.actionArea}>
+          <div className={styles.actionPanelDock}>{selfActionPanel}</div>
         </div>
       </div>
     </div>

@@ -41,8 +41,8 @@ export default function ActionButtons({ actions, actionDeadlineAt = null }: Acti
 
   const orderedActions = useMemo(() => {
     return [...actions].sort((a, b) => {
-      const pa = a.priority ?? fallbackPriority[a.key] ?? 99;
-      const pb = b.priority ?? fallbackPriority[b.key] ?? 99;
+      const pa = fallbackPriority[a.key] ?? a.priority ?? 99;
+      const pb = fallbackPriority[b.key] ?? b.priority ?? 99;
       if (pa !== pb) return pa - pb;
       return a.label.localeCompare(b.label, "ja");
     });

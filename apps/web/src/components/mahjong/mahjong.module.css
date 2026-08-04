@@ -147,8 +147,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 4px;
-  align-items: center;
-  justify-items: center;
+  align-items: stretch;
+  justify-items: stretch;
   min-height: 0;
   position: relative;
 }
@@ -180,6 +180,7 @@
 .table {
   position: relative;
   z-index: 1;
+  box-sizing: border-box;
   border-radius: 18px;
   border: 1px solid rgba(16, 185, 129, 0.35);
   background:
@@ -187,10 +188,10 @@
     linear-gradient(140deg, rgba(4, 120, 87, 0.8), rgba(20, 83, 45, 0.85));
   box-shadow: inset 0 0 0 1px rgba(167, 243, 208, 0.14), 0 16px 40px rgba(2, 12, 10, 0.38);
   padding: clamp(4px, 0.7vw, 10px);
-  width: min(96vw, 980px);
-  aspect-ratio: 1.08 / 1;
-  max-height: min(74dvh, 760px);
-  min-height: clamp(260px, 48dvh, 560px);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -203,83 +204,138 @@
 }
 
 .grid {
+  --self-tile-width: clamp(30px, min(4vw, 6vh), 58px);
+  --opponent-tile-width: clamp(16px, min(2.2vw, 3.5vh), 32px);
+  --discard-tile-width: clamp(20px, min(2.6vw, 4vh), 36px);
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
   display: grid;
-  grid-template-columns: clamp(56px, 9vw, 110px) minmax(0, 1fr) clamp(56px, 9vw, 110px);
-  grid-template-rows: clamp(80px, 14vh, 130px) minmax(0, 1fr) clamp(150px, 24vh, 230px);
+  grid-template-columns: clamp(72px, 12vw, 150px) minmax(0, 1fr) clamp(90px, 14vw, 180px);
+  grid-template-rows: clamp(80px, 14vh, 140px) minmax(0, 1fr) clamp(150px, 24vh, 240px);
   grid-template-areas:
-    "left top right"
-    "left center right"
-    "bottom bottom bottom";
+    "top-left top-player top-right"
+    "left-player center-table right-player"
+    "bottom-left self-player action-area";
   gap: clamp(4px, 0.55vw, 8px);
-  overflow: visible;
+  overflow: hidden;
 }
 
 .gridPlayers3 {
-  grid-template-columns: clamp(54px, 8.8vw, 98px) minmax(0, 1fr) clamp(54px, 8.8vw, 98px);
-  grid-template-rows: clamp(80px, 14vh, 130px) minmax(0, 1fr) clamp(150px, 24vh, 230px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) clamp(86px, 15vw, 164px);
+  grid-template-rows: clamp(76px, 13vh, 128px) minmax(0, 1fr) clamp(146px, 24vh, 236px);
   grid-template-areas:
-    "top top right"
-    "center center right"
-    "bottom bottom bottom";
+    "top-player top-player right-player"
+    "center-table center-table right-player"
+    "self-player self-player action-area";
+}
+
+.gridPlayers3 .cellTopLeft,
+.gridPlayers3 .cellTopRight,
+.gridPlayers3 .cellBottomLeft {
+  display: none;
+}
+
+.gridPlayers3 .seatTop {
+  padding-right: clamp(2px, 0.6vw, 8px);
+}
+
+.cellTopLeft,
+.cellTopRight,
+.cellBottomLeft,
+.seatTop,
+.seatBottom,
+.seatLeft,
+.seatRight,
+.center,
+.actionArea {
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.cellTopLeft {
+  grid-area: top-left;
+}
+
+.cellTopRight {
+  grid-area: top-right;
+}
+
+.cellBottomLeft {
+  grid-area: bottom-left;
 }
 
 .seatTop {
-  grid-area: top;
-  min-width: 0;
-  min-height: 0;
-  overflow: visible;
+  grid-area: top-player;
+  overflow: hidden;
   display: grid;
   align-items: end;
-  padding-bottom: clamp(4px, 0.9vh, 10px);
+  justify-items: center;
+  padding: 0 clamp(2px, 0.7vw, 10px) clamp(2px, 0.8vh, 8px);
 }
 
 .seatBottom {
-  grid-area: bottom;
-  min-width: 0;
-  min-height: 0;
-  overflow: visible;
+  grid-area: self-player;
+  overflow: hidden;
   display: grid;
-  align-items: start;
-  padding-top: clamp(8px, 1.4vh, 16px);
+  align-items: end;
+  justify-items: stretch;
+  padding: clamp(4px, 0.8vh, 10px) clamp(2px, 0.7vw, 10px) 0;
 }
 
 .seatLeft {
-  grid-area: left;
-  min-width: 0;
-  min-height: 0;
-  overflow: visible;
+  grid-area: left-player;
+  overflow: hidden;
   display: grid;
   align-items: center;
   justify-items: end;
-  padding-right: clamp(5px, 0.9vw, 12px);
+  padding: clamp(2px, 0.8vh, 8px) clamp(4px, 0.9vw, 12px) clamp(2px, 0.8vh, 8px) 0;
 }
 
 .seatRight {
-  grid-area: right;
-  min-width: 0;
-  min-height: 0;
-  overflow: visible;
+  grid-area: right-player;
+  overflow: hidden;
   display: grid;
   align-items: center;
   justify-items: start;
-  padding-left: clamp(5px, 0.9vw, 12px);
+  padding: clamp(2px, 0.8vh, 8px) 0 clamp(2px, 0.8vh, 8px) clamp(4px, 0.9vw, 12px);
 }
 
 .center {
-  grid-area: center;
-  min-width: 0;
-  min-height: 0;
+  grid-area: center-table;
   align-self: stretch;
   justify-self: stretch;
   display: grid;
   place-items: center;
 }
 
+.actionArea {
+  grid-area: action-area;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  overflow: visible;
+  padding: 8px max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) 4px;
+  pointer-events: none;
+}
+
+.actionPanelDock {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  pointer-events: auto;
+}
+
 .centerArena {
   --center-panel-size: clamp(88px, 11.2vw, 132px);
-  --center-discard-tile-width: clamp(13px, 1.28vw, 19px);
+  --center-discard-tile-width: clamp(20px, min(2.6vw, 4vh), 36px);
   --center-discard-gap: clamp(2px, 0.32vw, 4px);
   --center-discard-seat-gap: clamp(4px, 0.65vw, 8px);
   --center-discard-cols: 6;
@@ -289,6 +345,7 @@
   position: relative;
   width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 150px;
   overflow: hidden;
 }
@@ -703,6 +760,7 @@
 }
 
 .playerArea {
+  box-sizing: border-box;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   gap: clamp(2px, 0.4vw, 5px);
@@ -726,28 +784,18 @@
   align-content: end;
   position: relative;
   z-index: 12;
-  overflow: visible;
+  overflow: hidden;
   padding-bottom: max(6px, var(--mahjong-safe-bottom));
 }
 
 .selfArea {
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto;
   gap: clamp(3px, 0.6vh, 7px);
   width: 100%;
-  justify-self: center;
+  justify-self: stretch;
   min-height: 0;
-  overflow: visible;
-}
-
-.selfActionDock {
-  position: relative;
-  z-index: 30;
-  min-height: 24px;
-  display: grid;
-  justify-items: center;
-  align-items: end;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .selfInfoDock {
@@ -755,6 +803,7 @@
   z-index: 15;
   display: grid;
   justify-items: center;
+  min-width: 0;
 }
 
 .selfHandDock {
@@ -763,7 +812,7 @@
   min-height: 0;
   width: 100%;
   display: grid;
-  justify-items: center;
+  justify-items: stretch;
 }
 
 .selfMeldDock {
@@ -771,6 +820,7 @@
   z-index: 10;
   overflow: hidden;
   pointer-events: none;
+  min-width: 0;
 }
 
 .playerAreaLeft,
@@ -864,19 +914,19 @@
 }
 
 .handSelf {
-  --self-tile-gap: clamp(2px, 0.45vw, 6px);
-  --self-tsumo-gap: 10px;
-  --self-tile-width-max: clamp(34px, 4.2vw, 58px);
-  --self-tile-width-fit: calc((100% - 58px) / 14);
-  --self-tile-width: min(var(--self-tile-width-max), var(--self-tile-width-fit));
-  --self-drawn-tile-width: max(16px, min(var(--self-tile-width-max), 6vw));
+  --self-tile-gap: clamp(1px, 0.25vw, 4px);
+  --self-tsumo-gap: clamp(6px, 0.8vw, 12px);
+  --self-tile-width-fit: calc((100% - var(--self-tsumo-gap) - 18px - (13 * var(--self-tile-gap))) / 14);
+  --self-tile-width: max(22px, min(clamp(30px, min(4vw, 6vh), 58px), var(--self-tile-width-fit)));
+  --self-drawn-tile-width: var(--self-tile-width);
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: var(--self-tile-gap);
-  width: min(100%, calc(var(--self-tile-width-max) * 14 + var(--self-tsumo-gap) + 26px));
+  gap: 0;
+  width: 100%;
   min-width: 0;
-  overflow: visible;
+  max-width: 100%;
+  overflow: hidden;
   position: relative;
   z-index: 10;
 }
@@ -887,14 +937,14 @@
   justify-content: flex-start;
   gap: var(--self-tile-gap);
   min-width: 0;
-  flex: 1 1 0%;
-  width: 0;
-  overflow: visible;
+  flex: 1 1 auto;
+  width: auto;
+  overflow: hidden;
   min-height: 0;
 }
 
 .drawnTile {
-  margin-left: 10px;
+  margin-left: var(--self-tsumo-gap);
   width: var(--self-drawn-tile-width);
   min-width: var(--self-drawn-tile-width);
   flex: 0 0 auto;
@@ -909,15 +959,19 @@
 .handOpponent {
   --opponent-count: 13;
   --opponent-tile-gap: clamp(1px, 0.22vw, 3px);
-  --opponent-tile-width-max: clamp(18px, 2.2vw, 32px);
-  --opponent-tile-width: var(--opponent-tile-width-max);
+  --opponent-tile-width-max: clamp(16px, min(2.2vw, 3.5vh), 32px);
+  --opponent-tile-width-fit: calc((100% - ((var(--opponent-count) - 1) * var(--opponent-tile-gap)) - 12px) / var(--opponent-count));
+  --opponent-tile-width: max(10px, min(var(--opponent-tile-width-max), var(--opponent-tile-width-fit)));
   --opponent-tile-height: calc(var(--opponent-tile-width) * 1.46);
   display: flex;
   align-items: flex-end;
   justify-content: center;
   flex-wrap: nowrap;
   gap: var(--opponent-tile-gap);
-  overflow: visible;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .opponentTileBackFlat {
@@ -944,7 +998,7 @@
   height: 100%;
   align-self: stretch;
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .handOpponentLeft,
@@ -958,7 +1012,7 @@
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .drawnBackSlot {
@@ -1389,11 +1443,11 @@
 
 .actionsWrap {
   width: fit-content;
-  max-width: min(100%, calc(100% - 12px));
+  max-width: 100%;
   display: grid;
   gap: 4px;
-  padding: 5px 8px;
-  margin: 0 auto 2px;
+  padding: 6px;
+  margin: 0;
   border: 1px solid rgba(110, 231, 183, 0.3);
   border-radius: 10px;
   background: rgba(2, 44, 34, 0.82);
@@ -1407,7 +1461,7 @@
 .mahjongActionPanel {
   position: relative;
   z-index: 30;
-  width: fit-content;
+  width: max-content;
   max-width: 100%;
   overflow: visible;
   pointer-events: auto;
@@ -1431,12 +1485,12 @@
 }
 
 .actionGrid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: minmax(56px, auto);
+  justify-content: start;
   gap: 6px;
-  align-items: center;
-  max-width: min(100%, 480px);
+  align-items: end;
+  max-width: 100%;
 }
 
 .actionSlot {
@@ -1445,8 +1499,8 @@
 }
 
 .actionBtn {
-  min-width: 58px;
-  height: 34px;
+  min-width: 60px;
+  min-height: 36px;
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.52);
   background: rgba(10, 25, 30, 0.86);
@@ -1454,7 +1508,7 @@
   font-weight: 800;
   line-height: 1.1;
   color: #e2e8f0;
-  padding: 0 12px;
+  padding: 6px 12px;
   box-shadow: 0 2px 10px rgba(2, 8, 23, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   cursor: pointer;
   pointer-events: auto;
@@ -1486,7 +1540,7 @@
 
 .actionCritical {
   min-width: 68px;
-  height: 38px;
+  min-height: 38px;
   box-shadow: 0 0 0 1px rgba(254, 240, 138, 0.65), 0 0 14px rgba(250, 204, 21, 0.45);
 }
 
@@ -1736,30 +1790,22 @@
 }
 
 @media (max-width: 1400px) {
-  .table {
-    width: min(97vw, 920px);
-  }
-
   .grid {
-    grid-template-columns: clamp(66px, 10vw, 118px) minmax(0, 1fr) clamp(66px, 10vw, 118px);
-    grid-template-rows: clamp(74px, 13vh, 120px) minmax(0, 1fr) clamp(140px, 23vh, 210px);
+    grid-template-columns: clamp(68px, 11vw, 132px) minmax(0, 1fr) clamp(86px, 14vw, 164px);
+    grid-template-rows: clamp(76px, 13.5vh, 130px) minmax(0, 1fr) clamp(144px, 23vh, 224px);
   }
 }
 
 @media (max-width: 1100px) {
-  .table {
-    width: min(98vw, 860px);
-  }
-
   .grid {
-    grid-template-columns: clamp(58px, 9.5vw, 104px) minmax(0, 1fr) clamp(58px, 9.5vw, 104px);
-    grid-template-rows: clamp(68px, 12vh, 108px) minmax(0, 1fr) clamp(132px, 22vh, 196px);
+    grid-template-columns: clamp(58px, 10vw, 110px) minmax(0, 1fr) clamp(80px, 14vw, 142px);
+    grid-template-rows: clamp(68px, 12vh, 112px) minmax(0, 1fr) clamp(136px, 22vh, 198px);
   }
 
   .centerArena {
     --center-panel-size: clamp(84px, 10.8vw, 120px);
     --center-discard-gap: clamp(2px, 0.28vw, 3px);
-    --center-discard-tile-width: clamp(12px, 1.2vw, 17px);
+    --center-discard-tile-width: clamp(18px, min(2.2vw, 3.4vh), 30px);
   }
 
   .playerInfo {
@@ -1774,19 +1820,13 @@
 }
 
 @media (max-width: 900px) {
-  .table {
-    width: 100%;
-    max-height: min(76dvh, 640px);
-    min-height: clamp(280px, 52dvh, 540px);
-  }
-
   .grid {
-    grid-template-columns: clamp(52px, 9vw, 92px) minmax(0, 1fr) clamp(52px, 9vw, 92px);
-    grid-template-rows: clamp(64px, 11.5vh, 98px) minmax(0, 1fr) clamp(126px, 21vh, 180px);
+    grid-template-columns: clamp(52px, 10vw, 90px) minmax(0, 1fr) clamp(72px, 16vw, 120px);
+    grid-template-rows: clamp(64px, 11vh, 100px) minmax(0, 1fr) clamp(130px, 22vh, 190px);
   }
 
   .gridPlayers3 {
-    grid-template-columns: clamp(50px, 8.5vw, 90px) minmax(0, 1fr) clamp(50px, 8.5vw, 90px);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) clamp(70px, 15vw, 116px);
   }
 
   .seatLeft,
@@ -1802,45 +1842,37 @@
   }
 
   .handSelf {
-    --self-tile-gap: clamp(1px, 0.32vw, 4px);
-    --self-tsumo-gap: clamp(5px, 0.72vw, 10px);
-    --self-tile-width-max: clamp(32px, 4vw, 52px);
-    --self-tile-width-fit: calc((100% - 48px) / 14);
-    --self-drawn-tile-width: max(14px, min(var(--self-tile-width-max), 5.4vw));
+    --self-tile-gap: clamp(1px, 0.22vw, 3px);
+    --self-tsumo-gap: clamp(5px, 0.7vw, 9px);
   }
 
-  .actionsWrap {
-    padding: 4px 6px;
-    gap: 4px;
+  .actionGrid {
+    grid-template-columns: repeat(2, minmax(54px, auto));
+    gap: 5px;
   }
 }
 
 @media (max-width: 700px) {
-  .table {
-    max-height: min(70dvh, 560px);
-    min-height: clamp(250px, 50dvh, 480px);
-  }
-
   .grid {
-    grid-template-columns: clamp(40px, 8vw, 74px) minmax(0, 1fr) clamp(40px, 8vw, 74px);
-    grid-template-rows: clamp(56px, 10vh, 88px) minmax(0, 1fr) clamp(120px, 20vh, 168px);
+    grid-template-columns: clamp(38px, 9vw, 72px) minmax(0, 1fr) clamp(66px, 15vw, 106px);
+    grid-template-rows: clamp(56px, 10vh, 88px) minmax(0, 1fr) clamp(118px, 21vh, 168px);
+    gap: 3px;
   }
 
   .centerArena {
     --center-panel-size: clamp(78px, 10.5vw, 104px);
     --center-discard-gap: clamp(1px, 0.22vw, 2px);
-    --center-discard-tile-width: clamp(10px, 1.02vw, 14px);
+    --center-discard-tile-width: clamp(16px, min(2vw, 3vh), 24px);
     --center-discard-seat-gap: clamp(3px, 0.5vw, 6px);
   }
 
   .handOpponent {
-    --opponent-tile-width-max: clamp(14px, 1.8vw, 21px);
+    --opponent-tile-width-max: clamp(13px, min(1.8vw, 2.8vh), 21px);
     --opponent-tile-width: var(--opponent-tile-width-max);
   }
 
   .handSelf {
-    --self-tile-width-max: clamp(30px, 4vw, 46px);
-    --self-tile-width-fit: calc((100% - 42px) / 14);
+    --self-tsumo-gap: clamp(4px, 0.65vw, 8px);
   }
 
   .centerInfo {
@@ -1857,15 +1889,9 @@
 }
 
 @media (max-width: 430px) {
-  .table {
-    aspect-ratio: 1 / 1.02;
-    max-height: min(64dvh, 520px);
-    min-height: clamp(240px, 48dvh, 430px);
-  }
-
   .grid {
-    grid-template-columns: clamp(34px, 8vw, 56px) minmax(0, 1fr) clamp(34px, 8vw, 56px);
-    grid-template-rows: clamp(48px, 10vh, 76px) minmax(0, 1fr) clamp(112px, 22vh, 148px);
+    grid-template-columns: clamp(28px, 8vw, 48px) minmax(0, 1fr) clamp(62px, 18vw, 96px);
+    grid-template-rows: clamp(48px, 9.5vh, 72px) minmax(0, 1fr) clamp(108px, 22vh, 146px);
     gap: 3px;
   }
 
@@ -1883,9 +1909,6 @@
   .handSelf {
     --self-tile-gap: 1px;
     --self-tsumo-gap: 4px;
-    --self-tile-width-max: clamp(26px, 3.8vw, 40px);
-    --self-tile-width-fit: calc((100% - 34px) / 14);
-    --self-drawn-tile-width: max(12px, min(var(--self-tile-width-max), 4.6vw));
   }
 
   .playerInfo {
@@ -1910,44 +1933,47 @@
     height: 34px;
     font-size: 12px;
   }
+
+  .actionGrid {
+    gap: 4px;
+  }
 }
 
 @media (max-height: 900px) {
-  .table {
-    max-height: min(74dvh, 700px);
+  .grid {
+    grid-template-rows: clamp(72px, 12.5vh, 124px) minmax(0, 1fr) clamp(140px, 23vh, 220px);
   }
 }
 
 @media (max-height: 760px) {
-  .table {
-    max-height: min(72dvh, 620px);
-    min-height: clamp(250px, 50dvh, 500px);
-  }
-
   .grid {
-    grid-template-rows: clamp(62px, 11vh, 96px) minmax(0, 1fr) clamp(126px, 22vh, 182px);
+    grid-template-rows: clamp(64px, 11vh, 100px) minmax(0, 1fr) clamp(130px, 22vh, 190px);
   }
 
   .handOpponent {
-    --opponent-tile-width-max: clamp(16px, 2vw, 24px);
+    --opponent-tile-width-max: clamp(15px, min(1.9vw, 2.9vh), 24px);
     --opponent-tile-width: var(--opponent-tile-width-max);
+  }
+
+  .playerInfo {
+    padding: 2px 5px;
+    gap: 4px;
   }
 
   .centerInfo {
     padding: 4px;
   }
+
+  .centerArena {
+    --center-discard-gap: clamp(1px, 0.2vw, 2px);
+    --center-discard-seat-gap: clamp(3px, 0.5vw, 6px);
+  }
 }
 
 @media (max-height: 560px) {
-  .table {
-    aspect-ratio: 1.16 / 1;
-    max-height: min(76dvh, 420px);
-    min-height: clamp(210px, 44dvh, 320px);
-  }
-
   .grid {
-    grid-template-columns: clamp(36px, 8vw, 60px) minmax(0, 1fr) clamp(36px, 8vw, 60px);
-    grid-template-rows: clamp(46px, 10vh, 70px) minmax(0, 1fr) clamp(104px, 23vh, 142px);
+    grid-template-columns: clamp(30px, 8vw, 52px) minmax(0, 1fr) clamp(58px, 15vw, 90px);
+    grid-template-rows: clamp(46px, 10vh, 70px) minmax(0, 1fr) clamp(102px, 23vh, 140px);
   }
 
   .seatBottom {
@@ -1967,9 +1993,6 @@
   .handSelf {
     --self-tile-gap: 1px;
     --self-tsumo-gap: 4px;
-    --self-tile-width-max: clamp(24px, 3.6vw, 36px);
-    --self-tile-width-fit: calc((100% - 32px) / 14);
-    --self-drawn-tile-width: max(12px, min(var(--self-tile-width-max), 4.3vw));
   }
 
   .playerAreaSide .playerBadges {

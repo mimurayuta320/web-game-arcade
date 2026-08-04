@@ -2,7 +2,6 @@ import MeldArea from "./MeldArea";
 import OpponentHand from "./OpponentHand";
 import PlayerHand from "./PlayerHand";
 import PlayerInfo from "./PlayerInfo";
-import type { ReactNode } from "react";
 import styles from "./mahjong.module.css";
 import type { MahjongDiscardAnimationView, MahjongPlayerView, MahjongSeatPosition, MahjongTileInstanceView } from "./types";
 
@@ -12,7 +11,6 @@ type PlayerAreaProps = {
   selfConcealedHand?: MahjongTileInstanceView[];
   selfDrawnTile?: MahjongTileInstanceView | null;
   selfSelectedTileId?: string | null;
-  selfActionPanel?: ReactNode;
   selfSelectableTileIds?: string[] | null;
   selfDiscardAnimation?: MahjongDiscardAnimationView | null;
   onSelfTileClick?: (payload: { tileId: string; source: "concealed" | "drawn" }) => void;
@@ -24,7 +22,6 @@ export default function PlayerArea({
   selfConcealedHand,
   selfDrawnTile,
   selfSelectedTileId,
-  selfActionPanel,
   selfSelectableTileIds,
   selfDiscardAnimation,
   onSelfTileClick,
@@ -68,7 +65,6 @@ export default function PlayerArea({
       ) : (
         <>
           <div className={styles.selfArea}>
-            <div className={styles.selfActionDock}>{selfActionPanel}</div>
             <div className={styles.selfInfoDock}>{infoNode}</div>
             <div className={styles.selfHandDock}>{handNode}</div>
           </div>
