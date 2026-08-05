@@ -19,7 +19,6 @@ import type {
 } from "../components/survivors/types";
 import type {
   MahjongActionButton,
-  MahjongDiscardAnimationView,
   MahjongLogEvent,
   MahjongMeldView,
   MahjongPlayerView,
@@ -819,7 +818,6 @@ const LOGIN_I18N = {
     mahjongResultYakuman: "役満",
     mahjongYakuMenzenTsumo: "門前清自摸和",
     mahjongYakuTanyao: "断么九",
-    mahjongYakuPinfu: "平和",
     mahjongYakuToitoi: "対々和",
     mahjongYakuYakuhai: "役牌",
     mahjongYakuChiitoitsu: "七対子",
@@ -1531,7 +1529,6 @@ const LOGIN_I18N = {
     mahjongResultYakuman: "역만",
     mahjongYakuMenzenTsumo: "멘젠 쯔모",
     mahjongYakuTanyao: "탕야오",
-    mahjongYakuPinfu: "핑후",
     mahjongYakuToitoi: "또이또이",
     mahjongYakuYakuhai: "역패",
     mahjongYakuChiitoitsu: "치또이츠",
@@ -2316,6 +2313,8 @@ type SurvivorsWeaponRenderPose = {
   muzzleX: number;
   muzzleY: number;
   flashIntensity: number;
+  opacity: number;
+  daikonFrameIndex: number;
 };
 type SurvivorsDaikonAttackVisual = {
   active: boolean;
@@ -2338,15 +2337,6 @@ type BrushCursorPreview = {
   visible: boolean;
 };
 type MahjongCell = number;
-type MahjongTileInstance = {
-  instanceId: string;
-  tile: MahjongCell;
-};
-type MahjongDiscardSource = "concealed" | "drawn";
-type MahjongDiscardRequest = {
-  tileInstanceId: string;
-  source: MahjongDiscardSource;
-};
 type MahjongMeld = {
   type: "triplet" | "sequence";
   tile: MahjongCell;
@@ -2382,7 +2372,6 @@ type MahjongLatestDiscardMeta = {
 type MahjongMode = "yonma" | "sanma";
 type MahjongNorthRule = "normal" | "nuki-dora";
 type MahjongTsumoPaymentRule = "loss" | "no-loss" | "split-north";
-type MahjongCpuSpeed = "fast" | "normal" | "slow";
 type MahjongRuleConfig = {
   mode: MahjongMode;
   playerCount: 3 | 4;
@@ -2428,8 +2417,10 @@ const FOUR_PANEL_RANDOM_TITLES = [
   "温泉でタイムスリップ",
 ];
 
-const SURVIVORS_ARENA_WIDTH = 860;
-const SURVIVORS_ARENA_HEIGHT = 480;
+const SURVIVORS_VIEWPORT_WIDTH = 860;
+const SURVIVORS_VIEWPORT_HEIGHT = 480;
+const SURVIVORS_ARENA_WIDTH = 2580;
+const SURVIVORS_ARENA_HEIGHT = 1440;
 const SURVIVORS_PLAYER_RADIUS = 16;
 const SURVIVORS_ENEMY_RADIUS = 14;
 const SURVIVORS_SKILL_COOLDOWN_MS = 12000;
@@ -2528,12 +2519,12 @@ const SURVIVORS_PLAYER_SPRITES: Record<SurvivorsCharacterId, Record<1 | 2 | 3, s
 const SURVIVORS_CHARACTER_RENDER_RULES: Record<SurvivorsCharacterId, { usesFullBodyAttackAnimation: boolean }> = {
   fairy: { usesFullBodyAttackAnimation: false },
   hammer: { usesFullBodyAttackAnimation: false },
-  daikon: { usesFullBodyAttackAnimation: true },
+  daikon: { usesFullBodyAttackAnimation: false },
 };
 const SURVIVORS_DEFAULT_WEAPON_IMAGE_BY_CHARACTER: Record<SurvivorsCharacterId, string> = {
   fairy: "/motionPng/Survivors/hakusai-attack.png",
   hammer: "/motionPng/Survivors/hammer2.png",
-  daikon: "/motionPng/Survivors/daikon.png",
+  daikon: "/motionPng/Survivors/大根/大根attackMotion_背景透過.png",
 };
 const SURVIVORS_DEFAULT_WEAPON_CONFIG_BY_CHARACTER: Record<SurvivorsCharacterId, WeaponRenderConfig> = {
   fairy: {
@@ -2748,7 +2739,9 @@ const getSurvivorsDaikonDirection = (
 };
 const SURVIVORS_DAIKON_ATTACK_FRAME_COUNT = 5;
 const SURVIVORS_DAIKON_ATTACK_HIT_FRAME_INDEX = 2;
-const SURVIVORS_DAIKON_ATTACK_BASE_DURATION_MS = 360;
+const SURVIVORS_DAIKON_ATTACK_BASE_DURATION_MS = 520;
+const SURVIVORS_DAIKON_WEAPON_CYCLE_MS = 420;
+const SURVIVORS_DAIKON_ATTACK_SHEET_WIDTH = 1536;
 const SURVIVORS_DAIKON_ATTACK_MOTION_SPRITE = "/motionPng/Survivors/大根/大根attackMotion_背景透過.png";
 const SURVIVORS_DAIKON_ATTACK_SHEET_HEIGHT = 1024;
 const SURVIVORS_DAIKON_ATTACK_RENDER_SCALE = 0.1;
@@ -2797,10 +2790,10 @@ const SURVIVORS_CHARACTER_PROFILES: Record<SurvivorsCharacterId, SurvivorsCharac
   daikon: {
     // TODO: Confirm official daikon gameplay values once source data is available.
     roleLabel: "近中距離バランス",
-    attackRangeBase: 220,
-    attackRangePerLevel: 4,
+    attackRangeBase: 165,
+    attackRangePerLevel: 2,
     attackDamageBonus: 2,
-    attackIntervalAdjustMs: 10,
+    attackIntervalAdjustMs: 90,
     innateMultiShot: 0,
     skillName: "DAIKON WALL",
     skillMpCost: 40,
@@ -3030,16 +3023,6 @@ const FIT_PUZZLE_SIZE = 3;
 const MAHJONG_TYPE_COUNT = 34;
 const MAHJONG_START_HAND_COUNT = 13;
 const MAHJONG_WAIT_HINT_LIMIT = 8;
-const CPU_TURN_START_DELAY = 400;
-const CPU_DISCARD_ANIMATION_DELAY = 250;
-const CPU_CALL_THINK_DELAY = 700;
-const CPU_RIICHI_DELAY = 800;
-const CPU_WIN_DELAY = 900;
-const MAHJONG_CPU_SPEED_PROFILE: Record<MahjongCpuSpeed, { thinkMin: number; thinkMax: number }> = {
-  fast: { thinkMin: 300, thinkMax: 600 },
-  normal: { thinkMin: 700, thinkMax: 1200 },
-  slow: { thinkMin: 1200, thinkMax: 1800 },
-};
 const MAHJONG_TILE_LABELS = [
   "M1",
   "M2",
@@ -3208,28 +3191,6 @@ function normalizeMahjongTileList(source: unknown): number[] {
     .flat(Infinity)
     .map((value) => normalizeMahjongTileValue(value))
     .filter((value): value is number => value !== null);
-}
-
-function normalizeMahjongTileInstanceList(source: unknown): MahjongTileInstance[] {
-  if (!Array.isArray(source)) return [];
-  const out: MahjongTileInstance[] = [];
-  source.forEach((item) => {
-    if (typeof item === "number" || typeof item === "string") {
-      const tile = normalizeMahjongTileValue(item);
-      if (tile !== null) out.push(createMahjongTileInstance(tile));
-      return;
-    }
-    if (item && typeof item === "object") {
-      const raw = item as { tile?: unknown; instanceId?: unknown };
-      const tile = normalizeMahjongTileValue(raw.tile);
-      if (tile === null) return;
-      const providedId = typeof raw.instanceId === "string" && raw.instanceId.trim().length > 0
-        ? raw.instanceId.trim()
-        : createMahjongTileInstance(tile).instanceId;
-      out.push({ instanceId: providedId, tile });
-    }
-  });
-  return out;
 }
 
 function createMahjongWall(config: { removedTiles: MahjongCell[] } = MAHJONG_RULE_CONFIG_BASE.yonma): number[] {
@@ -3436,58 +3397,25 @@ function mahjongConcealedCountAfterDraw(meldCount: number): number {
   return mahjongConcealedCountAfterDiscard(meldCount) + 1;
 }
 
-let mahjongTileInstanceSeq = 0;
-
-function createMahjongTileInstance(tile: MahjongCell): MahjongTileInstance {
-  mahjongTileInstanceSeq += 1;
-  return {
-    instanceId: `mj-${mahjongTileInstanceSeq}`,
-    tile,
-  };
-}
-
-function mapMahjongTilesToInstances(tiles: MahjongCell[]): MahjongTileInstance[] {
-  return tiles.map((tile) => createMahjongTileInstance(tile));
-}
-
-function mahjongTileNumbersFromInstances(tiles: MahjongTileInstance[]): MahjongCell[] {
-  return tiles.map((item) => item.tile);
-}
-
-function sortMahjongTileInstances(tiles: MahjongTileInstance[]): MahjongTileInstance[] {
-  return [...tiles].sort((a, b) => a.tile - b.tile);
-}
-
-function mahjongBuildHandTiles(concealedHand: MahjongTileInstance[], drawnTile: MahjongTileInstance | null): MahjongCell[] {
-  return drawnTile ? [...mahjongTileNumbersFromInstances(concealedHand), drawnTile.tile] : mahjongTileNumbersFromInstances(concealedHand);
-}
-
-function normalizeMahjongHandState(
-  concealedHand: MahjongTileInstance[],
-  drawnTile: MahjongTileInstance | null,
+function mahjongSplitSelfHand(
+  hand: MahjongCell[],
+  drawnTileFlag: MahjongCell | null,
   meldCount: number,
 ): {
-  concealedHand: MahjongTileInstance[];
-  drawnTile: MahjongTileInstance | null;
+  concealedHand: MahjongCell[];
+  drawnTile: MahjongCell | null;
 } {
-  if (drawnTile) {
-    return {
-      concealedHand: [...concealedHand],
-      drawnTile,
-    };
-  }
-
   const expectedAfterDraw = mahjongConcealedCountAfterDraw(meldCount);
-  if (concealedHand.length === expectedAfterDraw && concealedHand.length > 0) {
+  const hasDrawnTile = drawnTileFlag !== null && hand.length === expectedAfterDraw && hand.length > 0;
+  if (!hasDrawnTile) {
     return {
-      concealedHand: concealedHand.slice(0, -1),
-      drawnTile: concealedHand[concealedHand.length - 1] ?? null,
+      concealedHand: [...hand],
+      drawnTile: null,
     };
   }
-
   return {
-    concealedHand: [...concealedHand],
-    drawnTile: null,
+    concealedHand: hand.slice(0, -1),
+    drawnTile: hand[hand.length - 1] ?? null,
   };
 }
 
@@ -3963,7 +3891,7 @@ function createFitPuzzleShuffledTiles(stepCount = 80): number[] {
 
 const BOARD_SIZE = 8;
 const GOMOKU_SIZE = 15;
-const UNO_COLORS: Array<Exclude<UnoColor, "W">> = ["R", "G", "B", "Y"];
+const UNO_COLORS: UnoColor[] = ["R", "G", "B", "Y"];
 const UNO_PLAY_ANIMATION_DELAY_MS = 140;
 let unoCardSerial = 0;
 
@@ -6659,8 +6587,7 @@ export default function Home() {
   if (!mahjongStartRef.current) {
     mahjongStartRef.current = createMahjongStartBoard();
   }
-  const [mahjongConcealedHand, setMahjongConcealedHand] = useState<MahjongTileInstance[]>(() => mapMahjongTilesToInstances([...(mahjongStartRef.current?.hand || [])]));
-  const [mahjongDrawnTile, setMahjongDrawnTile] = useState<MahjongTileInstance | null>(null);
+  const [mahjongBoard, setMahjongBoard] = useState<MahjongCell[]>(() => [...(mahjongStartRef.current?.hand || [])]);
   const [mahjongWall, setMahjongWall] = useState<MahjongCell[]>(() => [...(mahjongStartRef.current?.wall || [])]);
   const [mahjongRiver, setMahjongRiver] = useState<MahjongCell[]>([]);
   const [mahjongSideRivers, setMahjongSideRivers] = useState<[MahjongCell[], MahjongCell[], MahjongCell[]]>([[], [], []]);
@@ -6677,7 +6604,8 @@ export default function Home() {
   const [mahjongReturnPoints, setMahjongReturnPoints] = useState(30000);
   const [mahjongTsumoPaymentRule, setMahjongTsumoPaymentRule] = useState<MahjongTsumoPaymentRule>("loss");
   const [mahjongNukiDoraTiles, setMahjongNukiDoraTiles] = useState<MahjongCell[]>([]);
-  const [mahjongSelectedTileId, setMahjongSelectedTileId] = useState<string | null>(null);
+  const [mahjongSelected, setMahjongSelected] = useState<number | null>(null);
+  const [mahjongLastDraw, setMahjongLastDraw] = useState<MahjongCell | null>(null);
   const [mahjongRoundWind, setMahjongRoundWind] = useState<"東" | "南" | "西" | "北">("東");
   const [mahjongRoundNumber, setMahjongRoundNumber] = useState(1);
   const [mahjongSeatWind, setMahjongSeatWind] = useState<"東" | "南" | "西" | "北">("東");
@@ -6685,9 +6613,7 @@ export default function Home() {
   const [mahjongKyotaku, setMahjongKyotaku] = useState(0);
   const [mahjongRiichiTileIndex, setMahjongRiichiTileIndex] = useState<number | null>(null);
   const [mahjongRiichiPending, setMahjongRiichiPending] = useState(false);
-  const [mahjongAwaitingCallDiscard, setMahjongAwaitingCallDiscard] = useState(false);
   const [mahjongAutoDiscarding, setMahjongAutoDiscarding] = useState(false);
-  const [mahjongDiscardSubmitting, setMahjongDiscardSubmitting] = useState(false);
   const [mahjongActionDeadlineAt, setMahjongActionDeadlineAt] = useState<number | null>(null);
   const [mahjongDoraIndicator, setMahjongDoraIndicator] = useState<MahjongCell | null>(() => mahjongStartRef.current?.wall[4] ?? null);
   const [mahjongWinSummary, setMahjongWinSummary] = useState<MahjongWinSummary | null>(null);
@@ -6701,22 +6627,11 @@ export default function Home() {
   const [mahjongNoCallEnabled, setMahjongNoCallEnabled] = useState(false);
   const [mahjongReduceEffects, setMahjongReduceEffects] = useState(false);
   const [mahjongCallSubmitting, setMahjongCallSubmitting] = useState(false);
-  const [mahjongCpuSpeed, setMahjongCpuSpeed] = useState<MahjongCpuSpeed>("normal");
-  const [mahjongCpuTurnBusy, setMahjongCpuTurnBusy] = useState(false);
-  const [mahjongCpuDrawSeatIndex, setMahjongCpuDrawSeatIndex] = useState<number | null>(null);
-  const [mahjongCpuThinking, setMahjongCpuThinking] = useState<{ seatIndex: number; sec: number } | null>(null);
-  const [mahjongTurnActor, setMahjongTurnActor] = useState<"self" | "opponent">("self");
-  const [mahjongCpuTurnsRemaining, setMahjongCpuTurnsRemaining] = useState(0);
-  const [mahjongDiscardAnimation, setMahjongDiscardAnimation] = useState<MahjongDiscardAnimationView | null>(null);
   const [mahjongLogEvents, setMahjongLogEvents] = useState<MahjongLogEvent[]>([]);
   const mahjongActionDebugKeyRef = useRef("");
   const mahjongAutoDiscardLockRef = useRef(false);
-  const mahjongDiscardLockRef = useRef(false);
   const mahjongCallLockRef = useRef(false);
-  const mahjongRiichiCommitLockRef = useRef(false);
-  const mahjongCpuTurnTokenRef = useRef(0);
-  const mahjongCpuTimersRef = useRef<number[]>([]);
-  const onMahjongTileClickRef = useRef<(payload: { tileId: string; source: MahjongDiscardSource }, options?: { force?: boolean }) => void>(() => {});
+  const onMahjongTileClickRef = useRef<(index: number, options?: { force?: boolean }) => void>(() => {});
   const mahjongRuleConfig = useMemo<MahjongRuleConfig>(() => {
     const base = MAHJONG_RULE_CONFIG_BASE[mahjongMode];
     return {
@@ -6733,12 +6648,6 @@ export default function Home() {
     if (mahjongRuleConfig.northRule !== "nuki-dora") return 0;
     return mahjongNukiDoraTiles.length;
   }, [mahjongNukiDoraTiles.length, mahjongRuleConfig.mode, mahjongRuleConfig.northRule]);
-  const mahjongConcealedTiles = useMemo(() => mahjongTileNumbersFromInstances(mahjongConcealedHand), [mahjongConcealedHand]);
-  const mahjongCurrentHandTiles = useMemo(
-    () => mahjongBuildHandTiles(mahjongConcealedHand, mahjongDrawnTile),
-    [mahjongConcealedHand, mahjongDrawnTile],
-  );
-  const mahjongCurrentHandCount = mahjongCurrentHandTiles.length;
   const [pokerDeck, setPokerDeck] = useState<PokerCard[]>([]);
   const [pokerPlayerHand, setPokerPlayerHand] = useState<PokerCard[]>([]);
   const [pokerCpuHand, setPokerCpuHand] = useState<PokerCard[]>([]);
@@ -7055,6 +6964,7 @@ export default function Home() {
   const survivorsNextWaveAtSecRef = useRef(getSurvivorsNextWaveAtSec(1));
   const survivorsAutoAttackReadyAtRef = useRef(0);
   const survivorsContactReadyAtRef = useRef(0);
+  const survivorsContinuousSpawnReadyAtRef = useRef(0);
   const survivorsSkillReadyAtRef = useRef(0);
   const survivorsSkillActiveUntilRef = useRef(0);
   const survivorsWaveTransitioningRef = useRef(false);
@@ -8660,14 +8570,14 @@ export default function Home() {
     return Math.max(2, Math.min(8, Math.floor(daifugoMaxPlayers || 8)));
   }, [connectedRoomCode, connectedRoomMaxPlayers, daifugoCpuCount, daifugoMaxPlayers, daifugoMode]);
 
-  const daifugoDisplaySeats = useMemo<DaifugoPlayer[]>(() => {
+  const daifugoDisplaySeats = useMemo(() => {
     if (gameStarted.daifugo && daifugoPlayers.length > 0) {
       return daifugoPlayers;
     }
 
     if (connectedRoomCode) {
       const maxPlayers = Math.max(2, Math.min(8, Math.floor(connectedRoomMaxPlayers || daifugoMaxPlayers || 8)));
-      const joined: DaifugoPlayer[] = roomParticipants
+      const joined = roomParticipants
         .filter((participant) => participant.role === "host" || participant.role === "guest")
         .slice(0, maxPlayers)
         .map((participant, index) => ({
@@ -9059,6 +8969,21 @@ export default function Home() {
   const numeronMatchedPlayersCount = useMemo(() => {
     return Math.max(0, roomActivePlayerCount);
   }, [roomActivePlayerCount]);
+
+  const survivorsCameraLeft = Math.max(
+    0,
+    Math.min(
+      Math.max(0, SURVIVORS_ARENA_WIDTH - SURVIVORS_VIEWPORT_WIDTH),
+      survivorsPlayer.x - SURVIVORS_VIEWPORT_WIDTH / 2,
+    ),
+  );
+  const survivorsCameraTop = Math.max(
+    0,
+    Math.min(
+      Math.max(0, SURVIVORS_ARENA_HEIGHT - SURVIVORS_VIEWPORT_HEIGHT),
+      survivorsPlayer.y - SURVIVORS_VIEWPORT_HEIGHT / 2,
+    ),
+  );
 
   const resolveOthelloChaosOwners = (target: OthelloChaosTarget, playerSide: 1 | 2): Array<1 | 2> => {
     if (target === "black") return [1];
@@ -10063,7 +9988,7 @@ export default function Home() {
     if (typeof state.isChinchiroOver === "boolean") setIsChinchiroOver(state.isChinchiroOver);
 
     if (Array.isArray(state.sevensPlayers)) {
-      const parsed: SevensPlayer[] = (state.sevensPlayers as SevensPlayer[]).map((player): SevensPlayer => ({
+      const parsed = (state.sevensPlayers as SevensPlayer[]).map((player) => ({
         id: String(player.id || ""),
         name: String(player.name || "Player"),
         isCpu: Boolean(player.isCpu),
@@ -10224,30 +10149,10 @@ export default function Home() {
 
     const shouldApplyMahjongHiddenState = !connectedRoomCode;
 
-    let hydratedConcealed: MahjongTileInstance[] | null = null;
-    if (shouldApplyMahjongHiddenState && Array.isArray(state.mahjongConcealedHand)) {
-      hydratedConcealed = normalizeMahjongTileInstanceList(state.mahjongConcealedHand);
-    } else if (shouldApplyMahjongHiddenState && Array.isArray(state.mahjongBoard)) {
-      const parsedLegacyHand = normalizeMahjongTileList(state.mahjongBoard);
-      hydratedConcealed = mapMahjongTilesToInstances(parsedLegacyHand as MahjongCell[]);
-    }
-
-    let hydratedDrawn: MahjongTileInstance | null | undefined = undefined;
-    if (shouldApplyMahjongHiddenState && state.mahjongDrawnTile !== undefined) {
-      const parsedDrawnList = normalizeMahjongTileInstanceList(state.mahjongDrawnTile === null ? [] : [state.mahjongDrawnTile]);
-      hydratedDrawn = parsedDrawnList[0] || null;
-    } else if (shouldApplyMahjongHiddenState && (state.mahjongLastDraw === null || typeof state.mahjongLastDraw === "number" || typeof state.mahjongLastDraw === "string")) {
-      const parsedLastDraw = state.mahjongLastDraw === null ? null : normalizeMahjongTileValue(state.mahjongLastDraw);
-      hydratedDrawn = parsedLastDraw === null ? null : createMahjongTileInstance(parsedLastDraw);
-    }
-
-    if (shouldApplyMahjongHiddenState && hydratedConcealed) {
-      const incomingMeldCount = Array.isArray(state.mahjongSelfMelds) ? (state.mahjongSelfMelds as unknown[]).length : mahjongSelfMelds.length;
-      const normalized = normalizeMahjongHandState(hydratedConcealed, hydratedDrawn === undefined ? null : hydratedDrawn, incomingMeldCount);
-      setMahjongConcealedHand(normalized.concealedHand);
-      setMahjongDrawnTile(normalized.drawnTile);
-      if (normalized.drawnTile && hydratedDrawn === undefined) {
-        pushMahjongLog("[hydrate] legacy hand detected: split tail tile into drawnTile", "warn");
+    if (shouldApplyMahjongHiddenState && Array.isArray(state.mahjongBoard)) {
+      const parsedHand = normalizeMahjongTileList(state.mahjongBoard);
+      if (parsedHand.length > 0) {
+        setMahjongBoard(parsedHand as MahjongCell[]);
       }
     }
     if (shouldApplyMahjongHiddenState && Array.isArray(state.mahjongWall)) {
@@ -10298,10 +10203,12 @@ export default function Home() {
     if (Array.isArray(state.mahjongNukiDoraTiles)) {
       setMahjongNukiDoraTiles(normalizeMahjongTileList(state.mahjongNukiDoraTiles) as MahjongCell[]);
     }
-    if (typeof state.mahjongSelectedTileId === "string" || state.mahjongSelectedTileId === null) {
-      setMahjongSelectedTileId(state.mahjongSelectedTileId as string | null);
-    } else if (state.mahjongSelected === null || typeof state.mahjongSelected === "number") {
-      setMahjongSelectedTileId(null);
+    if (state.mahjongSelected === null || typeof state.mahjongSelected === "number") {
+      setMahjongSelected(state.mahjongSelected as number | null);
+    }
+    if (state.mahjongLastDraw === null || typeof state.mahjongLastDraw === "number" || typeof state.mahjongLastDraw === "string") {
+      const parsedLastDraw = state.mahjongLastDraw === null ? null : normalizeMahjongTileValue(state.mahjongLastDraw);
+      setMahjongLastDraw(parsedLastDraw);
     }
     if (state.mahjongRoundWind === "東" || state.mahjongRoundWind === "南" || state.mahjongRoundWind === "西" || state.mahjongRoundWind === "北") {
       setMahjongRoundWind(state.mahjongRoundWind);
@@ -11653,8 +11560,7 @@ export default function Home() {
         fitPuzzleMoves,
         fitPuzzleMessage,
         isFitPuzzleOver,
-        mahjongConcealedHand,
-        mahjongDrawnTile,
+        mahjongBoard,
         mahjongWall,
         mahjongRiver,
         mahjongSideRivers,
@@ -11668,7 +11574,8 @@ export default function Home() {
         mahjongReturnPoints,
         mahjongTsumoPaymentRule,
         mahjongNukiDoraTiles,
-        mahjongSelectedTileId,
+        mahjongSelected,
+        mahjongLastDraw,
         mahjongRoundWind,
         mahjongRoundNumber,
         mahjongSeatWind,
@@ -11773,8 +11680,7 @@ export default function Home() {
         numeronAssistCharges: _numeronAssistCharges,
         isNumeronOver: _isNumeronOver,
         numeronMessage: _numeronMessage,
-        mahjongConcealedHand: _mahjongConcealedHand,
-        mahjongDrawnTile: _mahjongDrawnTile,
+        mahjongBoard: _mahjongBoard,
         mahjongWall: _mahjongWall,
         mahjongSideRivers: _mahjongSideRivers,
         mahjongOpponentTurnIndex: _mahjongOpponentTurnIndex,
@@ -14242,43 +14148,9 @@ export default function Home() {
     });
   }, []);
 
-  const clearMahjongCpuTimers = useCallback(() => {
-    for (const timerId of mahjongCpuTimersRef.current) {
-      window.clearTimeout(timerId);
-      window.clearInterval(timerId);
-    }
-    mahjongCpuTimersRef.current = [];
-  }, []);
-
-  const cancelMahjongCpuPipeline = useCallback((reason: string) => {
-    const hadActive = mahjongCpuTimersRef.current.length > 0;
-    mahjongCpuTurnTokenRef.current += 1;
-    clearMahjongCpuTimers();
-    setMahjongCpuTurnBusy(false);
-    setMahjongCpuDrawSeatIndex(null);
-    setMahjongCpuThinking(null);
-    setMahjongTurnActor("self");
-    setMahjongCpuTurnsRemaining(0);
-    setMahjongDiscardAnimation(null);
-    if (hadActive) {
-      pushMahjongLog(`[cpu] cancel reason=${reason} token=${mahjongCpuTurnTokenRef.current} activeTimers=${mahjongCpuTimersRef.current.length}`);
-    }
-  }, [clearMahjongCpuTimers, pushMahjongLog]);
-
-  const scheduleMahjongCpuTimer = useCallback((delayMs: number, callback: () => void): number => {
-    const timerId = window.setTimeout(() => {
-      mahjongCpuTimersRef.current = mahjongCpuTimersRef.current.filter((id) => id !== timerId);
-      callback();
-    }, Math.max(0, delayMs));
-    mahjongCpuTimersRef.current.push(timerId);
-    return timerId;
-  }, []);
-
   const resetMahjong = useCallback(() => {
-    cancelMahjongCpuPipeline("reset");
     const start = createMahjongStartBoard(mahjongRuleConfig);
-    setMahjongConcealedHand(mapMahjongTilesToInstances(start.hand));
-    setMahjongDrawnTile(null);
+    setMahjongBoard(start.hand);
     setMahjongWall(start.wall);
     setMahjongRiver([]);
     setMahjongSideRivers([[], [], []]);
@@ -14289,7 +14161,8 @@ export default function Home() {
     setMahjongLatestOpponentDiscardBy(null);
     setMahjongLatestDiscardMeta(null);
     setMahjongNukiDoraTiles([]);
-    setMahjongSelectedTileId(null);
+    setMahjongSelected(null);
+    setMahjongLastDraw(null);
     setMahjongRoundWind("東");
     setMahjongRoundNumber(1);
     setMahjongSeatWind("東");
@@ -14297,22 +14170,14 @@ export default function Home() {
     setMahjongKyotaku(0);
     setMahjongRiichiTileIndex(null);
     setMahjongRiichiPending(false);
-    setMahjongAwaitingCallDiscard(false);
     setMahjongAutoDiscarding(false);
-    setMahjongDiscardSubmitting(false);
     mahjongAutoDiscardLockRef.current = false;
-    mahjongDiscardLockRef.current = false;
-    mahjongRiichiCommitLockRef.current = false;
     setMahjongActionDeadlineAt(null);
     setMahjongDoraIndicator(start.wall[4] ?? null);
     setMahjongWinSummary(null);
     setMahjongWinSubmitting(false);
     setMahjongCallSubmitting(false);
     mahjongCallLockRef.current = false;
-    setMahjongCpuTurnBusy(false);
-    setMahjongCpuDrawSeatIndex(null);
-    setMahjongCpuThinking(null);
-    setMahjongDiscardAnimation(null);
     setIsMahjongOver(false);
     setScore(Math.max(0, mahjongRuleConfig.startingPoints));
     setMahjongMessage(t("mahjongHint"));
@@ -14340,7 +14205,7 @@ export default function Home() {
         "success",
       );
     }
-  }, [cancelMahjongCpuPipeline, mahjongRuleConfig, pushMahjongLog, setScore, t]);
+  }, [mahjongRuleConfig, pushMahjongLog, setScore, t]);
 
   const logMahjongWinEval = useCallback((kind: "ron" | "tsumo", evalResult: MahjongWinEvaluation) => {
     const yakuLabel = evalResult.summary?.yakuKeys.join(",") || "-";
@@ -14356,11 +14221,9 @@ export default function Home() {
     if (isMahjongOver) return;
     const concealedAfterDiscard = mahjongConcealedCountAfterDiscard(mahjongSelfMelds.length);
     const concealedAfterDraw = mahjongConcealedCountAfterDraw(mahjongSelfMelds.length);
-    const handTiles = mahjongCurrentHandTiles;
-    const drawnTile = mahjongDrawnTile;
 
-    if (handTiles.length === concealedAfterDiscard) {
-      const waits = mahjongFindWinningTiles(handTiles);
+    if (mahjongBoard.length === concealedAfterDiscard) {
+      const waits = mahjongFindWinningTiles(mahjongBoard);
       if (waits.length === 0) {
         setMahjongMessage(t("mahjongNoHint"));
         pushMahjongLog("ヒント: 有効牌なし", "warn");
@@ -14372,15 +14235,15 @@ export default function Home() {
       return;
     }
 
-    if (handTiles.length !== concealedAfterDraw) {
+    if (mahjongBoard.length !== concealedAfterDraw) {
       setMahjongMessage(t("mahjongBlocked"));
       return;
     }
 
     const hintTsumoEval = evaluateMahjongWinAction({
-      baseHand: handTiles,
+      baseHand: mahjongBoard,
       winType: "tsumo",
-      winningTile: drawnTile?.tile ?? null,
+      winningTile: mahjongLastDraw,
       isRiichi: mahjongRiichiTileIndex !== null,
       river: mahjongRiver,
       meldCount: mahjongSelfMelds.length,
@@ -14389,12 +14252,12 @@ export default function Home() {
     });
 
     if (hintTsumoEval.ok) {
-      const readyTile = drawnTile !== null ? mahjongTileLabel(drawnTile.tile) : "*";
+      const readyTile = mahjongLastDraw !== null ? mahjongTileLabel(mahjongLastDraw) : "*";
       setMahjongMessage(tf("mahjongWinReady", { tile: readyTile }));
       return;
     }
 
-    const suggestions = mahjongFindBestDiscards(handTiles);
+    const suggestions = mahjongFindBestDiscards(mahjongBoard);
     const best = suggestions.find((item) => item.waits.length > 0 && item.outs > 0);
     if (!best) {
       setMahjongMessage(t("mahjongRemovedAndShuffle"));
@@ -14415,12 +14278,11 @@ export default function Home() {
     const meldCount = mahjongSelfMelds.length;
     const expectedAfterDraw = mahjongConcealedCountAfterDraw(meldCount);
     const expectedAfterDiscard = mahjongConcealedCountAfterDiscard(meldCount);
-    const handCount = mahjongCurrentHandCount;
-    if (handCount === expectedAfterDraw) {
+    if (mahjongBoard.length === expectedAfterDraw) {
       setMahjongMessage(t("mahjongNeedDiscardFirst"));
       return;
     }
-    if (handCount !== expectedAfterDiscard || mahjongDrawnTile !== null) {
+    if (mahjongBoard.length !== expectedAfterDiscard) {
       setMahjongMessage(t("mahjongBlocked"));
       return;
     }
@@ -14434,24 +14296,18 @@ export default function Home() {
 
     const drawTile = mahjongWall[0];
     const nextWall = mahjongWall.slice(1);
-    pushMahjongLog(`[draw] before concealed=${mahjongConcealedHand.length}`);
-    pushMahjongLog(`[draw] picked=${mahjongTileLabel(drawTile)}`);
+    const nextHand = [...mahjongBoard, drawTile];
 
-    setMahjongDrawnTile(createMahjongTileInstance(drawTile));
-    setMahjongAwaitingCallDiscard(false);
+    setMahjongBoard(nextHand);
     setMahjongWall(nextWall);
     setMahjongLatestOpponentDiscard(null);
     setMahjongLatestOpponentDiscardBy(null);
     setMahjongLatestDiscardMeta(null);
     setMahjongActionDeadlineAt(null);
-    setMahjongSelectedTileId(null);
+    setMahjongSelected(null);
+    setMahjongLastDraw(drawTile);
     setMahjongWinSummary(null);
     setMahjongWinSubmitting(false);
-
-    const nextHand = [...mahjongConcealedTiles, drawTile];
-    pushMahjongLog(`[draw] drawnTile=${mahjongTileLabel(drawTile)}`);
-    pushMahjongLog(`[render] concealed=${mahjongConcealedTiles.map((tile) => mahjongTileLabel(tile)).join(",")}`);
-    pushMahjongLog(`[render] drawn=${mahjongTileLabel(drawTile)}`);
 
     const tsumoEval = evaluateMahjongWinAction({
       baseHand: nextHand,
@@ -14478,16 +14334,15 @@ export default function Home() {
   const onMahjongTsumo = () => {
     if (mahjongAutoDiscarding) return;
     if (isMahjongOver || mahjongWinSubmitting) return;
-    const handTiles = mahjongCurrentHandTiles;
-    if (handTiles.length !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length) || mahjongDrawnTile === null) {
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) {
       setMahjongMessage(t("mahjongNeedDrawFirst"));
       return;
     }
 
     const tsumoEval = evaluateMahjongWinAction({
-      baseHand: handTiles,
+      baseHand: mahjongBoard,
       winType: "tsumo",
-      winningTile: mahjongDrawnTile.tile,
+      winningTile: mahjongLastDraw,
       isRiichi: mahjongRiichiTileIndex !== null,
       river: mahjongRiver,
       meldCount: mahjongSelfMelds.length,
@@ -14515,7 +14370,7 @@ export default function Home() {
   const onMahjongRon = () => {
     if (mahjongAutoDiscarding) return;
     if (isMahjongOver || mahjongWinSubmitting) return;
-    const baseHand = [...mahjongCurrentHandTiles];
+    const baseHand = [...mahjongBoard];
     const winningTile = mahjongLatestOpponentDiscard;
     const ronEval = evaluateMahjongWinAction({
       baseHand,
@@ -14553,10 +14408,13 @@ export default function Home() {
   };
 
   const onMahjongSortHand = () => {
-    if (mahjongConcealedHand.length <= 0) return;
-    setMahjongConcealedHand((prev) => sortMahjongTileInstances(prev));
-    setMahjongSelectedTileId(null);
-    pushMahjongLog("自動ソートを実行: concealedHand");
+    if (mahjongBoard.length <= 0) return;
+    setMahjongBoard((prev) => {
+      const handState = mahjongSplitSelfHand(prev, mahjongLastDraw, mahjongSelfMelds.length);
+      const sortedConcealed = sortMahjongTiles(handState.concealedHand);
+      return handState.drawnTile === null ? sortedConcealed : [...sortedConcealed, handState.drawnTile];
+    });
+    setMahjongSelected(null);
     pushMahjongLog("手牌を並び替えました。");
   };
 
@@ -14566,26 +14424,13 @@ export default function Home() {
       return;
     }
     if (isMahjongOver) return;
-    if (mahjongCurrentHandCount !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length) || mahjongDrawnTile === null) {
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) {
       setMahjongMessage(t("mahjongNeedDrawFirst"));
       return;
     }
-    const isMenzen = mahjongSelfMelds.every((meld) => meld.type === "ankan");
-    if (!isMenzen) {
-      setMahjongMessage("リーチ不可: 門前ではありません。");
-      pushMahjongLog("リーチ検証: failed (not menzen)", "warn");
-      return;
-    }
-    const currentScore = Number.isFinite(score) ? Math.floor(score) : 0;
-    if (currentScore < 1000) {
-      setMahjongMessage("リーチ不可: 持ち点が1000点未満です。");
-      pushMahjongLog("リーチ検証: failed (score < 1000)", "warn");
-      return;
-    }
-    const candidates = mahjongFindRiichiDiscardIndexes(mahjongCurrentHandTiles);
+    const candidates = mahjongFindRiichiDiscardIndexes(mahjongBoard);
     if (candidates.length <= 0) {
       setMahjongMessage("リーチ可能な捨て牌がありません。");
-      pushMahjongLog("リーチ検証: failed (no candidates)", "warn");
       return;
     }
     if (mahjongRiichiTileIndex !== null) {
@@ -14593,29 +14438,22 @@ export default function Home() {
       return;
     }
     setMahjongRiichiPending(true);
-    setMahjongSelectedTileId(null);
+    setMahjongSelected(null);
     setMahjongMessage(`${t("mahjongRiichi")}: 捨て牌を選択してください`);
-    pushMahjongLog(`リーチボタン押下: candidates=${candidates.length}`);
     pushMahjongLog("リーチ宣言: 対象牌を選択してください。", "success");
   };
 
   const onMahjongPass = () => {
     if (mahjongAutoDiscarding || mahjongCallSubmitting) return;
-    pushMahjongLog(`[pass] pendingCalls=${mahjongLatestOpponentDiscard !== null ? 1 : 0} deadline=${mahjongActionDeadlineAt ?? "none"}`);
     setMahjongActionDeadlineAt(null);
     setMahjongRiichiPending(false);
-    setMahjongAwaitingCallDiscard(false);
     if (mahjongLatestOpponentDiscard !== null) {
       pushMahjongLog(`ロン見逃し: ${mahjongTileLabel(mahjongLatestOpponentDiscard)}`, "warn");
       setMahjongLatestOpponentDiscard(null);
       setMahjongLatestOpponentDiscardBy(null);
       setMahjongLatestDiscardMeta(null);
     }
-    if (!connectedRoomCode && mahjongTurnActor === "opponent" && mahjongCpuTurnsRemaining <= 0) {
-      setMahjongTurnActor("self");
-    }
     setMahjongMessage("パスしました。");
-    pushMahjongLog("advanceTurn: パスにより処理継続");
     pushMahjongLog("パス", "normal");
   };
 
@@ -14630,37 +14468,24 @@ export default function Home() {
   }, [mahjongLatestDiscardMeta, mahjongLatestOpponentDiscard, mahjongLatestOpponentDiscardBy]);
 
   const consumeLatestDiscardFromRiver = useCallback((meta: MahjongLatestDiscardMeta): boolean => {
-    const seat = Math.max(0, Math.min(2, meta.sideRiverSeatIndex));
-    const currentRiver = mahjongSideRivers[seat] || [];
-    if (currentRiver.length <= 0) {
-      pushMahjongLog(`[calls] consume fail: seat=${seat} river empty`, "warn");
-      return false;
-    }
-
-    const index = Math.max(0, Math.min(currentRiver.length - 1, meta.sideRiverDiscardIndex));
-    if (currentRiver[index] !== meta.tile) {
-      pushMahjongLog(
-        `[calls] consume fail: seat=${seat} index=${index} expected=${mahjongTileLabel(meta.tile)} actual=${currentRiver[index] === undefined ? "none" : mahjongTileLabel(currentRiver[index])}`,
-        "warn",
-      );
-      return false;
-    }
-
+    let removed = false;
     setMahjongSideRivers((prev) => {
       const next: [MahjongCell[], MahjongCell[], MahjongCell[]] = [
         [...prev[0]],
         [...prev[1]],
         [...prev[2]],
       ];
-      const nextRiver = next[seat] || [];
-      if (nextRiver[index] === meta.tile) {
-        nextRiver.splice(index, 1);
+      const seat = Math.max(0, Math.min(2, meta.sideRiverSeatIndex));
+      const river = next[seat] || [];
+      const index = Math.max(0, Math.min(river.length - 1, meta.sideRiverDiscardIndex));
+      if (river[index] === meta.tile) {
+        river.splice(index, 1);
+        removed = true;
       }
       return next;
     });
-
-    return true;
-  }, [mahjongSideRivers, pushMahjongLog]);
+    return removed;
+  }, []);
 
   const clearLatestDiscardWindow = useCallback(() => {
     setMahjongActionDeadlineAt(null);
@@ -14690,12 +14515,12 @@ export default function Home() {
         setMahjongMessage("ポン対象の捨て牌が見つかりません。");
         return;
       }
-      if (!mahjongCanPon(mahjongConcealedTiles, meta.tile)) {
+      if (!mahjongCanPon(mahjongBoard, meta.tile)) {
         setMahjongMessage("ポン不可: 手牌が不足しています。");
         return;
       }
 
-      const removed = mahjongRemoveTilesOnce(mahjongConcealedTiles, [meta.tile, meta.tile]);
+      const removed = mahjongRemoveTilesOnce(mahjongBoard, [meta.tile, meta.tile]);
       if (!removed) {
         setMahjongMessage("ポン不可: 手牌の整合が取れませんでした。");
         return;
@@ -14712,14 +14537,11 @@ export default function Home() {
         calledTileIndex: 0,
       };
       setMahjongSelfMelds((prev) => [...prev, meld]);
-      setMahjongConcealedHand(mapMahjongTilesToInstances(sortMahjongTiles(removed)));
-      setMahjongSelectedTileId(null);
+      setMahjongBoard(sortMahjongTiles(removed));
+      setMahjongSelected(null);
       clearLatestDiscardWindow();
       setMahjongRiichiPending(false);
-      setMahjongDrawnTile(null);
-      setMahjongAwaitingCallDiscard(true);
-      setMahjongTurnActor("self");
-      setMahjongCpuTurnsRemaining(0);
+      setMahjongLastDraw(null);
       setMahjongMessage(`ポン: ${mahjongTileLabel(meta.tile)}。打牌してください。`);
       pushMahjongLog(`ポン成立: ${mahjongTileLabel(meta.tile)} (from ${meta.by})`, "success");
     } finally {
@@ -14733,8 +14555,8 @@ export default function Home() {
     endCallSubmission,
     isMahjongOver,
     mahjongAutoDiscarding,
+    mahjongBoard,
     mahjongCallSubmitting,
-    mahjongConcealedTiles,
     pushMahjongLog,
   ]);
 
@@ -14747,7 +14569,7 @@ export default function Home() {
         setMahjongMessage("チー対象の捨て牌が見つかりません。");
         return;
       }
-      const chiOptions = mahjongFindChiCandidates(mahjongConcealedTiles, meta.tile);
+      const chiOptions = mahjongFindChiCandidates(mahjongBoard, meta.tile);
       const targetOption = chiOptions.find((option) => option.length === tiles.length && option.every((tile, idx) => tile === tiles[idx]));
       if (!targetOption) {
         setMahjongMessage("チー不可: 候補が無効です。");
@@ -14755,7 +14577,7 @@ export default function Home() {
       }
 
       const consumeTiles = targetOption.filter((tile) => tile !== meta.tile);
-      const removed = mahjongRemoveTilesOnce(mahjongConcealedTiles, consumeTiles);
+      const removed = mahjongRemoveTilesOnce(mahjongBoard, consumeTiles);
       if (!removed) {
         setMahjongMessage("チー不可: 手牌が不足しています。");
         return;
@@ -14773,14 +14595,11 @@ export default function Home() {
         calledTileIndex: calledTileIndex >= 0 ? calledTileIndex : 1,
       };
       setMahjongSelfMelds((prev) => [...prev, meld]);
-      setMahjongConcealedHand(mapMahjongTilesToInstances(sortMahjongTiles(removed)));
-      setMahjongSelectedTileId(null);
+      setMahjongBoard(sortMahjongTiles(removed));
+      setMahjongSelected(null);
       clearLatestDiscardWindow();
       setMahjongRiichiPending(false);
-      setMahjongDrawnTile(null);
-      setMahjongAwaitingCallDiscard(true);
-      setMahjongTurnActor("self");
-      setMahjongCpuTurnsRemaining(0);
+      setMahjongLastDraw(null);
       setMahjongMessage(`チー: ${targetOption.map((tile) => mahjongTileLabel(tile)).join("・")}。打牌してください。`);
       pushMahjongLog(`チー成立: ${targetOption.map((tile) => mahjongTileLabel(tile)).join("・")} (from ${meta.by})`, "success");
     } finally {
@@ -14794,8 +14613,8 @@ export default function Home() {
     endCallSubmission,
     isMahjongOver,
     mahjongAutoDiscarding,
+    mahjongBoard,
     mahjongCallSubmitting,
-    mahjongConcealedTiles,
     pushMahjongLog,
   ]);
 
@@ -14805,11 +14624,9 @@ export default function Home() {
     try {
       let nextHand: MahjongCell[] | null = null;
       const nextMelds = [...mahjongSelfMelds];
-      const concealedTiles = mahjongConcealedTiles;
-      const fullTiles = mahjongCurrentHandTiles;
 
       if (mode === "ankan") {
-        nextHand = mahjongRemoveTilesOnce(fullTiles, [tile, tile, tile, tile]);
+        nextHand = mahjongRemoveTilesOnce(mahjongBoard, [tile, tile, tile, tile]);
         if (!nextHand) {
           setMahjongMessage("暗槓不可: 手牌が不足しています。");
           return;
@@ -14828,7 +14645,7 @@ export default function Home() {
           setMahjongMessage("明槓不可: 対象捨て牌が一致しません。");
           return;
         }
-        nextHand = mahjongRemoveTilesOnce(concealedTiles, [tile, tile, tile]);
+        nextHand = mahjongRemoveTilesOnce(mahjongBoard, [tile, tile, tile]);
         if (!nextHand) {
           setMahjongMessage("明槓不可: 手牌が不足しています。");
           return;
@@ -14852,7 +14669,7 @@ export default function Home() {
           setMahjongMessage("加槓不可: 対象ポンがありません。");
           return;
         }
-        nextHand = mahjongRemoveTilesOnce(fullTiles, [tile]);
+        nextHand = mahjongRemoveTilesOnce(mahjongBoard, [tile]);
         if (!nextHand) {
           setMahjongMessage("加槓不可: 手牌が不足しています。");
           return;
@@ -14881,14 +14698,11 @@ export default function Home() {
       const rinshanTile = mahjongWall[0];
       const nextWall = mahjongWall.slice(1);
       setMahjongSelfMelds(nextMelds);
-      setMahjongConcealedHand(mapMahjongTilesToInstances(sortMahjongTiles(nextHand)));
-      setMahjongDrawnTile(createMahjongTileInstance(rinshanTile));
-      setMahjongAwaitingCallDiscard(false);
+      setMahjongBoard([...sortMahjongTiles(nextHand), rinshanTile]);
       setMahjongWall(nextWall);
-      setMahjongSelectedTileId(null);
+      setMahjongSelected(null);
+      setMahjongLastDraw(rinshanTile);
       setMahjongRiichiPending(false);
-      setMahjongTurnActor("self");
-      setMahjongCpuTurnsRemaining(0);
       setMahjongActionDeadlineAt(null);
       setMahjongLatestOpponentDiscard(null);
       setMahjongLatestOpponentDiscardBy(null);
@@ -14906,9 +14720,8 @@ export default function Home() {
     endCallSubmission,
     isMahjongOver,
     mahjongAutoDiscarding,
+    mahjongBoard,
     mahjongCallSubmitting,
-    mahjongConcealedTiles,
-    mahjongCurrentHandTiles,
     mahjongSelfMelds,
     mahjongWall,
     pushMahjongLog,
@@ -14919,7 +14732,7 @@ export default function Home() {
     if (mahjongAutoDiscarding) return;
     if (!mahjongRiichiPending) return;
     setMahjongRiichiPending(false);
-    setMahjongSelectedTileId(null);
+    setMahjongSelected(null);
     setMahjongMessage("リーチ選択をキャンセルしました。");
     pushMahjongLog("リーチ選択をキャンセル", "normal");
   };
@@ -14929,9 +14742,10 @@ export default function Home() {
     if (mahjongRuleConfig.mode !== "sanma" || mahjongRuleConfig.northRule !== "nuki-dora") return;
 
     const northTile = 30;
-    const concealedHand = [...mahjongConcealedHand];
-    const northIndex = concealedHand.findIndex((tile) => tile.tile === northTile);
-    const drawnIsNorth = mahjongDrawnTile?.tile === northTile;
+    const handState = mahjongSplitSelfHand(mahjongBoard, mahjongLastDraw, mahjongSelfMelds.length);
+    const concealedHand = [...handState.concealedHand];
+    const northIndex = concealedHand.indexOf(northTile);
+    const drawnIsNorth = handState.drawnTile === northTile;
     if (northIndex < 0 && !drawnIsNorth) {
       setMahjongMessage("北牌がありません。");
       return;
@@ -14946,19 +14760,16 @@ export default function Home() {
 
     if (northIndex >= 0) {
       concealedHand.splice(northIndex, 1);
-    } else if (drawnIsNorth) {
-      setMahjongDrawnTile(null);
     }
     const replacementTile = mahjongWall[0];
     const nextWall = mahjongWall.slice(1);
-    const nextHand = sortMahjongTileInstances(concealedHand);
+    const nextHand = [...sortMahjongTiles(concealedHand), replacementTile];
 
-    setMahjongConcealedHand(nextHand);
+    setMahjongBoard(nextHand);
     setMahjongWall(nextWall);
-    setMahjongDrawnTile(createMahjongTileInstance(replacementTile));
-    setMahjongAwaitingCallDiscard(false);
+    setMahjongLastDraw(replacementTile);
     setMahjongNukiDoraTiles((prev) => [...prev, northTile]);
-    setMahjongSelectedTileId(null);
+    setMahjongSelected(null);
     setMahjongMessage(`北抜き: ${mahjongTileLabel(replacementTile)} を補充`);
     pushMahjongLog(`北抜き: ${mahjongTileLabel(replacementTile)} を補充`, "success");
   };
@@ -15209,212 +15020,178 @@ export default function Home() {
     setMahjongMessage(`和了判定テスト: ${passCount}/${cases.length} PASS`);
   }, [pushMahjongLog]);
 
-  const getMahjongDiscardPhase = (): "none" | "discardAfterDraw" | "discardAfterCall" | "selectingRiichiDiscard" => {
-    if (isMahjongOver) return "none";
-    if (mahjongLatestOpponentDiscard !== null) return "none";
-    if (mahjongRiichiPending) return "selectingRiichiDiscard";
-
-    if (mahjongDrawnTile !== null) {
-      return "discardAfterDraw";
-    }
-    if (mahjongAwaitingCallDiscard && mahjongDrawnTile === null) {
-      return "discardAfterCall";
-    }
-
-    return "none";
-  };
-
-  const onMahjongTileClick = (payload: { tileId: string; source: MahjongDiscardSource }, options?: { force?: boolean }) => {
+  const onMahjongTileClick = (index: number, options?: { force?: boolean }) => {
     if (mahjongAutoDiscarding && !options?.force) {
-      pushMahjongLog(`[discard] reject reason=autoDiscarding tileId=${payload.tileId} source=${payload.source}`, "warn");
       setMahjongMessage("自動ツモ切り処理中です。完了までお待ちください。");
       return;
     }
     if (isMahjongOver) return;
-    if (mahjongDiscardSubmitting || mahjongDiscardLockRef.current) {
-      pushMahjongLog(`[discard] reject reason=submitting tileId=${payload.tileId} source=${payload.source}`, "warn");
-      return;
-    }
-
-    const mahjongDiscardPhase = getMahjongDiscardPhase();
-    const currentTurnPlayerId = mahjongDiscardPhase === "none" ? "opponent" : "self";
-    const selfPlayerId = "self";
-    const canDiscard = Boolean(options?.force)
-      || (
-        currentTurnPlayerId === selfPlayerId
-        && (
-          mahjongDiscardPhase === "discardAfterDraw"
-          || mahjongDiscardPhase === "discardAfterCall"
-          || mahjongDiscardPhase === "selectingRiichiDiscard"
-        )
-      );
-    pushMahjongLog(
-      `[discard] click tileId=${payload.tileId} source=${payload.source} turn=${currentTurnPlayerId} self=${selfPlayerId} phase=${mahjongDiscardPhase} canDiscard=${canDiscard ? 1 : 0} concealed=${mahjongConcealedHand.length} drawn=${mahjongDrawnTile ? mahjongTileLabel(mahjongDrawnTile.tile) : "null"} submitting=${mahjongDiscardSubmitting ? 1 : 0}`,
-    );
-    if (!canDiscard) {
-      pushMahjongLog(`[discard] reject reason=phase_guard phase=${mahjongDiscardPhase}`, "warn");
-      setMahjongMessage("いまは打牌できません。打牌可能フェーズまで待ってください。");
-      return;
-    }
-
-    const request: MahjongDiscardRequest = {
-      tileInstanceId: payload.tileId,
-      source: payload.source,
-    };
 
     const expectedAfterDraw = mahjongConcealedCountAfterDraw(mahjongSelfMelds.length);
-    const fullInstances = mahjongDrawnTile ? [...mahjongConcealedHand, mahjongDrawnTile] : [...mahjongConcealedHand];
-    const riichiSelectableIndexes = mahjongRiichiPending ? mahjongFindRiichiDiscardIndexes(mahjongCurrentHandTiles) : [];
-    const riichiSelectableTileIds = riichiSelectableIndexes
-      .map((idx) => fullInstances[idx]?.instanceId)
-      .filter((id): id is string => Boolean(id));
-    const isRiichiSelectable = !mahjongRiichiPending || riichiSelectableTileIds.includes(request.tileInstanceId);
-    if (mahjongRiichiPending) {
-      pushMahjongLog(`[riichi] 選択牌=${request.tileInstanceId} source=${request.source} 検証=${isRiichiSelectable ? "ok" : "ng"}`);
+    if (mahjongBoard.length !== expectedAfterDraw) {
+      setMahjongMessage(t("mahjongNeedDrawFirst"));
+      return;
     }
+
+    const handState = mahjongSplitSelfHand(mahjongBoard, mahjongLastDraw, mahjongSelfMelds.length);
+    const concealedHand = handState.concealedHand;
+    const drawnTile = handState.drawnTile;
+    const drawnIndex = drawnTile === null ? null : concealedHand.length;
+    const handLengthForSelection = concealedHand.length + (drawnTile === null ? 0 : 1);
+
+    if (index < 0 || index >= handLengthForSelection) {
+      setMahjongMessage(t("mahjongNoHint"));
+      return;
+    }
+
+    const riichiSelectableIndexes = mahjongRiichiPending ? mahjongFindRiichiDiscardIndexes(mahjongBoard) : [];
+    const isRiichiSelectable = !mahjongRiichiPending || riichiSelectableIndexes.includes(index);
     if (!isRiichiSelectable) {
-      pushMahjongLog(`[discard] reject reason=riichi_candidate_miss tileId=${request.tileInstanceId}`, "warn");
       setMahjongMessage("この牌ではリーチできません。対象牌を選んでください。");
       return;
     }
 
-    if (!mahjongRiichiPending && mahjongRiichiTileIndex !== null && request.source !== "drawn") {
-      pushMahjongLog(`[discard] reject reason=riichi_locked_non_drawn tileId=${request.tileInstanceId}`, "warn");
-      setMahjongMessage("リーチ中はツモ牌のみ打牌できます。ツモ切りを実行してください。");
+    if (!mahjongRiichiPending && mahjongRiichiTileIndex !== null) {
+      if (drawnIndex === null || index !== drawnIndex) {
+        setMahjongMessage("リーチ中はツモ牌のみ打牌できます。ツモ切りを実行してください。");
+        return;
+      }
+    }
+
+    if (!mahjongRiichiPending && mahjongSelected !== index) {
+      setMahjongSelected(index);
+      setMahjongMessage(t("mahjongSwitched"));
       return;
     }
-    if (!mahjongRiichiPending && request.source === "drawn") {
-      if (mahjongDiscardPhase !== "discardAfterDraw") {
-        pushMahjongLog(`[discard] reject reason=drawn_without_phase phase=${mahjongDiscardPhase}`, "warn");
-        setMahjongMessage("ツモ牌はツモ後の打牌フェーズでのみ捨てられます。");
-        return;
+
+    let discardTile: MahjongCell;
+    let nextBoard: MahjongCell[];
+    if (drawnTile !== null && drawnIndex !== null && index === drawnIndex) {
+      // Tsumogiri: discard only the drawn tile and keep concealed hand order.
+      discardTile = drawnTile;
+      nextBoard = [...concealedHand];
+    } else {
+      discardTile = concealedHand[index] as MahjongCell;
+      const nextConcealed = concealedHand.filter((_, i) => i !== index);
+      if (drawnTile !== null) {
+        // Discard from concealed hand: absorb drawn tile into concealed hand.
+        nextConcealed.push(drawnTile);
       }
-      if (!mahjongDrawnTile) {
-        pushMahjongLog("[discard] reject reason=drawn_state_mismatch", "warn");
-        setMahjongMessage(t("mahjongNeedDrawFirst"));
-        return;
-      }
+      nextBoard = sortMahjongTiles(nextConcealed);
     }
-    if (!mahjongRiichiPending && request.source === "concealed") {
-      const phaseOk = mahjongDiscardPhase === "discardAfterDraw" || mahjongDiscardPhase === "discardAfterCall";
-      if (!phaseOk) {
-        pushMahjongLog(`[discard] reject reason=concealed_without_phase phase=${mahjongDiscardPhase}`, "warn");
-        setMahjongMessage("通常手牌は打牌可能フェーズでのみ捨てられます。");
-        return;
-      }
-      if (mahjongDiscardPhase === "discardAfterDraw" && mahjongCurrentHandCount !== expectedAfterDraw) {
-        pushMahjongLog(`[discard] warn count_mismatch expectedAfterDraw=${expectedAfterDraw} actual=${mahjongCurrentHandCount}`, "warn");
-      }
+    const nextRiver = [...mahjongRiver, discardTile];
+
+    setMahjongBoard(nextBoard);
+    setMahjongRiver(nextRiver);
+    setMahjongLatestOpponentDiscard(null);
+    setMahjongLatestOpponentDiscardBy(null);
+    setMahjongLatestDiscardMeta(null);
+    setMahjongActionDeadlineAt(null);
+    setMahjongSelected(null);
+    setMahjongLastDraw(null);
+    setMahjongWinSummary(null);
+    setMahjongWinSubmitting(false);
+    pushMahjongLog(`打牌: ${mahjongTileLabel(discardTile)}`);
+
+    if (mahjongWall.length === 0) {
+      setMahjongSelected(null);
+      setMahjongHonba((prev) => prev + 1);
+      setIsMahjongOver(true);
+      setMahjongMessage(t("mahjongRyukyoku"));
+      pushMahjongLog("流局: 山牌が尽きました。", "warn");
+      return;
     }
 
-    const shouldCommitRiichi = mahjongRiichiPending && mahjongRiichiTileIndex === null && !mahjongRiichiCommitLockRef.current;
-    let discardTile: MahjongCell | null = null;
-    let nextConcealed = [...mahjongConcealedHand];
+    if (!connectedRoomCode) {
+      const opponentNames = mahjongRuleConfig.playerCount === 3
+        ? (["Player B", "Player C"] as const)
+        : (["Player B", "Player C", "Player D"] as const);
+      const sideRiverIndexOrder = mahjongRuleConfig.playerCount === 3 ? [0, 2] : [0, 1, 2];
+      const opponentCycleLength = opponentNames.length;
+      const opponentTurnSlot = Math.max(0, mahjongOpponentTurnIndex % opponentCycleLength);
+      const opponentSeat = sideRiverIndexOrder[opponentTurnSlot] ?? 0;
+      const opponentDiscard = mahjongWall[0] ?? null;
+      const wallAfterOpponent = mahjongWall.slice(opponentDiscard === null ? 0 : 1);
+      setMahjongWall(wallAfterOpponent);
+      setMahjongOpponentTurnIndex((prev) => (prev + 1) % opponentCycleLength);
 
-    mahjongDiscardLockRef.current = true;
-    setMahjongDiscardSubmitting(true);
-    try {
-      pushMahjongLog(`[draw] before concealed=${mahjongConcealedHand.length} drawn=${mahjongDrawnTile ? mahjongTileLabel(mahjongDrawnTile.tile) : "null"}`);
+      if (opponentDiscard !== null) {
+        const actorName = opponentNames[opponentTurnSlot] || "相手";
+        setMahjongSideRivers((prev) => {
+          const next: [MahjongCell[], MahjongCell[], MahjongCell[]] = [
+            [...prev[0]],
+            [...prev[1]],
+            [...prev[2]],
+          ];
+          const discardIndex = next[opponentSeat].length;
+          next[opponentSeat].push(opponentDiscard);
+          setMahjongLatestDiscardMeta({
+            tile: opponentDiscard,
+            by: actorName,
+            sideRiverSeatIndex: opponentSeat,
+            sideRiverDiscardIndex: discardIndex,
+            discardId: `${Date.now()}-${opponentSeat}-${discardIndex}`,
+            discardTimestamp: Date.now(),
+          });
+          return next;
+        });
+        setMahjongLatestOpponentDiscard(opponentDiscard);
+        setMahjongLatestOpponentDiscardBy(actorName);
+        pushMahjongLog(`${actorName} 打牌: ${mahjongTileLabel(opponentDiscard)}`);
 
-      if (request.source === "drawn") {
-        if (!mahjongDrawnTile || mahjongDrawnTile.instanceId !== request.tileInstanceId) {
-          pushMahjongLog(`[discard] reject reason=drawn_id_mismatch requested=${request.tileInstanceId} actual=${mahjongDrawnTile?.instanceId || "null"}`, "warn");
-          setMahjongMessage("ツモ牌の状態が一致しません。もう一度選択してください。");
+        const ronEval = evaluateMahjongWinAction({
+          baseHand: nextBoard,
+          winType: "ron",
+          winningTile: opponentDiscard,
+          isRiichi: mahjongRiichiTileIndex !== null,
+          river: nextRiver,
+          meldCount: mahjongSelfMelds.length,
+          isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
+          bonusHan: mahjongBonusHan,
+        });
+        logMahjongWinEval("ron", ronEval);
+
+        const canRon = ronEval.ok;
+        const isRiichiLocked = mahjongRiichiTileIndex !== null;
+        const canPon = !isRiichiLocked && mahjongCanPon(nextBoard, opponentDiscard);
+        const canMinkan = !isRiichiLocked && mahjongCanMinkan(nextBoard, opponentDiscard);
+        const canChi = !isRiichiLocked && mahjongRuleConfig.allowChi && mahjongFindChiCandidates(nextBoard, opponentDiscard).length > 0;
+        const hasResponseAction = canRon || canPon || canMinkan || canChi;
+
+        if (hasResponseAction) {
+          const tags = [
+            canRon ? "ロン" : null,
+            canMinkan ? "カン" : null,
+            canPon ? "ポン" : null,
+            canChi ? "チー" : null,
+          ].filter(Boolean).join(" / ");
+          setMahjongActionDeadlineAt(Date.now() + 8000);
+          setMahjongMessage(`${tags} 可能: ${mahjongTileLabel(opponentDiscard)} (${actorName})`);
           return;
         }
-        discardTile = mahjongDrawnTile.tile;
-      } else {
-        const removeIndex = nextConcealed.findIndex((tile) => tile.instanceId === request.tileInstanceId);
-        if (removeIndex < 0) {
-          pushMahjongLog(`[discard] reject reason=concealed_id_not_found tileId=${request.tileInstanceId}`, "warn");
-          setMahjongMessage("手牌の状態が一致しません。もう一度選択してください。");
-          return;
-        }
-        const removedTile = nextConcealed[removeIndex];
-        discardTile = removedTile.tile;
-        nextConcealed.splice(removeIndex, 1);
-        if (mahjongDrawnTile) {
-          nextConcealed.push(mahjongDrawnTile);
-          nextConcealed = sortMahjongTileInstances(nextConcealed);
-          pushMahjongLog("自動ソートを実行: drawnTileをconcealedHandへ編入後");
-        }
+
+        setMahjongActionDeadlineAt(null);
+        setMahjongLatestOpponentDiscard(null);
+        setMahjongLatestOpponentDiscardBy(null);
+        setMahjongLatestDiscardMeta(null);
       }
-
-      if (discardTile === null) {
-        pushMahjongLog("[discard] reject reason=discard_tile_null", "warn");
-        setMahjongMessage("打牌対象が特定できませんでした。");
-        return;
-      }
-
-      const nextBoard = mahjongTileNumbersFromInstances(nextConcealed);
-      const nextRiver = [...mahjongRiver, discardTile];
-
-      setMahjongConcealedHand(nextConcealed);
-      setMahjongDrawnTile(null);
-      setMahjongAwaitingCallDiscard(false);
-      setMahjongRiver(nextRiver);
-      setMahjongLatestOpponentDiscard(null);
-      setMahjongLatestOpponentDiscardBy(null);
-      setMahjongLatestDiscardMeta(null);
-      setMahjongActionDeadlineAt(null);
-      setMahjongSelectedTileId(null);
-      setMahjongWinSummary(null);
-      setMahjongWinSubmitting(false);
-      pushMahjongLog(`[discard] tileId=${request.tileInstanceId} source=${request.source} tile=${mahjongTileLabel(discardTile)}`);
-      pushMahjongLog(`[discard] after concealed=${nextConcealed.length} drawn=null`);
-      pushMahjongLog(`打牌: ${mahjongTileLabel(discardTile)}`);
-
-      if (shouldCommitRiichi) {
-        mahjongRiichiCommitLockRef.current = true;
-        const currentScore = Number.isFinite(score) ? Math.floor(score) : 0;
-        if (currentScore < 1000) {
-          setMahjongMessage("リーチ失敗: 点数不足");
-          setMahjongRiichiPending(false);
-          pushMahjongLog("リーチ状態更新: failed (score < 1000)", "warn");
-        } else {
-          setMahjongRiichiTileIndex(nextRiver.length - 1);
-          setScore(currentScore - 1000);
-          setMahjongKyotaku((prev) => prev + 1);
-          setMahjongRiichiPending(false);
-          pushMahjongLog(`リーチ状態更新: tileIndex=${nextRiver.length - 1}`, "success");
-          pushMahjongLog("供託更新: +1 (now pending state applied)", "success");
-        }
-      }
-
-      if (mahjongWall.length === 0) {
-        setMahjongSelectedTileId(null);
-        setMahjongHonba((prev) => prev + 1);
-        setIsMahjongOver(true);
-        setMahjongMessage(t("mahjongRyukyoku"));
-        pushMahjongLog("流局: 山牌が尽きました。", "warn");
-        return;
-      }
-
-      if (!connectedRoomCode) {
-        const opponentNames = mahjongRuleConfig.playerCount === 3
-          ? (["Player B", "Player C"] as const)
-          : (["Player B", "Player C", "Player D"] as const);
-        setMahjongTurnActor("opponent");
-        setMahjongCpuTurnsRemaining(opponentNames.length);
-      }
-
-      const waits = mahjongFindWinningTiles(nextBoard);
-      if (waits.length === 0) {
-        setMahjongMessage(t("mahjongRemoved"));
-        return;
-      }
-
-      if (!shouldCommitRiichi && mahjongRiichiPending && mahjongRiichiTileIndex === null) {
-        setMahjongRiichiPending(false);
-      }
-
-      const waitLabel = waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
-      setMahjongMessage(tf("mahjongHintLine", { a: waitLabel }));
-    } finally {
-      setMahjongDiscardSubmitting(false);
-      mahjongDiscardLockRef.current = false;
-      pushMahjongLog("[discard] submit end");
     }
+
+    const waits = mahjongFindWinningTiles(nextBoard);
+    if (waits.length === 0) {
+      setMahjongMessage(t("mahjongRemoved"));
+      return;
+    }
+
+    if (mahjongRiichiPending && mahjongRiichiTileIndex === null) {
+      setMahjongRiichiTileIndex(nextRiver.length - 1);
+      setMahjongKyotaku(1);
+      setMahjongRiichiPending(false);
+      pushMahjongLog("リーチ宣言", "success");
+    }
+
+    const waitLabel = waits.slice(0, MAHJONG_WAIT_HINT_LIMIT).map((tile) => mahjongTileLabel(tile)).join(", ");
+    setMahjongMessage(tf("mahjongHintLine", { a: waitLabel }));
   };
 
   useEffect(() => {
@@ -15422,212 +15199,13 @@ export default function Home() {
   }, [onMahjongTileClick]);
 
   useEffect(() => {
-    if (!gameStarted.mahjong) return;
-    if (isMahjongOver) return;
-    if (connectedRoomCode) return;
-    if (mahjongTurnActor !== "opponent") return;
-    if (mahjongCpuTurnBusy) return;
-    if (mahjongLatestOpponentDiscard !== null) return;
-
-    if (mahjongCpuTurnsRemaining <= 0) {
-      setMahjongTurnActor("self");
-      return;
-    }
-
-    const opponentNames = mahjongRuleConfig.playerCount === 3
-      ? (["Player B", "Player C"] as const)
-      : (["Player B", "Player C", "Player D"] as const);
-    const sideRiverIndexOrder = mahjongRuleConfig.playerCount === 3 ? [0, 2] : [0, 1, 2];
-    const opponentCycleLength = opponentNames.length;
-    const opponentTurnSlot = Math.max(0, mahjongOpponentTurnIndex % opponentCycleLength);
-    const opponentSeat = sideRiverIndexOrder[opponentTurnSlot] ?? 0;
-    const actorName = opponentNames[opponentTurnSlot] || "相手";
-    const seatForAnimation: "top" | "left" | "right" = opponentSeat === 0 ? "top" : (opponentSeat === 1 ? "left" : "right");
-    const speedProfile = MAHJONG_CPU_SPEED_PROFILE[mahjongCpuSpeed];
-    const thinkDelay = speedProfile.thinkMin + Math.floor(Math.random() * (speedProfile.thinkMax - speedProfile.thinkMin + 1));
-    const turnsAfterThis = Math.max(0, mahjongCpuTurnsRemaining - 1);
-
-    clearMahjongCpuTimers();
-    setMahjongCpuDrawSeatIndex(null);
-    setMahjongCpuThinking(null);
-    setMahjongDiscardAnimation(null);
-    const token = mahjongCpuTurnTokenRef.current + 1;
-    mahjongCpuTurnTokenRef.current = token;
-    setMahjongCpuTurnBusy(true);
-    setMahjongMessage(`${actorName} がツモしています...`);
-    pushMahjongLog(`[cpu] start actor=${actorName} seat=${seatForAnimation} token=${token} remain=${mahjongCpuTurnsRemaining} delays={start:${CPU_TURN_START_DELAY},think:${thinkDelay},flight:${CPU_DISCARD_ANIMATION_DELAY},call:${CPU_CALL_THINK_DELAY},riichi:${CPU_RIICHI_DELAY},win:${CPU_WIN_DELAY}} activeTimers=${mahjongCpuTimersRef.current.length}`);
-
-    scheduleMahjongCpuTimer(CPU_TURN_START_DELAY, () => {
-      if (mahjongCpuTurnTokenRef.current !== token) {
-        pushMahjongLog(`[cpu] cancel-before-draw actor=${actorName} token=${token}`, "warn");
-        return;
-      }
-
-      setMahjongCpuDrawSeatIndex(opponentSeat);
-      setMahjongCpuThinking({ seatIndex: opponentSeat, sec: Math.max(1, Math.ceil(thinkDelay / 1000)) });
-      setMahjongMessage(`${actorName} が思考中...`);
-
-      scheduleMahjongCpuTimer(thinkDelay, () => {
-        if (mahjongCpuTurnTokenRef.current !== token) {
-          pushMahjongLog(`[cpu] cancel-before-discard actor=${actorName} token=${token}`, "warn");
-          return;
-        }
-
-        const opponentDiscard = mahjongWall[0] ?? null;
-        if (opponentDiscard === null) {
-          setMahjongCpuTurnBusy(false);
-          setMahjongCpuDrawSeatIndex(null);
-          setMahjongCpuThinking(null);
-          setMahjongTurnActor("self");
-          setMahjongCpuTurnsRemaining(0);
-          setMahjongHonba((prev) => prev + 1);
-          setIsMahjongOver(true);
-          setMahjongMessage(t("mahjongRyukyoku"));
-          pushMahjongLog("流局: 山牌が尽きました。", "warn");
-          return;
-        }
-
-        const wallAfterOpponent = mahjongWall.slice(1);
-        const latestRiver = [...mahjongRiver];
-        const latestHand = [...mahjongCurrentHandTiles];
-        const isRiichiLocked = mahjongRiichiTileIndex !== null;
-
-        setMahjongWall(wallAfterOpponent);
-        setMahjongOpponentTurnIndex((prev) => (prev + 1) % opponentCycleLength);
-        setMahjongCpuDrawSeatIndex(null);
-        setMahjongCpuThinking(null);
-        setMahjongDiscardAnimation({
-          id: `cpu-discard-${Date.now()}-${opponentSeat}`,
-          seat: seatForAnimation,
-          tile: opponentDiscard,
-          sourceIndex: null,
-          isTsumogiri: true,
-          durationMs: CPU_DISCARD_ANIMATION_DELAY,
-          startedAt: Date.now(),
-        });
-        pushMahjongLog(`[cpu] discard actor=${actorName} tile=${mahjongTileLabel(opponentDiscard)} token=${token}`);
-
-        scheduleMahjongCpuTimer(CPU_DISCARD_ANIMATION_DELAY, () => {
-          if (mahjongCpuTurnTokenRef.current !== token) {
-            pushMahjongLog(`[cpu] cancel-after-discard actor=${actorName} token=${token}`, "warn");
-            return;
-          }
-
-          setMahjongDiscardAnimation(null);
-          setMahjongSideRivers((prev) => {
-            const next: [MahjongCell[], MahjongCell[], MahjongCell[]] = [
-              [...prev[0]],
-              [...prev[1]],
-              [...prev[2]],
-            ];
-            const discardIndex = next[opponentSeat].length;
-            next[opponentSeat].push(opponentDiscard);
-            setMahjongLatestDiscardMeta({
-              tile: opponentDiscard,
-              by: actorName,
-              sideRiverSeatIndex: opponentSeat,
-              sideRiverDiscardIndex: discardIndex,
-              discardId: `${Date.now()}-${opponentSeat}-${discardIndex}`,
-              discardTimestamp: Date.now(),
-            });
-            return next;
-          });
-          setMahjongLatestOpponentDiscard(opponentDiscard);
-          setMahjongLatestOpponentDiscardBy(actorName);
-          setMahjongCpuTurnsRemaining(turnsAfterThis);
-          pushMahjongLog(`${actorName} 打牌: ${mahjongTileLabel(opponentDiscard)}`);
-
-          const ronEval = evaluateMahjongWinAction({
-            baseHand: latestHand,
-            winType: "ron",
-            winningTile: opponentDiscard,
-            isRiichi: isRiichiLocked,
-            river: latestRiver,
-            meldCount: mahjongSelfMelds.length,
-            isMenzen: mahjongSelfMelds.every((meld) => meld.type === "ankan"),
-            bonusHan: mahjongBonusHan,
-          });
-          logMahjongWinEval("ron", ronEval);
-
-          const canRon = ronEval.ok;
-          const canPon = !isRiichiLocked && mahjongCanPon(latestHand, opponentDiscard);
-          const canMinkan = !isRiichiLocked && mahjongCanMinkan(latestHand, opponentDiscard);
-          const canChi = !isRiichiLocked && mahjongRuleConfig.allowChi && mahjongFindChiCandidates(latestHand, opponentDiscard).length > 0;
-          const hasResponseAction = canRon || canPon || canMinkan || canChi;
-          pushMahjongLog(`[calls] 候補人数=${hasResponseAction ? 1 : 0} canRon=${canRon ? 1 : 0} canPon=${canPon ? 1 : 0} canChi=${canChi ? 1 : 0} canKan=${canMinkan ? 1 : 0}`);
-
-          if (hasResponseAction) {
-            const tags = [
-              canRon ? "ロン" : null,
-              canMinkan ? "カン" : null,
-              canPon ? "ポン" : null,
-              canChi ? "チー" : null,
-            ].filter(Boolean).join(" / ");
-            setMahjongActionDeadlineAt(Date.now() + 8000);
-            pushMahjongLog("捨て牌処理完了: waitingForCalls へ遷移");
-            setMahjongMessage(`${tags} 可能: ${mahjongTileLabel(opponentDiscard)} (${actorName})`);
-            setMahjongCpuTurnBusy(false);
-            return;
-          }
-
-          setMahjongActionDeadlineAt(null);
-          setMahjongLatestOpponentDiscard(null);
-          setMahjongLatestOpponentDiscardBy(null);
-          setMahjongLatestDiscardMeta(null);
-          setMahjongCpuTurnBusy(false);
-          if (turnsAfterThis <= 0) {
-            setMahjongTurnActor("self");
-          }
-          pushMahjongLog("捨て牌処理完了: 鳴き候補なし -> 次巡へ進行");
-        });
-      });
-    });
-  }, [
-    clearMahjongCpuTimers,
-    connectedRoomCode,
-    gameStarted.mahjong,
-    isMahjongOver,
-    logMahjongWinEval,
-    mahjongBonusHan,
-    mahjongCpuSpeed,
-    mahjongCpuTurnBusy,
-    mahjongCpuTurnsRemaining,
-    mahjongCurrentHandTiles,
-    mahjongLatestOpponentDiscard,
-    mahjongOpponentTurnIndex,
-    mahjongRiichiTileIndex,
-    mahjongRiver,
-    mahjongRuleConfig.allowChi,
-    mahjongRuleConfig.playerCount,
-    mahjongSelfMelds,
-    mahjongTurnActor,
-    mahjongWall,
-    pushMahjongLog,
-    scheduleMahjongCpuTimer,
-    t,
-  ]);
-
-  useEffect(() => {
-    const hasActiveCpuPipeline = mahjongCpuTurnBusy || mahjongCpuDrawSeatIndex !== null || mahjongCpuThinking !== null || mahjongDiscardAnimation !== null || mahjongCpuTimersRef.current.length > 0;
-    if (hasActiveCpuPipeline && (!gameStarted.mahjong || activePanel !== "mahjong" || isMahjongOver || Boolean(connectedRoomCode))) {
-      cancelMahjongCpuPipeline("context-change");
-    }
-  }, [activePanel, cancelMahjongCpuPipeline, connectedRoomCode, gameStarted.mahjong, isMahjongOver, mahjongCpuDrawSeatIndex, mahjongCpuThinking, mahjongCpuTurnBusy, mahjongDiscardAnimation]);
-
-  useEffect(() => {
-    return () => {
-      cancelMahjongCpuPipeline("unmount");
-    };
-  }, [cancelMahjongCpuPipeline]);
-
-  useEffect(() => {
     if (activePanel !== "mahjong") return;
     if (!gameStarted.mahjong) return;
 
     const tsumoEval = evaluateMahjongWinAction({
-      baseHand: mahjongCurrentHandTiles,
+      baseHand: mahjongBoard,
       winType: "tsumo",
-      winningTile: mahjongDrawnTile?.tile ?? null,
+      winningTile: mahjongLastDraw,
       isRiichi: mahjongRiichiTileIndex !== null,
       river: mahjongRiver,
       meldCount: mahjongSelfMelds.length,
@@ -15635,7 +15213,7 @@ export default function Home() {
       bonusHan: mahjongBonusHan,
     });
     const ronEval = evaluateMahjongWinAction({
-      baseHand: mahjongCurrentHandTiles,
+      baseHand: mahjongBoard,
       winType: "ron",
       winningTile: mahjongLatestOpponentDiscard,
       isRiichi: mahjongRiichiTileIndex !== null,
@@ -15646,7 +15224,7 @@ export default function Home() {
     });
 
     const debugKey = [
-      mahjongCurrentHandCount,
+      mahjongBoard.length,
       tsumoEval.ok ? 1 : 0,
       tsumoEval.reason,
       ronEval.ok ? 1 : 0,
@@ -15664,10 +15242,9 @@ export default function Home() {
   }, [
     activePanel,
     gameStarted.mahjong,
-    mahjongCurrentHandTiles,
-    mahjongCurrentHandCount,
+    mahjongBoard,
     mahjongBonusHan,
-    mahjongDrawnTile,
+    mahjongLastDraw,
     mahjongSelfMelds,
     mahjongRiichiTileIndex,
     mahjongRiver,
@@ -15678,12 +15255,11 @@ export default function Home() {
   useEffect(() => {
     if (!mahjongAutoWinEnabled) return;
     if (isMahjongOver) return;
-    if (mahjongCurrentHandCount !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) return;
-    if (!mahjongDrawnTile) return;
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) return;
     const canAutoWin = evaluateMahjongWinAction({
-      baseHand: mahjongCurrentHandTiles,
+      baseHand: mahjongBoard,
       winType: "tsumo",
-      winningTile: mahjongDrawnTile.tile,
+      winningTile: mahjongLastDraw,
       isRiichi: mahjongRiichiTileIndex !== null,
       river: mahjongRiver,
       meldCount: mahjongSelfMelds.length,
@@ -15692,17 +15268,13 @@ export default function Home() {
     }).ok;
     if (!canAutoWin) return;
     onMahjongTsumo();
-  }, [isMahjongOver, mahjongAutoWinEnabled, mahjongCurrentHandCount, mahjongCurrentHandTiles, mahjongBonusHan, mahjongDrawnTile, mahjongSelfMelds, mahjongRiichiTileIndex, mahjongRiver, onMahjongTsumo]);
+  }, [isMahjongOver, mahjongAutoWinEnabled, mahjongBoard, mahjongBonusHan, mahjongLastDraw, mahjongSelfMelds, mahjongRiichiTileIndex, mahjongRiver, onMahjongTsumo]);
 
   useEffect(() => {
     if (!gameStarted.mahjong) return;
     if (isMahjongOver) return;
-    if (!connectedRoomCode && mahjongTurnActor !== "self") return;
-    if (mahjongCpuTurnBusy) return;
     if (mahjongLatestOpponentDiscard !== null) return;
-    if (mahjongAwaitingCallDiscard) return;
-    if (mahjongCurrentHandCount !== mahjongConcealedCountAfterDiscard(mahjongSelfMelds.length)) return;
-    if (mahjongDrawnTile !== null) return;
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDiscard(mahjongSelfMelds.length)) return;
 
     // Auto-draw at turn start so discard is available without pressing the draw button.
     const timerId = window.setTimeout(() => {
@@ -15712,65 +15284,7 @@ export default function Home() {
     return () => {
       window.clearTimeout(timerId);
     };
-  }, [connectedRoomCode, gameStarted.mahjong, isMahjongOver, mahjongCpuTurnBusy, mahjongCurrentHandCount, mahjongDrawnTile, mahjongLatestOpponentDiscard, mahjongSelfMelds.length, mahjongAwaitingCallDiscard, mahjongTurnActor, onMahjongShuffle]);
-
-  useEffect(() => {
-    const expectedAfterDraw = mahjongConcealedCountAfterDraw(mahjongSelfMelds.length);
-    const expectedAfterDiscard = mahjongConcealedCountAfterDiscard(mahjongSelfMelds.length);
-
-    if (mahjongDrawnTile === null) {
-      if (mahjongConcealedHand.length !== expectedAfterDraw) return;
-      if (mahjongConcealedHand.length <= 0) return;
-
-      const fallbackDrawn = mahjongConcealedHand[mahjongConcealedHand.length - 1] ?? null;
-      if (!fallbackDrawn) return;
-
-      setMahjongConcealedHand((prev) => prev.slice(0, -1));
-      setMahjongDrawnTile(fallbackDrawn);
-      pushMahjongLog("[state-fix] concealedHand(14) を検出: 末尾牌を drawnTile へ分離", "warn");
-      return;
-    }
-
-    if (mahjongConcealedHand.length > expectedAfterDiscard) {
-      const overflow = mahjongConcealedHand.length - expectedAfterDiscard;
-      setMahjongConcealedHand((prev) => prev.slice(0, Math.max(0, prev.length - overflow)));
-      pushMahjongLog(`[state-fix] concealedHand overflow=${overflow} を検出: 余剰牌を除去`, "warn");
-    }
-  }, [mahjongConcealedHand, mahjongDrawnTile, mahjongSelfMelds.length, pushMahjongLog]);
-
-  useEffect(() => {
-    if (!gameStarted.mahjong) return;
-    if (isMahjongOver) return;
-    if (mahjongActionDeadlineAt === null) return;
-    if (mahjongLatestOpponentDiscard === null) return;
-
-    const remaining = mahjongActionDeadlineAt - Date.now();
-    if (remaining <= 0) {
-      pushMahjongLog("鳴き待ちタイムアウト: 自動パス実行", "warn");
-      onMahjongPass();
-      return;
-    }
-
-    const timerId = window.setTimeout(() => {
-      pushMahjongLog("鳴き待ちタイムアウト到達: 自動パス", "warn");
-      onMahjongPass();
-    }, remaining + 8);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [gameStarted.mahjong, isMahjongOver, mahjongActionDeadlineAt, mahjongLatestOpponentDiscard, onMahjongPass, pushMahjongLog]);
-
-  useEffect(() => {
-    if (!gameStarted.mahjong) return;
-    const phase = mahjongRiichiPending
-      ? "selectingRiichiDiscard"
-      : (mahjongLatestOpponentDiscard !== null
-        ? "waitingForCalls"
-        : (mahjongAwaitingCallDiscard ? "discardAfterCall" : (mahjongDrawnTile !== null ? "discardAfterDraw" : "drawing")));
-    const turn = (mahjongDrawnTile !== null || mahjongAwaitingCallDiscard) ? "self" : "opponent";
-    pushMahjongLog(`[state] gamePhase=${phase} currentTurn=${turn} pendingCalls=${mahjongLatestOpponentDiscard !== null ? 1 : 0}`);
-  }, [gameStarted.mahjong, mahjongRiichiPending, mahjongLatestOpponentDiscard, mahjongDrawnTile, mahjongAwaitingCallDiscard, pushMahjongLog]);
+  }, [gameStarted.mahjong, isMahjongOver, mahjongBoard.length, mahjongLatestOpponentDiscard, mahjongSelfMelds.length, onMahjongShuffle]);
 
   useEffect(() => {
     if (!gameStarted.mahjong) return;
@@ -15778,14 +15292,14 @@ export default function Home() {
     if (mahjongRiichiTileIndex === null) return;
     if (mahjongRiichiPending) return;
     if (mahjongLatestOpponentDiscard !== null) return;
-    if (mahjongCurrentHandCount !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) return;
-    if (mahjongDrawnTile === null) return;
+    if (mahjongBoard.length !== mahjongConcealedCountAfterDraw(mahjongSelfMelds.length)) return;
+    if (mahjongLastDraw === null) return;
     if (mahjongAutoDiscardLockRef.current) return;
 
     const tsumoEval = evaluateMahjongWinAction({
-      baseHand: mahjongCurrentHandTiles,
+      baseHand: mahjongBoard,
       winType: "tsumo",
-      winningTile: mahjongDrawnTile.tile,
+      winningTile: mahjongLastDraw,
       isRiichi: true,
       river: mahjongRiver,
       meldCount: mahjongSelfMelds.length,
@@ -15794,12 +15308,12 @@ export default function Home() {
     });
 
     if (tsumoEval.ok) {
-      setMahjongMessage(tf("mahjongWinReady", { tile: mahjongTileLabel(mahjongDrawnTile.tile) }));
+      setMahjongMessage(tf("mahjongWinReady", { tile: mahjongTileLabel(mahjongLastDraw) }));
       return;
     }
 
-    const ankanCandidates = mahjongFindAnkanCandidates(mahjongCurrentHandTiles);
-    const canAbortiveDraw = mahjongCanAbortiveDraw(mahjongCurrentHandTiles, mahjongRiver);
+    const ankanCandidates = mahjongFindAnkanCandidates(mahjongBoard);
+    const canAbortiveDraw = mahjongCanAbortiveDraw(mahjongBoard, mahjongRiver);
     if (ankanCandidates.length > 0 || canAbortiveDraw) {
       const extraChoices = [
         ankanCandidates.length > 0 ? "暗槓" : null,
@@ -15811,11 +15325,12 @@ export default function Home() {
 
     mahjongAutoDiscardLockRef.current = true;
     setMahjongAutoDiscarding(true);
-    setMahjongMessage(`リーチ中ツモ切り: ${mahjongTileLabel(mahjongDrawnTile.tile)}`);
+    setMahjongMessage(`リーチ中ツモ切り: ${mahjongTileLabel(mahjongLastDraw)}`);
 
     const timerId = window.setTimeout(() => {
       try {
-        onMahjongTileClickRef.current({ tileId: mahjongDrawnTile.instanceId, source: "drawn" }, { force: true });
+        const drawIndex = mahjongBoard.length - 1;
+        onMahjongTileClickRef.current(drawIndex, { force: true });
       } finally {
         setMahjongAutoDiscarding(false);
         mahjongAutoDiscardLockRef.current = false;
@@ -15834,9 +15349,8 @@ export default function Home() {
     mahjongRiichiTileIndex,
     mahjongRiichiPending,
     mahjongLatestOpponentDiscard,
-    mahjongCurrentHandCount,
-    mahjongCurrentHandTiles,
-    mahjongDrawnTile,
+    mahjongBoard,
+    mahjongLastDraw,
     mahjongRiver,
     mahjongBonusHan,
     mahjongSelfMelds,
@@ -17463,7 +16977,7 @@ export default function Home() {
     const hpScale = difficulty === "easy" ? 0.86 : difficulty === "hard" ? 1.2 : 1;
     const speedScale = difficulty === "easy" ? 0.92 : difficulty === "hard" ? 1.08 : 1;
     const contactScale = difficulty === "easy" ? 0.9 : difficulty === "hard" ? 1.2 : 1;
-    const count = Math.min(12, 3 + Math.floor((wave + 1) / 2));
+    const count = Math.min(30, 6 + Math.floor((wave + 1) / 2));
     return Array.from({ length: count }, (_, index) => {
       const hp = Math.max(8, Math.round((16 + wave * 5 + index * 2) * hpScale));
       const side = Math.floor(Math.random() * 4);
@@ -17505,6 +17019,7 @@ export default function Home() {
     survivorsPlayerRef.current = center;
     survivorsAutoAttackReadyAtRef.current = 0;
     survivorsContactReadyAtRef.current = 0;
+    survivorsContinuousSpawnReadyAtRef.current = 0;
     survivorsSkillReadyAtRef.current = 0;
     survivorsSkillActiveUntilRef.current = 0;
     survivorsWaveTransitioningRef.current = false;
@@ -17911,7 +17426,7 @@ export default function Home() {
   }, [buildSurvivorsShopSlots, survivorsKills]);
 
   const onSurvivorsBuyShopSlot = useCallback((slotId: string) => {
-    if (!isSurvivorsAugmentOpen) return;
+    if (!isSurvivorsAugmentOpen || !isSurvivorsShopSessionActive) return;
     const target = survivorsShopSlots.find((slot) => slot.slotId === slotId);
     if (!target || target.purchased) return;
     if (survivorsCoins < target.price) return;
@@ -17965,7 +17480,7 @@ export default function Home() {
     }
 
     setSurvivorsMessage(`${target.option.title} を購入`);
-  }, [applySurvivorsAugment, isSurvivorsAugmentOpen, survivorsCoins, survivorsShopSlots, survivorsShopWeapons]);
+  }, [applySurvivorsAugment, isSurvivorsAugmentOpen, isSurvivorsShopSessionActive, survivorsCoins, survivorsShopSlots, survivorsShopWeapons]);
 
   const onSurvivorsToggleShopLock = useCallback((slotId: string) => {
     if (!isSurvivorsAugmentOpen) return;
@@ -17978,7 +17493,7 @@ export default function Home() {
   const survivorsShopRerollCost = Math.max(10, 12 + survivorsShopRerollCount * 6);
 
   const onSurvivorsRerollShop = useCallback(() => {
-    if (!isSurvivorsAugmentOpen) return;
+    if (!isSurvivorsAugmentOpen || !isSurvivorsShopSessionActive) return;
     if (survivorsShopRerollBusyRef.current) return;
     if (survivorsCoins < survivorsShopRerollCost) return;
     survivorsShopRerollBusyRef.current = true;
@@ -17990,10 +17505,10 @@ export default function Home() {
       setIsSurvivorsShopRerolling(false);
       survivorsShopRerollBusyRef.current = false;
     }, 140);
-  }, [buildSurvivorsShopSlots, isSurvivorsAugmentOpen, survivorsAugmentReason, survivorsCoins, survivorsShopRerollCost, survivorsWave]);
+  }, [buildSurvivorsShopSlots, isSurvivorsAugmentOpen, isSurvivorsShopSessionActive, survivorsAugmentReason, survivorsCoins, survivorsShopRerollCost, survivorsWave]);
 
   const onSurvivorsStartNextWave = useCallback(() => {
-    if (!isSurvivorsAugmentOpen) return;
+    if (!isSurvivorsAugmentOpen || !isSurvivorsShopSessionActive) return;
     if (survivorsShopStartWaveBusyRef.current) return;
     survivorsShopStartWaveBusyRef.current = true;
     setIsSurvivorsStartingNextWave(true);
@@ -18015,10 +17530,10 @@ export default function Home() {
       setIsSurvivorsStartingNextWave(false);
       survivorsShopStartWaveBusyRef.current = false;
     }, 140);
-  }, [createSurvivorsEnemies, isSurvivorsAugmentOpen, survivorsKills, survivorsMaxHp, survivorsShopNextWave]);
+  }, [createSurvivorsEnemies, isSurvivorsAugmentOpen, isSurvivorsShopSessionActive, survivorsKills, survivorsMaxHp, survivorsShopNextWave]);
 
   useEffect(() => {
-    if (!isSurvivorsAugmentOpen) return;
+    if (!isSurvivorsAugmentOpen || !isSurvivorsShopSessionActive) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const tag = (event.target as HTMLElement | null)?.tagName?.toLowerCase() || "";
       if (tag === "input" || tag === "textarea" || tag === "select") return;
@@ -18028,20 +17543,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isSurvivorsAugmentOpen, onSurvivorsRerollShop]);
-
-  useEffect(() => {
-    if (!isSurvivorsAugmentOpen) {
-      survivorsShopRerollBusyRef.current = false;
-      survivorsShopStartWaveBusyRef.current = false;
-      setIsSurvivorsShopRerolling(false);
-      setIsSurvivorsStartingNextWave(false);
-      return;
-    }
-    if (!isSurvivorsShopSessionActive) {
-      setIsSurvivorsShopSessionActive(true);
-    }
-  }, [isSurvivorsAugmentOpen, isSurvivorsShopSessionActive]);
+  }, [isSurvivorsAugmentOpen, isSurvivorsShopSessionActive, onSurvivorsRerollShop]);
 
   useEffect(() => {
     if (!gameStarted.survivors || isSurvivorsOver) return;
@@ -18303,7 +17805,7 @@ export default function Home() {
                 survivorsDaikonAttackRef.current = {
                   active: true,
                   startedAt: now,
-                  durationMs: Math.max(220, Math.min(460, Math.floor(attackIntervalMs * 0.78))),
+                  durationMs: Math.max(360, Math.min(760, Math.floor(attackIntervalMs * 1.1))),
                   frameIndex: 0,
                   targetEnemyIds: sorted
                     .map((targetIndex) => moved[targetIndex]?.id)
@@ -18336,16 +17838,30 @@ export default function Home() {
         const alive = attacked.filter((enemy) => enemy.hp > 0);
         killCount = attacked.length - alive.length;
 
-        if (alive.length <= 0) {
-          survivorsEnemiesRef.current = [];
-          setSurvivorsEnemies([]);
-          if (!survivorsWaveTransitioningRef.current) {
-            openSurvivorsWaveShop("wave", survivorsWave);
-          }
-        } else {
-          survivorsEnemiesRef.current = alive;
-          setSurvivorsEnemies(alive);
+        let sustainedEnemies = alive;
+        if (sustainedEnemies.length <= 0) {
+          sustainedEnemies = createSurvivorsEnemies(survivorsWave);
+          setSurvivorsMessage("敵を一掃！ 次の敵が出現します");
+          survivorsContinuousSpawnReadyAtRef.current = now + 460;
         }
+        const spawnIntervalMs = Math.max(520, 1180 - survivorsWave * 22);
+        const targetCount = Math.min(
+          30,
+          4 + Math.floor((survivorsWave + 1) / 2) + Math.floor(Math.max(0, survivorsTimeSec) / 18),
+        );
+        if (now >= survivorsContinuousSpawnReadyAtRef.current && sustainedEnemies.length < targetCount) {
+          const deficit = targetCount - sustainedEnemies.length;
+          const spawnBatch = createSurvivorsEnemies(survivorsWave)
+            .slice(0, Math.max(1, Math.min(2, deficit)))
+            .map((enemy, index) => ({
+              ...enemy,
+              id: `${enemy.id}-r${now.toFixed(0)}-${index}`,
+            }));
+          sustainedEnemies = [...sustainedEnemies, ...spawnBatch];
+          survivorsContinuousSpawnReadyAtRef.current = now + spawnIntervalMs;
+        }
+        survivorsEnemiesRef.current = sustainedEnemies;
+        setSurvivorsEnemies(sustainedEnemies);
       }
 
       if (survivorsCharacterId === "daikon" && survivorsDaikonAttackRef.current.active) {
@@ -18394,11 +17910,10 @@ export default function Home() {
           const killedNow = attackedEnemies.length - aliveEnemies.length;
           killCount += killedNow;
           if (aliveEnemies.length <= 0) {
-            survivorsEnemiesRef.current = [];
-            setSurvivorsEnemies([]);
-            if (!survivorsWaveTransitioningRef.current) {
-              openSurvivorsWaveShop("wave", survivorsWave);
-            }
+            const refillEnemies = createSurvivorsEnemies(survivorsWave);
+            survivorsEnemiesRef.current = refillEnemies;
+            setSurvivorsEnemies(refillEnemies);
+            setSurvivorsMessage("敵を一掃！ 次の敵が出現します");
           } else {
             survivorsEnemiesRef.current = aliveEnemies;
             setSurvivorsEnemies(aliveEnemies);
@@ -18444,6 +17959,17 @@ export default function Home() {
         });
 
         const nextPoses: SurvivorsWeaponRenderPose[] = weaponSlots.map((slot, slotIndex) => {
+          const isDaikonMultiWeapon = survivorsCharacterId === "daikon" && weaponSlots.length >= 2;
+          const visibleCount = isDaikonMultiWeapon
+            ? 1
+            : weaponSlots.length;
+          const cycleLead = isDaikonMultiWeapon
+            ? Math.floor(now / SURVIVORS_DAIKON_WEAPON_CYCLE_MS) % Math.max(1, weaponSlots.length)
+            : 0;
+          const isVisible = !isDaikonMultiWeapon
+            ? true
+            : Array.from({ length: visibleCount }, (_, offset) => ((cycleLead + offset) % weaponSlots.length) === slotIndex)
+              .some(Boolean);
           const target = sortedEnemies.length > 0
             ? sortedEnemies[slotIndex % sortedEnemies.length]
             : null;
@@ -18454,9 +17980,26 @@ export default function Home() {
           const smoothAngle = normalizeAngleRad(prevAngle + getShortestAngleDeltaRad(prevAngle, targetAngle) * 0.24);
           survivorsWeaponAimAnglesRef.current[slot.slotKey] = smoothAngle;
 
-          const orbitAngle = weaponSlots.length <= 3
+          const daikonAttackState = survivorsDaikonAttackRef.current;
+          const isDaikonSlashActive = survivorsCharacterId === "daikon" && daikonAttackState.active;
+          const daikonSlashProgress = isDaikonSlashActive
+            ? Math.max(0, Math.min(1, (now - daikonAttackState.startedAt) / Math.max(1, daikonAttackState.durationMs)))
+            : 0;
+          const daikonForwardAngle = isDaikonSlashActive
+            ? Math.atan2(daikonAttackState.dirY, daikonAttackState.dirX)
+            : smoothAngle;
+          const spinSpeedRadPerMs = survivorsDaikonAttackRef.current.active ? 0.0032 : 0.0019;
+          const ringSpin = isDaikonMultiWeapon ? now * spinSpeedRadPerMs : 0;
+          let orbitAngle = (weaponSlots.length <= 3
             ? smoothAngle + (slotSpread[slotIndex] || 0)
-            : smoothAngle + (slotSpread[slotIndex] || 0) * 0.75;
+            : smoothAngle + (slotSpread[slotIndex] || 0) * 0.75) + ringSpin;
+          if (survivorsCharacterId === "daikon") {
+            if (isDaikonSlashActive) {
+              orbitAngle = daikonForwardAngle;
+            } else if (isDaikonMultiWeapon) {
+              orbitAngle = smoothAngle + (slotSpread[slotIndex] || 0) * 0.42 + ringSpin * 0.34;
+            }
+          }
           const motion = survivorsWeaponAttackMotionRef.current[slot.slotKey];
           let extension = 0;
           let swingOffset = 0;
@@ -18501,34 +18044,97 @@ export default function Home() {
             }
           }
 
-          const gripDistance = slot.config.distanceFromPlayer + Math.max(0, extension * 0.12);
-          const localX = Math.cos(orbitAngle) * gripDistance;
-          const localY = Math.sin(orbitAngle) * gripDistance;
-          const finalAngle = normalizeAngleRad(smoothAngle + swingOffset);
+          let daikonSlashThrust = 0;
+          let daikonForwardTravel = 0;
+          let daikonArcOffset = 0;
+          let daikonSlashSwingRad = 0;
+          if (survivorsCharacterId === "daikon" && isDaikonSlashActive) {
+            const primaryTargetId = daikonAttackState.targetEnemyIds[0] || "";
+            const primaryTarget = sortedEnemies.find((enemy) => enemy.id === primaryTargetId) || target || null;
+            const targetDistance = primaryTarget
+              ? Math.hypot(primaryTarget.x - nextPlayer.x, primaryTarget.y - nextPlayer.y)
+              : Math.max(60, daikonAttackState.impactRange * 0.8);
+            const forwardPhase = daikonSlashProgress < 0.62
+              ? daikonSlashProgress / 0.62
+              : Math.max(0, 1 - (daikonSlashProgress - 0.62) / 0.38);
+            const travelReach = Math.max(40, Math.min(320, targetDistance));
+            daikonForwardTravel = 18 + travelReach * Math.max(0, forwardPhase);
+            daikonArcOffset = Math.sin(daikonSlashProgress * Math.PI) * 10;
+            daikonSlashSwingRad = ((-24 + daikonSlashProgress * 48) * Math.PI) / 180;
+            daikonSlashThrust = 6;
+            flashIntensity = Math.max(flashIntensity, daikonSlashProgress > 0.14 && daikonSlashProgress < 0.7 ? 1 : 0.2);
+          }
+
+          const gripDistance = slot.config.distanceFromPlayer + Math.max(0, extension * 0.12) + daikonSlashThrust;
+          let localX = Math.cos(orbitAngle) * gripDistance;
+          let localY = Math.sin(orbitAngle) * gripDistance;
+          if (survivorsCharacterId === "daikon" && isDaikonSlashActive) {
+            const perpX = -daikonAttackState.dirY;
+            const perpY = daikonAttackState.dirX;
+            localX = daikonAttackState.dirX * daikonForwardTravel + perpX * daikonArcOffset;
+            localY = daikonAttackState.dirY * daikonForwardTravel + perpY * daikonArcOffset;
+          }
+          const baseWeaponAngle = survivorsCharacterId === "daikon"
+            ? (isDaikonSlashActive ? daikonForwardAngle + daikonSlashSwingRad : orbitAngle)
+            : smoothAngle;
+          const finalAngle = normalizeAngleRad(baseWeaponAngle + swingOffset);
           const leftTarget = Math.cos(finalAngle) < 0;
           const tipDistance = Math.hypot(slot.config.tipX - slot.config.gripX, slot.config.tipY - slot.config.gripY) * slot.config.scale;
           const muzzleX = nextPlayer.x + localX + Math.cos(finalAngle) * (tipDistance + extension);
           const muzzleY = nextPlayer.y + localY + Math.sin(finalAngle) * (tipDistance + extension);
           const isBehindByAngle = Math.sin(finalAngle) < 0;
-          const isBehindPlayer = slot.config.renderLayer === "behind" ? true : isBehindByAngle;
+          const isDaikonWeaponPose = survivorsCharacterId === "daikon";
+          if (isDaikonWeaponPose) {
+            localY += 6;
+          }
+          const isBehindPlayer = isDaikonWeaponPose
+            ? true
+            : (slot.config.renderLayer === "behind" ? true : isBehindByAngle);
+          const pulse01 = isDaikonMultiWeapon
+            ? (Math.sin(now * 0.014 - slotIndex * 0.95) + 1) / 2
+            : 1;
+          let poseScale = isDaikonMultiWeapon
+            ? slot.config.scale * (0.84 + pulse01 * 0.26)
+            : slot.config.scale;
+          if (survivorsCharacterId === "daikon" && isDaikonSlashActive) {
+            poseScale = slot.config.scale * (1.04 + Math.sin(daikonSlashProgress * Math.PI) * 0.24);
+          }
+          const poseOpacity = isDaikonMultiWeapon
+            ? (isVisible ? 1 : 0)
+            : 1;
+          const daikonFrameIndex = survivorsCharacterId === "daikon"
+            ? isDaikonSlashActive
+              ? Math.min(
+                Math.max(1, SURVIVORS_DAIKON_ATTACK_FRAME_RECTS.length) - 1,
+                Math.floor(daikonSlashProgress * Math.max(1, SURVIVORS_DAIKON_ATTACK_FRAME_RECTS.length)),
+              )
+              : 0
+            : 0;
+          const daikonUprightDeg = isDaikonSlashActive
+            ? -90 + ((-24 + daikonSlashProgress * 48) * 0.35)
+            : -90;
 
           return {
             slotKey: slot.slotKey,
             imageSrc: slot.imageSrc,
             localX,
             localY,
-            rotationDeg: (finalAngle * 180) / Math.PI + slot.config.baseRotation + (leftTarget ? 180 : 0),
-            scale: slot.config.scale,
-            scaleY: leftTarget ? -1 : 1,
+            rotationDeg: isDaikonWeaponPose
+              ? daikonUprightDeg
+              : (finalAngle * 180) / Math.PI + slot.config.baseRotation + (leftTarget ? 180 : 0),
+            scale: poseScale,
+            scaleY: isDaikonWeaponPose ? 1 : (leftTarget ? -1 : 1),
             gripX: slot.config.gripX,
             gripY: slot.config.gripY,
             isBehindPlayer,
             muzzleX,
             muzzleY,
             flashIntensity,
+            opacity: poseOpacity,
+            daikonFrameIndex,
           } satisfies SurvivorsWeaponRenderPose;
         });
-        setSurvivorsWeaponRenderPoses(nextPoses);
+        setSurvivorsWeaponRenderPoses(nextPoses.filter((pose) => pose.opacity > 0.02));
       }
 
       if (projectileShots.length > 0) {
@@ -18814,10 +18420,10 @@ export default function Home() {
 
   useEffect(() => {
     if (activePanel !== "mahjong") return;
-    if (!isMahjongOver && mahjongCurrentHandCount === MAHJONG_START_HAND_COUNT && mahjongRiver.length === 0) {
+    if (!isMahjongOver && mahjongBoard.length === MAHJONG_START_HAND_COUNT && mahjongRiver.length === 0) {
       setMahjongMessage(t("mahjongHint"));
     }
-  }, [activePanel, isMahjongOver, mahjongCurrentHandCount, mahjongRiver.length, t]);
+  }, [activePanel, isMahjongOver, mahjongBoard.length, mahjongRiver.length, t]);
 
   useEffect(() => {
     if (activePanel !== "poker") return;
@@ -23616,7 +23222,7 @@ export default function Home() {
                         if (gameStarted.sevens) return;
                         resetSevens();
                       }}
-                      disabled={Boolean(connectedRoomCode) || gameStarted.sevens}
+                      disabled={connectedRoomCode || gameStarted.sevens}
                       className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                     >
                       <option value="cpu">CPU対戦</option>
@@ -23672,7 +23278,7 @@ export default function Home() {
                           setSevensMaxPlayers(nextMax);
                           setRoomMaxPlayersDraft(nextMax);
                         }}
-                        disabled={Boolean(connectedRoomCode) || gameStarted.sevens}
+                        disabled={connectedRoomCode || gameStarted.sevens}
                         className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                       >
                         {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
@@ -23943,7 +23549,7 @@ export default function Home() {
                   <select
                     value={daifugoEffectiveMode}
                     onChange={(event) => setDaifugoMode(event.target.value as DaifugoMode)}
-                    disabled={Boolean(connectedRoomCode) || gameStarted.daifugo}
+                    disabled={connectedRoomCode || gameStarted.daifugo}
                     className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                   >
                     <option value="cpu">CPU</option>
@@ -23987,7 +23593,7 @@ export default function Home() {
                   <select
                     value={daifugoPreviewMaxPlayers}
                     onChange={(event) => setDaifugoMaxPlayers(Math.max(2, Math.min(8, Number(event.target.value) || 2)))}
-                    disabled={Boolean(connectedRoomCode) || gameStarted.daifugo}
+                    disabled={connectedRoomCode || gameStarted.daifugo}
                     className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                   >
                     {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
@@ -24754,12 +24360,11 @@ export default function Home() {
                 const short = (name: string) => (name.length > 8 ? `${name.slice(0, 8)}…` : name);
                 const sideDiscards = mahjongSideRivers;
                 const isSanma = mahjongRuleConfig.playerCount === 3;
-                const isSoloCpuMatch = !connectedRoomCode;
                 const opponentNames = isSanma ? ["Player B", "Player C"] : ["Player B", "Player C", "Player D"];
                 const opponentWindBySeat = isSanma ? (["南", "西"] as const) : (["南", "西", "北"] as const);
                 const opponentTurnName = opponentNames[Math.max(0, mahjongOpponentTurnIndex % opponentNames.length)] || "Player B";
 
-                const turnSeat: "bottom" | "top" = mahjongCurrentHandCount === mahjongConcealedCountAfterDraw(mahjongSelfMelds.length) ? "bottom" : "top";
+                const turnSeat: "bottom" | "top" = mahjongBoard.length === mahjongConcealedCountAfterDraw(mahjongSelfMelds.length) ? "bottom" : "top";
                 const selfPlayer: MahjongPlayerView = {
                   id: "self",
                   name: selfName,
@@ -24772,15 +24377,11 @@ export default function Home() {
                   isRiichi: mahjongRiichiTileIndex !== null,
                   isTurn: turnSeat === "bottom",
                   isConnected: true,
-                  thinkingSec: 0,
+                  thinkingSec: 7,
                   handBackCount: 0,
                   discards: mahjongRiver,
                   melds: mahjongSelfMelds,
                 };
-
-                const topThinkingSec = mahjongCpuThinking?.seatIndex === 0 ? mahjongCpuThinking.sec : 0;
-                const leftThinkingSec = mahjongCpuThinking?.seatIndex === 1 ? mahjongCpuThinking.sec : 0;
-                const rightThinkingSec = mahjongCpuThinking?.seatIndex === 2 ? mahjongCpuThinking.sec : 0;
 
                 const topPlayer: MahjongPlayerView = {
                   id: "top",
@@ -24794,9 +24395,8 @@ export default function Home() {
                   isRiichi: false,
                   isTurn: turnSeat === "top",
                   isConnected: true,
-                  thinkingSec: topThinkingSec,
-                  handBackCount: 13 + (mahjongCpuDrawSeatIndex === 0 ? 1 : 0),
-                  drawnBackActive: isSoloCpuMatch && mahjongCpuDrawSeatIndex === 0,
+                  thinkingSec: 8,
+                  handBackCount: 13,
                   discards: sideDiscards[0],
                   melds: mahjongSideMelds[0],
                 };
@@ -24813,9 +24413,8 @@ export default function Home() {
                   isRiichi: false,
                   isTurn: false,
                   isConnected: true,
-                  thinkingSec: leftThinkingSec,
-                  handBackCount: 13 + (mahjongCpuDrawSeatIndex === 1 ? 1 : 0),
-                  drawnBackActive: isSoloCpuMatch && mahjongCpuDrawSeatIndex === 1,
+                  thinkingSec: 8,
+                  handBackCount: 13,
                   discards: sideDiscards[1],
                   melds: mahjongSideMelds[1],
                 };
@@ -24832,9 +24431,8 @@ export default function Home() {
                   isRiichi: false,
                   isTurn: false,
                   isConnected: true,
-                  thinkingSec: rightThinkingSec,
-                  handBackCount: 13 + (mahjongCpuDrawSeatIndex === 2 ? 1 : 0),
-                  drawnBackActive: isSoloCpuMatch && mahjongCpuDrawSeatIndex === 2,
+                  thinkingSec: 8,
+                  handBackCount: 13,
                   discards: sideDiscards[isSanma ? 2 : 2],
                   melds: mahjongSideMelds[2],
                 };
@@ -24853,13 +24451,11 @@ export default function Home() {
                   latestDiscardSeat = "bottom";
                 }
 
-                const normalizedHand = mahjongCurrentHandTiles;
-                const fullInstances = mahjongDrawnTile ? [...mahjongConcealedHand, mahjongDrawnTile] : [...mahjongConcealedHand];
-                const riichiSelectableTileIds = mahjongRiichiPending
-                  ? mahjongFindRiichiDiscardIndexes(normalizedHand)
-                    .map((index) => fullInstances[index]?.instanceId)
-                    .filter((id): id is string => Boolean(id))
-                  : null;
+                const handState = mahjongSplitSelfHand(mahjongBoard, mahjongLastDraw, mahjongSelfMelds.length);
+                const normalizedHand = handState.drawnTile === null
+                  ? [...handState.concealedHand]
+                  : [...handState.concealedHand, handState.drawnTile];
+                const riichiSelectableIndexes = mahjongRiichiPending ? mahjongFindRiichiDiscardIndexes(normalizedHand) : null;
 
                 const centerInfo = {
                   roundLabel: `${mahjongRoundWind}${Math.min(mahjongRuleConfig.maxRoundPerWind, mahjongRoundNumber)}局`,
@@ -24876,7 +24472,6 @@ export default function Home() {
 
                 const mahjongRuleSummaryLines = [
                   `人数: ${mahjongRuleConfig.playerCount}人麻雀`,
-                  `CPU速度: ${mahjongCpuSpeed === "fast" ? "速い" : mahjongCpuSpeed === "slow" ? "ゆっくり" : "普通"}`,
                   `北牌: ${mahjongRuleConfig.northRule === "nuki-dora" ? "抜きドラ" : "通常牌"}`,
                   `チー: ${mahjongRuleConfig.allowChi ? "許可" : "禁止"}`,
                   `持ち点/返し点: ${mahjongRuleConfig.startingPoints.toLocaleString()} / ${mahjongRuleConfig.returnPoints.toLocaleString()}`,
@@ -24886,7 +24481,7 @@ export default function Home() {
                 const tsumoEval = evaluateMahjongWinAction({
                   baseHand: normalizedHand,
                   winType: "tsumo",
-                  winningTile: mahjongDrawnTile?.tile ?? null,
+                  winningTile: mahjongLastDraw,
                   isRiichi: mahjongRiichiTileIndex !== null,
                   river: mahjongRiver,
                   meldCount: mahjongSelfMelds.length,
@@ -24911,8 +24506,7 @@ export default function Home() {
                 const canRiichi = gameStarted.mahjong
                   && !isMahjongOver
                   && !mahjongAutoDiscarding
-                  && mahjongCurrentHandCount === concealedAfterDraw
-                  && mahjongDrawnTile !== null
+                  && mahjongBoard.length === concealedAfterDraw
                   && mahjongRiichiTileIndex === null
                   && mahjongFindRiichiDiscardIndexes(normalizedHand).length > 0;
                 const canKita = gameStarted.mahjong
@@ -24928,8 +24522,8 @@ export default function Home() {
                   : [];
                 const canChi = chiCandidates.length > 0;
                 const canMinkan = responseWindowOpen && !isRiichiLocked && !mahjongNoCallEnabled && mahjongCanMinkan(normalizedHand, mahjongLatestOpponentDiscard);
-                const ankanCandidates = !mahjongAutoDiscarding && mahjongCurrentHandCount === concealedAfterDraw ? mahjongFindAnkanCandidates(normalizedHand) : [];
-                const kakanCandidates = !mahjongAutoDiscarding && mahjongCurrentHandCount === concealedAfterDraw ? mahjongFindKakanCandidates(normalizedHand, mahjongSelfMelds) : [];
+                const ankanCandidates = !mahjongAutoDiscarding && mahjongBoard.length === concealedAfterDraw ? mahjongFindAnkanCandidates(normalizedHand) : [];
+                const kakanCandidates = !mahjongAutoDiscarding && mahjongBoard.length === concealedAfterDraw ? mahjongFindKakanCandidates(normalizedHand, mahjongSelfMelds) : [];
                 const canKan = canMinkan || ankanCandidates.length > 0 || kakanCandidates.length > 0;
                 const shouldShowPass = responseWindowOpen && !mahjongAutoDiscarding;
                 const shouldShowCancel = mahjongRiichiPending && !mahjongAutoDiscarding;
@@ -25075,16 +24669,15 @@ export default function Home() {
                     topPlayer={topPlayer}
                     leftPlayer={leftPlayer}
                     rightPlayer={rightPlayer}
-                    selfConcealedHand={mahjongConcealedHand}
-                    selfDrawnTile={mahjongDrawnTile}
-                    selfSelectedTileId={mahjongSelectedTileId}
+                    selfConcealedHand={handState.concealedHand}
+                    selfDrawnTile={handState.drawnTile}
+                    selfSelectedIndex={mahjongSelected}
                     riichiTileIndex={mahjongRiichiTileIndex}
                     latestDiscardSeat={latestDiscardSeat}
-                    discardAnimation={mahjongDiscardAnimation}
                     centerInfo={centerInfo}
                     actionButtons={actionButtons}
                     actionDeadlineAt={mahjongActionDeadlineAt}
-                    selfSelectableTileIds={riichiSelectableTileIds}
+                    selfSelectableTileIndexes={riichiSelectableIndexes}
                     enableActionSound={!mahjongReduceEffects}
                     roundResult={roundResult}
                     gameResultSummary={[]}
@@ -25128,28 +24721,6 @@ export default function Home() {
                               3人麻雀
                             </button>
                           </div>
-                        </div>
-
-                        <div className="rounded-md border border-emerald-300/25 bg-emerald-950/40 p-2">
-                          <p className="mb-1 font-semibold text-emerald-100">CPU思考速度</p>
-                          <select
-                            value={mahjongCpuSpeed}
-                            disabled={gameStarted.mahjong || Boolean(connectedRoomCode)}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              if (value === "fast" || value === "slow") {
-                                setMahjongCpuSpeed(value);
-                                return;
-                              }
-                              setMahjongCpuSpeed("normal");
-                            }}
-                            className="w-full rounded-md border border-slate-300/40 bg-slate-950/70 px-2 py-1"
-                          >
-                            <option value="fast">速い</option>
-                            <option value="normal">普通</option>
-                            <option value="slow">ゆっくり</option>
-                          </select>
-                          <p className="mt-1 text-[11px] text-emerald-100/70">ソロ対戦時のみ有効です。</p>
                         </div>
 
                         <div className="rounded-md border border-emerald-300/25 bg-emerald-950/40 p-2">
@@ -25249,9 +24820,9 @@ export default function Home() {
                         },
                       },
                     ]}
-                    onSelfTileClick={(payload) => {
+                    onSelfTileClick={(index) => {
                       if (!gameStarted.mahjong) return;
-                      onMahjongTileClick(payload);
+                      onMahjongTileClick(index);
                     }}
                     onCloseRoundResult={() => {
                       setMahjongWinSummary(null);
@@ -26308,10 +25879,18 @@ export default function Home() {
                 <div
                   className="relative mx-auto w-full max-w-[860px]"
                   style={{
-                    aspectRatio: `${SURVIVORS_ARENA_WIDTH} / ${SURVIVORS_ARENA_HEIGHT}`,
+                    aspectRatio: `${SURVIVORS_VIEWPORT_WIDTH} / ${SURVIVORS_VIEWPORT_HEIGHT}`,
                   }}
                 >
                   <div className="pointer-events-none absolute inset-0 rounded-lg border border-cyan-200/20" />
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      backgroundImage: "radial-gradient(circle at 20% 20%, rgba(16,185,129,0.08), transparent 34%), radial-gradient(circle at 80% 70%, rgba(34,211,238,0.08), transparent 30%)",
+                      backgroundSize: "420px 260px",
+                      backgroundPosition: `${-survivorsCameraLeft * 0.18}px ${-survivorsCameraTop * 0.18}px`,
+                    }}
+                  />
                   <div className="pointer-events-none absolute left-2 top-2 z-30 w-[min(38vw,220px)] rounded-md border border-slate-300/30 bg-slate-950/70 p-2">
                     <p className="mb-1 text-[10px] font-semibold tracking-wide text-emerald-100">
                       HP {Math.max(0, survivorsHp)}/{survivorsMaxHp}
@@ -26347,8 +25926,8 @@ export default function Home() {
                   <div
                     className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
                     style={{
-                      left: `${(survivorsPlayer.x / SURVIVORS_ARENA_WIDTH) * 100}%`,
-                      top: `${(survivorsPlayer.y / SURVIVORS_ARENA_HEIGHT) * 100}%`,
+                      left: `${survivorsPlayer.x - survivorsCameraLeft}px`,
+                      top: `${survivorsPlayer.y - survivorsCameraTop}px`,
                     }}
                   >
                     {!(SURVIVORS_CHARACTER_RENDER_RULES[survivorsCharacterId].usesFullBodyAttackAnimation && survivorsDaikonAttackVisual.active)
@@ -26369,90 +25948,64 @@ export default function Home() {
                             <img
                               src={pose.imageSrc}
                               alt={`weapon ${pose.slotKey}`}
-                              className="pointer-events-none select-none object-contain opacity-90"
+                              className="pointer-events-none select-none object-contain"
                               style={{
-                                width: "40px",
-                                height: "40px",
+                                width: survivorsCharacterId === "daikon" ? "52px" : "40px",
+                                height: survivorsCharacterId === "daikon" ? "52px" : "40px",
                                 maxWidth: "none",
                                 transform: `translate(${-pose.gripX}px, ${-pose.gripY}px) scaleY(${pose.scaleY})`,
+                                opacity: pose.opacity,
                                 filter: "drop-shadow(0 0 8px rgba(15,23,42,0.55))",
+                                display: survivorsCharacterId === "daikon" ? "none" : "block",
                               }}
                               draggable={false}
                             />
+                            {survivorsCharacterId === "daikon" ? (() => {
+                              const frameRect = SURVIVORS_DAIKON_ATTACK_FRAME_RECTS[
+                                Math.max(0, Math.min(SURVIVORS_DAIKON_ATTACK_FRAME_RECTS.length - 1, pose.daikonFrameIndex))
+                              ] || SURVIVORS_DAIKON_ATTACK_FRAME_RECTS[0];
+                              return (
+                                <div
+                                  className="pointer-events-none absolute overflow-hidden"
+                                  style={{
+                                    width: "52px",
+                                    height: "52px",
+                                    transform: `translate(${-pose.gripX}px, ${-pose.gripY}px) scaleY(${pose.scaleY})`,
+                                    opacity: pose.opacity,
+                                    backgroundImage: `url(${SURVIVORS_DAIKON_ATTACK_MOTION_SPRITE})`,
+                                    backgroundRepeat: "no-repeat",
+                                    backgroundSize: `${(SURVIVORS_DAIKON_ATTACK_SHEET_WIDTH / Math.max(1, frameRect.width)) * 100}% 100%`,
+                                    backgroundPosition: `${(frameRect.x / Math.max(1, SURVIVORS_DAIKON_ATTACK_SHEET_WIDTH - frameRect.width)) * 100}% 0%`,
+                                    filter: "drop-shadow(0 0 8px rgba(15,23,42,0.55))",
+                                  }}
+                                />
+                              );
+                            })() : null}
                           </div>
                         ))
                       : null}
 
                     {survivorsCharacterId === "daikon" ? (
-                      <>
-                        {!survivorsDaikonAttackVisual.active ? (() => {
-                          const directionSprite = SURVIVORS_DAIKON_DIRECTION_SPRITES[survivorsDaikonLastMoveDirection];
-                          if (!survivorsDaikonSpriteMeta.valid) {
-                            return null;
-                          }
-                          const col = Math.max(0, Math.min(SURVIVORS_DAIKON_IDLE_SHEET_COLS - 1, directionSprite.column));
-                          const row = Math.max(0, Math.min(SURVIVORS_DAIKON_IDLE_SHEET_ROWS - 1, directionSprite.row));
-                          return (
-                            <div className="relative h-14 w-14 select-none overflow-hidden drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]">
-                              <div
-                                className="absolute inset-0 bg-no-repeat"
-                                style={{
-                                  backgroundImage: `url(${SURVIVORS_DAIKON_IDLE_SPRITE})`,
-                                  backgroundSize: `${SURVIVORS_DAIKON_IDLE_SHEET_COLS * 100}% ${SURVIVORS_DAIKON_IDLE_SHEET_ROWS * 100}%`,
-                                  backgroundPosition: `${(col / Math.max(1, SURVIVORS_DAIKON_IDLE_SHEET_COLS - 1)) * 100}% ${(row / Math.max(1, SURVIVORS_DAIKON_IDLE_SHEET_ROWS - 1)) * 100}%`,
-                                }}
-                              />
-                            </div>
-                          );
-                        })() : null}
-                        {process.env.NODE_ENV !== "production" ? (() => {
-                          const frame = SURVIVORS_DAIKON_DIRECTION_SPRITES[survivorsDaikonLastMoveDirection];
-                          return (
-                            <div className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded bg-black/65 px-2 py-1 text-[10px] leading-tight text-lime-200">
-                              <div>{`Direction: ${survivorsDaikonLastMoveDirection}`}</div>
-                              <div>{`Frame: ${frame.frameNumber}`}</div>
-                              <div>{`FrameIndex: ${frame.frameIndex}`}</div>
-                              <div>{`Column: ${frame.column}`}</div>
-                              <div>{`Row: ${frame.row}`}</div>
-                              {!survivorsDaikonSpriteMeta.valid ? <div>Sprite: invalid 4x2 size</div> : null}
-                            </div>
-                          );
-                        })() : null}
-                        {survivorsDaikonAttackVisual.active ? (() => {
-                          const frameRect = SURVIVORS_DAIKON_ATTACK_FRAME_RECTS[
-                            Math.max(0, Math.min(SURVIVORS_DAIKON_ATTACK_FRAME_RECTS.length - 1, survivorsDaikonAttackVisual.frameIndex))
-                          ];
-                          const weaponFloatOffsetPx = SURVIVORS_DAIKON_ATTACK_WEAPON_FLOAT_PX[
-                            Math.max(0, Math.min(SURVIVORS_DAIKON_ATTACK_WEAPON_FLOAT_PX.length - 1, survivorsDaikonAttackVisual.frameIndex))
-                          ];
-                          return (
+                      (() => {
+                        const directionSprite = SURVIVORS_DAIKON_DIRECTION_SPRITES[survivorsDaikonLastMoveDirection];
+                        if (!survivorsDaikonSpriteMeta.valid) {
+                          return null;
+                        }
+                        const col = Math.max(0, Math.min(SURVIVORS_DAIKON_IDLE_SHEET_COLS - 1, directionSprite.column));
+                        const row = Math.max(0, Math.min(SURVIVORS_DAIKON_IDLE_SHEET_ROWS - 1, directionSprite.row));
+                        return (
+                          <div className="relative h-14 w-14 select-none overflow-hidden drop-shadow-[0_0_14px_rgba(34,211,238,0.55)]">
                             <div
-                              className="pointer-events-none absolute left-1/2 top-1/2"
+                              className="absolute inset-0 bg-no-repeat"
                               style={{
-                                width: `${frameRect.width}px`,
-                                height: `${SURVIVORS_DAIKON_ATTACK_SHEET_HEIGHT}px`,
-                                overflow: "hidden",
-                                transform: `translate(-50%, -50%) translateY(${weaponFloatOffsetPx}px) rotate(${survivorsDaikonAttackVisual.angleDeg}deg) scaleX(${survivorsDaikonAttackVisual.facingLeft ? -1 : 1}) scale(${SURVIVORS_DAIKON_ATTACK_RENDER_SCALE})`,
-                                transformOrigin: "center",
-                                filter: "drop-shadow(0 0 10px rgba(163,230,53,0.55))",
+                                backgroundImage: `url(${SURVIVORS_DAIKON_IDLE_SPRITE})`,
+                                backgroundSize: `${SURVIVORS_DAIKON_IDLE_SHEET_COLS * 100}% ${SURVIVORS_DAIKON_IDLE_SHEET_ROWS * 100}%`,
+                                backgroundPosition: `${(col / Math.max(1, SURVIVORS_DAIKON_IDLE_SHEET_COLS - 1)) * 100}% ${(row / Math.max(1, SURVIVORS_DAIKON_IDLE_SHEET_ROWS - 1)) * 100}%`,
                               }}
-                            >
-                              <img
-                                src={SURVIVORS_DAIKON_ATTACK_MOTION_SPRITE}
-                                alt="daikon attack motion"
-                                className="pointer-events-none absolute left-0 top-0 select-none"
-                                style={{
-                                  width: "1536px",
-                                  height: `${SURVIVORS_DAIKON_ATTACK_SHEET_HEIGHT}px`,
-                                  maxWidth: "none",
-                                  left: `${-frameRect.x}px`,
-                                }}
-                                draggable={false}
-                              />
-                            </div>
-                          );
-                        })() : null}
-                      </>
+                            />
+                          </div>
+                        );
+                      })()
                     ) : (
                       <img
                         src={SURVIVORS_PLAYER_SPRITES[survivorsCharacterId][survivorsPlayerFrame]}
@@ -26481,14 +26034,37 @@ export default function Home() {
                               alt={`weapon ${pose.slotKey}`}
                               className="pointer-events-none select-none object-contain"
                               style={{
-                                width: "40px",
-                                height: "40px",
+                                width: survivorsCharacterId === "daikon" ? "52px" : "40px",
+                                height: survivorsCharacterId === "daikon" ? "52px" : "40px",
                                 maxWidth: "none",
                                 transform: `translate(${-pose.gripX}px, ${-pose.gripY}px) scaleY(${pose.scaleY})`,
+                                opacity: pose.opacity,
                                 filter: "drop-shadow(0 0 10px rgba(45,212,191,0.42))",
+                                display: survivorsCharacterId === "daikon" ? "none" : "block",
                               }}
                               draggable={false}
                             />
+                            {survivorsCharacterId === "daikon" ? (() => {
+                              const frameRect = SURVIVORS_DAIKON_ATTACK_FRAME_RECTS[
+                                Math.max(0, Math.min(SURVIVORS_DAIKON_ATTACK_FRAME_RECTS.length - 1, pose.daikonFrameIndex))
+                              ] || SURVIVORS_DAIKON_ATTACK_FRAME_RECTS[0];
+                              return (
+                                <div
+                                  className="pointer-events-none absolute overflow-hidden"
+                                  style={{
+                                    width: "52px",
+                                    height: "52px",
+                                    transform: `translate(${-pose.gripX}px, ${-pose.gripY}px) scaleY(${pose.scaleY})`,
+                                    opacity: pose.opacity,
+                                    backgroundImage: `url(${SURVIVORS_DAIKON_ATTACK_MOTION_SPRITE})`,
+                                    backgroundRepeat: "no-repeat",
+                                    backgroundSize: `${(SURVIVORS_DAIKON_ATTACK_SHEET_WIDTH / Math.max(1, frameRect.width)) * 100}% 100%`,
+                                    backgroundPosition: `${(frameRect.x / Math.max(1, SURVIVORS_DAIKON_ATTACK_SHEET_WIDTH - frameRect.width)) * 100}% 0%`,
+                                    filter: "drop-shadow(0 0 10px rgba(45,212,191,0.42))",
+                                  }}
+                                />
+                              );
+                            })() : null}
                           </div>
                         ))
                       : null}
@@ -26534,8 +26110,8 @@ export default function Home() {
                         <div
                           className="absolute h-[3px] origin-left rounded-full bg-cyan-200/90"
                           style={{
-                            left: `${(projectile.fromX / SURVIVORS_ARENA_WIDTH) * 100}%`,
-                            top: `${(projectile.fromY / SURVIVORS_ARENA_HEIGHT) * 100}%`,
+                            left: `${projectile.fromX - survivorsCameraLeft}px`,
+                            top: `${projectile.fromY - survivorsCameraTop}px`,
                             transform: `translateY(-50%) rotate(${trailAngle}deg)`,
                             width: `${Math.max(4, trailLength)}px`,
                             opacity: 0.65 * (1 - progress * 0.5),
@@ -26547,8 +26123,8 @@ export default function Home() {
                           alt="fairy attack projectile"
                           className="absolute h-9 w-9 select-none object-contain drop-shadow-[0_0_14px_rgba(125,211,252,0.9)]"
                           style={{
-                            left: `${(x / SURVIVORS_ARENA_WIDTH) * 100}%`,
-                            top: `${(y / SURVIVORS_ARENA_HEIGHT) * 100}%`,
+                            left: `${x - survivorsCameraLeft}px`,
+                            top: `${y - survivorsCameraTop}px`,
                             transform: `translate(-50%, -50%) rotate(${projectile.angleDeg}deg) scale(${1.12 - progress * 0.2})`,
                             opacity: 1 - progress * 0.5,
                           }}
@@ -26562,8 +26138,8 @@ export default function Home() {
                       key={`survivors-dot-${enemy.id}`}
                       className="absolute -translate-x-1/2 -translate-y-1/2"
                       style={{
-                        left: `${(enemy.x / SURVIVORS_ARENA_WIDTH) * 100}%`,
-                        top: `${(enemy.y / SURVIVORS_ARENA_HEIGHT) * 100}%`,
+                        left: `${enemy.x - survivorsCameraLeft}px`,
+                        top: `${enemy.y - survivorsCameraTop}px`,
                       }}
                     >
                       <div className="h-7 w-7 rounded-full border border-rose-100/70 bg-rose-400/80 shadow-[0_0_16px_rgba(251,113,133,0.45)]" />
