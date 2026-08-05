@@ -6492,6 +6492,7 @@ export default function Home() {
   const [mineMessage, setMineMessage] = useState<string>(LOGIN_I18N.ja.minesHint);
   const [isMineOver, setIsMineOver] = useState(false);
   const [numeronSecret, setNumeronSecret] = useState(() => createNumeronSecret());
+  const [numeronEnemySecret, setNumeronEnemySecret] = useState(() => createNumeronSecret());
   const [numeronDigitCount, setNumeronDigitCount] = useState<NumeronDigitCount>(3);
   const [numeronSecretDraft, setNumeronSecretDraft] = useState<string[]>([]);
   const [isNumeronSecretConfirmed, setIsNumeronSecretConfirmed] = useState(false);
@@ -9936,6 +9937,7 @@ export default function Home() {
     const shouldApplyNumeronSync = !connectedRoomCode;
     if (shouldApplyNumeronSync) {
       if (typeof state.numeronSecret === "string") setNumeronSecret(state.numeronSecret);
+      if (typeof state.numeronEnemySecret === "string") setNumeronEnemySecret(state.numeronEnemySecret);
       setNumeronDigitCount(normalizeNumeronDigitCount(state.numeronDigitCount));
       {
         const count = normalizeNumeronDigitCount(state.numeronDigitCount);
@@ -11491,6 +11493,7 @@ export default function Home() {
         mineMessage,
         isMineOver,
         numeronSecret,
+        numeronEnemySecret,
         numeronDigitCount,
         numeronSecretDraft,
         isNumeronSecretConfirmed,
@@ -11668,6 +11671,7 @@ export default function Home() {
       const {
         activePanel: _activePanel,
         numeronSecret: _numeronSecret,
+        numeronEnemySecret: _numeronEnemySecret,
         numeronDigitCount: _numeronDigitCount,
         numeronSecretDraft: _numeronSecretDraft,
         isNumeronSecretConfirmed: _isNumeronSecretConfirmed,
@@ -12675,6 +12679,7 @@ export default function Home() {
     setNumeronDigitCount(nextDigitCount);
     setNumeronSecretDraft(nextSecretDraft);
     setNumeronSecret(fixedSecret || createNumeronSecret(nextDigitCount));
+    setNumeronEnemySecret(createNumeronSecret(nextDigitCount));
     setIsNumeronSecretConfirmed(false);
     setIsNumeronSecretPanelOpen(true);
     setNumeronDraft([]);
@@ -12744,7 +12749,7 @@ export default function Home() {
       return;
     }
 
-    const resultText = numeronSecret.includes(numeronHintDigit)
+    const resultText = numeronEnemySecret.includes(numeronHintDigit)
       ? (Number(numeronHintDigit) >= 5 ? "HIGH" : "LOW")
       : "NONE";
     setNumeronAssistCharges((prev) => ({ ...prev, highlow: Math.max(0, prev.highlow - 1) }));
@@ -12758,9 +12763,9 @@ export default function Home() {
       return;
     }
 
-    const revealIndex = Math.floor(Math.random() * numeronSecret.length);
+    const revealIndex = Math.floor(Math.random() * numeronEnemySecret.length);
     setNumeronAssistCharges((prev) => ({ ...prev, reveal: Math.max(0, prev.reveal - 1) }));
-    setNumeronMessage(tf("numeronRevealResult", { index: String(revealIndex + 1), digit: numeronSecret[revealIndex] ?? "?" }));
+    setNumeronMessage(tf("numeronRevealResult", { index: String(revealIndex + 1), digit: numeronEnemySecret[revealIndex] ?? "?" }));
   };
 
   const onNumeronUseHighLow = () => {
@@ -12838,7 +12843,7 @@ export default function Home() {
       return;
     }
 
-    const result = evaluateNumeron(numeronSecret, guess);
+    const result = evaluateNumeron(numeronEnemySecret, guess);
     const nextHistory = [...numeronHistory, { guess, hits: result.hits, blows: result.blows }];
     setNumeronHistory(nextHistory);
     setNumeronDraft([]);
@@ -12852,7 +12857,7 @@ export default function Home() {
 
     if (nextHistory.length >= numeronTryLimit) {
       setIsNumeronOver(true);
-      setNumeronMessage(tf("numeronTryLimitReached", { secret: numeronSecret }));
+      setNumeronMessage(tf("numeronTryLimitReached", { secret: numeronEnemySecret }));
       return;
     }
 
@@ -12912,7 +12917,7 @@ export default function Home() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activePanel, gameStarted.numeron, isNumeronOver, numeronDigitCount, numeronDraft, numeronAssistCharges, numeronHintDigit, numeronSecret, numeronHistory, numeronPendingItem]);
+  }, [activePanel, gameStarted.numeron, isNumeronOver, numeronDigitCount, numeronDraft, numeronAssistCharges, numeronHintDigit, numeronSecret, numeronEnemySecret, numeronHistory, numeronPendingItem]);
 
   const resetBlackjack = useCallback(() => {
     clearBlackjackDealerResolveTimer();
@@ -22653,7 +22658,7 @@ export default function Home() {
 
                 <p className="mt-4 text-sm text-slate-200">{numeronMessage}</p>
                 <p className="mt-1 text-xs text-slate-400">
-                  {t("numeronSecretLabel")}: {isNumeronOver ? numeronSecret : "*".repeat(numeronDigitCount)}
+                  {t("numeronSecretLabel")}: {isNumeronOver ? numeronEnemySecret : "*".repeat(numeronDigitCount)}
                 </p>
 
                 <div ref={numeronGuessPanelRef} className="numeron-next-guess-panel mt-4 rounded-xl border border-cyan-300/20 bg-slate-950/40 p-3">
@@ -22796,7 +22801,7 @@ export default function Home() {
                           key={`numeron-op-secret-${index}`}
                           className="numeron-next-secret-card inline-grid h-9 min-w-9 place-items-center rounded-md border border-cyan-200/25 bg-slate-900/80 px-2 text-base font-bold"
                         >
-                          {isNumeronOver ? (numeronSecret[index] ?? "-") : "?"}
+                          {isNumeronOver ? (numeronEnemySecret[index] ?? "-") : "?"}
                         </span>
                       ))}
                     </div>

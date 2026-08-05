@@ -35,15 +35,6 @@ const INVITE_TOKEN_TTL_MS = Number(process.env.ROOM_INVITE_TOKEN_TTL_MS || 5 * 6
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.SHARE_DB_PATH || path.join(DATA_DIR, "profiles.json");
 
-const MAHJONG_ROOM_CONFIG_DEFAULT = {
-  mode: "yonma",
-  allowChi: true,
-  northRule: "normal",
-  tsumoPaymentRule: "loss",
-  startingPoints: 25000,
-  returnPoints: 30000,
-};
-
 const DEFAULT_PROFILE = {
   bankCoins: 0,
   pityCounter: 0,
@@ -99,7 +90,6 @@ function roomMetaOf(code) {
       rematchVotes: new Set(),
       inviteTokens: new Map(),
       privateAccessPeerIds: new Set(),
-      mahjongRoomConfig: { ...MAHJONG_ROOM_CONFIG_DEFAULT },
     });
   }
   return roomMeta.get(code);
@@ -209,42 +199,6 @@ function normalizeRoomMaxPlayers(raw, fallback = DEFAULT_ROOM_MAX_PLAYERS) {
     return Math.max(MIN_ROOM_PLAYERS, Math.min(HARD_MAX_ROOM_PLAYERS, Math.floor(base)));
   }
   return Math.max(MIN_ROOM_PLAYERS, Math.min(HARD_MAX_ROOM_PLAYERS, Math.floor(parsed)));
-}
-
-function normalizeMahjongMode(raw, fallback = MAHJONG_ROOM_CONFIG_DEFAULT.mode) {
-  const value = String(raw || "").trim();
-  if (value === "yonma" || value === "sanma") return value;
-  return fallback;
-}
-
-function normalizeMahjongNorthRule(raw, fallback = MAHJONG_ROOM_CONFIG_DEFAULT.northRule) {
-  const value = String(raw || "").trim();
-  if (value === "normal" || value === "nuki-dora") return value;
-  return fallback;
-}
-
-function normalizeMahjongTsumoPaymentRule(raw, fallback = MAHJONG_ROOM_CONFIG_DEFAULT.tsumoPaymentRule) {
-  const value = String(raw || "").trim();
-  if (value === "loss" || value === "no-loss" || value === "split-north") return value;
-  return fallback;
-}
-
-function normalizeMahjongScorePoint(raw, fallback) {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(10000, Math.min(100000, Math.floor(parsed)));
-}
-
-function normalizeMahjongRoomConfig(raw, fallback = MAHJONG_ROOM_CONFIG_DEFAULT) {
-  const src = raw && typeof raw === "object" ? raw : {};
-  return {
-    mode: normalizeMahjongMode(src.mode, fallback.mode),
-    allowChi: typeof src.allowChi === "boolean" ? src.allowChi : fallback.allowChi,
-    northRule: normalizeMahjongNorthRule(src.northRule, fallback.northRule),
-    tsumoPaymentRule: normalizeMahjongTsumoPaymentRule(src.tsumoPaymentRule, fallback.tsumoPaymentRule),
-    startingPoints: normalizeMahjongScorePoint(src.startingPoints, fallback.startingPoints),
-    returnPoints: normalizeMahjongScorePoint(src.returnPoints, fallback.returnPoints),
-  };
 }
 
 function normalizePlayablePanel(raw) {
@@ -1049,7 +1003,6 @@ function broadcastRoomState(code) {
     maxPlayers: normalizeRoomMaxPlayers(meta.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS),
     inGame: Boolean(meta.inGame),
     rematchVotes: [...meta.rematchVotes],
-    mahjongRoomConfig: normalizeMahjongRoomConfig(meta.mahjongRoomConfig, MAHJONG_ROOM_CONFIG_DEFAULT),
   });
 }
 
@@ -1601,34 +1554,6 @@ wss.on("connection", (ws) => {
         }
         payload.cardIds = cardIds;
       }
-    }
-
-    if (type === "mahjong-room-config-set") {
-      const meta = roomMetaOf(code);
-      if (!isHost(meta, ws.peerId)) {
-        sendError(ws, "HOST_ONLY");
-        return;
-      }
-      meta.mahjongRoomConfig = normalizeMahjongRoomConfig(payload?.config, meta.mahjongRoomConfig || MAHJONG_ROOM_CONFIG_DEFAULT);
-      const config = normalizeMahjongRoomConfig(meta.mahjongRoomConfig, MAHJONG_ROOM_CONFIG_DEFAULT);
-      broadcastRoom(code, {
-        type: "mahjong-room-config",
-        room: code,
-        config,
-      });
-      broadcastRoomState(code);
-      return;
-    }
-
-    if (type === "mahjong-room-config-request") {
-      const meta = roomMetaOf(code);
-      const config = normalizeMahjongRoomConfig(meta.mahjongRoomConfig, MAHJONG_ROOM_CONFIG_DEFAULT);
-      sendJson(ws, {
-        type: "mahjong-room-config",
-        room: code,
-        config,
-      });
-      return;
     }
 
     let mutationResult = { ok: true };
