@@ -753,6 +753,24 @@ body {
   width: 100%;
 }
 
+.numeron-next-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.numeron-next-field-card {
+  min-width: 0;
+}
+
+.numeron-next-field-your {
+  grid-column: 1;
+}
+
+.numeron-next-field-opponent {
+  grid-column: 2;
+}
+
 .numeron-next-secret-card {
   width: clamp(4rem, 1.8vw + 2.8rem, 5.8rem) !important;
   min-width: clamp(4rem, 1.8vw + 2.8rem, 5.8rem) !important;
@@ -790,6 +808,10 @@ body {
   .numeron-next-main,
   .numeron-next-side {
     padding: 0.8rem !important;
+  }
+
+  .numeron-next-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

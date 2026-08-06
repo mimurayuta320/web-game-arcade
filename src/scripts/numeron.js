@@ -94,16 +94,19 @@ function createDigitCards(container, onPick, className) {
   }
 }
 
-function setSlots(container, draft, slotCount, mode = "plain", onSlotClick = null) {
+function setSlots(container, draft, slotCount, mode = "plain", onSlotClick = null, options = {}) {
   if (!container) return;
   container.textContent = "";
 
   const length = Number.isFinite(slotCount) ? Math.max(3, Math.min(4, Math.floor(slotCount))) : 3;
+  const activeIndex = Number.isFinite(options.activeIndex) ? Number(options.activeIndex) : -1;
   for (let i = 0; i < length; i += 1) {
     const value = draft[i] || "";
     const isClickable = typeof onSlotClick === "function" && mode === "plain";
     const card = document.createElement(isClickable ? "button" : "div");
     card.className = "numeron-slot-card";
+    if (value) card.classList.add("is-filled");
+    if (activeIndex === i) card.classList.add("is-active");
 
     if (isClickable) {
       card.type = "button";
@@ -163,13 +166,26 @@ function toHalfWidthText(value) {
 
 export function initNumeron(options = {}) {
   const numeronScreenEl = document.getElementById("numeronScreen");
+  const backBtn = document.getElementById("numeronBackBtn");
   const turnTextEl = document.getElementById("numeronTurnText");
+  const mainTurnTextEl = document.getElementById("numeronMainTurnText");
   const timeTextEl = document.getElementById("numeronTimeText");
+  const roomCodeTextEl = document.getElementById("numeronRoomCodeText");
   const turnBadgeEl = document.getElementById("numeronTurnBadge");
   const p1TryCountEl = document.getElementById("numeronP1TryCount");
   const p2TryCountEl = document.getElementById("numeronP2TryCount");
   const p1ItemsEl = document.getElementById("numeronP1Items");
   const p2ItemsEl = document.getElementById("numeronP2Items");
+  const playerSelfNameEl = document.getElementById("numeronPlayerSelfName");
+  const playerSelfRateEl = document.getElementById("numeronPlayerSelfRate");
+  const playerSelfRecordEl = document.getElementById("numeronPlayerSelfRecord");
+  const playerSelfStateEl = document.getElementById("numeronPlayerSelfState");
+  const playerRivalNameEl = document.getElementById("numeronPlayerRivalName");
+  const playerRivalRateEl = document.getElementById("numeronPlayerRivalRate");
+  const playerRivalRecordEl = document.getElementById("numeronPlayerRivalRecord");
+  const playerRivalStateEl = document.getElementById("numeronPlayerRivalState");
+  const playerSelfCardEl = playerSelfStateEl?.closest(".numeron-player-card") || null;
+  const playerRivalCardEl = playerRivalStateEl?.closest(".numeron-player-card") || null;
   const statusTextEl = document.getElementById("numeronStatusText");
   const selfHistoryEl = document.getElementById("numeronSelfHistory");
   const opponentHistoryEl = document.getElementById("numeronOpponentHistory");
@@ -195,6 +211,7 @@ export function initNumeron(options = {}) {
 
   const guessSlotsEl = document.getElementById("numeronGuessSlots");
   const guessDeckEl = document.getElementById("numeronGuessDeck");
+  const guessSectionEl = document.getElementById("numeronGuessSection");
   const guessBtn = document.getElementById("numeronGuessBtn");
   const guessBackBtn = document.getElementById("numeronGuessBackBtn");
   const guessClearBtn = document.getElementById("numeronGuessClearBtn");
@@ -202,8 +219,17 @@ export function initNumeron(options = {}) {
   const itemDoubleBtn = document.getElementById("numeronItemDoubleBtn");
   const itemShuffleBtn = document.getElementById("numeronItemShuffleBtn");
   const itemHighLowBtn = document.getElementById("numeronItemHighLowBtn");
+  const itemHighLowCountEl = document.getElementById("numeronItemHighLowCount");
+  const itemDoubleCountEl = document.getElementById("numeronItemDoubleCount");
+  const itemShuffleCountEl = document.getElementById("numeronItemShuffleCount");
   const highLowDigitSelect = document.getElementById("numeronHighLowDigitSelect");
+  const itemSelectedTextEl = document.getElementById("numeronItemSelectedText");
+  const itemConfirmBtn = document.getElementById("numeronItemConfirmBtn");
+  const itemCancelBtn = document.getElementById("numeronItemCancelBtn");
+  const itemHighLowTargetEl = document.getElementById("numeronItemHighLowTarget");
   const itemResultTextEl = document.getElementById("numeronItemResultText");
+  const configPanelEl = document.getElementById("numeronConfigPanel");
+  const chatToggleBtn = document.getElementById("numeronChatToggleBtn");
 
   const state = {
     gameMode: "local",
@@ -225,6 +251,16 @@ export function initNumeron(options = {}) {
     guessDraft: [],
     items: [createDefaultItems(), createDefaultItems()],
     itemResultText: "-",
+    pendingItem: "",
+    roomCode: "",
+    configOpen: false,
+    chatCollapsed: true,
+    selfName: "あなた",
+    rivalName: "対戦相手",
+    selfRateText: "レート: -",
+    rivalRateText: "レート: -",
+    selfRecordText: "勝利: - / 敗北: -",
+    rivalRecordText: "勝利: - / 敗北: -",
     openingChoice: "first",
     openingPlayer: 0,
     codeLength: 3,
@@ -385,6 +421,38 @@ export function initNumeron(options = {}) {
     return true;
   }
 
+  function clearPendingItem() {
+    state.pendingItem = "";
+  }
+
+  function selectPendingItem(itemKey) {
+    if (!canUseItems()) return;
+    if (state.pendingItem === itemKey) {
+      clearPendingItem();
+    } else {
+      state.pendingItem = itemKey;
+    }
+    render();
+  }
+
+  function refreshPlayerMeta() {
+    if (isRoomMode()) {
+      if (!state.selfName) state.selfName = "あなた";
+      if (!state.rivalName) state.rivalName = "対戦相手";
+    } else if (isCpuMode()) {
+      state.selfName = "あなた";
+      state.rivalName = "CPU";
+    } else {
+      state.selfName = "PLAYER 1";
+      state.rivalName = "PLAYER 2";
+    }
+
+    if (!state.selfRateText) state.selfRateText = "レート: -";
+    if (!state.rivalRateText) state.rivalRateText = "レート: -";
+    if (!state.selfRecordText) state.selfRecordText = "勝利: - / 敗北: -";
+    if (!state.rivalRecordText) state.rivalRecordText = "勝利: - / 敗北: -";
+  }
+
   function isTypingTarget(target) {
     if (!(target instanceof HTMLElement)) return false;
     const tag = target.tagName;
@@ -473,13 +541,17 @@ export function initNumeron(options = {}) {
       return;
     }
 
-    entries.forEach((entry, idx) => {
+    const total = entries.length;
+    entries
+      .slice()
+      .reverse()
+      .forEach((entry, idx) => {
       const item = document.createElement("li");
       item.className = "numeron-history-row";
 
       const turn = document.createElement("span");
       turn.className = "value-turn";
-      turn.textContent = String(idx + 1);
+      turn.textContent = String(total - idx);
 
       const call = document.createElement("span");
       call.className = "value-call";
@@ -495,7 +567,7 @@ export function initNumeron(options = {}) {
 
       item.append(turn, call, eat, bite);
       target.append(item);
-    });
+      });
   }
 
   function syncDigitDeckState(container, draft, enabled) {
@@ -524,6 +596,8 @@ export function initNumeron(options = {}) {
   }
 
   function render() {
+    refreshPlayerMeta();
+
     if (p1TryCountEl) p1TryCountEl.textContent = String(state.history[0].length);
     if (p2TryCountEl) p2TryCountEl.textContent = String(state.history[1].length);
     if (p1ItemsEl) p1ItemsEl.textContent = formatItems(state.items[0]);
@@ -540,6 +614,10 @@ export function initNumeron(options = {}) {
     }
 
     renderElapsedTime();
+
+    if (roomCodeTextEl) {
+      roomCodeTextEl.textContent = state.roomCode || "-";
+    }
 
     if (turnBadgeEl) {
       turnBadgeEl.classList.remove("is-rival", "is-wait");
@@ -558,13 +636,50 @@ export function initNumeron(options = {}) {
       }
     }
 
+    if (mainTurnTextEl) {
+      if (isSetupPhase()) {
+        mainTurnTextEl.textContent = "シークレット設定";
+      } else if (state.gameOver) {
+        mainTurnTextEl.textContent = state.winnerIndex == null ? "待機中" : "ゲーム終了";
+      } else if (canLocalInput()) {
+        mainTurnTextEl.textContent = "あなたのターン";
+      } else {
+        mainTurnTextEl.textContent = "対戦相手のターン";
+      }
+    }
+
     const localIndex = isRoomMode() ? state.roomPlayerIndex : 0;
     const rivalIndex = localIndex === 0 ? 1 : 0;
+
+    const localTurn = !state.gameOver && !isSetupPhase() && state.currentPlayer === localIndex;
+    const rivalTurn = !state.gameOver && !isSetupPhase() && state.currentPlayer === rivalIndex;
+
+    if (playerSelfNameEl) playerSelfNameEl.textContent = state.selfName;
+    if (playerRivalNameEl) playerRivalNameEl.textContent = state.rivalName;
+    if (playerSelfRateEl) playerSelfRateEl.textContent = state.selfRateText;
+    if (playerRivalRateEl) playerRivalRateEl.textContent = state.rivalRateText;
+    if (playerSelfRecordEl) playerSelfRecordEl.textContent = state.selfRecordText;
+    if (playerRivalRecordEl) playerRivalRecordEl.textContent = state.rivalRecordText;
+    if (playerSelfStateEl) playerSelfStateEl.textContent = localTurn ? "あなたのターン" : "待機中";
+    if (playerRivalStateEl) playerRivalStateEl.textContent = rivalTurn ? "相手のターン" : "待機中";
+    if (playerSelfCardEl) {
+      playerSelfCardEl.classList.toggle("is-active", localTurn);
+      playerSelfCardEl.classList.toggle("is-wait", !localTurn);
+    }
+    if (playerRivalCardEl) {
+      playerRivalCardEl.classList.toggle("is-active", rivalTurn);
+      playerRivalCardEl.classList.toggle("is-wait", !rivalTurn);
+    }
+
     renderHistoryList(selfHistoryEl, state.history[localIndex]);
     renderHistoryList(opponentHistoryEl, state.history[rivalIndex]);
 
     if (opponentSecretBlockEl) {
-      opponentSecretBlockEl.classList.toggle("hidden", isSetupPhase());
+      opponentSecretBlockEl.classList.remove("hidden");
+    }
+
+    if (guessSectionEl) {
+      guessSectionEl.classList.toggle("hidden", isSetupPhase());
     }
 
     const rivalSecret = state.secrets[rivalIndex];
@@ -582,8 +697,12 @@ export function initNumeron(options = {}) {
       const ownSecret = state.secrets[localIndex];
       secretCards = isValidCode(ownSecret, state.codeLength) ? ownSecret.split("") : [];
     }
-    setSlots(secretSlotsEl, secretCards, state.codeLength, "plain", canEditSecret() ? onSecretSlotClick : null);
-    setSlots(guessSlotsEl, state.guessDraft, state.codeLength, "plain", canEditGuess() ? onGuessSlotClick : null);
+    setSlots(secretSlotsEl, secretCards, state.codeLength, "plain", canEditSecret() ? onSecretSlotClick : null, {
+      activeIndex: canEditSecret() && secretCards.length < state.codeLength ? secretCards.length : -1,
+    });
+    setSlots(guessSlotsEl, state.guessDraft, state.codeLength, "plain", canEditGuess() ? onGuessSlotClick : null, {
+      activeIndex: canEditGuess() && state.guessDraft.length < state.codeLength ? state.guessDraft.length : -1,
+    });
 
     if (modeSelectEl) {
       const roomGuestLocked = isRoomMode() && state.roomPlayerIndex !== 0;
@@ -607,6 +726,10 @@ export function initNumeron(options = {}) {
       remakeBtn.disabled = state.roomLocked;
     }
 
+    if (configPanelEl) {
+      configPanelEl.classList.toggle("hidden", !state.configOpen);
+    }
+
     const secretEnabled = canEditSecret();
     const guessEnabled = canEditGuess();
     const itemEnabled = canUseItems();
@@ -622,13 +745,57 @@ export function initNumeron(options = {}) {
     if (guessBackBtn) guessBackBtn.disabled = !guessEnabled || state.guessDraft.length === 0;
     if (guessClearBtn) guessClearBtn.disabled = !guessEnabled || state.guessDraft.length === 0;
 
-    if (itemDoubleBtn) itemDoubleBtn.disabled = !itemEnabled || state.items[state.currentPlayer].double <= 0 || state.turnActionsLeft !== 1;
-    if (itemShuffleBtn) itemShuffleBtn.disabled = !itemEnabled || state.items[state.currentPlayer].shuffle <= 0;
-    if (itemHighLowBtn) itemHighLowBtn.disabled = !itemEnabled || state.items[state.currentPlayer].highlow <= 0;
-    if (highLowDigitSelect) highLowDigitSelect.disabled = !itemEnabled || state.items[state.currentPlayer].highlow <= 0;
+    const currentItems = state.items[state.currentPlayer];
+    const canUseDouble = itemEnabled && currentItems.double > 0 && state.turnActionsLeft === 1;
+    const canUseShuffle = itemEnabled && currentItems.shuffle > 0;
+    const canUseHighLow = itemEnabled && currentItems.highlow > 0;
+
+    if (!itemEnabled) clearPendingItem();
+    if (state.pendingItem === "double" && !canUseDouble) clearPendingItem();
+    if (state.pendingItem === "shuffle" && !canUseShuffle) clearPendingItem();
+    if (state.pendingItem === "highlow" && !canUseHighLow) clearPendingItem();
+
+    if (itemDoubleBtn) {
+      itemDoubleBtn.disabled = !canUseDouble;
+      itemDoubleBtn.dataset.itemState = state.pendingItem === "double" ? "selected" : canUseDouble ? "ready" : "used";
+      itemDoubleBtn.classList.toggle("is-selected", state.pendingItem === "double");
+    }
+    if (itemShuffleBtn) {
+      itemShuffleBtn.disabled = !canUseShuffle;
+      itemShuffleBtn.dataset.itemState = state.pendingItem === "shuffle" ? "selected" : canUseShuffle ? "ready" : "used";
+      itemShuffleBtn.classList.toggle("is-selected", state.pendingItem === "shuffle");
+    }
+    if (itemHighLowBtn) {
+      itemHighLowBtn.disabled = !canUseHighLow;
+      itemHighLowBtn.dataset.itemState = state.pendingItem === "highlow" ? "selected" : canUseHighLow ? "ready" : "used";
+      itemHighLowBtn.classList.toggle("is-selected", state.pendingItem === "highlow");
+    }
+
+    if (itemHighLowCountEl) itemHighLowCountEl.textContent = `x${currentItems.highlow}`;
+    if (itemDoubleCountEl) itemDoubleCountEl.textContent = `x${currentItems.double}`;
+    if (itemShuffleCountEl) itemShuffleCountEl.textContent = `x${currentItems.shuffle}`;
+
+    if (itemConfirmBtn) itemConfirmBtn.disabled = !itemEnabled || !state.pendingItem;
+    if (itemCancelBtn) itemCancelBtn.disabled = !state.pendingItem;
+    if (itemSelectedTextEl) {
+      if (state.pendingItem === "highlow") itemSelectedTextEl.textContent = "HIGH & LOW: 対象数字を確認して使用";
+      else if (state.pendingItem === "double") itemSelectedTextEl.textContent = "TARGET: このターンを2回行動にする";
+      else if (state.pendingItem === "shuffle") itemSelectedTextEl.textContent = "SLASH: 自分の秘密数字をシャッフルする";
+      else itemSelectedTextEl.textContent = "アイテムを選択してください";
+    }
+
+    if (itemHighLowTargetEl) itemHighLowTargetEl.classList.toggle("hidden", state.pendingItem !== "highlow");
+    if (highLowDigitSelect) highLowDigitSelect.disabled = !itemEnabled || state.pendingItem !== "highlow";
 
     if (itemResultTextEl) {
       itemResultTextEl.textContent = `アイテム結果: ${state.itemResultText || "-"}`;
+    }
+
+    if (numeronScreenEl) {
+      numeronScreenEl.classList.toggle("numeron-chat-collapsed", state.chatCollapsed);
+    }
+    if (chatToggleBtn) {
+      chatToggleBtn.textContent = state.chatCollapsed ? "チャットを開く" : "チャットを閉じる";
     }
 
     if (secretStageTextEl) {
@@ -683,6 +850,8 @@ export function initNumeron(options = {}) {
     state.turnActionsLeft = 1;
     state.guessDraft = [];
     state.itemResultText = "-";
+    state.pendingItem = "";
+    state.configOpen = false;
     state.items = [createDefaultItems(), createDefaultItems()];
     state.cpuCandidates = [buildCandidatesFromHistory(state.history[0], state.codeLength), buildCandidatesFromHistory(state.history[1], state.codeLength)];
     state.matchStartedAt = Date.now();
@@ -702,6 +871,8 @@ export function initNumeron(options = {}) {
     state.guessDraft = [];
     state.secretDraft = [];
     state.itemResultText = "-";
+    state.pendingItem = "";
+    state.configOpen = false;
     state.openingPlayer = resolveOpeningPlayer(state.openingChoice);
     state.matchStartedAt = null;
     state.matchEndedAt = null;
@@ -917,6 +1088,32 @@ export function initNumeron(options = {}) {
     maybeRunCpu();
   }
 
+  function confirmPendingItem() {
+    if (!canUseItems()) return;
+    const target = state.pendingItem;
+    if (!target) {
+      pushMessage("先にアイテムを選択してください");
+      render();
+      return;
+    }
+
+    state.pendingItem = "";
+    if (target === "highlow") {
+      useHighLowItem();
+      return;
+    }
+    if (target === "double") {
+      useDoubleItem();
+      return;
+    }
+    if (target === "shuffle") {
+      useShuffleItem();
+      return;
+    }
+
+    render();
+  }
+
   function cpuGuess() {
     const actor = state.currentPlayer;
     const history = state.history[actor];
@@ -977,6 +1174,9 @@ export function initNumeron(options = {}) {
     state.guessDraft = [];
     state.items = [createDefaultItems(), createDefaultItems()];
     state.itemResultText = "-";
+    state.pendingItem = "";
+    state.configOpen = false;
+    state.chatCollapsed = true;
     state.matchStartedAt = null;
     state.matchEndedAt = null;
     state.roomLocked = false;
@@ -1049,9 +1249,14 @@ export function initNumeron(options = {}) {
     render();
   });
 
-  itemDoubleBtn?.addEventListener("click", useDoubleItem);
-  itemHighLowBtn?.addEventListener("click", useHighLowItem);
-  itemShuffleBtn?.addEventListener("click", useShuffleItem);
+  itemDoubleBtn?.addEventListener("click", () => selectPendingItem("double"));
+  itemHighLowBtn?.addEventListener("click", () => selectPendingItem("highlow"));
+  itemShuffleBtn?.addEventListener("click", () => selectPendingItem("shuffle"));
+  itemConfirmBtn?.addEventListener("click", confirmPendingItem);
+  itemCancelBtn?.addEventListener("click", () => {
+    clearPendingItem();
+    render();
+  });
 
   memoClearBtn?.addEventListener("click", () => {
     if (!memoPadEl) return;
@@ -1078,10 +1283,20 @@ export function initNumeron(options = {}) {
     event.stopPropagation();
   });
 
-  menuBtn?.addEventListener("click", () => {
+  backBtn?.addEventListener("click", () => {
     const confirmed = window.confirm("ゲーム一覧に戻りますか？");
     if (!confirmed) return;
     options.onBackToMenu?.();
+  });
+
+  menuBtn?.addEventListener("click", () => {
+    state.configOpen = !state.configOpen;
+    render();
+  });
+
+  chatToggleBtn?.addEventListener("click", () => {
+    state.chatCollapsed = !state.chatCollapsed;
+    render();
   });
 
   window.addEventListener("keydown", handleGlobalKeyDown);
@@ -1106,6 +1321,9 @@ export function initNumeron(options = {}) {
       state.gameMode = "room";
       state.playMode = "local";
       state.roomPlayerIndex = roomRole === "guest" ? 1 : 0;
+      state.roomCode = typeof roomCode === "string" ? roomCode : "";
+      state.selfName = roomRole === "guest" ? "プレイヤー2" : "プレイヤー1";
+      state.rivalName = "対戦相手";
       options.onRoomStatusChange?.({ roomCode, roomRole });
       enterStandby();
     },
@@ -1113,8 +1331,24 @@ export function initNumeron(options = {}) {
       state.gameMode = "local";
       state.playMode = mode === "local" ? "local" : "cpu";
       state.roomPlayerIndex = 0;
+      state.roomCode = "";
+      state.selfName = state.playMode === "cpu" ? "あなた" : "PLAYER 1";
+      state.rivalName = state.playMode === "cpu" ? "CPU" : "PLAYER 2";
+      state.selfRateText = "レート: -";
+      state.rivalRateText = "レート: -";
+      state.selfRecordText = "勝利: - / 敗北: -";
+      state.rivalRecordText = "勝利: - / 敗北: -";
       options.onRoomStatusChange?.({ roomCode: null, roomRole: null });
       enterStandby();
+    },
+    setRoomParticipants: ({ selfName, peerName, selfRateText, peerRateText, selfRecordText, peerRecordText } = {}) => {
+      if (typeof selfName === "string" && selfName.trim()) state.selfName = selfName.trim();
+      if (typeof peerName === "string" && peerName.trim()) state.rivalName = peerName.trim();
+      if (typeof selfRateText === "string" && selfRateText.trim()) state.selfRateText = selfRateText.trim();
+      if (typeof peerRateText === "string" && peerRateText.trim()) state.rivalRateText = peerRateText.trim();
+      if (typeof selfRecordText === "string" && selfRecordText.trim()) state.selfRecordText = selfRecordText.trim();
+      if (typeof peerRecordText === "string" && peerRecordText.trim()) state.rivalRecordText = peerRecordText.trim();
+      render();
     },
     setRoomLock: ({ locked, message }) => {
       state.roomLocked = Boolean(locked);

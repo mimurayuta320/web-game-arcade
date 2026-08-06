@@ -144,6 +144,9 @@ const roomChatPanel = document.getElementById("roomChatPanel");
 const roomChatLog = document.getElementById("roomChatLog");
 const roomChatInput = document.getElementById("roomChatInput");
 const roomChatSendBtn = document.getElementById("roomChatSendBtn");
+const numeronChatMount = document.getElementById("numeronChatMount");
+const numeronChatToggleBtn = document.getElementById("numeronChatToggleBtn");
+const roomChatOriginalParent = roomChatPanel?.parentElement || null;
 
 const roomStatus = document.getElementById("roomStatus");
 const roomCodeText = document.getElementById("roomCodeText");
@@ -1513,6 +1516,10 @@ function renderRoomChat() {
   if (!roomChatPanel || !roomChatLog) return;
   const visible = shouldShowRoomChat();
   roomChatPanel.classList.toggle("hidden", !visible);
+  if (numeronChatToggleBtn) {
+    const numeronVisible = !numeronScreen.classList.contains("hidden");
+    numeronChatToggleBtn.classList.toggle("hidden", !(visible && numeronVisible));
+  }
   roomChatLog.innerHTML = "";
   if (!visible) return;
   if (!roomSession.roomChatMessages.length) {
@@ -1526,10 +1533,43 @@ function renderRoomChat() {
   roomSession.roomChatMessages.slice(-80).forEach((message) => {
     const row = document.createElement("p");
     row.className = "room-chat-item";
-    row.textContent = `${message.name}: ${message.text}`;
+    const normalizedName = normalizeName(message.name || "Player");
+    if (normalizedName.toUpperCase() === "SYSTEM") {
+      row.classList.add("is-system");
+    } else if (normalizedName === roomSession.playerName) {
+      row.classList.add("is-self");
+    } else {
+      row.classList.add("is-peer");
+    }
+
+    const name = document.createElement("span");
+    name.className = "room-chat-name";
+    name.textContent = `${normalizedName}: `;
+
+    const text = document.createElement("span");
+    text.className = "room-chat-text";
+    text.textContent = String(message.text || "").trim();
+
+    row.append(name, text);
     roomChatLog.appendChild(row);
   });
   roomChatLog.scrollTop = roomChatLog.scrollHeight;
+}
+
+function mountRoomChatForNumeron(enabled) {
+  if (!roomChatPanel) return;
+  if (enabled && numeronChatMount) {
+    if (roomChatPanel.parentElement !== numeronChatMount) {
+      numeronChatMount.appendChild(roomChatPanel);
+    }
+    renderRoomChat();
+    return;
+  }
+
+  if (roomChatOriginalParent && roomChatPanel.parentElement !== roomChatOriginalParent) {
+    roomChatOriginalParent.appendChild(roomChatPanel);
+  }
+  renderRoomChat();
 }
 
 function appendRoomChatMessage(name, text) {
@@ -1738,6 +1778,7 @@ function showOnly(screen) {
   sevensScreen.classList.add("hidden");
   numeronScreen.classList.add("hidden");
   screen.classList.remove("hidden");
+  mountRoomChatForNumeron(screen === numeronScreen);
   updateFriendsAvailability();
 }
 
@@ -1888,7 +1929,22 @@ function syncRoomParticipantsToGame() {
   if (!roomSession.selectedGame) return;
   const controller = controllerOf(roomSession.selectedGame);
   if (!controller?.setRoomParticipants) return;
-  controller.setRoomParticipants({ count: roomParticipantCount(), max: MAX_ROOM_PLAYERS });
+
+  const otherNames = otherParticipantNames();
+  const peerName = otherNames.length === 0
+    ? "対戦相手"
+    : (otherNames.length === 1 ? otherNames[0] : `${otherNames[0]} +${otherNames.length - 1}`);
+
+  controller.setRoomParticipants({
+    count: roomParticipantCount(),
+    max: MAX_ROOM_PLAYERS,
+    selfName: roomSession.playerName || "あなた",
+    peerName,
+    selfRateText: "レート: -",
+    peerRateText: "レート: -",
+    selfRecordText: "勝利: - / 敗北: -",
+    peerRecordText: "勝利: - / 敗北: -",
+  });
 }
 
 function refreshRoomPresence() {

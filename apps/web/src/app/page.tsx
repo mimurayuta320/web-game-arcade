@@ -22789,93 +22789,96 @@ export default function Home() {
               </fieldset>
             </article>
 
-            <article className="numeron-next-side w-full max-w-[360px] justify-self-end rounded-2xl border border-slate-300/20 bg-slate-900/40 p-4">
+            <article className="numeron-next-side w-full max-w-[480px] justify-self-end rounded-2xl border border-slate-300/20 bg-slate-900/40 p-4">
               <div className="grid gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-cyan-100">{t("numeronOpponentField")}</p>
-                  <div className="mt-2 rounded-lg border border-cyan-200/20 bg-slate-950/45 p-3">
-                    <p className="text-[11px] tracking-wide text-slate-400">{t("numeronSecretLabel")}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {Array.from({ length: numeronDigitCount }, (_, index) => (
-                        <span
-                          key={`numeron-op-secret-${index}`}
-                          className="numeron-next-secret-card inline-grid h-9 min-w-9 place-items-center rounded-md border border-cyan-200/25 bg-slate-900/80 px-2 text-base font-bold"
-                        >
-                          {isNumeronOver ? (numeronEnemySecret[index] ?? "-") : "?"}
-                        </span>
-                      ))}
+                <div className="numeron-next-field-grid">
+                  <div className="numeron-next-field-card numeron-next-field-your">
+                    <p className="text-sm font-semibold text-emerald-100">{t("numeronYourField")}</p>
+                    <div className="mt-2 rounded-lg border border-emerald-200/20 bg-slate-950/45 p-3">
+                      <p className="text-[11px] tracking-wide text-slate-400">{t("numeronYourSecret")}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {Array.from({ length: numeronDigitCount }, (_, index) => {
+                          const value = isNumeronSecretConfirmed
+                            ? (numeronSecret[index] ?? "-")
+                            : (numeronSecretDraft[index] ?? "-");
+                          return (
+                            <span
+                              key={`numeron-my-secret-${index}`}
+                              className="numeron-next-secret-card inline-grid h-9 min-w-9 place-items-center rounded-md border border-emerald-200/25 bg-slate-900/80 px-2 text-base font-bold"
+                            >
+                              {value}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
+                  </div>
 
+                  <div className="numeron-next-field-card numeron-next-field-opponent">
+                    <p className="text-sm font-semibold text-cyan-100">{t("numeronOpponentField")}</p>
+                    <div className="mt-2 rounded-lg border border-cyan-200/20 bg-slate-950/45 p-3">
+                      <p className="text-[11px] tracking-wide text-slate-400">{t("numeronSecretLabel")}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {Array.from({ length: numeronDigitCount }, (_, index) => (
+                          <span
+                            key={`numeron-op-secret-${index}`}
+                            className="numeron-next-secret-card inline-grid h-9 min-w-9 place-items-center rounded-md border border-cyan-200/25 bg-slate-900/80 px-2 text-base font-bold"
+                          >
+                            {isNumeronOver ? (numeronEnemySecret[index] ?? "-") : "?"}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 <div>
-                  <p className="text-sm font-semibold text-emerald-100">{t("numeronYourField")}</p>
-                  <div className="mt-2 rounded-lg border border-emerald-200/20 bg-slate-950/45 p-3">
-                    <p className="text-[11px] tracking-wide text-slate-400">{t("numeronYourSecret")}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {Array.from({ length: numeronDigitCount }, (_, index) => {
-                        const value = isNumeronSecretConfirmed
-                          ? (numeronSecret[index] ?? "-")
-                          : (numeronSecretDraft[index] ?? "-");
-                        return (
-                          <span
-                            key={`numeron-my-secret-${index}`}
-                            className="numeron-next-secret-card inline-grid h-9 min-w-9 place-items-center rounded-md border border-emerald-200/25 bg-slate-900/80 px-2 text-base font-bold"
-                          >
-                            {value}
-                          </span>
-                        );
-                      })}
+                  <p className="mt-3 text-[11px] tracking-wide text-slate-300">{t("numeronOpponentHistory")}</p>
+                  <ul className="numeron-next-history mt-2 max-h-[210px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/35 p-2 text-sm text-slate-200">
+                    {numeronHistory.length === 0 ? (
+                      <li className="text-slate-400">-</li>
+                    ) : (
+                      numeronHistory.map((entry, index) => (
+                        <li key={`op-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="numeron-next-history-row grid grid-cols-[2rem_1fr] gap-2">
+                          <span className="text-slate-500">{index + 1}.</span>
+                          <span>{tf("numeronResult", { guess: entry.guess, hits: entry.hits, blows: entry.blows })}</span>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+
+                  <p className="mt-3 text-sm font-semibold">MEMO</p>
+                  <textarea
+                    rows={7}
+                    placeholder="候補メモ"
+                    className="mt-2 w-full max-w-[320px] rounded-lg border border-slate-500/30 bg-slate-950/55 p-3 text-sm outline-none focus:border-cyan-300/45"
+                  />
+
+                  <div className="mt-3 rounded-md border border-emerald-200/20 bg-slate-950/35 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] tracking-wide text-slate-300">{t("numeronEnemyIncomingHistory")}</p>
+                      <button
+                        type="button"
+                        onClick={() => setIsNumeronEnemyHistoryOpen((prev) => !prev)}
+                        className="rounded-md border border-emerald-200/35 px-2 py-1 text-[11px]"
+                      >
+                        {isNumeronEnemyHistoryOpen ? t("numeronEnemyHistoryClose") : t("numeronEnemyHistoryOpen")}
+                      </button>
                     </div>
-
-                    <p className="mt-3 text-[11px] tracking-wide text-slate-300">{t("numeronOpponentHistory")}</p>
-                    <ul className="numeron-next-history mt-2 max-h-[210px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/35 p-2 text-sm text-slate-200">
-                      {numeronHistory.length === 0 ? (
-                        <li className="text-slate-400">-</li>
-                      ) : (
-                        numeronHistory.map((entry, index) => (
-                          <li key={`op-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="numeron-next-history-row grid grid-cols-[2rem_1fr] gap-2">
-                            <span className="text-slate-500">{index + 1}.</span>
-                            <span>{tf("numeronResult", { guess: entry.guess, hits: entry.hits, blows: entry.blows })}</span>
-                          </li>
-                        ))
-                      )}
-                    </ul>
-
-                    <p className="mt-3 text-sm font-semibold">MEMO</p>
-                    <textarea
-                      rows={7}
-                      placeholder="候補メモ"
-                      className="mt-2 w-full max-w-[320px] rounded-lg border border-slate-500/30 bg-slate-950/55 p-3 text-sm outline-none focus:border-cyan-300/45"
-                    />
-
-                    <div className="mt-3 rounded-md border border-emerald-200/20 bg-slate-950/35 p-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-[11px] tracking-wide text-slate-300">{t("numeronEnemyIncomingHistory")}</p>
-                        <button
-                          type="button"
-                          onClick={() => setIsNumeronEnemyHistoryOpen((prev) => !prev)}
-                          className="rounded-md border border-emerald-200/35 px-2 py-1 text-[11px]"
-                        >
-                          {isNumeronEnemyHistoryOpen ? t("numeronEnemyHistoryClose") : t("numeronEnemyHistoryOpen")}
-                        </button>
-                      </div>
-                      {isNumeronEnemyHistoryOpen ? (
-                        <ul className="numeron-next-history mt-2 max-h-[160px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/40 p-2 text-xs text-slate-200">
-                          {numeronEnemyHistory.length === 0 ? (
-                            <li className="text-slate-400">-</li>
-                          ) : (
-                            numeronEnemyHistory.map((entry, index) => (
-                              <li key={`enemy-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="numeron-next-history-row grid grid-cols-[1.6rem_1fr] gap-2">
-                                <span className="text-slate-500">{index + 1}.</span>
-                                <span>{tf("numeronEnemyResult", { guess: entry.guess, hits: entry.hits, blows: entry.blows })}</span>
-                              </li>
-                            ))
-                          )}
-                        </ul>
-                      ) : null}
-                    </div>
+                    {isNumeronEnemyHistoryOpen ? (
+                      <ul className="numeron-next-history mt-2 max-h-[160px] space-y-1 overflow-auto rounded-md border border-slate-500/25 bg-slate-950/40 p-2 text-xs text-slate-200">
+                        {numeronEnemyHistory.length === 0 ? (
+                          <li className="text-slate-400">-</li>
+                        ) : (
+                          numeronEnemyHistory.map((entry, index) => (
+                            <li key={`enemy-${entry.guess}-${entry.hits}-${entry.blows}-${index}`} className="numeron-next-history-row grid grid-cols-[1.6rem_1fr] gap-2">
+                              <span className="text-slate-500">{index + 1}.</span>
+                              <span>{tf("numeronEnemyResult", { guess: entry.guess, hits: entry.hits, blows: entry.blows })}</span>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    ) : null}
                   </div>
                 </div>
               </div>
