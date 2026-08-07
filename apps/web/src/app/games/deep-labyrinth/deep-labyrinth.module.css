@@ -1,0 +1,493 @@
+.deepLabyrinthRoot {
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(36, 69, 120, 0.3), transparent 46%),
+    radial-gradient(circle at 84% 88%, rgba(92, 34, 74, 0.26), transparent 40%),
+    #08122d;
+  color: #e5efff;
+  overflow: auto;
+}
+
+:global(.gamePage) {
+  min-height: 100dvh;
+}
+
+:global(.gamePageInner) {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  max-width: min(1980px, 98vw);
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+:global(.dlTopActions) {
+  display: flex;
+  justify-content: flex-end;
+}
+
+:global(.dlHeader) {
+  border: 1px solid rgba(126, 180, 255, 0.3);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(6, 16, 42, 0.76);
+}
+
+:global(.dlTitleWrap) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+:global(.dlTitleLabel) {
+  font-size: 12px;
+  color: #9ac5ff;
+}
+
+:global(.dlTitleInput) {
+  flex: 1;
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(126, 180, 255, 0.3);
+  background: rgba(0, 0, 0, 0.25);
+  color: #f4f7ff;
+  padding: 8px 10px;
+}
+
+:global(.dlHud) {
+  border: 1px solid rgba(147, 181, 255, 0.35);
+  border-radius: 12px;
+  background: rgba(12, 24, 52, 0.85);
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+:global(.dlHudItem) {
+  min-width: 0;
+  border-radius: 8px;
+  background: rgba(3, 8, 24, 0.5);
+  border: 1px solid rgba(147, 181, 255, 0.2);
+  padding: 8px;
+}
+
+:global(.dlHudItemStrong) {
+  border-color: rgba(117, 233, 255, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(117, 233, 255, 0.12);
+}
+
+:global(.dlHudKey) {
+  display: block;
+  font-size: 12px;
+  color: #b9d2ff;
+}
+
+:global(.dlHudValue) {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+:global(.dlSafe) {
+  color: #a8eeff;
+}
+
+:global(.dlWarn) {
+  color: #ffd264;
+}
+
+:global(.dlAlert) {
+  color: #ff9a3c;
+}
+
+:global(.dlDanger) {
+  color: #ff635d;
+}
+
+:global(.dlBlink) {
+  animation: dlBlink 0.8s infinite;
+}
+
+@keyframes dlBlink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+:global(.gameLayout) {
+  min-height: 0;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  width: 100%;
+  align-items: start;
+}
+
+:global(.gameLayout.sidePanelCollapsed) {
+  grid-template-columns: minmax(0, 1fr) 0;
+}
+
+:global(.gameLayout.withSidePanel) {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+}
+
+:global(.sidePanel) {
+  min-height: 0;
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+  overflow: auto;
+  box-sizing: border-box;
+  max-height: clamp(560px, 78vh, 84vh);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+:global(.sidePanel.isClosed) {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(18px);
+}
+
+:global(.mapSection) {
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  min-width: 0;
+  isolation: isolate;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+:global(.mapContainer) {
+  position: relative;
+  width: min(100%, 96vw);
+  margin: 0 auto;
+  min-width: 0;
+  min-height: clamp(420px, 72vh, 86vh);
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(139, 163, 218, 0.35);
+  background: #071126;
+  isolation: isolate;
+}
+
+:global(.dlCanvasViewport) {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+:global(.dlCanvasTools) {
+  position: absolute;
+  z-index: 8;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: min(82vw, 620px);
+  justify-content: flex-end;
+}
+
+:global(.dlCellInfoPopover) {
+  position: absolute;
+  z-index: 10;
+  left: 10px;
+  bottom: 10px;
+  width: min(90vw, 320px);
+  border-radius: 10px;
+  border: 1px solid rgba(168, 206, 255, 0.46);
+  background: rgba(4, 14, 38, 0.9);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
+}
+
+:global(.dlCellInfoPopover p) {
+  margin: 0;
+}
+
+:global(.dlCellInfoPopover p + p) {
+  margin-top: 3px;
+}
+
+:global(.dlMapDim) {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+:global(.dlCanvas) {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  position: relative;
+  z-index: 1;
+  border-radius: 8px;
+  border: 1px solid rgba(160, 188, 255, 0.26);
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+:global(.dlPanel) {
+  border: 1px solid rgba(148, 188, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(6, 14, 35, 0.82);
+  padding: 10px;
+}
+
+:global(.dlPanelTitle) {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+:global(.dlList) {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+:global(.dlListItem) {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+:global(.dlMuted) {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #90a9d9;
+}
+
+:global(.dlWarnText) {
+  color: #ffb267;
+  font-size: 12px;
+}
+
+:global(.dlToast) {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #b9f2cc;
+}
+
+:global(.dlCoreConfirm) {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+:global(.dlMonsterList) {
+  display: grid;
+  gap: 8px;
+}
+
+:global(.dlMonsterCard) {
+  border: 1px solid rgba(148, 188, 255, 0.2);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+:global(.dlMonsterHead) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+:global(.dlSwatch) {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+:global(.dlCost) {
+  margin: 6px 0;
+  font-size: 12px;
+  color: #c2d4f5;
+}
+
+:global(.dlSpeedRow) {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+:global(.dlSettingRow) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #d2e4ff;
+}
+
+:global(.dlSettingRow + .dlSettingRow) {
+  margin-top: 8px;
+}
+
+:global(.dlBtn),
+:global(.dlBtnGhost),
+:global(.dlBtnSmall) {
+  border: 1px solid rgba(156, 191, 255, 0.38);
+  background: rgba(21, 52, 99, 0.58);
+  color: #eff6ff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+:global(.dlBtnGhost) {
+  background: rgba(20, 30, 58, 0.45);
+}
+
+:global(.dlBtnSmall) {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+:global(.dlBtnActive) {
+  background: rgba(60, 99, 179, 0.75);
+}
+
+:global(.dlOverlay) {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 18, 0.7);
+  display: grid;
+  place-items: center;
+  z-index: 19;
+}
+
+:global(.dlOverlayCard) {
+  position: relative;
+  z-index: 20;
+  width: min(92vw, 420px);
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid rgba(160, 196, 255, 0.35);
+  background: rgba(5, 15, 40, 0.95);
+}
+
+:global(.dlPlacementModalRoot) {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+:global(.dlPlacementModalCard) {
+  pointer-events: auto;
+  width: min(92vw, 480px);
+  border-radius: 14px;
+  border: 1px solid rgba(160, 196, 255, 0.35);
+  background: rgba(5, 15, 40, 0.96);
+  padding: 16px;
+}
+
+:global(.dlPlacementModalActions) {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 1220px) {
+  :global(.dlHud) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  :global(.gamePageInner) {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  :global(.gameLayout) {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  :global(.gameLayout.withSidePanel) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.mapSection) {
+    order: 1;
+    width: 100%;
+  }
+
+  :global(.sidePanel) {
+    order: 2;
+    width: 100%;
+    max-height: none;
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  :global(.dlHud) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :global(.mapContainer) {
+    min-height: clamp(320px, 65dvh, 78dvh);
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  :global(.dlHud) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+  }
+
+  :global(.dlHudItem) {
+    padding: 6px;
+  }
+
+  :global(.dlHudKey) {
+    font-size: 11px;
+  }
+
+  :global(.dlHudValue) {
+    font-size: 15px;
+  }
+
+  :global(.dlPlacementModalActions) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.dlPlacementModalCard .dlBtn),
+  :global(.dlPlacementModalCard .dlBtnGhost) {
+    min-height: 46px;
+    font-size: 15px;
+  }
+}

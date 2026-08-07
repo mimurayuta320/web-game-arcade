@@ -27,7 +27,7 @@ import type {
   MahjongRulePreset,
 } from "../components/mahjong/types";
 
-type Panel = "menu" | "scores" | "othello" | "gomoku" | "chess" | "shogi" | "uno" | "minesweeper" | "numeron" | "blackjack" | "chinchiro" | "sevens" | "daifugo" | "fourPanel" | "drawingRelay" | "fitPuzzle" | "mahjong" | "poker" | "solitaire" | "survivors";
+type Panel = "menu" | "scores" | "othello" | "gomoku" | "chess" | "shogi" | "uno" | "minesweeper" | "numeron" | "blackjack" | "chinchiro" | "sevens" | "daifugo" | "fourPanel" | "drawingRelay" | "fitPuzzle" | "mahjong" | "poker" | "solitaire" | "survivors" | "deepLabyrinth";
 type PlayablePanel = Exclude<Panel, "menu" | "scores">;
 
 const INITIAL_GAME_START_STATE: Record<PlayablePanel, boolean> = {
@@ -49,6 +49,7 @@ const INITIAL_GAME_START_STATE: Record<PlayablePanel, boolean> = {
   poker: false,
   solitaire: false,
   survivors: false,
+  deepLabyrinth: false,
 };
 
 const PLAYABLE_PANELS: PlayablePanel[] = [
@@ -70,6 +71,7 @@ const PLAYABLE_PANELS: PlayablePanel[] = [
   "poker",
   "solitaire",
   "survivors",
+  "deepLabyrinth",
 ];
 
 type RoomParticipant = {
@@ -292,6 +294,7 @@ const LOGIN_I18N = {
     tabPoker: "ポーカー",
     tabSolitaire: "ソリティア",
     tabSurvivors: "Survivors",
+    tabDeepLabyrinth: "深層魔界ラボ",
     tabScores: "スコア",
     menuTitle: "ゲーム選択（Next移行メニュー）",
     menuLead: "旧HTMLメニューを段階的に移植しています。まずはオセロ、五目並べ、チェス、UNOへ遷移できます。",
@@ -818,6 +821,7 @@ const LOGIN_I18N = {
     mahjongResultYakuman: "役満",
     mahjongYakuMenzenTsumo: "門前清自摸和",
     mahjongYakuTanyao: "断么九",
+    mahjongYakuPinfu: "平和",
     mahjongYakuToitoi: "対々和",
     mahjongYakuYakuhai: "役牌",
     mahjongYakuChiitoitsu: "七対子",
@@ -1003,6 +1007,7 @@ const LOGIN_I18N = {
     tabPoker: "포커",
     tabSolitaire: "솔리테어",
     tabSurvivors: "Survivors",
+    tabDeepLabyrinth: "심층 마계 라보",
     tabScores: "점수",
     menuTitle: "게임 선택 (Next 마이그레이션 메뉴)",
     menuLead: "기존 HTML 메뉴를 단계적으로 이전 중입니다. 먼저 오셀로, 오목, 체스, UNO로 이동할 수 있습니다.",
@@ -1529,6 +1534,7 @@ const LOGIN_I18N = {
     mahjongResultYakuman: "역만",
     mahjongYakuMenzenTsumo: "멘젠 쯔모",
     mahjongYakuTanyao: "탕야오",
+    mahjongYakuPinfu: "핑후",
     mahjongYakuToitoi: "또이또이",
     mahjongYakuYakuhai: "역패",
     mahjongYakuChiitoitsu: "치또이츠",
@@ -1720,6 +1726,7 @@ const EN_I18N: Partial<I18nMap> = {
   tabPoker: "Poker",
   tabSolitaire: "Solitaire",
   tabSurvivors: "Survivors",
+  tabDeepLabyrinth: "Deep Labyrinth",
   menuTitle: "Game Select (Next Migration Menu)",
   menuLead: "The legacy HTML menu is being migrated in phases. You can move to Othello, Gomoku, Chess, and UNO first.",
   playableLead: "Playable in Next migration",
@@ -3891,7 +3898,7 @@ function createFitPuzzleShuffledTiles(stepCount = 80): number[] {
 
 const BOARD_SIZE = 8;
 const GOMOKU_SIZE = 15;
-const UNO_COLORS: UnoColor[] = ["R", "G", "B", "Y"];
+const UNO_COLORS: Array<Exclude<UnoColor, "W">> = ["R", "G", "B", "Y"];
 const UNO_PLAY_ANIMATION_DELAY_MS = 140;
 let unoCardSerial = 0;
 
@@ -8801,8 +8808,12 @@ export default function Home() {
   }, [daifugoRules, daifugoTableCards, daifugoTableCombo]);
 
   const isDaifugoLocalWinner = useMemo(() => {
-    return isDaifugoOver && daifugoPhase === "finished" && Number(daifugoDisplayLocalSeat?.rank || 0) === 1;
-  }, [daifugoDisplayLocalSeat?.rank, daifugoPhase, isDaifugoOver]);
+    const localRank =
+      daifugoDisplayLocalSeat && "rank" in daifugoDisplayLocalSeat
+        ? Number(daifugoDisplayLocalSeat.rank || 0)
+        : 0;
+    return isDaifugoOver && daifugoPhase === "finished" && localRank === 1;
+  }, [daifugoDisplayLocalSeat, daifugoPhase, isDaifugoOver]);
 
   const daifugoIsLocalTurn = useMemo(() => {
     return !isDaifugoOver && daifugoPhase === "playing" && daifugoCurrentPlayer?.id === daifugoLocalPlayerId;
@@ -8870,6 +8881,7 @@ export default function Home() {
     if (panel === "mahjong") return t("tabMahjong");
     if (panel === "poker") return t("tabPoker");
     if (panel === "solitaire") return t("tabSolitaire");
+    if (panel === "deepLabyrinth") return t("tabDeepLabyrinth");
     return t("tabSurvivors");
   }, [t]);
 
@@ -9280,6 +9292,10 @@ export default function Home() {
     openPanel("survivors");
   };
 
+  const openDeepLabyrinth = () => {
+    window.location.href = "/games/deep-labyrinth";
+  };
+
   const languageButtons: Array<{ code: Language; labelKey: LanguageLabelKey }> = [
     { code: "ja", labelKey: "langJa" },
     { code: "ko", labelKey: "langKo" },
@@ -9338,6 +9354,7 @@ export default function Home() {
     { panel: "fourPanel", category: "party", label: t("tabFourPanel"), onClick: openFourPanel },
     { panel: "drawingRelay", category: "party", label: t("tabDrawingRelay"), onClick: openDrawingRelay },
     { panel: "survivors", category: "party", label: t("tabSurvivors"), onClick: openSurvivors },
+    { panel: "deepLabyrinth", category: "party", label: t("tabDeepLabyrinth"), onClick: openDeepLabyrinth },
   ];
 
   const menuTabCategoryOrder: MenuTabCategory[] = ["menu", "board", "card", "casino", "party"];
@@ -9397,6 +9414,7 @@ export default function Home() {
     { panel: "fourPanel", category: "party", title: t("tabFourPanel"), onClick: openFourPanel, className: "rounded-xl border border-sky-200/30 bg-sky-400/10 p-4 text-left" },
     { panel: "drawingRelay", category: "party", title: t("tabDrawingRelay"), onClick: openDrawingRelay, className: "rounded-xl border border-indigo-200/30 bg-indigo-400/10 p-4 text-left" },
     { panel: "survivors", category: "party", title: t("tabSurvivors"), onClick: openSurvivors, className: "rounded-xl border border-emerald-200/30 bg-emerald-400/10 p-4 text-left" },
+    { panel: "deepLabyrinth", category: "party", title: t("tabDeepLabyrinth"), onClick: openDeepLabyrinth, className: "rounded-xl border border-fuchsia-200/30 bg-fuchsia-400/10 p-4 text-left" },
   ];
 
   const menuCategoryOrder: MenuCategory[] = ["board", "card", "casino", "party"];
@@ -9990,7 +10008,7 @@ export default function Home() {
     if (typeof state.isChinchiroOver === "boolean") setIsChinchiroOver(state.isChinchiroOver);
 
     if (Array.isArray(state.sevensPlayers)) {
-      const parsed = (state.sevensPlayers as SevensPlayer[]).map((player) => ({
+      const parsed: SevensPlayer[] = (state.sevensPlayers as SevensPlayer[]).map((player) => ({
         id: String(player.id || ""),
         name: String(player.name || "Player"),
         isCpu: Boolean(player.isCpu),
@@ -23230,7 +23248,7 @@ export default function Home() {
                         if (gameStarted.sevens) return;
                         resetSevens();
                       }}
-                      disabled={connectedRoomCode || gameStarted.sevens}
+                      disabled={Boolean(connectedRoomCode) || gameStarted.sevens}
                       className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                     >
                       <option value="cpu">CPU対戦</option>
@@ -23286,7 +23304,7 @@ export default function Home() {
                           setSevensMaxPlayers(nextMax);
                           setRoomMaxPlayersDraft(nextMax);
                         }}
-                        disabled={connectedRoomCode || gameStarted.sevens}
+                        disabled={Boolean(connectedRoomCode) || gameStarted.sevens}
                         className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                       >
                         {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
@@ -23557,7 +23575,7 @@ export default function Home() {
                   <select
                     value={daifugoEffectiveMode}
                     onChange={(event) => setDaifugoMode(event.target.value as DaifugoMode)}
-                    disabled={connectedRoomCode || gameStarted.daifugo}
+                    disabled={Boolean(connectedRoomCode) || gameStarted.daifugo}
                     className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                   >
                     <option value="cpu">CPU</option>
@@ -23601,7 +23619,7 @@ export default function Home() {
                   <select
                     value={daifugoPreviewMaxPlayers}
                     onChange={(event) => setDaifugoMaxPlayers(Math.max(2, Math.min(8, Number(event.target.value) || 2)))}
-                    disabled={connectedRoomCode || gameStarted.daifugo}
+                    disabled={Boolean(connectedRoomCode) || gameStarted.daifugo}
                     className="rounded-md border border-slate-400/40 bg-slate-950/70 px-2 py-2 text-sm disabled:opacity-60"
                   >
                     {Array.from({ length: 7 }, (_, i) => i + 2).map((count) => (
@@ -23642,7 +23660,9 @@ export default function Home() {
                           >
                             <p className="truncate text-xs font-semibold text-emerald-50">{isTurn ? `▶ ${truncated}` : truncated}</p>
                             {isFinished ? (
-                              <p className="mt-0.5 text-[10px] text-amber-100">{seat.rank || "-"}位 {daifugoClassLabel(seat.className)}</p>
+                              <p className="mt-0.5 text-[10px] text-amber-100">
+                                {"rank" in seat ? seat.rank || "-" : "-"}位 {daifugoClassLabel("className" in seat ? seat.className : "heimin")}
+                              </p>
                             ) : isIdle ? (
                               <p className="mt-0.5 text-[10px] text-emerald-100/80">待機中</p>
                             ) : seat.status === "passed" ? (
@@ -23677,7 +23697,7 @@ export default function Home() {
                               >
                                 <p className="truncate text-[12px] font-semibold leading-tight text-emerald-50">{isTurn ? `▶ ${truncated}` : truncated}</p>
                                 {isFinished ? (
-                                  <p className="mt-0.5 text-[11px] leading-tight text-amber-100">{seat.rank || "-"}位</p>
+                                  <p className="mt-0.5 text-[11px] leading-tight text-amber-100">{"rank" in seat ? seat.rank || "-" : "-"}位</p>
                                 ) : isIdle ? (
                                   <p className="mt-0.5 text-[11px] leading-tight text-emerald-100/80">待機中</p>
                                 ) : seat.status === "passed" ? (
@@ -23709,7 +23729,9 @@ export default function Home() {
                             >
                               <p className="truncate text-[11px] font-semibold text-emerald-50">{isTurn ? `▶ ${truncated}` : truncated}</p>
                               {isFinished ? (
-                                <p className="mt-0.5 text-[10px] text-amber-100">{seat.rank || "-"}位 {daifugoClassLabel(seat.className)}</p>
+                                <p className="mt-0.5 text-[10px] text-amber-100">
+                                  {"rank" in seat ? seat.rank || "-" : "-"}位 {daifugoClassLabel("className" in seat ? seat.className : "heimin")}
+                                </p>
                               ) : isIdle ? (
                                 <p className="mt-0.5 text-[10px] text-emerald-100/80">待機中</p>
                               ) : seat.status === "passed" ? (
