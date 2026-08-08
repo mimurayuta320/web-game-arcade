@@ -16,35 +16,39 @@ import { WavePanel } from "@/games/deep-labyrinth/components/WavePanel";
 import { PauseMenu } from "@/games/deep-labyrinth/components/PauseMenu";
 import { PlacementConfirmModal } from "@/games/deep-labyrinth/components/PlacementConfirmModal";
 import { ResultModal } from "@/games/deep-labyrinth/components/ResultModal";
+import { PerformanceOverlay } from "@/games/deep-labyrinth/components/PerformanceOverlay";
+import { getDepthLayer, DEPTH_LAYER_COLORS } from "@/games/deep-labyrinth/data/balance";
+import { deepLabPerfMonitor, isDeepLabPerfEnabled } from "@/games/deep-labyrinth/core/performance";
 
 const INITIAL_HUD: HudSnapshot = {
-  phase: "preparation",
-  remainingDigCount: 150,
-  maxDigCount: 150,
+  phase: "initialPreparation",
+  phaseLabel: "初期準備",
+  allyCount: 0,
+  summonedCount: 0,
+  remainingDigCount: 600,
+  maxDigCount: 600,
   currentMonsterCount: 0,
   enemyCount: 0,
   wave: 1,
   maxWave: 10,
+  playerHp: 0,
+  playerMaxHp: 0,
   coreHp: 0,
   coreMaxHp: 0,
   corePlaced: false,
   nextWaveInSec: 60,
   waveCountdownSec: 0,
   paused: false,
-  depthLabel: "深度: 浅層（0～7マス）",
+  depthLabel: "深度: 浅層（1～8マス）",
 };
 
 export default function DeepLabyrinthPage() {
   const [mounted, setMounted] = useState(false);
+  const [engineReady, setEngineReady] = useState(false);
   const engineRef = useRef<GameEngine | null>(null);
   const loopRef = useRef<GameLoop | null>(null);
 
-  if (mounted && !engineRef.current) {
-    engineRef.current = new GameEngine();
-  }
-  if (mounted && !loopRef.current) {
-    loopRef.current = new GameLoop();
-  }
+  const lastHudRef = useRef<HudSnapshot>(INITIAL_HUD);
 
   const engine = engineRef.current;
   const loop = loopRef.current;
@@ -58,10 +62,46 @@ export default function DeepLabyrinthPage() {
   const [showFirstTip, setShowFirstTip] = useState(false);
   const [showExactSpawnRate, setShowExactSpawnRate] = useState(false);
   const [reduceGlowAnimation, setReduceGlowAnimation] = useState(false);
+  const [lowPowerMode, setLowPowerMode] = useState(false);
+
+  const isSameHud = (a: HudSnapshot, b: HudSnapshot): boolean => {
+    return (
+      a.phase === b.phase &&
+      a.allyCount === b.allyCount &&
+      a.remainingDigCount === b.remainingDigCount &&
+      a.maxDigCount === b.maxDigCount &&
+      a.enemyCount === b.enemyCount &&
+      a.wave === b.wave &&
+      a.maxWave === b.maxWave &&
+      a.playerHp === b.playerHp &&
+      a.playerMaxHp === b.playerMaxHp &&
+      a.corePlaced === b.corePlaced &&
+      a.depthLabel === b.depthLabel &&
+      a.nextWaveInSec === b.nextWaveInSec &&
+      a.waveCountdownSec === b.waveCountdownSec
+    );
+  };
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (engineRef.current || loopRef.current) return;
+
+    engineRef.current = new GameEngine();
+    loopRef.current = new GameLoop();
+    setEngineReady(true);
+
+    return () => {
+      loopRef.current?.dispose();
+      engineRef.current?.dispose();
+      loopRef.current = null;
+      engineRef.current = null;
+      setEngineReady(false);
+    };
+  }, [mounted]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -74,28 +114,59 @@ export default function DeepLabyrinthPage() {
   }, []);
 
   useEffect(() => {
-    if (!engine || !loop) return;
+    if (typeof window === "undefined") return;
+    const key = "deep-labyrinth-low-power-mode-v1";
+    const raw = window.localStorage.getItem(key);
+    setLowPowerMode(raw === "1");
+  }, []);
 
-    const unsub = engine.subscribeHud((nextHud) => {
+  useEffect(() => {
+    if (!engine || !loop) return;
+    engine.setLowPowerMode(lowPowerMode);
+    loop.setLowPowerMode(lowPowerMode);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("deep-labyrinth-low-power-mode-v1", lowPowerMode ? "1" : "0");
+    }
+  }, [engine, loop, lowPowerMode]);
+
+  useEffect(() => {
+    if (!engineReady || !engineRef.current || !loopRef.current) return;
+
+    const activeEngine = engineRef.current;
+    const activeLoop = loopRef.current;
+
+    if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
+      (window as unknown as { __deepLabEngine?: GameEngine }).__deepLabEngine = activeEngine;
+    }
+
+    const unsub = activeEngine.subscribeHud((nextHud) => {
+      if (isSameHud(lastHudRef.current, nextHud)) return;
+      lastHudRef.current = nextHud;
       setHud(nextHud);
-      setRevision((v) => v + 1);
+      if (isDeepLabPerfEnabled()) deepLabPerfMonitor().markHudCommit();
     });
 
-    loop.start((dt) => {
-      engine.tick(dt);
+    activeLoop.start((dt) => {
+      activeEngine.tick(dt);
     });
 
     return () => {
       unsub();
-      loop.stop();
+      activeLoop.stop();
+      if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
+        (window as unknown as { __deepLabEngine?: GameEngine }).__deepLabEngine = undefined;
+      }
     };
-  }, [engine, loop]);
+  }, [engineReady]);
 
   useEffect(() => {
     if (!engine) return;
 
     const onKey = (event: KeyboardEvent) => {
-      if (event.code === "Space") {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+
+      if (event.code === "KeyP") {
         event.preventDefault();
         engine.togglePause();
       }
@@ -122,35 +193,52 @@ export default function DeepLabyrinthPage() {
   const state = engine.getRenderState();
   const bestiaryEntries = engine.getBestiaryEntries();
   const controlLocked = engine.isControlLocked();
+  const playerDepthLayer = state.corePosition
+    ? DEPTH_LAYER_COLORS[getDepthLayer(state.corePosition.y)].name
+    : state.selectedPlacementPosition
+      ? DEPTH_LAYER_COLORS[getDepthLayer(state.selectedPlacementPosition.y)].name
+      : null;
 
   return (
     <main className={`${styles.deepLabyrinthRoot} gamePage`}>
       <div className="gamePageInner">
         <GameHeader title={title} onTitleChange={setTitle} />
-        <GameHUD hud={hud} depthLabel={hud.depthLabel} />
+        <section className="gameScreen">
+          <GameHUD
+            allyCount={hud.allyCount}
+            remainingDigCount={hud.remainingDigCount}
+            maxDigCount={hud.maxDigCount}
+            currentWave={hud.wave}
+            maxWave={hud.maxWave}
+            enemyCount={hud.enemyCount}
+            playerHp={hud.corePlaced ? hud.playerHp : null}
+            playerMaxHp={hud.corePlaced ? hud.playerMaxHp : null}
+            playerDepthLayer={playerDepthLayer}
+            gamePhase={hud.phase}
+          />
 
-        <div className="dlTopActions" data-ui-panel="true">
-          <button type="button" className="dlBtnSmall" onClick={() => setShowBlockInfo(true)}>
-            ブロック情報
-          </button>
-          <button type="button" className="dlBtnSmall" onClick={() => setSidePanelOpen((v) => !v)}>
-            {sidePanelOpen ? "パネルを閉じる" : "パネルを開く"}
-          </button>
-        </div>
+          <div className="gameMain">
+            <section className="mapSection">
+              <div className="mapContainer">
+                <GameCanvas
+                  engine={engine}
+                  onSelectCell={setSelectedCell}
+                  showExactSpawnRate={showExactSpawnRate}
+                  reduceGlowAnimation={reduceGlowAnimation}
+                  lowPowerMode={lowPowerMode}
+                />
+              </div>
+            </section>
 
-        <section className={`gameLayout ${sidePanelOpen ? "withSidePanel" : "sidePanelCollapsed"}`}>
-          <section className="mapSection">
-            <div className="mapContainer">
-              <GameCanvas
-                engine={engine}
-                onSelectCell={setSelectedCell}
-                showExactSpawnRate={showExactSpawnRate}
-                reduceGlowAnimation={reduceGlowAnimation}
-              />
-            </div>
-          </section>
-
-          <aside className={`sidePanel ${sidePanelOpen ? "isOpen" : "isClosed"}`} data-ui-panel="true">
+            <aside className={`sidePanel ${sidePanelOpen ? "isOpen" : "isClosed"}`} data-ui-panel="true">
+              <div className="dlTopActions" data-ui-panel="true">
+                <button type="button" className="dlBtnSmall" onClick={() => setShowBlockInfo(true)}>
+                  ブロック情報
+                </button>
+                <button type="button" className="dlBtnSmall" onClick={() => setSidePanelOpen((v) => !v)}>
+                  {sidePanelOpen ? "パネルを閉じる" : "パネルを開く"}
+                </button>
+              </div>
             <MaterialPanel state={state} />
             <WavePanel
               gameSpeed={state.gameSpeed}
@@ -191,6 +279,8 @@ export default function DeepLabyrinthPage() {
                       <li className="dlListItem"><span>土の種類</span><strong>{detail?.soilLabel ?? selectedCell.type}</strong></li>
                       <li className="dlListItem"><span>深度</span><strong>{detail?.depthLabel ?? hud.depthLabel}</strong></li>
                       <li className="dlListItem"><span>魔物出現期待度</span><strong>{detail?.spawnTierLabel ?? "通常"}</strong></li>
+                      <li className="dlListItem"><span>レア期待度</span><strong>{detail?.rarityExpectationLabel ?? "低い"}</strong></li>
+                      <li className="dlListItem"><span>出現候補帯</span><strong>{detail?.candidateRarityBand ?? "common～uncommon"}</strong></li>
                       <li className="dlListItem"><span>出現候補</span><strong>{detail?.spawnCandidates ?? "なし"}</strong></li>
                       <li className="dlListItem"><span>取得素材</span><strong>{detail?.materialLabel ?? "なし"}</strong></li>
                       <li className="dlListItem"><span>掘削可能</span><strong>{detail?.diggable ? "はい" : "いいえ"}</strong></li>
@@ -203,7 +293,7 @@ export default function DeepLabyrinthPage() {
               ) : (
                 <p className="dlMuted">右クリックまたはタップでマス情報を表示します。</p>
               )}
-              {state.phase === "allyPlacement" ? (
+              {state.phase === "playerPlacement" ? (
                 <div className="dlCoreConfirm">
                   <p className="dlWarnText">配置する場所を選択してください。</p>
                   {engine.shouldShowAutoCorePlaceButton() ? (
@@ -229,6 +319,21 @@ export default function DeepLabyrinthPage() {
                       </button>
                     </>
                   ) : null}
+                </div>
+              ) : null}
+              {state.phase === "betweenWavePreparation" || state.phase === "playerReposition" ? (
+                <div className="dlCoreConfirm">
+                  <p className="dlWarnText">ウェーブ間の再配置準備中です。</p>
+                  <button
+                    type="button"
+                    className="dlBtnSmall"
+                    onClick={() => {
+                      engine.beginPlayerReposition();
+                      setRevision((v) => v + 1);
+                    }}
+                  >
+                    再配置場所を選ぶ
+                  </button>
                 </div>
               ) : null}
               {state.message ? <p className="dlWarnText">{state.message}</p> : null}
@@ -291,8 +396,21 @@ export default function DeepLabyrinthPage() {
                 />
                 <span>ブロック発光アニメーションを減らす</span>
               </label>
+              <label className="dlSettingRow">
+                <input
+                  type="checkbox"
+                  checked={lowPowerMode}
+                  onChange={(event) => setLowPowerMode(event.currentTarget.checked)}
+                />
+                <span>低負荷モード（30FPS/描画簡略化）</span>
+              </label>
             </section>
-          </aside>
+            </aside>
+          </div>
+
+          <div className="gameControls" data-ui-panel="true">
+            <span className="dlMuted">操作欄: 右パネル</span>
+          </div>
         </section>
 
         <PauseMenu visible={state.paused && state.phase === "paused"} onResume={() => engine.setPaused(false)} />
@@ -300,12 +418,17 @@ export default function DeepLabyrinthPage() {
           isOpen={state.isPlacementConfirmOpen}
           position={state.selectedPlacementPosition}
           isProcessing={engine.isPlacementProcessing()}
+          mode={state.phase === "repositionConfirmation" ? "reposition" : "initial"}
           onConfirm={() => {
             engine.confirmCorePlacement();
             setRevision((v) => v + 1);
           }}
           onCancel={() => {
             engine.cancelCorePlacementConfirmation();
+            setRevision((v) => v + 1);
+          }}
+          onStartCurrent={() => {
+            engine.startNextWaveFromCurrentPosition();
             setRevision((v) => v + 1);
           }}
         />
@@ -321,6 +444,7 @@ export default function DeepLabyrinthPage() {
                 <li className="dlListItem"><span>卵型の印2つ</span><strong>魔物がかなり出やすい</strong></li>
                 <li className="dlListItem"><span>青紫の発光</span><strong>魔物発生候補</strong></li>
                 <li className="dlListItem"><span>金紫の発光</span><strong>高確率の魔物発生候補</strong></li>
+                <li className="dlListItem"><span>小さな星印</span><strong>深層でレア期待度が高い</strong></li>
               </ul>
               {showFirstTip ? (
                 <p className="dlWarnText">光っている土からは味方魔物が出現しやすくなっています</p>
@@ -341,6 +465,8 @@ export default function DeepLabyrinthPage() {
             </div>
           </div>
         ) : null}
+
+        <PerformanceOverlay />
       </div>
     </main>
   );

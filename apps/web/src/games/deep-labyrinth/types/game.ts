@@ -14,17 +14,20 @@ export type InvaderState = "moving" | "attacking" | "digging" | "dead";
 export type MonsterRole = "tank" | "melee" | "ranged" | "support" | "healer" | "debuffer" | "summoner";
 export type MonsterRarity = "common" | "uncommon" | "rare" | "epic";
 export type GamePhase =
-  | "preparation"
-  | "allyPlacement"
+  | "initialPreparation"
+  | "playerPlacement"
   | "placementConfirmation"
   | "countdown"
   | "wave"
+  | "waveComplete"
+  | "betweenWavePreparation"
+  | "playerReposition"
+  | "repositionConfirmation"
   | "paused"
-  | "waveResult"
   | "gameOver"
   | "victory";
 export type Direction = "up" | "down" | "left" | "right";
-export type DepthLayer = 0 | 1 | 2;
+export type DepthLayer = 0 | 1 | 2 | 3 | 4;
 export type MonsterSpawnTier = "normal" | "high" | "veryHigh";
 
 export type MaterialKey = "manaCrystal" | "lifeWater" | "voidIron" | "toxinSpore";
@@ -130,6 +133,7 @@ export interface Monster {
   visualConfig: MonsterVisualConfig;
   summonParentId: string | null;
   summonCount: number;
+  isSummonedTemporary?: boolean;
   buffs?: {
     attackMultiplier: number;
     cooldownMultiplier: number;
@@ -150,6 +154,7 @@ export interface Invader {
   path: Vec2[];
   pathIndex: number;
   pathState: EnemyPathState;
+  lastPathCalculatedAtMs?: number;
   repathTimer: number;
   attackTimer: number;
   stuckSec: number;
@@ -293,12 +298,17 @@ export interface GameState {
 
 export interface HudSnapshot {
   phase: GamePhase;
+  phaseLabel: string;
+  allyCount: number;
+  summonedCount: number;
   remainingDigCount: number;
   maxDigCount: number;
   currentMonsterCount: number;
   enemyCount: number;
   wave: number;
   maxWave: number;
+  playerHp: number;
+  playerMaxHp: number;
   coreHp: number;
   coreMaxHp: number;
   corePlaced: boolean;

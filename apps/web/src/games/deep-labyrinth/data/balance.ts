@@ -1,13 +1,24 @@
+import {
+  DEPTH_LAYER_COUNT,
+  DEPTH_LAYER_HEIGHT as DEPTH_LAYER_HEIGHT_CONFIG,
+  DEPTH_LAYERS,
+  type DepthLayer,
+} from "./mapConfig";
+
 export const MAP_COLUMNS = 48;
-export const MAP_ROWS = 24;
+export const MAP_ROWS = 40;
 export const GRID_COLS = MAP_COLUMNS;
 export const GRID_ROWS = MAP_ROWS;
 
-export const DEPTH_LAYER_HEIGHT = 8;
-export type DepthLayer = 0 | 1 | 2;
+export const DEPTH_LAYER_HEIGHT = DEPTH_LAYER_HEIGHT_CONFIG;
+export type { DepthLayer };
+export { DEPTH_LAYER_COUNT };
 
 export function getDepthLayer(row: number): DepthLayer {
-  return Math.min(2, Math.floor(row / DEPTH_LAYER_HEIGHT)) as DepthLayer;
+  return Math.min(
+    DEPTH_LAYER_COUNT - 1,
+    Math.floor(row / DEPTH_LAYER_HEIGHT),
+  ) as DepthLayer;
 }
 
 export const DEPTH_LAYER_COLORS: Record<
@@ -22,28 +33,44 @@ export const DEPTH_LAYER_COLORS: Record<
   }
 > = {
   0: {
-    name: "浅層",
-    base: "#76503a",
-    light: "#91694e",
-    dark: "#503526",
-    border: "#39271e",
-    particle: "#aa7958",
+    name: DEPTH_LAYERS[0].name,
+    base: DEPTH_LAYERS[0].baseColor,
+    light: DEPTH_LAYERS[0].accentColor,
+    dark: DEPTH_LAYERS[0].darkColor,
+    border: DEPTH_LAYERS[0].darkColor,
+    particle: DEPTH_LAYERS[0].accentColor,
   },
   1: {
-    name: "中層",
-    base: "#604034",
-    light: "#7d5544",
-    dark: "#3e2924",
-    border: "#2e1e1a",
-    particle: "#91604c",
+    name: DEPTH_LAYERS[1].name,
+    base: DEPTH_LAYERS[1].baseColor,
+    light: DEPTH_LAYERS[1].accentColor,
+    dark: DEPTH_LAYERS[1].darkColor,
+    border: DEPTH_LAYERS[1].darkColor,
+    particle: DEPTH_LAYERS[1].accentColor,
   },
   2: {
-    name: "深層",
-    base: "#3b3548",
-    light: "#504760",
-    dark: "#272330",
-    border: "#1c1924",
-    particle: "#675b78",
+    name: DEPTH_LAYERS[2].name,
+    base: DEPTH_LAYERS[2].baseColor,
+    light: DEPTH_LAYERS[2].accentColor,
+    dark: DEPTH_LAYERS[2].darkColor,
+    border: DEPTH_LAYERS[2].darkColor,
+    particle: DEPTH_LAYERS[2].accentColor,
+  },
+  3: {
+    name: DEPTH_LAYERS[3].name,
+    base: DEPTH_LAYERS[3].baseColor,
+    light: DEPTH_LAYERS[3].accentColor,
+    dark: DEPTH_LAYERS[3].darkColor,
+    border: DEPTH_LAYERS[3].darkColor,
+    particle: DEPTH_LAYERS[3].accentColor,
+  },
+  4: {
+    name: DEPTH_LAYERS[4].name,
+    base: DEPTH_LAYERS[4].baseColor,
+    light: DEPTH_LAYERS[4].accentColor,
+    dark: DEPTH_LAYERS[4].darkColor,
+    border: DEPTH_LAYERS[4].darkColor,
+    particle: DEPTH_LAYERS[4].accentColor,
   },
 };
 
@@ -58,25 +85,39 @@ export const DEPTH_LAYER_SOIL_RATIOS: Record<
   }
 > = {
   0: {
-    normalSoil: 0.75,
+    normalSoil: 0.68,
     magicSoil: 0.05,
-    moistSoil: 0.12,
+    moistSoil: 0.2,
     mineralSoil: 0.04,
-    toxicSoil: 0.04,
+    toxicSoil: 0.03,
   },
   1: {
-    normalSoil: 0.58,
-    magicSoil: 0.14,
-    moistSoil: 0.09,
-    mineralSoil: 0.12,
-    toxicSoil: 0.07,
+    normalSoil: 0.52,
+    magicSoil: 0.08,
+    moistSoil: 0.1,
+    mineralSoil: 0.24,
+    toxicSoil: 0.06,
   },
   2: {
-    normalSoil: 0.42,
-    magicSoil: 0.2,
+    normalSoil: 0.26,
+    magicSoil: 0.3,
     moistSoil: 0.08,
-    mineralSoil: 0.16,
-    toxicSoil: 0.14,
+    mineralSoil: 0.24,
+    toxicSoil: 0.12,
+  },
+  3: {
+    normalSoil: 0.18,
+    magicSoil: 0.31,
+    moistSoil: 0.08,
+    mineralSoil: 0.14,
+    toxicSoil: 0.29,
+  },
+  4: {
+    normalSoil: 0.1,
+    magicSoil: 0.32,
+    moistSoil: 0.06,
+    mineralSoil: 0.28,
+    toxicSoil: 0.24,
   },
 };
 
@@ -88,7 +129,7 @@ export const DEPTH_LAYER_SPAWN_TUNING: Record<
   }
 > = {
   0: {
-    spawnRateMultiplier: 0.95,
+    spawnRateMultiplier: 0.92,
     monsterWeightBonus: { slime: 1.3, wisp: 1.05, poisonBug: 0.85, ironMole: 0.8, shadowMimic: 0.7 },
   },
   1: {
@@ -96,15 +137,25 @@ export const DEPTH_LAYER_SPAWN_TUNING: Record<
     monsterWeightBonus: { slime: 1, wisp: 1.15, poisonBug: 1, ironMole: 1.15, shadowMimic: 1 },
   },
   2: {
-    spawnRateMultiplier: 1.12,
+    spawnRateMultiplier: 1.08,
     monsterWeightBonus: { slime: 0.82, wisp: 1.25, poisonBug: 1.2, ironMole: 1.22, shadowMimic: 1.35 },
+  },
+  3: {
+    spawnRateMultiplier: 1.14,
+    monsterWeightBonus: { slime: 0.72, wisp: 1.3, poisonBug: 1.24, ironMole: 1.2, shadowMimic: 1.42 },
+  },
+  4: {
+    spawnRateMultiplier: 1.2,
+    monsterWeightBonus: { slime: 0.66, wisp: 1.36, poisonBug: 1.28, ironMole: 1.18, shadowMimic: 1.52 },
   },
 };
 
 export const DEPTH_LAYER_MATERIAL_BONUS_CHANCE: Record<DepthLayer, number> = {
-  0: 0,
-  1: 0.18,
-  2: 0.32,
+  0: 0.02,
+  1: 0.08,
+  2: 0.18,
+  3: 0.27,
+  4: 0.35,
 };
 
 export const MONSTER_SPAWN_TIER_MULTIPLIERS = {
@@ -131,32 +182,43 @@ export const DEPTH_LAYER_TIER_RATIOS: Record<
   }
 > = {
   0: {
-    normal: 0.78,
-    high: 0.19,
-    veryHigh: 0.03,
+    normal: 0.84,
+    high: 0.14,
+    veryHigh: 0.02,
   },
   1: {
-    normal: 0.68,
-    high: 0.24,
-    veryHigh: 0.08,
+    normal: 0.75,
+    high: 0.19,
+    veryHigh: 0.06,
   },
   2: {
-    normal: 0.58,
-    high: 0.27,
-    veryHigh: 0.15,
+    normal: 0.62,
+    high: 0.25,
+    veryHigh: 0.13,
+  },
+  3: {
+    normal: 0.52,
+    high: 0.28,
+    veryHigh: 0.2,
+  },
+  4: {
+    normal: 0.4,
+    high: 0.34,
+    veryHigh: 0.26,
   },
 };
 
 export const DIG_BREAK_ANIMATION_DURATION = 180;
 export const MIN_CELL_SIZE = 12;
 
-export const HUD_NOTIFY_INTERVAL_MS = 150;
+export const HUD_NOTIFY_INTERVAL_MS = 200;
 export const INITIAL_PREPARATION_TIME = 60;
 export const EXTRA_PREPARATION_TIME_SEC = 30;
 export const CORE_PLACEMENT_COUNTDOWN_SEC = 3;
+export const BETWEEN_WAVE_PREPARATION_TIME = 15;
 export const MIN_CORE_PATH_DISTANCE = 8;
-export const INITIAL_MAX_DIG_COUNT = 150;
-export const INITIAL_REMAINING_DIG_COUNT = 150;
+export const INITIAL_MAX_DIG_COUNT = 600;
+export const INITIAL_REMAINING_DIG_COUNT = 600;
 export const DIG_RECOVERY_PER_WAVE = 10;
 
 export const DIG_BALANCE = {
@@ -229,5 +291,19 @@ export const ALLY_WANDER_CONFIG = {
 
 export const DEFAULT_ALLY_DETECTION_RANGE = 7;
 export const DEFAULT_ALLY_LEASH_RANGE = 12;
-export const ALLY_PATH_RECALCULATION_INTERVAL = 350;
-export const ALLY_DETECTION_INTERVAL = 300;
+export const ALLY_PATH_RECALCULATION_INTERVAL = 500;
+export const ALLY_DETECTION_INTERVAL = 400;
+
+export const PERFORMANCE_CONFIG = {
+  logicUpdatesPerSecond: 30,
+  logicUpdatesPerSecondLowPower: 15,
+  hudUpdateIntervalMs: 200,
+  maxDeltaTimeMs: 100,
+  maxRenderPixelRatio: 1.5,
+  lowPowerRenderPixelRatio: 1,
+  lowPowerDetectionIntervalMs: 700,
+  maxPathfindingPerLogicStep: 2,
+  pathRecalculationCooldownMs: 500,
+  maxDigBreakEffects: 120,
+  maxSpawnEffects: 80,
+};

@@ -2,6 +2,7 @@ import {
   ALLY_DETECTION_INTERVAL,
   ALLY_PATH_RECALCULATION_INTERVAL,
   ALLY_WANDER_CONFIG,
+  BETWEEN_WAVE_PREPARATION_TIME,
   CORE_PLACEMENT_COUNTDOWN_SEC,
   DEPTH_LAYER_COLORS,
   DEPTH_LAYER_HEIGHT,
@@ -16,6 +17,7 @@ import {
   INITIAL_MAX_DIG_COUNT,
   INITIAL_PREPARATION_TIME,
   INITIAL_REMAINING_DIG_COUNT,
+  PERFORMANCE_CONFIG,
   WAVE_BALANCE,
   getDepthLayer,
 } from "../data/balance";
@@ -30,6 +32,7 @@ import {
   MONSTER_RARITY_COLOR,
 } from "../data/monsters";
 import type {
+  AllyBehaviorProfile,
   AllyMovementState,
   BestiaryEntry,
   CorePlacementResult,
@@ -41,7 +44,6 @@ import type {
   HudSnapshot,
   Invader,
   MapCell,
-  MonsterLimit,
   MonsterSpawnTier,
   SoilType,
   Vec2,
@@ -53,8 +55,10 @@ import { getEnemyFinalMoveSpeed } from "../systems/MovementSystem";
 import { materialFromSoil } from "../systems/ResourceSystem";
 import {
   createSummonedMinion,
+  getCandidateRarityBandByDepth,
   getFinalSpawnRate,
   getMonsterSpawnTierLabel,
+  getRarityExpectationLabelByDepth,
   maybeNaturalSpawnWithTier,
   pickSpawnCandidatesBySoil,
   rarityColorByMonsterKind,
@@ -65,6 +69,7 @@ import { enemiesForWave } from "../systems/WaveSystem";
 import { cellKey, cloneMap, isInside, isPassableCellType } from "../utils/grid";
 import { findPathAStarWithCost, findPathBfs, reachableSetBfs, shortestPathDistanceBfs } from "../utils/pathfinding";
 import { hash2d, randomFloat, randomInt, randomPick } from "../utils/random";
+import { deepLabPerfMonitor, isDeepLabPerfEnabled } from "./performance";
 
 const DIRECTIONS4: Array<[number, number]> = [
   [-1, 0],
@@ -123,10 +128,6 @@ function cellCenter(cell: GridPosition): Vec2 {
   return { x: cell.x + 0.5, y: cell.y + 0.5 };
 }
 
-function hasReachedMonsterLimit(currentCount: number, maxCount: MonsterLimit): boolean {
-  return maxCount !== null && currentCount >= maxCount;
-}
-
 const BESTIARY_STORAGE_KEY = "deep-labyrinth-bestiary-v1";
 
 function createDefaultBestiary(): Record<string, BestiaryEntry> {
@@ -159,15 +160,27 @@ export class GameEngine {
   private invaderSerial = 0;
   private digBreakSerial = 0;
   private cameraFocusRow = 0;
-  private placementProcessing = false;
+  private placementProcessingFlag = false;
+  private isWaveStarting = false;
+  private lastCompletedWave = 0;
+  private nextWaveNumber = 1;
   private phaseBeforePause: GamePhase | null = null;
+  private lowPowerMode = false;
+  private pathfindingBudget = PERFORMANCE_CONFIG.maxPathfindingPerLogicStep;
+  private disposed = false;
+  private readonly spatialCellSize = 4;
+  private readonly invaderSpatialGrid = new Map<string, Invader[]>();
 
   constructor(seed?: number) {
+    if (isDeepLabPerfEnabled()) {
+      deepLabPerfMonitor().registerEngineCreated();
+    }
+
     const chosenSeed = seed ?? ((Date.now() ^ randomInt(1, 0x7fffffff)) >>> 0);
     const generated = generateLabyrinthMap(chosenSeed);
 
     this.state = {
-      phase: "preparation",
+      phase: "initialPreparation",
       timeSec: 0,
       mapSeed: generated.seed,
       mapVersion: 1,
@@ -221,6 +234,21 @@ export class GameEngine {
     };
 
     this.loadBestiary();
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (isDeepLabPerfEnabled()) {
+      deepLabPerfMonitor().registerEngineDisposed();
+    }
+  }
+
+  setLowPowerMode(enabled: boolean): void {
+    this.lowPowerMode = enabled;
+    if (isDeepLabPerfEnabled()) {
+      deepLabPerfMonitor().setLowPowerMode(enabled);
+    }
   }
 
   getRenderState(): GameState {
@@ -291,25 +319,63 @@ export class GameEngine {
     this.hudSubscribers.forEach((handler) => handler(snap));
   }
 
+  private consumePathfindingBudget(): boolean {
+    if (this.pathfindingBudget <= 0) return false;
+    this.pathfindingBudget -= 1;
+    return true;
+  }
+
+  private markPathfindingCall(): void {
+    if (!isDeepLabPerfEnabled()) return;
+    deepLabPerfMonitor().markPathfindingCall();
+  }
+
+  private markDetectionCall(): void {
+    if (!isDeepLabPerfEnabled()) return;
+    deepLabPerfMonitor().markDetectionCall();
+  }
+
   private getHudSnapshot(): HudSnapshot {
     const layer = getDepthLayer(this.cameraFocusRow);
-    const from = layer * DEPTH_LAYER_HEIGHT;
+    const from = layer * DEPTH_LAYER_HEIGHT + 1;
     const to = from + DEPTH_LAYER_HEIGHT - 1;
+    const aliveMonsters = this.state.monsters.filter((it) => it.isActive && it.state !== "dead");
+    const allyCount = aliveMonsters.filter((it) => !it.isSummonedTemporary).length;
+    const summonedCount = aliveMonsters.filter((it) => it.isSummonedTemporary).length;
+    const phaseLabelByPhase: Record<GamePhase, string> = {
+      initialPreparation: "初期準備",
+      playerPlacement: "初期配置",
+      placementConfirmation: "初期配置確認",
+      countdown: "開始カウントダウン",
+      wave: "戦闘中",
+      waveComplete: "ウェーブクリア",
+      betweenWavePreparation: "再配置準備",
+      playerReposition: "再配置中",
+      repositionConfirmation: "再配置確認",
+      paused: "一時停止",
+      gameOver: "ゲームオーバー",
+      victory: "勝利",
+    };
     return {
       phase: this.state.phase,
+      phaseLabel: phaseLabelByPhase[this.state.phase],
+      allyCount,
+      summonedCount,
       remainingDigCount: this.state.remainingDigCount,
       maxDigCount: this.state.maxDigCount,
-      currentMonsterCount: this.state.currentMonsterCount,
+      currentMonsterCount: allyCount,
       enemyCount: this.state.invaders.filter((it) => it.state !== "dead").length,
       wave: this.state.wave.wave,
       maxWave: this.state.wave.maxWave,
+      playerHp: this.state.coreHp,
+      playerMaxHp: this.state.coreMaxHp,
       coreHp: this.state.coreHp,
       coreMaxHp: this.state.coreMaxHp,
       corePlaced: Boolean(this.state.corePosition),
       nextWaveInSec: Math.max(0, Math.ceil(this.state.wave.nextWaveInSec)),
       waveCountdownSec: Math.max(0, Math.ceil(this.state.waveCountdownSec)),
       paused: this.state.paused,
-      depthLabel: `深度: ${DEPTH_LAYER_COLORS[layer].name}（${from}～${to}マス）`,
+      depthLabel: `深度: ${DEPTH_LAYER_COLORS[layer].name}（${from}～${to}）`,
     };
   }
 
@@ -430,6 +496,9 @@ export class GameEngine {
       elapsedSec: 0,
       durationSec: 0.55,
     });
+    if (this.state.spawnEffects.length > PERFORMANCE_CONFIG.maxSpawnEffects) {
+      this.state.spawnEffects.splice(0, this.state.spawnEffects.length - PERFORMANCE_CONFIG.maxSpawnEffects);
+    }
   }
 
   private updateUiEffects(dt: number): void {
@@ -467,13 +536,19 @@ export class GameEngine {
   }
 
   setGameSpeed(speed: 1 | 2 | 3): void {
-    if (this.state.phase === "countdown" || this.state.phase === "placementConfirmation") return;
+    if (this.state.phase === "countdown" || this.state.phase === "placementConfirmation" || this.state.phase === "repositionConfirmation") return;
     this.state.gameSpeed = speed;
     this.emitHud(true);
   }
 
   setPaused(paused: boolean): void {
-    if (this.state.phase === "allyPlacement" || this.state.phase === "placementConfirmation" || this.state.phase === "countdown") {
+    if (
+      this.state.phase === "playerPlacement" ||
+      this.state.phase === "playerReposition" ||
+      this.state.phase === "placementConfirmation" ||
+      this.state.phase === "repositionConfirmation" ||
+      this.state.phase === "countdown"
+    ) {
       return;
     }
 
@@ -505,7 +580,12 @@ export class GameEngine {
   }
 
   private canDigNow(): boolean {
-    return this.state.phase === "preparation" || this.state.phase === "wave" || this.state.phase === "waveResult";
+    return (
+      this.state.phase === "initialPreparation" ||
+      this.state.phase === "wave" ||
+      this.state.phase === "betweenWavePreparation" ||
+      this.state.phase === "playerReposition"
+    );
   }
 
   private consumeDigCount(): boolean {
@@ -543,12 +623,37 @@ export class GameEngine {
       particles,
     };
     this.state.digBreakEffects.push(effect);
+    if (this.state.digBreakEffects.length > PERFORMANCE_CONFIG.maxDigBreakEffects) {
+      this.state.digBreakEffects.splice(0, this.state.digBreakEffects.length - PERFORMANCE_CONFIG.maxDigBreakEffects);
+    }
   }
 
   private recalcInvaderPathsAfterDig(): void {
     for (const invader of this.state.invaders) {
       if (invader.state === "dead") continue;
-      this.recalcInvaderPath(invader, true);
+      invader.pathState.pathMapVersion = -1;
+      invader.repathTimer = randomFloat() * 0.8;
+    }
+  }
+
+  private maybeTriggerDeepLayerRisk(row: number, col: number, spawnTier: MonsterSpawnTier): void {
+    const layer = getDepthLayer(row);
+    if (layer < 3) return;
+
+    if (spawnTier === "veryHigh") {
+      for (const invader of this.state.invaders) {
+        if (invader.state === "dead") continue;
+        invader.repathTimer = 0;
+      }
+      this.pushToast("希少ブロックの気配を敵が察知しました", 2.4);
+    }
+
+    if (!this.state.hasGameStarted || this.state.phase !== "wave") return;
+    const addChance = layer === 3 ? 0.04 : 0.08;
+    if (randomFloat() < addChance) {
+      this.spawnInvader();
+      this.pushToast("深層の敵性生物が乱入しました", 2.2);
+      this.setMessage(`深層警戒: 敵増援 (${col},${row})`);
     }
   }
 
@@ -599,6 +704,8 @@ export class GameEngine {
       for (const line of lines) this.pushToast(line, 2.6);
     }
 
+    this.maybeTriggerDeepLayerRisk(row, col, spawnTier);
+
     this.bumpMapVersion();
     this.pushDigBreakEffect(row, col, soilType);
     this.recalcInvaderPathsAfterDig();
@@ -622,14 +729,14 @@ export class GameEngine {
   digAtCell(row: number, col: number, dragging: boolean): void {
     if (!isInside(GRID_ROWS, GRID_COLS, row, col)) return;
 
-    if (this.state.phase === "allyPlacement") {
+    if (this.state.phase === "playerPlacement" || this.state.phase === "playerReposition") {
       const result = this.selectCorePlacement(row, col);
       if (!result.canPlace && result.reason) this.setMessage(result.reason);
       this.emitHud();
       return;
     }
 
-    if (this.state.phase === "placementConfirmation" || this.state.phase === "countdown") {
+    if (this.state.phase === "placementConfirmation" || this.state.phase === "repositionConfirmation" || this.state.phase === "countdown") {
       this.setMessage("配置確認中です");
       this.emitHud();
       return;
@@ -679,17 +786,80 @@ export class GameEngine {
     return this.state.corePosition;
   }
 
+  private hasEntityAt(row: number, col: number): boolean {
+    const hasAlly = this.state.monsters.some(
+      (monster) =>
+        monster.isActive &&
+        monster.state !== "dead" &&
+        Math.floor(monster.position.y) === row &&
+        Math.floor(monster.position.x) === col,
+    );
+    if (hasAlly) return true;
+    return this.state.invaders.some(
+      (invader) =>
+        invader.state !== "dead" &&
+        Math.floor(invader.position.y) === row &&
+        Math.floor(invader.position.x) === col,
+    );
+  }
+
+  private canRepositionTo(row: number, col: number): CorePlacementResult {
+    if (!this.state.corePosition) return { canPlace: false, reason: "初期配置が必要です" };
+    if (!isInside(GRID_ROWS, GRID_COLS, row, col)) return { canPlace: false, reason: "マップ外には配置できません" };
+    if (row <= 0 || row >= GRID_ROWS - 1 || col <= 0 || col >= GRID_COLS - 1) {
+      return { canPlace: false, reason: "マップ外周には配置できません" };
+    }
+
+    const isCurrent = this.state.corePosition.x === col && this.state.corePosition.y === row;
+    const cell = this.state.map[row][col];
+    if (!cell) return { canPlace: false, reason: "無効なマスです" };
+
+    if (!isCurrent && cell.type !== "empty") {
+      return { canPlace: false, reason: "掘削済みの床を選んでください" };
+    }
+    if (cell.type === "nest" || this.state.nests.some((it) => it.x === col && it.y === row)) {
+      return { canPlace: false, reason: "巣がある場所には配置できません" };
+    }
+    if (cell.type === "trap" || this.state.traps.some((it) => it.x === col && it.y === row)) {
+      return { canPlace: false, reason: "罠がある場所には配置できません" };
+    }
+    if (row === this.state.entrancePosition.y && col === this.state.entrancePosition.x) {
+      return { canPlace: false, reason: "入口には配置できません" };
+    }
+    if (!isCurrent && this.hasEntityAt(row, col)) {
+      return { canPlace: false, reason: "ほかのユニットがいるため配置できません" };
+    }
+
+    const dist = shortestPathDistanceBfs(this.state.map, this.state.entrancePosition, { x: col, y: row }, `${row}:${col}`);
+    if (dist == null) {
+      return { canPlace: false, reason: "敵入口から到達できる場所へ配置してください" };
+    }
+    return { canPlace: true, pathDistance: dist };
+  }
+
   private refreshCorePlacementCache(): void {
-    const keys = listPlaceableCoreCells(this.state).map((entry) => cellKey(entry.row, entry.col));
-    this.corePlaceableKeys = new Set(keys);
+    if (this.state.phase === "playerPlacement") {
+      const keys = listPlaceableCoreCells(this.state).map((entry) => cellKey(entry.row, entry.col));
+      this.corePlaceableKeys = new Set(keys);
+      return;
+    }
+    if (this.state.phase === "playerReposition") {
+      const keys = new Set<string>();
+      for (let row = 1; row < GRID_ROWS - 1; row += 1) {
+        for (let col = 1; col < GRID_COLS - 1; col += 1) {
+          if (this.canRepositionTo(row, col).canPlace) keys.add(cellKey(row, col));
+        }
+      }
+      this.corePlaceableKeys = keys;
+    }
   }
 
   isCorePlacementPhase(): boolean {
-    return this.state.phase === "allyPlacement";
+    return this.state.phase === "playerPlacement" || this.state.phase === "playerReposition";
   }
 
   isPlacementConfirmationPhase(): boolean {
-    return this.state.phase === "placementConfirmation";
+    return this.state.phase === "placementConfirmation" || this.state.phase === "repositionConfirmation";
   }
 
   isCountdownPhase(): boolean {
@@ -697,14 +867,15 @@ export class GameEngine {
   }
 
   isPlacementProcessing(): boolean {
-    return this.placementProcessing;
+    return this.placementProcessingFlag;
   }
 
   isControlLocked(): boolean {
-    return this.state.phase === "placementConfirmation" || this.state.phase === "countdown";
+    return this.state.phase === "placementConfirmation" || this.state.phase === "repositionConfirmation" || this.state.phase === "countdown";
   }
 
   canPlaceCoreAt(row: number, col: number): CorePlacementResult {
+    if (this.state.phase === "playerReposition") return this.canRepositionTo(row, col);
     return canPlaceCore(row, col, this.state);
   }
 
@@ -713,19 +884,20 @@ export class GameEngine {
   }
 
   selectCorePlacement(row: number, col: number): CorePlacementResult {
-    const result = canPlaceCore(row, col, this.state);
+    const result = this.state.phase === "playerReposition" ? this.canRepositionTo(row, col) : canPlaceCore(row, col, this.state);
     if (!result.canPlace) return result;
     this.state.selectedPlacementPosition = { x: col, y: row };
     this.state.isPlacementConfirmOpen = true;
-    this.state.phase = "placementConfirmation";
-    this.setMessage("この場所に守る味方を配置して開始しますか？");
+    this.state.phase = this.state.phase === "playerReposition" ? "repositionConfirmation" : "placementConfirmation";
+    this.setMessage(this.state.phase === "repositionConfirmation" ? "再配置場所を確認してください" : "この場所に守る味方を配置して開始しますか？");
     return result;
   }
 
   clearCorePlacementSelection(): void {
     this.state.selectedPlacementPosition = null;
     this.state.isPlacementConfirmOpen = false;
-    this.state.phase = "allyPlacement";
+    this.state.phase = this.state.corePosition ? "playerReposition" : "playerPlacement";
+    this.refreshCorePlacementCache();
   }
 
   private findSafestAutoCoreCell(): Vec2 | null {
@@ -756,7 +928,7 @@ export class GameEngine {
   }
 
   autoPlaceCoreAtSafestCell(): boolean {
-    if (this.state.phase !== "allyPlacement") return false;
+    if (this.state.phase !== "playerPlacement") return false;
     const spot = this.findSafestAutoCoreCell();
     if (!spot) {
       this.setMessage("配置できる空間が見つかりません");
@@ -853,6 +1025,7 @@ export class GameEngine {
   }
 
   private recalcInvaderPath(invader: Invader, force = false): boolean {
+    const nowMs = Date.now();
     const target = this.targetForInvader(invader);
     const current = invaderCell(invader);
 
@@ -864,7 +1037,17 @@ export class GameEngine {
       return true;
     }
 
+    const elapsed = nowMs - (invader.lastPathCalculatedAtMs ?? 0);
+    if (!force && elapsed < PERFORMANCE_CONFIG.pathRecalculationCooldownMs) {
+      return false;
+    }
+
+    if (!this.consumePathfindingBudget()) {
+      return false;
+    }
+
     const crowd = this.crowdMap();
+    this.markPathfindingCall();
     const path = findPathAStarWithCost(this.state.map, current, target, (_, to, toCell) =>
       this.invaderStepCost(invader, to, toCell, crowd),
     );
@@ -872,6 +1055,7 @@ export class GameEngine {
     if (path.length === 0) {
       const dug = this.tryMinerDig(invader, target);
       if (dug) {
+        this.markPathfindingCall();
         const pathRetry = findPathAStarWithCost(this.state.map, current, target, (_, to, toCell) =>
           this.invaderStepCost(invader, to, toCell, this.crowdMap()),
         );
@@ -882,6 +1066,7 @@ export class GameEngine {
           targetPosition: target,
           pathMapVersion: this.mapVersion,
         };
+        invader.lastPathCalculatedAtMs = nowMs;
         invader.path = pathRetry;
         invader.pathIndex = 0;
         return true;
@@ -895,6 +1080,7 @@ export class GameEngine {
       targetPosition: target,
       pathMapVersion: this.mapVersion,
     };
+    invader.lastPathCalculatedAtMs = nowMs;
     invader.path = path;
     invader.pathIndex = 0;
     return true;
@@ -906,9 +1092,50 @@ export class GameEngine {
     return 2;
   }
 
+  private startWaveCountdown(): void {
+    this.state.phase = "countdown";
+    this.state.waveCountdownSec = CORE_PLACEMENT_COUNTDOWN_SEC;
+    this.state.isPlacementConfirmOpen = false;
+    this.state.selectedPlacementPosition = null;
+    this.state.paused = false;
+    this.isWaveStarting = true;
+    this.setMessage("襲撃開始まで 3 秒");
+  }
+
+  private beginBetweenWavePreparation(nextWave: number): void {
+    this.nextWaveNumber = nextWave;
+    this.state.phase = "betweenWavePreparation";
+    this.state.wave.nextWaveInSec = BETWEEN_WAVE_PREPARATION_TIME;
+    this.state.paused = false;
+    this.state.selectedPlacementPosition = null;
+    this.state.isPlacementConfirmOpen = false;
+    this.setMessage("再配置準備フェーズ：位置を選んで次ウェーブを開始してください");
+  }
+
+  private applyCorePosition(next: GridPosition): void {
+    const prev = this.state.corePosition;
+    if (prev && this.state.map[prev.y]?.[prev.x] && this.state.map[prev.y][prev.x].type === "coreRoom") {
+      this.state.map[prev.y][prev.x].type = "empty";
+      this.state.map[prev.y][prev.x].baseType = "empty";
+    }
+    const cell = this.state.map[next.y][next.x];
+    cell.type = "coreRoom";
+    cell.baseType = "coreRoom";
+    this.state.corePosition = { ...next };
+    this.bumpMapVersion();
+  }
+
   confirmCorePlacement(): boolean {
-    if (this.state.phase !== "placementConfirmation" || !this.state.isPlacementConfirmOpen) return false;
-    if (this.placementProcessing) return false;
+    if (
+      this.placementProcessingFlag ||
+      this.isWaveStarting ||
+      (this.state.phase !== "placementConfirmation" && this.state.phase !== "repositionConfirmation")
+    ) {
+      return false;
+    }
+    if (!this.state.isPlacementConfirmOpen) return false;
+
+    if (this.placementProcessingFlag) return false;
 
     const pending = this.state.selectedPlacementPosition;
     if (!pending) {
@@ -916,23 +1143,42 @@ export class GameEngine {
       return false;
     }
 
-    this.placementProcessing = true;
+    this.placementProcessingFlag = true;
+
+    if (this.state.phase === "repositionConfirmation") {
+      const target = pending;
+      const result = this.canRepositionTo(target.y, target.x);
+      if (!result.canPlace) {
+        this.setMessage(result.reason ?? "配置を見直してください");
+        this.state.phase = "playerReposition";
+        this.state.isPlacementConfirmOpen = false;
+        this.refreshCorePlacementCache();
+        this.placementProcessingFlag = false;
+        return false;
+      }
+      this.applyCorePosition(target);
+      for (const inv of this.state.invaders) this.recalcInvaderPath(inv, true);
+      this.startWaveCountdown();
+      this.placementProcessingFlag = false;
+      this.emitHud(true);
+      return true;
+    }
 
     const result = canPlaceCore(pending.y, pending.x, this.state);
     if (!result.canPlace) {
       this.setMessage("選択した場所には配置できなくなりました。別の場所を選択してください");
       this.state.selectedPlacementPosition = null;
       this.state.isPlacementConfirmOpen = false;
-      this.state.phase = "allyPlacement";
+      this.state.phase = "playerPlacement";
       this.refreshCorePlacementCache();
-      this.placementProcessing = false;
+      this.placementProcessingFlag = false;
       return false;
     }
 
     const pathFromEntrance = findPathBfs(this.state.map, this.state.entrancePosition, pending);
     if (pathFromEntrance.length === 0) {
       this.setMessage("敵入口から到達できる場所に魔界核を配置してください");
-      this.placementProcessing = false;
+      this.placementProcessingFlag = false;
       return false;
     }
 
@@ -941,17 +1187,13 @@ export class GameEngine {
     cell.baseType = "coreRoom";
     this.state.corePosition = { ...pending };
     this.state.confirmedAllyPosition = { ...pending };
-    this.state.selectedPlacementPosition = null;
-    this.state.isPlacementConfirmOpen = false;
     this.state.coreHp = 1000;
     this.state.coreMaxHp = 1000;
-    this.state.phase = "countdown";
-    this.state.paused = false;
     this.state.hasGameStarted = false;
+    this.nextWaveNumber = 1;
     this.state.wave.wave = 1;
-    this.state.waveCountdownSec = CORE_PLACEMENT_COUNTDOWN_SEC;
-    this.queuedInWave = enemiesForWave(this.state.wave.wave);
-    this.state.wave.remainingEnemiesInWave = this.queuedInWave;
+    this.queuedInWave = 0;
+    this.state.wave.remainingEnemiesInWave = 0;
     this.state.wave.spawnTimerSec = WAVE_BALANCE.spawnEverySec;
     this.bumpMapVersion();
 
@@ -959,18 +1201,34 @@ export class GameEngine {
       this.recalcInvaderPath(inv, true);
     }
 
-    this.setMessage("守護核を設置しました。襲撃まで 3 秒");
+    this.startWaveCountdown();
     this.pushToast("襲撃開始までカウントダウン", 1.2);
-    this.placementProcessing = false;
+    this.placementProcessingFlag = false;
+    this.emitHud(true);
+    return true;
+  }
+
+  startNextWaveFromCurrentPosition(): boolean {
+    if (this.state.phase !== "repositionConfirmation" || this.placementProcessingFlag || this.isWaveStarting) {
+      return false;
+    }
+    const core = this.state.corePosition;
+    if (!core) return false;
+    const result = this.canRepositionTo(core.y, core.x);
+    if (!result.canPlace) {
+      this.setMessage(result.reason ?? "現在位置では開始できません");
+      return false;
+    }
+    this.startWaveCountdown();
     this.emitHud(true);
     return true;
   }
 
   cancelCorePlacementConfirmation(): void {
-    if (this.state.phase !== "placementConfirmation") return;
+    if (this.state.phase !== "placementConfirmation" && this.state.phase !== "repositionConfirmation") return;
     this.state.selectedPlacementPosition = null;
     this.state.isPlacementConfirmOpen = false;
-    this.state.phase = "allyPlacement";
+    this.state.phase = this.state.corePosition ? "playerReposition" : "playerPlacement";
     this.setMessage("配置場所を選び直してください");
     this.refreshCorePlacementCache();
     this.emitHud(true);
@@ -980,20 +1238,20 @@ export class GameEngine {
     if (this.state.corePlacementRetryCount === 0) {
       this.state.corePlacementRetryCount = 1;
       this.state.remainingDigCount = Math.min(this.state.maxDigCount, this.state.remainingDigCount + 5);
-      this.state.phase = "preparation";
+      this.state.phase = "initialPreparation";
       this.state.paused = false;
       this.state.wave.nextWaveInSec = EXTRA_PREPARATION_TIME_SEC;
       this.setMessage("魔界核を配置できる空間がありません。追加時間内に配置場所を作ってください");
       return;
     }
 
-    this.state.phase = "allyPlacement";
+    this.state.phase = "playerPlacement";
     this.state.paused = true;
     this.setMessage("配置候補が不足しています。自分で掘るか自動配置を選択してください");
   }
 
   private enterCorePlacementPhase(): void {
-    this.state.phase = "allyPlacement";
+    this.state.phase = "playerPlacement";
     this.state.paused = true;
     this.state.wave.nextWaveInSec = 0;
     this.state.selectedPlacementPosition = null;
@@ -1008,12 +1266,20 @@ export class GameEngine {
   }
 
   shouldShowAutoCorePlaceButton(): boolean {
-    return this.state.phase === "allyPlacement" && this.state.corePlacementRetryCount >= 1;
+    return this.state.phase === "playerPlacement" && this.state.corePlacementRetryCount >= 1;
+  }
+
+  beginPlayerReposition(): void {
+    if (this.state.phase !== "betweenWavePreparation" && this.state.phase !== "playerReposition") return;
+    this.state.phase = "playerReposition";
+    this.state.isPlacementConfirmOpen = false;
+    this.refreshCorePlacementCache();
+    this.setMessage("次ウェーブの守護位置を選択してください");
   }
 
   resumePreparationForCorePlacement(): void {
-    if (this.state.phase !== "allyPlacement" && this.state.phase !== "placementConfirmation") return;
-    this.state.phase = "preparation";
+    if (this.state.phase !== "playerPlacement" && this.state.phase !== "placementConfirmation") return;
+    this.state.phase = "initialPreparation";
     this.state.paused = false;
     this.state.selectedPlacementPosition = null;
     this.state.isPlacementConfirmOpen = false;
@@ -1041,9 +1307,6 @@ export class GameEngine {
   }
 
   spawnMonsterFromFirstNest(kind: string): void {
-    if (hasReachedMonsterLimit(this.state.currentMonsterCount, this.state.maxMonsterCount)) {
-      return;
-    }
     if (this.state.nests.length === 0) {
       this.setMessage("先に巣を配置してください");
       return;
@@ -1101,6 +1364,7 @@ export class GameEngine {
         targetPosition: target,
         pathMapVersion: -1,
       },
+      lastPathCalculatedAtMs: 0,
       repathTimer: randomFloat() * 0.6,
       attackTimer: 0,
       stuckSec: 0,
@@ -1114,21 +1378,24 @@ export class GameEngine {
   }
 
   private updatePhaseTimers(dt: number, realDt: number): void {
-    if (this.state.phase === "preparation") {
+    if (this.state.phase === "initialPreparation") {
       this.state.wave.nextWaveInSec -= dt;
       if (this.state.wave.nextWaveInSec <= 0) this.enterCorePlacementPhase();
       return;
     }
 
-    if (this.state.phase === "waveResult") {
+    if (this.state.phase === "waveComplete") {
+      this.beginBetweenWavePreparation(this.state.wave.wave + 1);
+      return;
+    }
+
+    if (this.state.phase === "betweenWavePreparation") {
       this.state.wave.nextWaveInSec -= dt;
-      if (this.state.wave.nextWaveInSec <= 0) {
-        this.state.phase = "wave";
-        this.state.paused = false;
-        this.state.wave.wave += 1;
-        this.queuedInWave = enemiesForWave(this.state.wave.wave);
-        this.state.wave.remainingEnemiesInWave = this.queuedInWave;
-        this.state.wave.spawnTimerSec = 0;
+      if (this.state.wave.nextWaveInSec <= 0 && this.state.phase === "betweenWavePreparation") {
+        this.state.wave.nextWaveInSec = 0;
+        this.state.phase = "playerReposition";
+        this.refreshCorePlacementCache();
+        this.setMessage("再配置を確定すると次のウェーブが始まります");
       }
       return;
     }
@@ -1139,6 +1406,13 @@ export class GameEngine {
       const after = Math.ceil(this.state.waveCountdownSec);
       if (after !== before && after > 0) this.setMessage(`${after}`);
       if (before > 0 && after === 0) {
+        if (this.isWaveStarting) {
+          this.state.wave.wave = this.nextWaveNumber;
+          this.queuedInWave = enemiesForWave(this.state.wave.wave);
+          this.state.wave.remainingEnemiesInWave = this.queuedInWave;
+          this.state.wave.spawnTimerSec = 0;
+          this.isWaveStarting = false;
+        }
         this.state.phase = "wave";
         this.state.hasGameStarted = true;
         this.state.paused = false;
@@ -1164,6 +1438,9 @@ export class GameEngine {
         this.state.phase = "victory";
         return;
       }
+      if (this.lastCompletedWave === this.state.wave.wave) return;
+      this.lastCompletedWave = this.state.wave.wave;
+
       const recovered = Math.min(
         this.state.maxDigCount,
         this.state.remainingDigCount + DIG_RECOVERY_PER_WAVE,
@@ -1172,8 +1449,12 @@ export class GameEngine {
         this.state.remainingDigCount = recovered;
         this.pushToast("ウェーブ突破報酬：掘削回数が10回復しました", 2.4);
       }
-      this.state.phase = "waveResult";
-      this.state.wave.nextWaveInSec = WAVE_BALANCE.betweenWaveSec;
+      const hpRecoveryAmount = Math.floor(this.state.coreMaxHp * 0.2);
+      this.state.coreHp = Math.min(this.state.coreMaxHp, this.state.coreHp + hpRecoveryAmount);
+      this.state.phase = "waveComplete";
+      this.state.wave.nextWaveInSec = BETWEEN_WAVE_PREPARATION_TIME;
+      this.pushToast(`Wave ${this.state.wave.wave} クリア！`, 2.6);
+      this.setMessage(`Wave ${this.state.wave.wave} クリア！`);
     }
   }
 
@@ -1314,7 +1595,7 @@ export class GameEngine {
     return { x: Math.floor(monster.position.x), y: Math.floor(monster.position.y) };
   }
 
-  private ensureMonsterAiDefaults(monster: { behavior: typeof DEFAULT_ALLY_BEHAVIOR; movementState: AllyMovementState; position: Vec2 }, nowMs: number): void {
+  private ensureMonsterAiDefaults(monster: { behavior: AllyBehaviorProfile; movementState: AllyMovementState; position: Vec2 }, nowMs: number): void {
     if (!monster.behavior) {
       monster.behavior = { ...DEFAULT_ALLY_BEHAVIOR };
     } else {
@@ -1384,10 +1665,50 @@ export class GameEngine {
     return this.state.invaders.find((inv) => inv.id === id && inv.state !== "dead") ?? null;
   }
 
+  private spatialKey(row: number, col: number): string {
+    const gr = Math.floor(row / this.spatialCellSize);
+    const gc = Math.floor(col / this.spatialCellSize);
+    return `${gr}:${gc}`;
+  }
+
+  private rebuildInvaderSpatialGrid(): void {
+    this.invaderSpatialGrid.clear();
+    for (const inv of this.state.invaders) {
+      if (inv.state === "dead") continue;
+      const c = invaderCell(inv);
+      const key = this.spatialKey(c.y, c.x);
+      const bucket = this.invaderSpatialGrid.get(key);
+      if (bucket) bucket.push(inv);
+      else this.invaderSpatialGrid.set(key, [inv]);
+    }
+  }
+
+  private queryNearbyInvaders(from: GridPosition, range: number): Invader[] {
+    const out: Invader[] = [];
+    const minRow = from.y - range;
+    const maxRow = from.y + range;
+    const minCol = from.x - range;
+    const maxCol = from.x + range;
+    const gMinRow = Math.floor(minRow / this.spatialCellSize);
+    const gMaxRow = Math.floor(maxRow / this.spatialCellSize);
+    const gMinCol = Math.floor(minCol / this.spatialCellSize);
+    const gMaxCol = Math.floor(maxCol / this.spatialCellSize);
+
+    for (let gr = gMinRow; gr <= gMaxRow; gr += 1) {
+      for (let gc = gMinCol; gc <= gMaxCol; gc += 1) {
+        const bucket = this.invaderSpatialGrid.get(`${gr}:${gc}`);
+        if (!bucket) continue;
+        for (const inv of bucket) out.push(inv);
+      }
+    }
+
+    return out;
+  }
+
   private pickAllyTarget(monster: {
     id: string;
     kind: string;
-    behavior: typeof DEFAULT_ALLY_BEHAVIOR;
+    behavior: AllyBehaviorProfile;
     movementState: AllyMovementState;
     position: Vec2;
   }, assignments: Map<string, number>): Invader | null {
@@ -1395,8 +1716,7 @@ export class GameEngine {
     const core = this.chooseCorePosition() ?? this.state.playerStartPosition;
     const detection = Math.max(3, monster.behavior.detectionRange);
 
-    const candidates = this.state.invaders
-      .filter((inv) => inv.state !== "dead")
+    const candidates = this.queryNearbyInvaders(from, detection)
       .map((inv) => ({ inv, cell: invaderCell(inv), manhattan: getManhattanDistance(from, invaderCell(inv)) }))
       .filter((entry) => entry.manhattan <= detection)
       .sort((a, b) => a.manhattan - b.manhattan)
@@ -1453,8 +1773,10 @@ export class GameEngine {
     return randomPick(candidates);
   }
 
-  private buildAllyPath(monster: { id: string; behavior: typeof DEFAULT_ALLY_BEHAVIOR }, start: GridPosition, goal: GridPosition): GridPosition[] {
+  private buildAllyPath(monster: { id: string; behavior: AllyBehaviorProfile }, start: GridPosition, goal: GridPosition): GridPosition[] {
+    if (!this.consumePathfindingBudget()) return [];
     const occ = this.allyOccupancy(monster.id);
+    this.markPathfindingCall();
     return findPathAStarWithCost(this.state.map, start, goal, (_from, to, toCell) => {
       if (!isPassableCellType(toCell.type)) return Number.POSITIVE_INFINITY;
       const key = cellKey(to.y, to.x);
@@ -1723,11 +2045,22 @@ export class GameEngine {
   }
 
   private updateMonsters(dt: number): void {
-    if (this.state.paused || this.state.phase === "allyPlacement" || this.state.phase === "placementConfirmation" || this.state.phase === "countdown") {
+    if (
+      this.state.paused ||
+      this.state.phase === "playerPlacement" ||
+      this.state.phase === "playerReposition" ||
+      this.state.phase === "placementConfirmation" ||
+      this.state.phase === "repositionConfirmation" ||
+      this.state.phase === "countdown"
+    ) {
       return;
     }
 
     const nowMs = Date.now();
+    const activeEnemyCount = this.state.invaders.filter((inv) => inv.state !== "dead").length;
+    if (activeEnemyCount > 0) {
+      this.rebuildInvaderSpatialGrid();
+    }
     const assignments = new Map<string, number>();
     for (const ally of this.state.monsters) {
       if (!ally.isActive || ally.state === "dead") continue;
@@ -1755,10 +2088,14 @@ export class GameEngine {
         continue;
       }
 
-      let target = this.findInvaderById(movement.targetEnemyId);
+      let target = activeEnemyCount === 0 ? null : this.findInvaderById(movement.targetEnemyId);
       const timeSinceDetect = nowMs - movement.lastDetectionAt;
-      if (!target || timeSinceDetect >= ALLY_DETECTION_INTERVAL) {
+      const detectionIntervalMs = this.lowPowerMode
+        ? PERFORMANCE_CONFIG.lowPowerDetectionIntervalMs
+        : ALLY_DETECTION_INTERVAL;
+      if (activeEnemyCount > 0 && timeSinceDetect >= detectionIntervalMs) {
         movement.lastDetectionAt = nowMs;
+        this.markDetectionCall();
         const nextTarget = this.pickAllyTarget(monster, assignments);
         if (nextTarget && nextTarget.id !== movement.targetEnemyId) {
           if (movement.targetEnemyId) {
@@ -1894,15 +2231,27 @@ export class GameEngine {
   }
 
   tick(deltaSecRaw: number): void {
+    this.pathfindingBudget = PERFORMANCE_CONFIG.maxPathfindingPerLogicStep;
+
     if (this.state.phase === "gameOver" || this.state.phase === "victory") {
       this.updateUiEffects(deltaSecRaw);
       this.emitHud(true);
+      if (isDeepLabPerfEnabled()) {
+        deepLabPerfMonitor().updateSceneCounts({
+          allies: this.state.monsters.filter((m) => m.isActive && m.state !== "dead").length,
+          enemies: this.state.invaders.filter((inv) => inv.state !== "dead").length,
+          projectiles: 0,
+          effects: this.state.spawnEffects.length + this.state.digBreakEffects.length,
+        });
+      }
       return;
     }
 
     const frozenByPhase =
-      this.state.phase === "allyPlacement" ||
+      this.state.phase === "playerPlacement" ||
+      this.state.phase === "playerReposition" ||
       this.state.phase === "placementConfirmation" ||
+      this.state.phase === "repositionConfirmation" ||
       this.state.phase === "countdown";
     const frozen = this.state.paused || frozenByPhase;
     const deltaSec = frozen ? 0 : deltaSecRaw * this.state.gameSpeed;
@@ -1921,6 +2270,15 @@ export class GameEngine {
     this.updateMonsters(deltaSec);
 
     this.emitHud();
+
+    if (isDeepLabPerfEnabled()) {
+      deepLabPerfMonitor().updateSceneCounts({
+        allies: this.state.monsters.filter((m) => m.isActive && m.state !== "dead").length,
+        enemies: this.state.invaders.filter((inv) => inv.state !== "dead").length,
+        projectiles: 0,
+        effects: this.state.spawnEffects.length + this.state.digBreakEffects.length,
+      });
+    }
   }
 
   getCellAt(row: number, col: number): MapCell | null {
@@ -1943,6 +2301,8 @@ export class GameEngine {
     soilLabel: string;
     depthLabel: string;
     spawnTierLabel: string;
+    rarityExpectationLabel: string;
+    candidateRarityBand: string;
     spawnRate: number;
     spawnCandidates: string;
     diggable: boolean;
@@ -1978,11 +2338,17 @@ export class GameEngine {
       soilLabel: soilLabelByType[cell.type] ?? cell.type,
       depthLabel: DEPTH_LAYER_COLORS[depthLayer].name,
       spawnTierLabel: getMonsterSpawnTierLabel(spawnTier),
+      rarityExpectationLabel: getRarityExpectationLabelByDepth(row),
+      candidateRarityBand: getCandidateRarityBandByDepth(row),
       spawnRate,
-      spawnCandidates: pickSpawnCandidatesBySoil(cell.type),
+      spawnCandidates: pickSpawnCandidatesBySoil(cell.type, row),
       diggable: this.isCellDiggable(row, col),
       materialLabel: material ? materialLabelByKey[material] ?? material : "なし",
     };
+  }
+
+  getPlayerFocusPosition(): GridPosition {
+    return this.state.corePosition ?? this.state.playerStartPosition;
   }
 
   refreshDerivedState(): void {
@@ -1990,16 +2356,84 @@ export class GameEngine {
     this.emitHud(true);
   }
 
+  debugEnsureWaveRunning(): void {
+    if (process.env.NODE_ENV === "production") return;
+    if (!this.state.corePosition) {
+      const p = this.state.playerStartPosition;
+      this.state.map[p.y][p.x].type = "coreRoom";
+      this.state.map[p.y][p.x].baseType = "coreRoom";
+      this.state.corePosition = { ...p };
+      this.state.coreHp = 1000;
+      this.state.coreMaxHp = 1000;
+      this.bumpMapVersion();
+    }
+    this.state.phase = "wave";
+    this.state.paused = false;
+    this.state.hasGameStarted = true;
+    this.emitHud(true);
+  }
+
+  debugSpawnAllies(count: number): void {
+    if (process.env.NODE_ENV === "production") return;
+    this.debugEnsureWaveRunning();
+    const kinds = MONSTER_BLUEPRINTS.map((bp) => bp.id);
+    const limit = Math.max(0, Math.floor(count));
+    const passableCells: GridPosition[] = [];
+    for (let row = 1; row < GRID_ROWS - 1; row += 1) {
+      for (let col = 1; col < GRID_COLS - 1; col += 1) {
+        if (!isPassableCellType(this.state.map[row][col].type)) continue;
+        passableCells.push({ x: col, y: row });
+      }
+    }
+    if (passableCells.length === 0) return;
+
+    for (let i = 0; i < limit; i += 1) {
+      const kind = randomPick(kinds);
+      const cell = randomPick(passableCells);
+      const row = cell.y;
+      const col = cell.x;
+      const monster = spawnMonsterFromNest(kind, { x: col + 0.5, y: row + 0.5 });
+      this.state.monsters.push(monster);
+    }
+    this.refreshDerivedState();
+  }
+
+  debugSpawnInvaders(count: number): void {
+    if (process.env.NODE_ENV === "production") return;
+    this.debugEnsureWaveRunning();
+    const limit = Math.max(0, Math.floor(count));
+    for (let i = 0; i < limit; i += 1) {
+      this.spawnInvader();
+    }
+    this.emitHud(true);
+  }
+
+  debugSpawnDigEffects(count: number): void {
+    if (process.env.NODE_ENV === "production") return;
+    const limit = Math.max(0, Math.floor(count));
+    for (let i = 0; i < limit; i += 1) {
+      const row = randomInt(1, GRID_ROWS - 2);
+      const col = randomInt(1, GRID_COLS - 2);
+      const type = this.state.map[row][col].type;
+      if (!this.isSoilType(type)) continue;
+      this.pushDigBreakEffect(row, col, type);
+    }
+  }
+
   restart(): void {
     const fresh = new GameEngine();
     this.state = fresh.state;
+    fresh.dispose();
     this.mapVersion = 1;
     this.dragVisited.clear();
     this.lastDragCell = null;
     this.queuedInWave = 0;
     this.corePlaceableKeys.clear();
     this.invaderSerial = 0;
-    this.placementProcessing = false;
+    this.placementProcessingFlag = false;
+    this.isWaveStarting = false;
+    this.lastCompletedWave = 0;
+    this.nextWaveNumber = 1;
     this.phaseBeforePause = null;
     this.emitHud(true);
   }

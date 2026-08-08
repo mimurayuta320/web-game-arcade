@@ -24486,6 +24486,29 @@ export default function Home() {
                   ? [...handState.concealedHand]
                   : [...handState.concealedHand, handState.drawnTile];
                 const riichiSelectableIndexes = mahjongRiichiPending ? mahjongFindRiichiDiscardIndexes(normalizedHand) : null;
+                const selfConcealedHandView = handState.concealedHand.map((tile, index) => ({
+                  instanceId: `concealed-${index}-${tile}`,
+                  tile,
+                }));
+                const selfDrawnTileView = handState.drawnTile === null
+                  ? null
+                  : {
+                    instanceId: `drawn-${handState.drawnTile}`,
+                    tile: handState.drawnTile,
+                  };
+                const selfSelectedTileId = (() => {
+                  if (mahjongSelected === null) return null;
+                  if (selfDrawnTileView && mahjongSelected === handState.concealedHand.length) return selfDrawnTileView.instanceId;
+                  return selfConcealedHandView[mahjongSelected]?.instanceId ?? null;
+                })();
+                const selfSelectableTileIds = riichiSelectableIndexes
+                  ? riichiSelectableIndexes
+                    .map((index) => {
+                      if (selfDrawnTileView && index === handState.concealedHand.length) return selfDrawnTileView.instanceId;
+                      return selfConcealedHandView[index]?.instanceId ?? null;
+                    })
+                    .filter((id): id is string => id !== null)
+                  : null;
 
                 const centerInfo = {
                   roundLabel: `${mahjongRoundWind}${Math.min(mahjongRuleConfig.maxRoundPerWind, mahjongRoundNumber)}局`,
@@ -24699,15 +24722,15 @@ export default function Home() {
                     topPlayer={topPlayer}
                     leftPlayer={leftPlayer}
                     rightPlayer={rightPlayer}
-                    selfConcealedHand={handState.concealedHand}
-                    selfDrawnTile={handState.drawnTile}
-                    selfSelectedIndex={mahjongSelected}
+                    selfConcealedHand={selfConcealedHandView}
+                    selfDrawnTile={selfDrawnTileView}
+                    selfSelectedTileId={selfSelectedTileId}
                     riichiTileIndex={mahjongRiichiTileIndex}
                     latestDiscardSeat={latestDiscardSeat}
                     centerInfo={centerInfo}
                     actionButtons={actionButtons}
                     actionDeadlineAt={mahjongActionDeadlineAt}
-                    selfSelectableTileIndexes={riichiSelectableIndexes}
+                    selfSelectableTileIds={selfSelectableTileIds}
                     enableActionSound={!mahjongReduceEffects}
                     roundResult={roundResult}
                     gameResultSummary={[]}
@@ -24850,8 +24873,12 @@ export default function Home() {
                         },
                       },
                     ]}
-                    onSelfTileClick={(index) => {
+                    onSelfTileClick={({ tileId, source }) => {
                       if (!gameStarted.mahjong) return;
+                      const index = source === "drawn"
+                        ? handState.concealedHand.length
+                        : selfConcealedHandView.findIndex((tile) => tile.instanceId === tileId);
+                      if (index < 0) return;
                       onMahjongTileClick(index);
                     }}
                     onCloseRoundResult={() => {

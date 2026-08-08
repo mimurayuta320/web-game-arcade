@@ -1,4 +1,6 @@
 type Point = { x: number; y: number };
+type TouchPointLike = { clientX: number; clientY: number };
+type TouchCollectionLike = ArrayLike<TouchPointLike>;
 
 export class InputManager {
   private pinchDistance = 0;
@@ -8,7 +10,7 @@ export class InputManager {
     return Boolean(node?.closest("[data-ui-panel='true']"));
   }
 
-  getTouchCenter(touches: TouchList): Point {
+  getTouchCenter(touches: TouchCollectionLike): Point {
     if (touches.length === 0) return { x: 0, y: 0 };
     if (touches.length === 1) return { x: touches[0].clientX, y: touches[0].clientY };
     const a = touches[0];
@@ -16,7 +18,7 @@ export class InputManager {
     return { x: (a.clientX + b.clientX) * 0.5, y: (a.clientY + b.clientY) * 0.5 };
   }
 
-  updatePinchScale(touches: TouchList): number | null {
+  updatePinchScale(touches: TouchCollectionLike): number | null {
     if (touches.length < 2) {
       this.pinchDistance = 0;
       return null;

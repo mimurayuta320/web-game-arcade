@@ -43,7 +43,7 @@ export function BestiaryPanel({ entries }: Props) {
               <p className="dlMuted">{entry.discovered ? entry.description : "未発見の魔物です"}</p>
               {def ? (
                 <p className="dlCost">
-                  HP:{def.maxHp} / 攻撃:{def.attack} / 防御:{def.defense} / 射程:{def.range}
+                  HP:{def.maxHp} / 攻撃:{def.attackPower} / 防御:{def.defense} / 射程:{def.attackRange}
                 </p>
               ) : null}
               {def ? (

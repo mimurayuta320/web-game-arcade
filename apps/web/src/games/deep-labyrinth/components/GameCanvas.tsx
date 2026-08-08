@@ -2,22 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  DEPTH_LAYER_COUNT,
   DEPTH_LAYER_COLORS,
   DEPTH_LAYER_HEIGHT,
   GRID_COLS,
   GRID_ROWS,
   MIN_CELL_SIZE,
+  PERFORMANCE_CONFIG,
   getDepthLayer,
 } from "../data/balance";
 import type { Direction, MapCell, Monster, MonsterSpawnTier, TileVariant } from "../types/game";
 import { InputManager } from "../core/InputManager";
 import { GameEngine } from "../core/GameEngine";
+import { deepLabPerfMonitor, isDeepLabPerfEnabled } from "../core/performance";
 
 type Props = {
   engine: GameEngine;
   onSelectCell: (cell: MapCell | null) => void;
   showExactSpawnRate: boolean;
   reduceGlowAnimation: boolean;
+  lowPowerMode: boolean;
 };
 
 type DrawMetrics = {
@@ -40,6 +44,8 @@ type InspectInfo = {
   soilLabel: string;
   depthLabel: string;
   spawnTierLabel: string;
+  rarityExpectationLabel: string;
+  candidateRarityBand: string;
   spawnRate: number;
   spawnCandidates: string;
   diggable: boolean;
@@ -312,9 +318,16 @@ function drawMonster(
   ctx.arc(cx - size * 0.28, cy - size * 0.1, size * 0.12, 0, Math.PI * 2);
   ctx.arc(cx + size * 0.28, cy - size * 0.1, size * 0.12, 0, Math.PI * 2);
   ctx.fill();
+
+  const rarityMark = monster.rarity === "epic" ? "★" : monster.rarity === "rare" ? "◆" : monster.rarity === "uncommon" ? "▲" : "●";
+  const rarityColor = monster.rarity === "epic" ? "#d9b15f" : monster.rarity === "rare" ? "#7b7ff4" : monster.rarity === "uncommon" ? "#79dc8f" : "#f2f7ff";
+  ctx.fillStyle = rarityColor;
+  ctx.font = `${Math.max(8, Math.floor(size * 0.95))}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.fillText(rarityMark, cx, cy - size * 1.02);
 }
 
-function soilParticleColor(soilType: string, layer: 0 | 1 | 2): string {
+function soilParticleColor(soilType: string, layer: ReturnType<typeof getDepthLayer>): string {
   const base = DEPTH_LAYER_COLORS[layer].particle;
   if (soilType === "magicSoil") return blendColor(base, "#8f78df", 0.5);
   if (soilType === "moistSoil") return blendColor(base, "#59bca9", 0.5);
@@ -398,11 +411,32 @@ function drawSpawnTierOverlay(
     ctx.lineTo(x + size * 0.9, y + size * 0.9);
     ctx.stroke();
   }
+
+  if (getDepthLayer(cell.row) >= 3) {
+    ctx.fillStyle = "rgba(255, 240, 176, 0.88)";
+    ctx.beginPath();
+    ctx.moveTo(x + size * 0.78, y + size * 0.22);
+    ctx.lineTo(x + size * 0.83, y + size * 0.33);
+    ctx.lineTo(x + size * 0.95, y + size * 0.35);
+    ctx.lineTo(x + size * 0.86, y + size * 0.43);
+    ctx.lineTo(x + size * 0.89, y + size * 0.55);
+    ctx.lineTo(x + size * 0.78, y + size * 0.49);
+    ctx.lineTo(x + size * 0.67, y + size * 0.55);
+    ctx.lineTo(x + size * 0.7, y + size * 0.43);
+    ctx.lineTo(x + size * 0.61, y + size * 0.35);
+    ctx.lineTo(x + size * 0.73, y + size * 0.33);
+    ctx.closePath();
+    ctx.fill();
+  }
 }
 
-export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlowAnimation }: Props) {
+export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlowAnimation, lowPowerMode }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const staticLayerRef = useRef<HTMLCanvasElement | null>(null);
+  const staticLayerMapVersionRef = useRef(-1);
+  const staticLayerCellSizeRef = useRef(-1);
+  const cameraRef = useRef<CameraState>({ zoom: 1, offsetX: 0, offsetY: 0 });
   const [metrics, setMetrics] = useState<DrawMetrics>({
     cellSize: 20,
     width: GRID_COLS * 20,
@@ -420,8 +454,12 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const pinchCenterRef = useRef<{ x: number; y: number } | null>(null);
-  const isSpaceDownRef = useRef(false);
+  const isShiftDownRef = useRef(false);
   const longPressTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    cameraRef.current = camera;
+  }, [camera]);
 
   const clampCamera = useCallback(
     (next: CameraState): CameraState => {
@@ -505,6 +543,9 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
   useEffect(() => {
     return () => {
       if (longPressTimerRef.current) {
+        if (isDeepLabPerfEnabled()) {
+          deepLabPerfMonitor().registerTimerStop("longPressInspect");
+        }
         window.clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
       }
@@ -517,10 +558,10 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Space") isSpaceDownRef.current = true;
+      if (event.code === "ShiftLeft" || event.code === "ShiftRight") isShiftDownRef.current = true;
     };
     const onKeyUp = (event: KeyboardEvent) => {
-      if (event.code === "Space") isSpaceDownRef.current = false;
+      if (event.code === "ShiftLeft" || event.code === "ShiftRight") isShiftDownRef.current = false;
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -531,6 +572,123 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
   }, []);
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      if (!canvasRef.current) return;
+
+      const current = hoverCell ?? (() => {
+        const p = engine.getPlayerFocusPosition();
+        return { row: p.y, col: p.x };
+      })();
+
+      let nextRow = current.row;
+      let nextCol = current.col;
+      let moved = false;
+
+      if (event.code === "ArrowUp" || event.code === "KeyW") {
+        nextRow = Math.max(0, current.row - 1);
+        moved = true;
+      } else if (event.code === "ArrowDown" || event.code === "KeyS") {
+        nextRow = Math.min(GRID_ROWS - 1, current.row + 1);
+        moved = true;
+      } else if (event.code === "ArrowLeft" || event.code === "KeyA") {
+        nextCol = Math.max(0, current.col - 1);
+        moved = true;
+      } else if (event.code === "ArrowRight" || event.code === "KeyD") {
+        nextCol = Math.min(GRID_COLS - 1, current.col + 1);
+        moved = true;
+      } else if (event.code === "Space") {
+        event.preventDefault();
+        engine.beginDrag();
+        engine.digAtCell(current.row, current.col, false);
+        engine.endDrag();
+        onSelectCell(engine.getCellAt(current.row, current.col));
+        const info = engine.inspectCell(current.row, current.col);
+        setInspectInfo(
+          info
+            ? {
+                row: current.row,
+                col: current.col,
+                ...info,
+              }
+            : null,
+        );
+        return;
+      }
+
+      if (!moved) return;
+      event.preventDefault();
+      setHoverCell({ row: nextRow, col: nextCol });
+      onSelectCell(engine.getCellAt(nextRow, nextCol));
+      const info = engine.inspectCell(nextRow, nextCol);
+      setInspectInfo(
+        info
+          ? {
+              row: nextRow,
+              col: nextCol,
+              ...info,
+            }
+          : null,
+      );
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [engine, hoverCell, onSelectCell]);
+
+  const ensureStaticLayer = useCallback(() => {
+    const state = engine.getRenderState();
+    const needsRedraw =
+      !staticLayerRef.current ||
+      staticLayerMapVersionRef.current !== state.mapVersion ||
+      staticLayerCellSizeRef.current !== metrics.cellSize;
+
+    if (!needsRedraw) return;
+
+    const staticCanvas = document.createElement("canvas");
+    staticCanvas.width = Math.max(1, Math.floor(metrics.width));
+    staticCanvas.height = Math.max(1, Math.floor(metrics.height));
+    const staticCtx = staticCanvas.getContext("2d");
+    if (!staticCtx) return;
+
+    for (let row = 0; row < GRID_ROWS; row += 1) {
+      for (let col = 0; col < GRID_COLS; col += 1) {
+        const cell = state.map[row][col];
+        const x = col * metrics.cellSize;
+        const y = row * metrics.cellSize;
+
+        if (cell.type === "empty" || cell.type === "coreRoom" || cell.type === "entrance" || cell.type === "nest" || cell.type === "trap") {
+          const layer = getDepthLayer(row);
+          const floorBase =
+            cell.type === "coreRoom"
+              ? blendColor(DEPTH_LAYER_COLORS[layer].base, "#4a1e56", 0.4)
+              : cell.type === "entrance"
+                ? blendColor(DEPTH_LAYER_COLORS[layer].base, "#80432f", 0.55)
+                : blendColor(DEPTH_LAYER_COLORS[layer].base, "#16202a", 0.6);
+          staticCtx.fillStyle = applyBrightness(floorBase, cell.tileVariant.brightness - 2);
+          staticCtx.fillRect(x, y, metrics.cellSize, metrics.cellSize);
+          staticCtx.strokeStyle = "rgba(205,218,230,0.08)";
+          staticCtx.strokeRect(x + 0.5, y + 0.5, metrics.cellSize - 1, metrics.cellSize - 1);
+        } else {
+          drawSoilTile(staticCtx, cell, x, y, metrics.cellSize);
+          // Cache base spawn-tier visuals and keep pulse animation for the dynamic layer only.
+          drawSpawnTierOverlay(staticCtx, cell, x, y, metrics.cellSize, 0.75, false);
+        }
+
+        if (state.playerAreaCells.some((p) => p.x === col && p.y === row)) {
+          staticCtx.fillStyle = "rgba(103,138,237,0.14)";
+          staticCtx.fillRect(x, y, metrics.cellSize, metrics.cellSize);
+        }
+      }
+    }
+
+    staticLayerRef.current = staticCanvas;
+    staticLayerMapVersionRef.current = state.mapVersion;
+    staticLayerCellSizeRef.current = metrics.cellSize;
+  }, [engine, metrics.cellSize, metrics.height, metrics.width]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -539,10 +697,19 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
     let rafId = 0;
 
     const render = () => {
+      const frameStart = typeof performance !== "undefined" ? performance.now() : Date.now();
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        rafId = window.requestAnimationFrame(render);
+        return;
+      }
       const state = engine.getRenderState();
       const debug = engine.getDebugOverlay();
       const nowMs = Date.now();
-      const dpr = window.devicePixelRatio || 1;
+      const rawDpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(
+        rawDpr,
+        lowPowerMode ? PERFORMANCE_CONFIG.lowPowerRenderPixelRatio : PERFORMANCE_CONFIG.maxRenderPixelRatio,
+      );
       const drawW = Math.floor(metrics.viewportWidth);
       const drawH = Math.floor(metrics.viewportHeight);
 
@@ -554,13 +721,7 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, drawW, drawH);
 
-      const clampedCamera = clampCamera(camera);
-      if (
-        Math.abs(clampedCamera.offsetX - camera.offsetX) > 0.5 ||
-        Math.abs(clampedCamera.offsetY - camera.offsetY) > 0.5
-      ) {
-        setCamera(clampedCamera);
-      }
+      const clampedCamera = clampCamera(cameraRef.current);
 
       const focusRow = (-clampedCamera.offsetY + drawH * 0.5) / (metrics.cellSize * clampedCamera.zoom);
       engine.setCameraFocusRow(focusRow);
@@ -574,46 +735,39 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
       const viewRight = viewLeft + drawW / clampedCamera.zoom;
       const viewBottom = viewTop + drawH / clampedCamera.zoom;
 
+      ensureStaticLayer();
+      if (staticLayerRef.current) {
+        ctx.drawImage(staticLayerRef.current, 0, 0);
+      }
+
       for (let row = 0; row < GRID_ROWS; row += 1) {
         for (let col = 0; col < GRID_COLS; col += 1) {
           const cell = state.map[row][col];
           const x = col * metrics.cellSize;
           const y = row * metrics.cellSize;
 
-          if (cell.type === "empty" || cell.type === "coreRoom" || cell.type === "entrance" || cell.type === "nest" || cell.type === "trap") {
-            const layer = getDepthLayer(row);
-            const floorBase =
-              cell.type === "coreRoom"
-                ? blendColor(DEPTH_LAYER_COLORS[layer].base, "#4a1e56", 0.4)
-                : cell.type === "entrance"
-                  ? blendColor(DEPTH_LAYER_COLORS[layer].base, "#80432f", 0.55)
-                  : blendColor(DEPTH_LAYER_COLORS[layer].base, "#16202a", 0.6);
-            ctx.fillStyle = applyBrightness(floorBase, cell.tileVariant.brightness - 2);
-            ctx.fillRect(x, y, metrics.cellSize, metrics.cellSize);
-            ctx.strokeStyle = "rgba(205,218,230,0.08)";
-            ctx.strokeRect(x + 0.5, y + 0.5, metrics.cellSize - 1, metrics.cellSize - 1);
-          } else {
-            drawSoilTile(ctx, cell, x, y, metrics.cellSize);
-            const isOnScreen =
-              x + metrics.cellSize >= viewLeft &&
-              x <= viewRight &&
-              y + metrics.cellSize >= viewTop &&
-              y <= viewBottom;
-            const pulse = 0.5 + Math.sin((nowMs + row * 41 + col * 23) * 0.0022) * 0.5;
-            drawSpawnTierOverlay(
-              ctx,
-              cell,
-              x,
-              y,
-              metrics.cellSize,
-              pulse,
-              isOnScreen && !reduceGlowAnimation,
-            );
+          if (
+            x + metrics.cellSize < viewLeft ||
+            x > viewRight ||
+            y + metrics.cellSize < viewTop ||
+            y > viewBottom
+          ) {
+            continue;
           }
 
-          if (state.playerAreaCells.some((p) => p.x === col && p.y === row)) {
-            ctx.fillStyle = "rgba(103,138,237,0.14)";
-            ctx.fillRect(x, y, metrics.cellSize, metrics.cellSize);
+          if (cell.type !== "empty" && cell.type !== "coreRoom" && cell.type !== "entrance" && cell.type !== "nest" && cell.type !== "trap") {
+            if (cell.spawnTier !== "normal") {
+              const pulse = 0.5 + Math.sin((nowMs + row * 41 + col * 23) * 0.0022) * 0.5;
+              drawSpawnTierOverlay(
+                ctx,
+                cell,
+                x,
+                y,
+                metrics.cellSize,
+                pulse,
+                !reduceGlowAnimation && !lowPowerMode,
+              );
+            }
           }
 
           if (engine.isCorePlacementPhase()) {
@@ -641,7 +795,8 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
         }
       }
 
-      for (const boundaryRow of [DEPTH_LAYER_HEIGHT, DEPTH_LAYER_HEIGHT * 2]) {
+      for (let layer = 1; layer < DEPTH_LAYER_COUNT; layer += 1) {
+        const boundaryRow = layer * DEPTH_LAYER_HEIGHT;
         const y = boundaryRow * metrics.cellSize;
         ctx.strokeStyle = "rgba(205, 189, 166, 0.16)";
         ctx.lineWidth = 1;
@@ -654,9 +809,10 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
       ctx.fillStyle = "rgba(225,236,255,0.75)";
       ctx.font = `${Math.max(11, Math.floor(metrics.cellSize * 0.43))}px sans-serif`;
       ctx.textAlign = "left";
-      for (const layer of [0, 1, 2] as const) {
+      for (let layer = 0; layer < DEPTH_LAYER_COUNT; layer += 1) {
+        const layerKey = layer as keyof typeof DEPTH_LAYER_COLORS;
         const labelY = (layer * DEPTH_LAYER_HEIGHT + DEPTH_LAYER_HEIGHT * 0.5) * metrics.cellSize;
-        ctx.fillText(DEPTH_LAYER_COLORS[layer].name, 6, labelY);
+        ctx.fillText(DEPTH_LAYER_COLORS[layerKey].name, 6, labelY);
       }
 
       if (state.selectedPlacementPosition) {
@@ -673,6 +829,9 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
         if (!monster.isActive || monster.state === "dead") continue;
         const x = monster.position.x * metrics.cellSize;
         const y = monster.position.y * metrics.cellSize;
+        if (x < viewLeft - metrics.cellSize || x > viewRight + metrics.cellSize || y < viewTop - metrics.cellSize || y > viewBottom + metrics.cellSize) {
+          continue;
+        }
         drawMonster(ctx, monster, x, y, Math.max(4, metrics.cellSize * 0.28), state.timeSec);
       }
 
@@ -680,6 +839,9 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
         if (invader.state === "dead") continue;
         const x = invader.position.x * metrics.cellSize;
         const y = invader.position.y * metrics.cellSize;
+        if (x < viewLeft - metrics.cellSize || x > viewRight + metrics.cellSize || y < viewTop - metrics.cellSize || y > viewBottom + metrics.cellSize) {
+          continue;
+        }
         drawInvader(ctx, x, y, Math.max(4, metrics.cellSize * 0.2 * invader.bodySize), invader.direction);
       }
 
@@ -767,13 +929,33 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
       }
 
       rafId = window.requestAnimationFrame(render);
+
+      if (isDeepLabPerfEnabled()) {
+        const frameEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
+        deepLabPerfMonitor().recordFrame(frameEnd - frameStart);
+        deepLabPerfMonitor().updateCanvasInfo({
+          cssWidth: drawW,
+          cssHeight: drawH,
+          internalWidth: canvas.width,
+          internalHeight: canvas.height,
+          devicePixelRatio: rawDpr,
+          renderPixelRatio: dpr,
+        });
+      }
     };
+
+    if (isDeepLabPerfEnabled()) {
+      deepLabPerfMonitor().registerLoopStart("render");
+    }
 
     rafId = window.requestAnimationFrame(render);
     return () => {
       window.cancelAnimationFrame(rafId);
+      if (isDeepLabPerfEnabled()) {
+        deepLabPerfMonitor().registerLoopStop("render");
+      }
     };
-  }, [camera, clampCamera, engine, metrics, reduceGlowAnimation]);
+  }, [clampCamera, engine, ensureStaticLayer, lowPowerMode, metrics, reduceGlowAnimation]);
 
   const pointToCell = (clientX: number, clientY: number): { row: number; col: number } | null => {
     const canvas = canvasRef.current;
@@ -831,12 +1013,35 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
           type="button"
           className="dlBtnSmall"
           onClick={() => {
+            const p = engine.getPlayerFocusPosition();
+            focusToCell(p.y, p.x, Math.max(1.2, camera.zoom));
+          }}
+        >
+          プレイヤーへ移動
+        </button>
+        <button
+          type="button"
+          className="dlBtnSmall"
+          onClick={() => {
             const e = engine.getEntrancePosition();
             focusToCell(e.y, e.x, Math.max(1.2, camera.zoom));
           }}
         >
           敵入口へ移動
         </button>
+        {([0, 1, 2, 3, 4] as const).map((layer) => (
+          <button
+            key={`layer-focus-${layer}`}
+            type="button"
+            className="dlBtnSmall"
+            onClick={() => {
+              const centerRow = layer * DEPTH_LAYER_HEIGHT + Math.floor(DEPTH_LAYER_HEIGHT * 0.5);
+              focusToCell(centerRow, Math.floor(GRID_COLS * 0.5), Math.max(0.92, camera.zoom));
+            }}
+          >
+            {DEPTH_LAYER_COLORS[layer].name}
+          </button>
+        ))}
       </div>
 
       <canvas
@@ -868,7 +1073,7 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
           if (engine.isPlacementConfirmationPhase() || engine.isCountdownPhase()) return;
 
           const isMiddleMouse = event.pointerType === "mouse" && event.button === 1;
-          const isSpacePan = isSpaceDownRef.current && event.button === 0;
+          const isSpacePan = isShiftDownRef.current && event.button === 0;
           const shouldPan = cameraMode === "pan" || isMiddleMouse || isSpacePan;
 
           if (shouldPan) {
@@ -926,9 +1131,20 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
           event.preventDefault();
           if (event.touches.length === 1) {
             const t = event.touches[0];
-            if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
+            if (longPressTimerRef.current) {
+              if (isDeepLabPerfEnabled()) {
+                deepLabPerfMonitor().registerTimerStop("longPressInspect");
+              }
+              window.clearTimeout(longPressTimerRef.current);
+            }
+            if (isDeepLabPerfEnabled()) {
+              deepLabPerfMonitor().registerTimerStart("longPressInspect");
+            }
             longPressTimerRef.current = window.setTimeout(() => {
               updateInspectFromPoint(t.clientX, t.clientY);
+              if (isDeepLabPerfEnabled()) {
+                deepLabPerfMonitor().registerTimerStop("longPressInspect");
+              }
               longPressTimerRef.current = null;
             }, 450);
           }
@@ -981,6 +1197,9 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
         }}
         onTouchEnd={() => {
           if (longPressTimerRef.current) {
+            if (isDeepLabPerfEnabled()) {
+              deepLabPerfMonitor().registerTimerStop("longPressInspect");
+            }
             window.clearTimeout(longPressTimerRef.current);
             longPressTimerRef.current = null;
           }
@@ -992,6 +1211,8 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
           <p>{inspectInfo.soilLabel}</p>
           <p>深度: {inspectInfo.depthLabel}</p>
           <p>魔物出現期待度: {inspectInfo.spawnTierLabel}</p>
+          <p>レア期待度: {inspectInfo.rarityExpectationLabel}</p>
+          <p>出現候補帯: {inspectInfo.candidateRarityBand}</p>
           {showExactSpawnRate ? <p>魔物出現確率: {Math.round(inspectInfo.spawnRate * 100)}%</p> : null}
           <p>出現候補: {inspectInfo.spawnCandidates}</p>
           <p>取得素材: {inspectInfo.materialLabel}</p>

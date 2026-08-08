@@ -1,4 +1,5 @@
 import {
+  DEPTH_LAYER_COUNT,
   DEPTH_LAYER_TIER_RATIOS,
   DEPTH_LAYER_HEIGHT,
   DEPTH_LAYER_SOIL_RATIOS,
@@ -34,8 +35,8 @@ type GeneratedLabyrinth = {
 const INITIAL_OPEN_RATIO_MIN = 0.05;
 const INITIAL_OPEN_RATIO_MAX = 0.08;
 const INITIAL_OPEN_RATIO_HARD_MAX = 0.1;
-const MIN_INITIAL_PATH_TURNS = 2;
-const MAX_INITIAL_PATH_TURNS = 4;
+const MIN_INITIAL_PATH_TURNS = 3;
+const MAX_INITIAL_PATH_TURNS = 6;
 const MIN_INITIAL_PATH_LENGTH = 18;
 
 type SoilRatio = { type: SoilType; ratio: number };
@@ -79,13 +80,13 @@ function isSoilCell(cell: MapCell): boolean {
   );
 }
 
-function layerRows(layer: 0 | 1 | 2): { from: number; to: number } {
+function layerRows(layer: number): { from: number; to: number } {
   const from = layer * DEPTH_LAYER_HEIGHT;
   const to = Math.min(GRID_ROWS - 2, from + DEPTH_LAYER_HEIGHT - 1);
   return { from, to };
 }
 
-function collectSoilCellsInLayer(map: MapCell[][], layer: 0 | 1 | 2): GridPosition[] {
+function collectSoilCellsInLayer(map: MapCell[][], layer: number): GridPosition[] {
   const { from, to } = layerRows(layer);
   const out: GridPosition[] = [];
   for (let r = Math.max(1, from); r <= to; r += 1) {
@@ -98,7 +99,7 @@ function collectSoilCellsInLayer(map: MapCell[][], layer: 0 | 1 | 2): GridPositi
 
 function paintTierClusters(
   map: MapCell[][],
-  layer: 0 | 1 | 2,
+  layer: number,
   tier: MonsterSpawnTier,
   targetCount: number,
   rng: SeededRandom,
@@ -159,11 +160,11 @@ function assignSpawnTiers(map: MapCell[][], seed: number, playerStart: GridPosit
     }
   }
 
-  for (const layer of [0, 1, 2] as const) {
+  for (let layer = 0; layer < DEPTH_LAYER_COUNT; layer += 1) {
     const soils = collectSoilCellsInLayer(map, layer);
     const total = soils.length;
     if (total <= 0) continue;
-    const ratio = DEPTH_LAYER_TIER_RATIOS[layer];
+    const ratio = DEPTH_LAYER_TIER_RATIOS[layer as keyof typeof DEPTH_LAYER_TIER_RATIOS];
     const veryHighCount = Math.floor(total * ratio.veryHigh);
     const highCount = Math.floor(total * ratio.high);
 
@@ -411,7 +412,7 @@ function listNormalSoilCells(map: MapCell[][]): GridPosition[] {
   return cells;
 }
 
-function listNormalSoilCellsInLayer(map: MapCell[][], layer: 0 | 1 | 2): GridPosition[] {
+function listNormalSoilCellsInLayer(map: MapCell[][], layer: number): GridPosition[] {
   const from = layer * DEPTH_LAYER_HEIGHT;
   const to = Math.min(GRID_ROWS - 2, from + DEPTH_LAYER_HEIGHT - 1);
   const cells: GridPosition[] = [];
@@ -423,8 +424,9 @@ function listNormalSoilCellsInLayer(map: MapCell[][], layer: 0 | 1 | 2): GridPos
   return cells;
 }
 
-function buildLayerRatios(layer: 0 | 1 | 2): SoilRatio[] {
-  const cfg = DEPTH_LAYER_SOIL_RATIOS[layer];
+function buildLayerRatios(layer: number): SoilRatio[] {
+  const safeLayer = Math.max(0, Math.min(DEPTH_LAYER_COUNT - 1, layer)) as 0 | 1 | 2 | 3 | 4;
+  const cfg = DEPTH_LAYER_SOIL_RATIOS[safeLayer];
   return [
     { type: "magicSoil", ratio: cfg.magicSoil },
     { type: "moistSoil", ratio: cfg.moistSoil },
@@ -435,7 +437,7 @@ function buildLayerRatios(layer: 0 | 1 | 2): SoilRatio[] {
 
 function applySpecialSoils(map: MapCell[][], seed: number): void {
   const rng = new SeededRandom(seed ^ 0x9e3779b9);
-  for (const layer of [0, 1, 2] as const) {
+  for (let layer = 0; layer < DEPTH_LAYER_COUNT; layer += 1) {
     const ratios = buildLayerRatios(layer);
     const layerTotal = listNormalSoilCellsInLayer(map, layer).length;
     for (const cfg of ratios) {
@@ -543,25 +545,86 @@ function buildInitialPolyline(
     ];
   }
 
+  if (turnTarget === 4) {
+    const rowAMin = sy + 3;
+    const rowAMax = ey - 7;
+    if (rowAMin >= rowAMax) return null;
+    const rowA = rng.int(rowAMin, rowAMax);
+    const rowBMin = rowA + 3;
+    const rowBMax = ey - 3;
+    if (rowBMin >= rowBMax) return null;
+    const rowB = rng.int(rowBMin, rowBMax);
+
+    const pivots = horizontalPivotCandidates(entranceInner.x, playerStart.x);
+    if (pivots.length === 0) return null;
+    const x1 = rng.pick(pivots);
+
+    return [
+      entranceInner,
+      { x: entranceInner.x, y: rowA },
+      { x: x1, y: rowA },
+      { x: x1, y: rowB },
+      { x: playerStart.x, y: rowB },
+      playerStart,
+    ];
+  }
+
+  if (turnTarget === 5) {
+    const rowAMin = sy + 3;
+    const rowAMax = ey - 8;
+    if (rowAMin >= rowAMax) return null;
+    const rowA = rng.int(rowAMin, rowAMax);
+    const rowBMin = rowA + 3;
+    const rowBMax = ey - 3;
+    if (rowBMin >= rowBMax) return null;
+    const rowB = rng.int(rowBMin, rowBMax);
+
+    const pivots = horizontalPivotCandidates(entranceInner.x, playerStart.x);
+    if (pivots.length < 2) return null;
+    const x1 = rng.pick(pivots);
+    const x2Candidates = pivots.filter((x) => x !== x1);
+    if (x2Candidates.length === 0) return null;
+    const x2 = rng.pick(x2Candidates);
+
+    return [
+      entranceInner,
+      { x: entranceInner.x, y: rowA },
+      { x: x1, y: rowA },
+      { x: x1, y: rowB },
+      { x: x2, y: rowB },
+      { x: x2, y: ey },
+      playerStart,
+    ];
+  }
+
   const rowAMin = sy + 3;
-  const rowAMax = ey - 7;
+  const rowAMax = ey - 10;
   if (rowAMin >= rowAMax) return null;
   const rowA = rng.int(rowAMin, rowAMax);
   const rowBMin = rowA + 3;
-  const rowBMax = ey - 3;
+  const rowBMax = ey - 7;
   if (rowBMin >= rowBMax) return null;
   const rowB = rng.int(rowBMin, rowBMax);
+  const rowCMin = rowB + 3;
+  const rowCMax = ey - 2;
+  if (rowCMin >= rowCMax) return null;
+  const rowC = rng.int(rowCMin, rowCMax);
 
   const pivots = horizontalPivotCandidates(entranceInner.x, playerStart.x);
-  if (pivots.length === 0) return null;
+  if (pivots.length < 2) return null;
   const x1 = rng.pick(pivots);
+  const x2Candidates = pivots.filter((x) => x !== x1);
+  if (x2Candidates.length === 0) return null;
+  const x2 = rng.pick(x2Candidates);
 
   return [
     entranceInner,
     { x: entranceInner.x, y: rowA },
     { x: x1, y: rowA },
     { x: x1, y: rowB },
-    { x: playerStart.x, y: rowB },
+    { x: x2, y: rowB },
+    { x: x2, y: rowC },
+    { x: playerStart.x, y: rowC },
     playerStart,
   ];
 }
@@ -741,7 +804,7 @@ function generateCandidate(seed: number): GeneratedLabyrinth {
 
   const playerStart: GridPosition = {
     x: pickPlayerStartX(entrance.x, rng),
-    y: rng.int(Math.floor(GRID_ROWS * 0.6), Math.floor(GRID_ROWS * 0.8)),
+    y: rng.int(10, Math.min(15, GRID_ROWS - 4)),
   };
 
   const entryInner = { x: entrance.x, y: 1 };
@@ -786,7 +849,7 @@ function generateFallback(seed: number): GeneratedLabyrinth {
 
   const playerStart = {
     x: clamp(entrance.x + 6, 3, GRID_COLS - 4),
-    y: clamp(Math.floor(GRID_ROWS * 0.75), 12, GRID_ROWS - 3),
+    y: clamp(Math.floor(GRID_ROWS * 0.32), 10, 15),
   };
 
   const fallbackPath: GridPosition[] = [

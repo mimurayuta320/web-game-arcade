@@ -2,8 +2,8 @@ import type { GameState } from "../types/game";
 import { INITIAL_MAX_DIG_COUNT, MAP_COLUMNS, MAP_ROWS } from "../data/balance";
 
 const SAVE_KEY = "deep-labyrinth-save-v1";
-const SAVE_VERSION = 3;
-const LEGACY_MAX_DIG_COUNT = 60;
+const SAVE_VERSION = 4;
+const LEGACY_MAX_DIG_COUNT = 150;
 
 export interface SavePayload {
   version: number;
@@ -34,6 +34,13 @@ function migrateCheckpoint(checkpoint: Partial<GameState> | null): Partial<GameS
 
   const next: Partial<GameState> = { ...checkpoint };
   next.maxMonsterCount = null;
+
+  const size = checkpointMapSize(checkpoint);
+  const isLegacyMap = Boolean(size && (size.columns !== MAP_COLUMNS || size.rows !== MAP_ROWS));
+  if (isLegacyMap) {
+    // Keep legacy-size checkpoints as-is to avoid unsafe map shape expansion.
+    return next;
+  }
 
   const oldMaxDigCount =
     typeof checkpoint.maxDigCount === "number" ? checkpoint.maxDigCount : LEGACY_MAX_DIG_COUNT;
