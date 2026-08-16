@@ -19,7 +19,9 @@ import { deepLabPerfMonitor, isDeepLabPerfEnabled } from "../core/performance";
 type Props = {
   engine: GameEngine;
   onSelectCell: (cell: MapCell | null) => void;
-  showExactSpawnRate: boolean;
+  allyCount: number;
+  remainingDigCount: number;
+  maxDigCount: number;
   reduceGlowAnimation: boolean;
   lowPowerMode: boolean;
 };
@@ -430,7 +432,15 @@ function drawSpawnTierOverlay(
   }
 }
 
-export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlowAnimation, lowPowerMode }: Props) {
+export function GameCanvas({
+  engine,
+  onSelectCell,
+  allyCount,
+  remainingDigCount,
+  maxDigCount,
+  reduceGlowAnimation,
+  lowPowerMode,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const staticLayerRef = useRef<HTMLCanvasElement | null>(null);
@@ -687,6 +697,22 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
     staticLayerMapVersionRef.current = state.mapVersion;
     staticLayerCellSizeRef.current = metrics.cellSize;
   }, [engine, metrics.cellSize, metrics.height, metrics.width]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Block page scroll while wheel is used over the canvas.
+    const blockPageScrollOnWheel = (event: WheelEvent) => {
+      event.preventDefault();
+    };
+
+    canvas.addEventListener("wheel", blockPageScrollOnWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener("wheel", blockPageScrollOnWheel);
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -992,6 +1018,12 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
     <div ref={viewportRef} className="dlCanvasViewport">
       {engine.isPlacementConfirmationPhase() ? <div className="dlMapDim" /> : null}
       <div className="dlCanvasTools" data-ui-panel="true">
+        <div className="dlCanvasStat" aria-label="ally count">
+          味方: <strong>{allyCount}</strong>
+        </div>
+        <div className="dlCanvasStat" aria-label="remaining dig count">
+          掘れる回数: <strong>{remainingDigCount}</strong> / {maxDigCount}
+        </div>
         <button type="button" className="dlBtnSmall" onClick={() => setCameraMode((v) => (v === "dig" ? "pan" : "dig"))}>
           {cameraMode === "dig" ? "掘削" : "移動"}
         </button>
@@ -1055,6 +1087,7 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
         }}
         onWheel={(event) => {
           event.preventDefault();
+          event.stopPropagation();
           const pivotX = event.clientX;
           const pivotY = event.clientY;
           const prevZoom = camera.zoom;
@@ -1206,19 +1239,6 @@ export function GameCanvas({ engine, onSelectCell, showExactSpawnRate, reduceGlo
           panStartRef.current = null;
         }}
       />
-      {inspectInfo ? (
-        <div className="dlCellInfoPopover" data-ui-panel="true">
-          <p>{inspectInfo.soilLabel}</p>
-          <p>深度: {inspectInfo.depthLabel}</p>
-          <p>魔物出現期待度: {inspectInfo.spawnTierLabel}</p>
-          <p>レア期待度: {inspectInfo.rarityExpectationLabel}</p>
-          <p>出現候補帯: {inspectInfo.candidateRarityBand}</p>
-          {showExactSpawnRate ? <p>魔物出現確率: {Math.round(inspectInfo.spawnRate * 100)}%</p> : null}
-          <p>出現候補: {inspectInfo.spawnCandidates}</p>
-          <p>取得素材: {inspectInfo.materialLabel}</p>
-          <p>掘削可能: {inspectInfo.diggable ? "はい" : "いいえ"}</p>
-        </div>
-      ) : null}
     </div>
   );
 }

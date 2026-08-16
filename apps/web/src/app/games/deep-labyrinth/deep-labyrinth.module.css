@@ -331,6 +331,24 @@
   justify-content: flex-end;
 }
 
+:global(.dlCanvasStat) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(173, 206, 255, 0.42);
+  background: rgba(6, 16, 34, 0.82);
+  color: #e8f4ff;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+:global(.dlCanvasStat strong) {
+  color: #ffffff;
+}
+
 :global(.dlCellInfoPopover) {
   position: absolute;
   z-index: 10;

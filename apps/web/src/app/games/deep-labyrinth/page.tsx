@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import styles from "./deep-labyrinth.module.css";
 import { STAGE_TITLE_DEFAULT } from "@/games/deep-labyrinth/data/stages";
 import { GameEngine } from "@/games/deep-labyrinth/core/GameEngine";
@@ -16,7 +17,6 @@ import { WavePanel } from "@/games/deep-labyrinth/components/WavePanel";
 import { PauseMenu } from "@/games/deep-labyrinth/components/PauseMenu";
 import { PlacementConfirmModal } from "@/games/deep-labyrinth/components/PlacementConfirmModal";
 import { ResultModal } from "@/games/deep-labyrinth/components/ResultModal";
-import { PerformanceOverlay } from "@/games/deep-labyrinth/components/PerformanceOverlay";
 import { getDepthLayer, DEPTH_LAYER_COLORS } from "@/games/deep-labyrinth/data/balance";
 import { deepLabPerfMonitor, isDeepLabPerfEnabled } from "@/games/deep-labyrinth/core/performance";
 
@@ -43,10 +43,13 @@ const INITIAL_HUD: HudSnapshot = {
 };
 
 export default function DeepLabyrinthPage() {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [engineReady, setEngineReady] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
   const engineRef = useRef<GameEngine | null>(null);
   const loopRef = useRef<GameLoop | null>(null);
+  const gameStartedRef = useRef(false);
 
   const lastHudRef = useRef<HudSnapshot>(INITIAL_HUD);
 
@@ -63,6 +66,10 @@ export default function DeepLabyrinthPage() {
   const [showExactSpawnRate, setShowExactSpawnRate] = useState(false);
   const [reduceGlowAnimation, setReduceGlowAnimation] = useState(false);
   const [lowPowerMode, setLowPowerMode] = useState(false);
+
+  useEffect(() => {
+    gameStartedRef.current = gameStarted;
+  }, [gameStarted]);
 
   const isSameHud = (a: HudSnapshot, b: HudSnapshot): boolean => {
     return (
@@ -147,6 +154,7 @@ export default function DeepLabyrinthPage() {
     });
 
     activeLoop.start((dt) => {
+      if (!gameStartedRef.current) return;
       activeEngine.tick(dt);
     });
 
@@ -223,7 +231,9 @@ export default function DeepLabyrinthPage() {
                 <GameCanvas
                   engine={engine}
                   onSelectCell={setSelectedCell}
-                  showExactSpawnRate={showExactSpawnRate}
+                  allyCount={hud.allyCount}
+                  remainingDigCount={hud.remainingDigCount}
+                  maxDigCount={hud.maxDigCount}
                   reduceGlowAnimation={reduceGlowAnimation}
                   lowPowerMode={lowPowerMode}
                 />
@@ -323,7 +333,9 @@ export default function DeepLabyrinthPage() {
               ) : null}
               {state.phase === "betweenWavePreparation" || state.phase === "playerReposition" ? (
                 <div className="dlCoreConfirm">
-                  <p className="dlWarnText">ウェーブ間の再配置準備中です。</p>
+                  {state.phase === "betweenWavePreparation" ? (
+                    <p className="dlWarnText">ウェーブ間の再配置準備中です。</p>
+                  ) : null}
                   <button
                     type="button"
                     className="dlBtnSmall"
@@ -372,7 +384,14 @@ export default function DeepLabyrinthPage() {
                 >
                   Debug
                 </button>
-                <button type="button" className="dlBtnGhost" onClick={() => engine.restart()}>
+                <button
+                  type="button"
+                  className="dlBtnGhost"
+                  onClick={() => {
+                    engine.restart();
+                    setGameStarted(false);
+                  }}
+                >
                   リスタート
                 </button>
               </div>
@@ -409,7 +428,30 @@ export default function DeepLabyrinthPage() {
           </div>
 
           <div className="gameControls" data-ui-panel="true">
-            <span className="dlMuted">操作欄: 右パネル</span>
+            <div className="dlSpeedRow">
+              {!gameStarted ? (
+                <button
+                  type="button"
+                  className="dlBtn"
+                  onClick={() => {
+                    setGameStarted(true);
+                    setRevision((v) => v + 1);
+                  }}
+                >
+                  ゲームスタート
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="dlBtnGhost"
+                onClick={() => {
+                  router.push("/");
+                }}
+              >
+                メニューに戻る
+              </button>
+              <span className="dlMuted">操作欄: 右パネル</span>
+            </div>
           </div>
         </section>
 
@@ -432,7 +474,14 @@ export default function DeepLabyrinthPage() {
             setRevision((v) => v + 1);
           }}
         />
-        <ResultModal visible={state.phase === "gameOver" || state.phase === "victory"} state={state} onRestart={() => engine.restart()} />
+        <ResultModal
+          visible={state.phase === "gameOver" || state.phase === "victory"}
+          state={state}
+          onRestart={() => {
+            engine.restart();
+            setGameStarted(false);
+          }}
+        />
 
         {showBlockInfo ? (
           <div className="dlOverlay" data-ui-panel="true">
@@ -465,8 +514,6 @@ export default function DeepLabyrinthPage() {
             </div>
           </div>
         ) : null}
-
-        <PerformanceOverlay />
       </div>
     </main>
   );

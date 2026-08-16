@@ -1226,10 +1226,15 @@ export class GameEngine {
 
   cancelCorePlacementConfirmation(): void {
     if (this.state.phase !== "placementConfirmation" && this.state.phase !== "repositionConfirmation") return;
+    const wasRepositionConfirmation = this.state.phase === "repositionConfirmation";
     this.state.selectedPlacementPosition = null;
     this.state.isPlacementConfirmOpen = false;
     this.state.phase = this.state.corePosition ? "playerReposition" : "playerPlacement";
-    this.setMessage("配置場所を選び直してください");
+    if (wasRepositionConfirmation) {
+      this.state.message = "";
+    } else {
+      this.setMessage("配置場所を選び直してください");
+    }
     this.refreshCorePlacementCache();
     this.emitHud(true);
   }
@@ -1270,11 +1275,11 @@ export class GameEngine {
   }
 
   beginPlayerReposition(): void {
-    if (this.state.phase !== "betweenWavePreparation" && this.state.phase !== "playerReposition") return;
+    if (this.state.phase !== "betweenWavePreparation") return;
     this.state.phase = "playerReposition";
     this.state.isPlacementConfirmOpen = false;
     this.refreshCorePlacementCache();
-    this.setMessage("次ウェーブの守護位置を選択してください");
+    this.state.message = "";
   }
 
   resumePreparationForCorePlacement(): void {
@@ -1395,7 +1400,7 @@ export class GameEngine {
         this.state.wave.nextWaveInSec = 0;
         this.state.phase = "playerReposition";
         this.refreshCorePlacementCache();
-        this.setMessage("再配置を確定すると次のウェーブが始まります");
+        this.state.message = "";
       }
       return;
     }

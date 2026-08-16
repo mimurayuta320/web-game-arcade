@@ -15335,17 +15335,6 @@ export default function Home() {
       return;
     }
 
-    const ankanCandidates = mahjongFindAnkanCandidates(mahjongBoard);
-    const canAbortiveDraw = mahjongCanAbortiveDraw(mahjongBoard, mahjongRiver);
-    if (ankanCandidates.length > 0 || canAbortiveDraw) {
-      const extraChoices = [
-        ankanCandidates.length > 0 ? "暗槓" : null,
-        canAbortiveDraw ? "九種九牌" : null,
-      ].filter(Boolean).join(" / ");
-      setMahjongMessage(`リーチ中: ${extraChoices} を選択できます。`);
-      return;
-    }
-
     mahjongAutoDiscardLockRef.current = true;
     setMahjongAutoDiscarding(true);
     setMahjongMessage(`リーチ中ツモ切り: ${mahjongTileLabel(mahjongLastDraw)}`);
@@ -24554,6 +24543,8 @@ export default function Home() {
 
                 const canTsumo = gameStarted.mahjong && tsumoEval.ok;
                 const canRon = gameStarted.mahjong && ronEval.ok;
+                const tsumoTileLabel = canTsumo && mahjongLastDraw !== null ? mahjongTileLabel(mahjongLastDraw) : null;
+                const ronTileLabel = canRon && mahjongLatestOpponentDiscard !== null ? mahjongTileLabel(mahjongLatestOpponentDiscard) : null;
                 const isRiichiLocked = mahjongRiichiTileIndex !== null;
                 const concealedAfterDraw = mahjongConcealedCountAfterDraw(mahjongSelfMelds.length);
                 const canRiichi = gameStarted.mahjong
@@ -24564,10 +24555,11 @@ export default function Home() {
                   && mahjongFindRiichiDiscardIndexes(normalizedHand).length > 0;
                 const canKita = gameStarted.mahjong
                   && !mahjongAutoDiscarding
+                  && !isRiichiLocked
                   && mahjongRuleConfig.mode === "sanma"
                   && mahjongRuleConfig.northRule === "nuki-dora"
                   && normalizedHand.includes(30);
-                const canAbortiveDraw = gameStarted.mahjong && !mahjongAutoDiscarding && mahjongCanAbortiveDraw(normalizedHand, mahjongRiver);
+                const canAbortiveDraw = gameStarted.mahjong && !mahjongAutoDiscarding && !isRiichiLocked && mahjongCanAbortiveDraw(normalizedHand, mahjongRiver);
                 const responseWindowOpen = gameStarted.mahjong && mahjongLatestOpponentDiscard !== null;
                 const canPon = responseWindowOpen && !isRiichiLocked && !mahjongNoCallEnabled && mahjongCanPon(normalizedHand, mahjongLatestOpponentDiscard);
                 const chiCandidates = responseWindowOpen && !isRiichiLocked && mahjongRuleConfig.allowChi && !mahjongNoCallEnabled
@@ -24575,8 +24567,8 @@ export default function Home() {
                   : [];
                 const canChi = chiCandidates.length > 0;
                 const canMinkan = responseWindowOpen && !isRiichiLocked && !mahjongNoCallEnabled && mahjongCanMinkan(normalizedHand, mahjongLatestOpponentDiscard);
-                const ankanCandidates = !mahjongAutoDiscarding && mahjongBoard.length === concealedAfterDraw ? mahjongFindAnkanCandidates(normalizedHand) : [];
-                const kakanCandidates = !mahjongAutoDiscarding && mahjongBoard.length === concealedAfterDraw ? mahjongFindKakanCandidates(normalizedHand, mahjongSelfMelds) : [];
+                const ankanCandidates = !mahjongAutoDiscarding && !isRiichiLocked && mahjongBoard.length === concealedAfterDraw ? mahjongFindAnkanCandidates(normalizedHand) : [];
+                const kakanCandidates = !mahjongAutoDiscarding && !isRiichiLocked && mahjongBoard.length === concealedAfterDraw ? mahjongFindKakanCandidates(normalizedHand, mahjongSelfMelds) : [];
                 const canKan = canMinkan || ankanCandidates.length > 0 || kakanCandidates.length > 0;
                 const shouldShowPass = responseWindowOpen && !mahjongAutoDiscarding;
                 const shouldShowCancel = mahjongRiichiPending && !mahjongAutoDiscarding;
@@ -24584,10 +24576,10 @@ export default function Home() {
                 const actionButtons: MahjongActionButton[] = [];
                 if (gameStarted.mahjong) {
                   if (canRon) {
-                    actionButtons.push({ key: "ron", label: "ロン", tone: "primary", priority: 1, emphasis: "critical", onClick: onMahjongRon });
+                    actionButtons.push({ key: "ron", label: ronTileLabel ? `ロン ${ronTileLabel}` : "ロン", tone: "primary", priority: 1, emphasis: "critical", onClick: onMahjongRon });
                   }
                   if (canTsumo) {
-                    actionButtons.push({ key: "tsumo", label: t("mahjongTsumo"), tone: "primary", priority: 2, emphasis: "critical", onClick: onMahjongTsumo });
+                    actionButtons.push({ key: "tsumo", label: tsumoTileLabel ? `${t("mahjongTsumo")} ${tsumoTileLabel}` : t("mahjongTsumo"), tone: "primary", priority: 2, emphasis: "critical", onClick: onMahjongTsumo });
                   }
                   if (canRiichi) {
                     actionButtons.push({ key: "riichi", label: t("mahjongRiichi"), tone: "accent", priority: 3, emphasis: "high", onClick: onMahjongDeclareRiichi });
@@ -24727,6 +24719,7 @@ export default function Home() {
                     selfSelectedTileId={selfSelectedTileId}
                     riichiTileIndex={mahjongRiichiTileIndex}
                     latestDiscardSeat={latestDiscardSeat}
+                    latestDiscardTargetable={canRon}
                     centerInfo={centerInfo}
                     actionButtons={actionButtons}
                     actionDeadlineAt={mahjongActionDeadlineAt}
@@ -24882,6 +24875,7 @@ export default function Home() {
                       onMahjongTileClick(index);
                     }}
                     onCloseRoundResult={() => {
+                      resetMahjong();
                       setMahjongWinSummary(null);
                       setMahjongWinSubmitting(false);
                       setMahjongLatestOpponentDiscard(null);
