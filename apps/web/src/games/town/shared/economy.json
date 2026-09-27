@@ -1,0 +1,67 @@
+{
+  "startingAme": 100,
+  "earn": {
+    "login": 30,
+    "dress": 10,
+    "onlineStepMinutes": 5,
+    "onlinePerStep": 5,
+    "onlineDailyCap": 60,
+    "praiseReceived": 5,
+    "praiseReceivedDailyCap": 50,
+    "praiseGiven": 2,
+    "praiseGivenDailyCap": 10,
+    "visitRoom": 3,
+    "visitRoomDailyCap": 15
+  },
+  "scratch": {
+    "price": 50,
+    "prizes": [
+      { "type": "item", "weight": 8 },
+      { "type": "ame", "amount": 150, "weight": 5 },
+      { "type": "ame", "amount": 80, "weight": 12 },
+      { "type": "ame", "amount": 40, "weight": 25 },
+      { "type": "ame", "amount": 20, "weight": 30 },
+      { "type": "ame", "amount": 10, "weight": 20 }
+    ]
+  },
+  "rooms": {
+    "sizes": [10, 12, 14],
+    "expandCost": { "12": 300, "14": 600 },
+    "maxItems": { "10": 50, "12": 70, "14": 90 },
+    "slotCost": [0, 500, 1000]
+  },
+  "limitedParts": [
+    { "key": "hat", "id": "pumpkin", "label": "かぼちゃ帽", "price": 150 },
+    { "key": "hat", "id": "chef", "label": "コック帽", "price": 120 },
+    { "key": "hat", "id": "pirate", "label": "かいぞく帽", "price": 180 },
+    { "key": "hat", "id": "kanzashi", "label": "さくらかんざし", "price": 120 },
+    { "key": "onepiece", "id": "idol", "label": "アイドル衣装", "price": 300 },
+    { "key": "onepiece", "id": "wedding", "label": "ウェディング", "price": 400 },
+    { "key": "back", "id": "rainbow", "label": "にじの羽", "price": 300 },
+    { "key": "back", "id": "jetpack", "label": "ジェットパック", "price": 250 },
+    { "key": "hand", "id": "sparkler", "label": "せんこう花火", "price": 100 },
+    { "key": "hand", "id": "guitar", "label": "ギター", "price": 200 },
+    { "key": "glasses", "id": "vr", "label": "VRゴーグル", "price": 150 }
+  ],
+  "limitedFurniture": [
+    { "kind": "canopybed", "label": "天がいベッド", "price": 400 },
+    { "kind": "throne", "label": "王さまのいす", "price": 300 },
+    { "kind": "neonsign", "label": "ネオンサイン", "price": 200 },
+    { "kind": "goldpig", "label": "金のブタ像", "price": 500 },
+    { "kind": "minifountain", "label": "ミニ噴水", "price": 350 },
+    { "kind": "sakuratree", "label": "へやの桜", "price": 300 }
+  ],
+  "furnitureFootprints": {
+    "bed": [1, 2], "sofa": [2, 1], "chair": [1, 1], "cushion": [1, 1], "table": [1, 1], "kotatsu": [1, 1],
+    "desk": [1, 1], "bookshelf": [1, 1], "tv": [1, 1], "plant": [1, 1], "floorlamp": [1, 1], "piano": [2, 1],
+    "fridge": [1, 1], "teddy": [1, 1], "aquarium": [1, 1], "xmastree": [1, 1], "rug": [2, 2],
+    "sink": [1, 1], "stove": [1, 1], "diningtable": [2, 1], "bathtub": [2, 1], "toilet": [1, 1], "washbasin": [1, 1],
+    "chabudai": [1, 1], "tansu": [1, 1], "bonsai": [1, 1], "andon": [1, 1], "grandclock": [1, 1], "arcade": [1, 1],
+    "beanbag": [1, 1], "fireplace": [2, 1], "dresser": [1, 1], "wardrobe": [1, 1], "snowman": [1, 1],
+    "pumpkinlamp": [1, 1], "kadomatsu": [1, 1], "sunflower": [1, 1],
+    "canopybed": [1, 2], "throne": [1, 1], "neonsign": [1, 1], "goldpig": [1, 1], "minifountain": [1, 1], "sakuratree": [1, 1]
+  },
+  "flatFurniture": ["rug"],
+  "wallStyles": ["cream", "pink", "mint", "sky", "wood", "brick", "night", "lemon"],
+  "floorStyles": ["wood", "tatami", "checker", "carpetPink", "carpetBlue", "marble", "lawn"]
+}

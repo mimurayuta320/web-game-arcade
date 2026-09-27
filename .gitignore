@@ -5,3 +5,5 @@ dist/
 Thumbs.db
 server/data/*.sqlite
 apps/api/.env
+server/data/town-rooms*.json
+server/data/town-data*.json

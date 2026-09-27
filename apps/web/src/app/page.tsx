@@ -295,6 +295,9 @@ const LOGIN_I18N = {
     tabSolitaire: "ソリティア",
     tabSurvivors: "Survivors",
     tabDeepLabyrinth: "深層魔界ラボ",
+    townTitle: "ネオンタウン",
+    townLead: "アバターを着せかえて、みんなと街をおさんぽ・おしゃべり",
+    townEnter: "タウンへ行く",
     tabScores: "スコア",
     menuTitle: "ゲーム選択（Next移行メニュー）",
     menuLead: "旧HTMLメニューを段階的に移植しています。まずはオセロ、五目並べ、チェス、UNOへ遷移できます。",
@@ -1008,6 +1011,9 @@ const LOGIN_I18N = {
     tabSolitaire: "솔리테어",
     tabSurvivors: "Survivors",
     tabDeepLabyrinth: "심층 마계 라보",
+    townTitle: "네온 타운",
+    townLead: "아바타를 꾸미고 모두와 함께 거리를 산책하며 대화해요",
+    townEnter: "타운으로 가기",
     tabScores: "점수",
     menuTitle: "게임 선택 (Next 마이그레이션 메뉴)",
     menuLead: "기존 HTML 메뉴를 단계적으로 이전 중입니다. 먼저 오셀로, 오목, 체스, UNO로 이동할 수 있습니다.",
@@ -1727,6 +1733,9 @@ const EN_I18N: Partial<I18nMap> = {
   tabSolitaire: "Solitaire",
   tabSurvivors: "Survivors",
   tabDeepLabyrinth: "Deep Labyrinth",
+  townTitle: "Neon Town",
+  townLead: "Dress up your avatar, then stroll and chat around town with everyone.",
+  townEnter: "Enter Town",
   menuTitle: "Game Select (Next Migration Menu)",
   menuLead: "The legacy HTML menu is being migrated in phases. You can move to Othello, Gomoku, Chess, and UNO first.",
   playableLead: "Playable in Next migration",
@@ -1839,6 +1848,9 @@ const GAME_OPTIONS = [
 ];
 
 const ZH_I18N: Partial<I18nMap> = {
+  townTitle: "霓虹小镇",
+  townLead: "装扮你的形象，和大家一起在小镇散步聊天",
+  townEnter: "进入小镇",
   loginTitle: "登录",
   loginLead: "旧版 HTML 入口流程已迁移到 Next。",
   languageLabel: "Language",
@@ -20985,6 +20997,16 @@ export default function Home() {
 
         {activePanel === "menu" ? (
           <section className="grid gap-5">
+            <a
+              href="/games/town"
+              className="order-first flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200/40 bg-amber-300/10 p-5 transition hover:border-amber-200/75 hover:bg-amber-300/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200/80"
+            >
+              <span>
+                <span className="block text-xl font-semibold text-amber-50">{t("townTitle")}</span>
+                <span className="mt-1 block text-sm text-amber-100/80">{t("townLead")}</span>
+              </span>
+              <span className="rounded-full bg-amber-300 px-4 py-2 text-sm font-bold text-slate-900">{t("townEnter")}</span>
+            </a>
             <article className="order-2 rounded-2xl border border-slate-300/20 bg-slate-900/40 p-5">
               <h2 className="text-xl font-semibold">{t("menuTitle")}</h2>
 
