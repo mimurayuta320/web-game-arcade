@@ -1,0 +1,1280 @@
+.root {
+  --town-bg: #fff6ea;
+  --town-panel: #ffffff;
+  --town-ink: #3a2c2c;
+  --town-muted: #8a7a72;
+  --town-line: #f0dfcc;
+  --town-accent: #ff8c3c;
+  --town-accent-ink: #ffffff;
+  --town-soft: #fff0df;
+
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--town-bg);
+  color: var(--town-ink);
+  font-family: system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+}
+
+/* ------------------------------------------------------------ header */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--town-panel);
+  border-bottom: 1px solid var(--town-line);
+}
+
+.backButton {
+  border: 1px solid var(--town-line);
+  background: var(--town-soft);
+  color: var(--town-ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.titleBlock {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.areaLabel {
+  font-size: 13px;
+  color: var(--town-muted);
+  white-space: nowrap;
+}
+
+.headerRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--town-muted);
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c9b9ad;
+}
+
+.status[data-status="online"] .statusDot { background: #3cb371; }
+.status[data-status="connecting"] .statusDot { background: #f5b83c; }
+
+.dressButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: var(--town-accent);
+  color: var(--town-accent-ink);
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 14px 4px 6px;
+  cursor: pointer;
+}
+
+.dressButton canvas {
+  background: #ffffff;
+  border-radius: 50%;
+}
+
+/* ------------------------------------------------------------ layout */
+
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+}
+
+.stageColumn {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+}
+
+.stage {
+  position: relative;
+  min-height: 360px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--town-line);
+  background: #dff1ff;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.hint {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  color: var(--town-muted);
+  pointer-events: none;
+}
+
+.replacedOverlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
+  background: rgba(255, 246, 234, 0.88);
+  font-size: 14px;
+}
+
+.replacedOverlay p {
+  margin: 0;
+}
+
+.chatBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chatInput {
+  flex: 1 1 220px;
+  min-width: 0;
+  border: 2px solid var(--town-line);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 15px;
+  background: var(--town-panel);
+  color: var(--town-ink);
+}
+
+.chatInput:focus {
+  outline: none;
+  border-color: var(--town-accent);
+}
+
+.emotes {
+  display: flex;
+  gap: 6px;
+}
+
+.emoteButton {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--town-line);
+  background: var(--town-panel);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.emoteButton:hover { background: var(--town-soft); }
+
+/* ------------------------------------------------------------ side */
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.side > .panel {
+  flex: 0 1 auto;
+  overflow-y: auto;
+}
+
+.side > .chatPanel {
+  flex: 1 1 180px;
+  min-height: 160px;
+}
+
+.panel {
+  background: var(--town-panel);
+  border: 1px solid var(--town-line);
+  border-radius: 16px;
+  padding: 12px;
+  min-height: 0;
+}
+
+.panelTitle {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--town-muted);
+  font-weight: 700;
+}
+
+.areaList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.areaButton {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--town-line);
+  background: var(--town-soft);
+  color: var(--town-ink);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.areaButton[aria-current="location"] {
+  background: var(--town-accent);
+  border-color: var(--town-accent);
+  color: var(--town-accent-ink);
+  cursor: default;
+}
+
+.areaCount {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.chatPanel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.chatLog {
+  overflow-y: auto;
+  min-height: 160px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.chatLine { margin: 0 0 4px; overflow-wrap: anywhere; }
+.chatLine strong { margin-right: 6px; }
+.chatSystem { margin: 0 0 4px; color: var(--town-muted); font-size: 12px; }
+
+/* ------------------------------------------------------------ buttons */
+
+.primaryButton,
+.secondaryButton {
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: none;
+  background: var(--town-accent);
+  color: var(--town-accent-ink);
+}
+
+.primaryButton:disabled { opacity: 0.45; cursor: default; }
+
+.secondaryButton {
+  border: 1px solid var(--town-line);
+  background: var(--town-panel);
+  color: var(--town-ink);
+}
+
+.chip {
+  border: 1px solid var(--town-line);
+  background: var(--town-panel);
+  color: var(--town-ink);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip[data-active="true"] {
+  background: var(--town-accent);
+  border-color: var(--town-accent);
+  color: var(--town-accent-ink);
+}
+
+/* ------------------------------------------------------------ editor */
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(58, 44, 44, 0.45);
+}
+
+.editor {
+  width: min(860px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--town-panel);
+  color: var(--town-ink);
+}
+
+.editorPreview {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.previewStage {
+  display: grid;
+  place-items: center;
+  padding: 8px 0;
+  border-radius: 16px;
+  background: radial-gradient(circle at 50% 85%, #ffe2c4 0 30%, transparent 31%), var(--town-soft);
+}
+
+.previewButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.nameField {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--town-muted);
+}
+
+.nameField input {
+  border: 2px solid var(--town-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 15px;
+  color: var(--town-ink);
+  background: var(--town-panel);
+}
+
+.editorParts {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.categoryTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.categoryTab {
+  border: 1px solid var(--town-line);
+  background: var(--town-soft);
+  color: var(--town-ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.categoryTab[aria-selected="true"] {
+  background: var(--town-accent);
+  border-color: var(--town-accent);
+  color: var(--town-accent-ink);
+}
+
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 8px;
+}
+
+.optionCard {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 2px solid var(--town-line);
+  border-radius: 12px;
+  background: var(--town-panel);
+  color: var(--town-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.optionCard[aria-pressed="true"] {
+  border-color: var(--town-accent);
+  background: var(--town-soft);
+}
+
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+
+.swatch[aria-pressed="true"] {
+  outline: 3px solid var(--town-accent);
+  outline-offset: 2px;
+}
+
+.editorActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------ v2: actions */
+
+.iconButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--town-line);
+  background: var(--town-panel);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.flash {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.stage[data-editing="true"] {
+  outline: 3px dashed var(--town-accent);
+  outline-offset: -3px;
+}
+
+.chatBarWrap {
+  position: relative;
+}
+
+.actionMenuButton {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--town-accent);
+  background: var(--town-soft);
+  color: var(--town-ink);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.actionMenuButton[aria-expanded="true"] {
+  background: var(--town-accent);
+  color: var(--town-accent-ink);
+}
+
+.actionPalette {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: min(420px, 100%);
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--town-line);
+  background: var(--town-panel);
+  box-shadow: 0 12px 30px rgba(58, 44, 44, 0.18);
+}
+
+.actionTabs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+}
+
+.actionButton {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border: 1px solid var(--town-line);
+  border-radius: 12px;
+  background: var(--town-soft);
+  color: var(--town-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.actionButton:hover {
+  border-color: var(--town-accent);
+}
+
+.actionIcon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.actionHint {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--town-muted);
+}
+
+.closeButton {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--town-line);
+  background: var(--town-panel);
+  color: var(--town-ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------ v2: profile */
+
+.profileCard {
+  position: relative;
+  width: min(320px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--town-panel);
+  color: var(--town-ink);
+}
+
+.profileCard .closeButton {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.profileStage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  border-radius: 16px;
+  background: radial-gradient(circle at 50% 85%, #ffe2c4 0 30%, transparent 31%), var(--town-soft);
+}
+
+.profileName {
+  margin: 0;
+  font-size: 18px;
+}
+
+.profileStat {
+  margin: 0;
+  font-size: 13px;
+  color: var(--town-muted);
+}
+
+.profileStat span {
+  color: #f0b429;
+}
+
+.profileActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------ v2: rooms */
+
+.roomButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.roomButtons > button {
+  flex: 1 1 auto;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.roomInfo {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--town-muted);
+}
+
+.roomList {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.roomListButton {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  border: 1px solid var(--town-line);
+  background: var(--town-panel);
+  color: var(--town-ink);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.roomListButton[aria-current="location"] {
+  border-color: var(--town-accent);
+  background: var(--town-soft);
+}
+
+.roomListTitle {
+  font-weight: 700;
+}
+
+.roomListTitle em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--town-muted);
+  margin-left: 4px;
+}
+
+.roomEditor {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.roomEditorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.roomEditorHeader .panelTitle {
+  margin: 0;
+}
+
+.roomEditorHeader .primaryButton {
+  padding: 6px 14px;
+}
+
+.toolToggle {
+  display: flex;
+  gap: 6px;
+}
+
+.furnitureGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+
+.furnitureButton {
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  padding: 4px 2px 6px;
+  border: 2px solid var(--town-line);
+  border-radius: 10px;
+  background: var(--town-panel);
+  color: var(--town-ink);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.furnitureButton[aria-pressed="true"] {
+  border-color: var(--town-accent);
+  background: var(--town-soft);
+}
+
+.styleRow {
+  display: grid;
+  gap: 6px;
+}
+
+.floorChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.titleRow {
+  display: flex;
+  gap: 6px;
+}
+
+.titleRow input {
+  flex: 1;
+  min-width: 0;
+  border: 2px solid var(--town-line);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--town-ink);
+  background: var(--town-panel);
+}
+
+.titleRow .secondaryButton {
+  padding: 6px 12px;
+}
+
+.clearRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.dangerButton {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  background: #d9414f;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.linkButton {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--town-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------ v2: editor */
+
+.groupTabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--town-soft);
+  width: fit-content;
+}
+
+.groupTab {
+  border: none;
+  background: transparent;
+  color: var(--town-ink);
+  border-radius: 999px;
+  padding: 6px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.groupTab[aria-selected="true"] {
+  background: var(--town-panel);
+  box-shadow: 0 1px 4px rgba(58, 44, 44, 0.15);
+  color: var(--town-accent);
+}
+
+.paletteBlock {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.paletteLabel {
+  font-size: 12px;
+  color: var(--town-muted);
+  font-weight: 700;
+}
+
+.customColor {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 2px;
+  border: 1px solid var(--town-line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--town-muted);
+  cursor: pointer;
+}
+
+.customColor input {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.outfits {
+  display: grid;
+  gap: 6px;
+}
+
+.outfitsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--town-muted);
+  font-weight: 700;
+}
+
+.outfitGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.outfitSlot {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 44 / 56;
+  border: 2px solid var(--town-line);
+  border-radius: 8px;
+  background: var(--town-panel);
+  color: var(--town-muted);
+  font-size: 11px;
+  cursor: pointer;
+  overflow: hidden;
+  padding: 0;
+}
+
+.outfitSlot[data-mode="save"] {
+  border-style: dashed;
+  border-color: var(--town-accent);
+}
+
+.backButton,
+.dressButton {
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ v3: アメ */
+
+.ameBadge {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #f5c26b;
+  background: #fff4d6;
+  color: #8a5a10;
+  font-weight: 800;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toasts {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.toast {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(58, 44, 44, 0.85);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: toastIn 0.25s ease-out;
+}
+
+.toast[data-kind="ame"] {
+  background: #f0a52c;
+}
+
+.toast[data-kind="error"] {
+  background: #d9414f;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.ameShop {
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--town-panel);
+  color: var(--town-ink);
+}
+
+.ameShopHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ameBig {
+  font-size: 24px;
+  font-weight: 800;
+  color: #b0700c;
+}
+
+.ameBig small {
+  font-size: 13px;
+}
+
+.ameSection {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.ameLead,
+.ameNote {
+  margin: 0;
+  font-size: 13px;
+  color: var(--town-muted);
+  text-align: center;
+}
+
+.ameHeading {
+  justify-self: start;
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+
+.prizeList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+
+.prizeResult {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #d9414f;
+}
+
+.scratchWrap {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.scratchCard {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 3px solid #f5c26b;
+  background: #fffaf0;
+}
+
+.scratchGrid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.scratchCell {
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+  border: 1px dashed #f0dfcc;
+}
+
+.scratchCell[data-win="true"] {
+  background: #fff1b8;
+}
+
+.scratchCoat {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+  transition: opacity 0.4s;
+}
+
+.scratchCoat[data-revealed="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shopGrid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.shopItem {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 1px solid var(--town-line);
+  border-radius: 12px;
+  background: var(--town-soft);
+}
+
+.shopItem[data-owned="true"] {
+  background: var(--town-panel);
+}
+
+.shopLabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.buyButton {
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: #f0a52c;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.buyButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ownedTag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #3c9a6a;
+}
+
+.roomShop {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+}
+
+.roomShopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--town-line);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.earnList {
+  width: 100%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.earnList li {
+  display: grid;
+  grid-template-columns: 1fr auto 96px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--town-line);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.earnList b {
+  color: #b0700c;
+}
+
+.earnList em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--town-muted);
+  text-align: right;
+}
+
+.earnList li[data-done="true"] {
+  background: var(--town-soft);
+}
+
+.optionCard,
+.furnitureButton {
+  position: relative;
+}
+
+.lockTag,
+.limitedTag {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lockTag {
+  background: rgba(58, 44, 44, 0.75);
+  color: #ffffff;
+}
+
+.limitedTag {
+  background: #fff1b8;
+  color: #b0700c;
+}
+
+.furnitureButton[data-locked="true"] canvas,
+.optionCard:has(.lockTag) canvas {
+  opacity: 0.55;
+}
+
+.lockNote {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: #d9414f;
+  text-align: right;
+}
+
+.myRooms {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ------------------------------------------------------------ narrow */
+
+@media (max-width: 860px) {
+  .root {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stage {
+    min-height: 58dvh;
+  }
+
+  .side > .panel {
+    overflow: visible;
+  }
+
+  .chatLog {
+    max-height: 220px;
+  }
+
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .status {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .wideOnly {
+    display: none;
+  }
+
+  .header {
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .title {
+    font-size: 16px;
+  }
+
+  .dressButton {
+    padding: 4px 6px;
+  }
+}

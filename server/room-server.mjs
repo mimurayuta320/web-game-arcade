@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
+import { handleTownMessage, handleTownClose } from "./town-world.mjs";
 
 const HOST = process.env.ROOM_HOST || "0.0.0.0";
 const PORT = Number(process.env.ROOM_PORT || 8788);
@@ -999,6 +1000,7 @@ wss.on("connection", (ws) => {
     }
 
     if (!payload || typeof payload !== "object") return;
+    if (handleTownMessage(ws, payload)) return;
     ws.peerId = String(payload.from || ws.peerId || "").trim() || ws.peerId;
     ws.clientId = String(payload.clientId || ws.clientId || "").trim() || ws.clientId;
     ws.userId = String(payload.userId || ws.userId || "").trim() || ws.userId;
@@ -1307,6 +1309,7 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
+    handleTownClose(ws);
     const code = ws.roomCode;
     const from = ws.peerId;
     removeFromRoom(ws);
