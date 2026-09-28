@@ -14,12 +14,12 @@ export function directionOf(screenDx: number, screenDy: number): Direction8 {
   return DIRECTION_BY_SECTOR[((sector % 8) + 8) % 8];
 }
 
-export const LINE = "rgba(58, 38, 38, 0.9)";
-export const LINE_WIDTH = 1.1;
+export const LINE = "rgba(74, 46, 42, 0.92)";
+export const LINE_WIDTH = 0.95;
 export const HEAD_Y = -44;
 export const HIP_Y = -13;
-export const EYE_Y = -42;
-export const EYE_X = 6.2;
+export const EYE_Y = -41.2;
+export const EYE_X = 6.5;
 
 export function shade(hex: string, amount: number): string {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -29,6 +29,31 @@ export function shade(hex: string, amount: number): string {
   const g = clamp(mix((n >> 8) & 255));
   const b = clamp(mix(n & 255));
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
+/** Mix two #rrggbb colors (t = 0 → a, 1 → b). */
+export function mix(a: string, b: string, t: number): string {
+  const p = Number.parseInt(a.slice(1), 16);
+  const q = Number.parseInt(b.slice(1), 16);
+  const ch = (sh: number) => Math.round(((p >> sh) & 255) * (1 - t) + ((q >> sh) & 255) * t);
+  return `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, "0")}`;
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const outlineCache = new Map<string, string>();
+
+/**
+ * Pigg-style outline: a deeper, slightly warm version of the fill instead of one dark line color,
+ * which keeps light parts soft and dark parts crisp.
+ */
+export function outlineOf(fill: string): string {
+  if (!HEX.test(fill)) return LINE;
+  let out = outlineCache.get(fill);
+  if (!out) {
+    out = mix(shade(fill, -0.52), "#4a2e2a", 0.3);
+    outlineCache.set(fill, out);
+  }
+  return out;
 }
 
 /** Perceived brightness 0..1, used to pick readable accent colors. */
@@ -45,7 +70,7 @@ export function fillStroke(ctx: Ctx, fill: string, stroke = true) {
     // (left over from line drawing) would stamp a dot there.
     ctx.lineCap = "butt";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = LINE;
+    ctx.strokeStyle = outlineOf(fill);
     ctx.lineWidth = LINE_WIDTH;
     ctx.stroke();
   }

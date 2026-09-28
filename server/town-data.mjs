@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import economy from "../apps/web/src/games/town/shared/economy.json" with { type: "json" };
+import { gardenSizeFor, levelFromXp } from "../apps/web/src/games/town/shared/gardenRules.mjs";
 
 export { economy };
 
@@ -35,11 +36,19 @@ export const BAITS = new Map(economy.fishing.baits.map((b) => [b.id, b]));
 export const CASINO_ITEMS = new Map(economy.casinoItems.map((i) => [i.id, i]));
 export const PET_SPECIES = new Map(economy.pets.species.map((s) => [s.id, s]));
 export const CROPS = new Map(economy.garden.crops.map((c) => [c.id, c]));
+const GARDEN = economy.garden;
+export const RECIPES = new Map(GARDEN.recipes.map((r) => [r.id, r]));
+const FERT_IDS = new Set(GARDEN.ferts.map((f) => f.id));
+const TOOL_IDS = new Set(GARDEN.tools.map((t) => t.id));
+const ITEM_IDS = new Set(GARDEN.items.map((i) => i.id));
+const DECO_KINDS = new Set([...GARDEN.decos, ...GARDEN.items.map((i) => i.id)]);
 
 /** playerId -> player */
 export const players = new Map();
 /** roomId -> room */
 export const rooms = new Map();
+/** playerId -> My Garden (one per player, id = player id) */
+export const gardens = new Map();
 
 const nowTs = () => Date.now();
 
@@ -195,6 +204,15 @@ function ensureExtras(player, raw = player) {
     return out;
   };
   player.seeds = countMap(raw.seeds, CROPS);
+  // Everyone starts with some of every regular seed (given once, also to players from before this existed).
+  player.starterSeeds = Boolean(raw.starterSeeds);
+  if (!player.starterSeeds) {
+    const n = GARDEN.starterSeeds ?? 10;
+    for (const crop of CROPS.values()) {
+      if (!crop.rare) player.seeds[crop.id] = Math.max(player.seeds[crop.id] ?? 0, n);
+    }
+    player.starterSeeds = true;
+  }
   player.goods = countMap(raw.goods, CROPS);
   player.petFood = Math.max(0, Math.min(9999, Math.floor(Number(raw.petFood) || 0)));
   // Lifetime counters (for achievements) and which achievements have been claimed.
@@ -204,11 +222,134 @@ function ensureExtras(player, raw = player) {
     if (/^[a-zA-Z]{1,16}$/.test(id) && count > 0) stats[id] = Math.min(count, 1e9);
   }
   player.stats = stats;
+  player.gp = sanitizeGardenProgress(raw.gp);
   const achIds = new Set(ACHIEVEMENTS.map((a) => a.id));
   player.achClaimed = {};
   for (const id of Object.keys(raw.achClaimed && typeof raw.achClaimed === "object" ? raw.achClaimed : {})) {
     if (achIds.has(id)) player.achClaimed[id] = true;
   }
+}
+
+/**
+ * My Garden progress: xp (→ level), crop dex, dishes, ★gold crops, fertilizer, tools, placeable items,
+ * mystery seeds, claimed dex rewards and today's orders.
+ */
+function sanitizeGardenProgress(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const counts = (source, allowed) => {
+    const out = {};
+    for (const [id, n] of Object.entries(source && typeof source === "object" ? source : {})) {
+      const count = Math.floor(Number(n) || 0);
+      if (allowed.has(id) && count > 0) out[id] = Math.min(count, 9999);
+    }
+    return out;
+  };
+  const dex = {};
+  for (const [id, entry] of Object.entries(src.dex && typeof src.dex === "object" ? src.dex : {})) {
+    const n = Math.floor(Number(entry?.n) || 0);
+    if (CROPS.has(id) && n > 0) dex[id] = { n: Math.min(n, 1e9), gold: Math.max(0, Math.floor(Number(entry.gold) || 0)) };
+  }
+  const orders = src.orders && typeof src.orders === "object" && Array.isArray(src.orders.list) ? {
+    day: String(src.orders.day || ""),
+    refreshes: Math.max(0, Math.floor(Number(src.orders.refreshes) || 0)),
+    list: src.orders.list.slice(0, GARDEN.orders.perDay).map((o) => ({
+      id: String(o?.id || "").slice(0, 16),
+      needs: Object.fromEntries(Object.entries(o?.needs && typeof o.needs === "object" ? o.needs : {})
+        .filter(([k]) => CROPS.has(k) || RECIPES.has(k))
+        .map(([k, v]) => [k, Math.max(1, Math.min(99, Math.floor(Number(v) || 1)))])),
+      ame: Math.max(0, Math.floor(Number(o?.ame) || 0)),
+      xp: Math.max(0, Math.floor(Number(o?.xp) || 0)),
+      done: Boolean(o?.done),
+    })),
+  } : null;
+  return {
+    xp: Math.max(0, Math.floor(Number(src.xp) || 0)),
+    dex,
+    cooked: counts(src.cooked, RECIPES),
+    dishes: counts(src.dishes, RECIPES),
+    gold: counts(src.gold, CROPS),
+    ferts: counts(src.ferts, FERT_IDS),
+    tools: (Array.isArray(src.tools) ? src.tools : []).filter((t) => TOOL_IDS.has(t)),
+    items: counts(src.items, ITEM_IDS),
+    mystery: Math.max(0, Math.min(9999, Math.floor(Number(src.mystery) || 0))),
+    dexClaimed: (Array.isArray(src.dexClaimed) ? src.dexClaimed : []).map(Number).filter((n) => GARDEN.dexMilestones.some((m) => m.pct === n)),
+    orders,
+    helped: Math.max(0, Math.floor(Number(src.helped) || 0)),
+  };
+}
+
+export function gardenLevelOf(player) {
+  return levelFromXp(player.gp?.xp || 0, GARDEN.maxLevel);
+}
+
+// ------------------------------------------------------------ My Garden
+
+function sanitizeGardenCrop(raw) {
+  if (!raw || typeof raw !== "object" || !CROPS.has(raw.id)) return null;
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  return {
+    id: raw.id,
+    plantedAt: num(raw.plantedAt),
+    growth: Math.max(0, num(raw.growth)),
+    calcAt: num(raw.calcAt) || num(raw.plantedAt),
+    fert: FERT_IDS.has(raw.fert) ? raw.fert : "",
+    careWet: Math.max(0, num(raw.careWet)),
+    careDry: Math.max(0, num(raw.careDry)),
+    ripeAt: Math.max(0, num(raw.ripeAt)),
+  };
+}
+
+export function sanitizeGarden(raw, size) {
+  const garden = {
+    id: String(raw.id),
+    ownerId: String(raw.ownerId || raw.id),
+    owner: normalizeName(raw.owner),
+    size,
+    plots: [],
+    decos: [],
+    updatedAt: Number(raw.updatedAt) || nowTs(),
+  };
+  const used = new Set();
+  const inside = (x, y) => Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < size && y < size;
+  for (const p of Array.isArray(raw.plots) ? raw.plots : []) {
+    const x = Math.floor(Number(p?.x));
+    const y = Math.floor(Number(p?.y));
+    if (!inside(x, y) || used.has(`${x},${y}`)) continue;
+    used.add(`${x},${y}`);
+    garden.plots.push({
+      x, y,
+      wetUntil: Number(p.wetUntil) || 0,
+      weed: Boolean(p.weed),
+      bug: Boolean(p.bug),
+      pestAt: Number(p.pestAt) || nowTs(),
+      crop: sanitizeGardenCrop(p.crop),
+    });
+  }
+  for (const d of Array.isArray(raw.decos) ? raw.decos : []) {
+    const x = Math.floor(Number(d?.x));
+    const y = Math.floor(Number(d?.y));
+    if (!DECO_KINDS.has(d?.kind) || !inside(x, y) || used.has(`${x},${y}`) || garden.decos.length >= GARDEN.maxDecos) continue;
+    used.add(`${x},${y}`);
+    garden.decos.push({ kind: d.kind, x, y });
+  }
+  return garden;
+}
+
+/** The player's garden, created on first use; its size follows the garden level. */
+export function ensureGarden(player) {
+  const size = gardenSizeFor(gardenLevelOf(player), GARDEN);
+  let garden = gardens.get(player.id);
+  if (!garden) {
+    garden = sanitizeGarden({ id: player.id, ownerId: player.id, owner: player.name }, size);
+    gardens.set(player.id, garden);
+    scheduleSave();
+  }
+  if (garden.size < size) {
+    garden.size = size;
+    scheduleSave();
+  }
+  if (garden.owner !== player.name) garden.owner = player.name;
+  return garden;
 }
 
 export function normalizePetName(raw, species) {
@@ -554,6 +695,8 @@ export function ensurePlayer(id, name) {
       const room = rooms.get(roomId);
       if (room) room.owner = player.name;
     }
+    const garden = gardens.get(player.id);
+    if (garden) garden.owner = player.name;
     scheduleSave();
   }
   // Everyone has a home room; its id equals the player id for backward compatibility.
@@ -596,6 +739,21 @@ export function walletOf(player) {
     seeds: player.seeds,
     goods: player.goods,
     petFood: player.petFood,
+    garden: {
+      xp: player.gp.xp,
+      level: gardenLevelOf(player),
+      dex: player.gp.dex,
+      cooked: player.gp.cooked,
+      dishes: player.gp.dishes,
+      gold: player.gp.gold,
+      ferts: player.gp.ferts,
+      tools: player.gp.tools,
+      items: player.gp.items,
+      mystery: player.gp.mystery,
+      dexClaimed: player.gp.dexClaimed,
+      helped: player.gp.helped,
+      hasGarden: gardens.has(player.id),
+    },
     pets: player.pets.map((p) => ({
       id: p.id, species: p.species, name: p.name, bond: p.bond, level: petLevel(p), hunger: petHunger(p),
     })),
@@ -647,6 +805,11 @@ function load() {
     for (const raw of data.rooms || []) {
       if (/^[0-9a-f]{16}$/.test(raw?.id)) rooms.set(raw.id, sanitizeRoom(raw));
     }
+    for (const raw of data.gardens || []) {
+      const owner = players.get(String(raw?.id));
+      if (!owner) continue;
+      gardens.set(owner.id, sanitizeGarden(raw, gardenSizeFor(gardenLevelOf(owner), GARDEN)));
+    }
     return;
   } catch (error) {
     if (error?.code !== "ENOENT") {
@@ -692,7 +855,7 @@ export function scheduleSave() {
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    const data = { version: 2, players: [...players.values()], rooms: [...rooms.values()] };
+    const data = { version: 2, players: [...players.values()], rooms: [...rooms.values()], gardens: [...gardens.values()] };
     const tmp = `${DATA_PATH}.tmp`;
     fs.promises.mkdir(path.dirname(DATA_PATH), { recursive: true })
       .then(() => fs.promises.writeFile(tmp, JSON.stringify(data)))

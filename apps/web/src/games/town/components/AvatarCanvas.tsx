@@ -7,7 +7,7 @@ import type { AvatarConfig, ThumbFocus } from "../avatar/parts";
 
 /** Zoomed thumbnail frames: vertical centre and span in avatar units. */
 const FRAMES: Record<Exclude<ThumbFocus, "body">, { center: number; span: number }> = {
-  head: { center: -46, span: 40 },
+  head: { center: -48, span: 47 },
   upper: { center: -30, span: 42 },
   lower: { center: -11, span: 28 },
   feet: { center: -5, span: 16 },

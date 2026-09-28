@@ -413,6 +413,71 @@ export function avatarHitBox(camera: Camera, a: { x: number; y: number; z?: numb
   return { x0: sx - 20 * s, x1: sx + 20 * s, y0: sy - 70 * s, y1: sy + 4 * s };
 }
 
+/** Short-lived garden effects at a tile (watering, harvest, ...), `born` in performance.now() ms. */
+export type TileEffect = { x: number; y: number; kind: string; text?: string; born: number };
+const EFFECT_MS = 1300;
+
+function drawEffect(ctx: Ctx, fx: TileEffect, now: number) {
+  const age = (now - fx.born) / EFFECT_MS;
+  if (age < 0 || age > 1) return;
+  const [sx, sy] = toScreen(fx.x, fx.y);
+  ctx.save();
+  ctx.globalAlpha = 1 - age;
+  switch (fx.kind) {
+    case "water":
+      for (let i = 0; i < 7; i += 1) {
+        const dx = (i - 3) * 4;
+        const fall = ((age * 1.6 + i * 0.13) % 1) * 22;
+        ctx.beginPath();
+        ctx.ellipse(sx + dx, sy - 26 + fall, 1.3, 2.4, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "#6ec3e8";
+        ctx.fill();
+      }
+      break;
+    case "dust":
+    case "seed":
+      for (let i = 0; i < 6; i += 1) {
+        const a = (i / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(sx + Math.cos(a) * (6 + age * 14), sy - 4 + Math.sin(a) * (3 + age * 6) - age * 6, 3 - age * 2, 0, Math.PI * 2);
+        ctx.fillStyle = fx.kind === "seed" ? "#7ac35a" : "#c9a06a";
+        ctx.fill();
+      }
+      break;
+    case "leaf":
+      for (let i = 0; i < 5; i += 1) {
+        ctx.beginPath();
+        ctx.ellipse(sx - 10 + i * 5, sy - 8 - age * 22 + Math.sin(age * 8 + i) * 3, 2.6, 1.2, age * 6 + i, 0, Math.PI * 2);
+        ctx.fillStyle = "#5fae4a";
+        ctx.fill();
+      }
+      break;
+    case "sparkle":
+    case "gold":
+    case "harvest":
+      for (let i = 0; i < 6; i += 1) {
+        const a = (i / 6) * Math.PI * 2 + age * 3;
+        const r = 8 + age * 16;
+        starPath(ctx, sx + Math.cos(a) * r, sy - 14 + Math.sin(a) * r * 0.6, fx.kind === "gold" ? 3.4 : 2.6, 4, 0.4);
+        ctx.fillStyle = fx.kind === "gold" ? "#f5c542" : fx.kind === "sparkle" ? "#fff3a0" : "#ffffff";
+        ctx.fill();
+      }
+      if (fx.text) {
+        ctx.font = "bold 13px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#ffffff";
+        const y = sy - 30 - age * 26;
+        ctx.strokeText(fx.text, sx, y);
+        ctx.fillStyle = fx.kind === "gold" ? "#c98a0a" : "#3a2c2c";
+        ctx.fillText(fx.text, sx, y);
+      }
+      break;
+  }
+  ctx.restore();
+}
+
 export function renderArea(
   ctx: Ctx,
   area: AreaDef,
@@ -423,6 +488,7 @@ export function renderArea(
   now: number,
   hoverTile: [number, number] | null,
   ghost: PlacementGhost | null = null,
+  effects: TileEffect[] = [],
 ) {
   const time = now / 1000;
   const grad = ctx.createLinearGradient(0, 0, 0, height);
@@ -502,6 +568,7 @@ export function renderArea(
   }
   drawables.sort((p, q) => p.depth - q.depth);
   for (const d of drawables) d.draw();
+  for (const fx of effects) drawEffect(ctx, fx, now);
   ctx.restore();
 
   // Labels, name tags and bubbles: screen space, on top of everything.

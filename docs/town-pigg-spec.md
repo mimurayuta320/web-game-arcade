@@ -71,7 +71,7 @@ ode --no-warnings scripts/reel-sim.mjs。魚10種・図鑑つき。PERFECT の�
 | 釣り具屋・景品交換所 | 釣りポイントで さお・エサ・乗り物、カジノコインで カジノ家具・乗り物・服・カジノアイテムを買える | 実装 |
 | のりもの | 着せかえの「のりもの」。乗ると歩く速さが約1.6倍 | 実装 |
 | ペット | ショッピング街の「ペットショップ」でアメで購入（犬・猫・うさぎ・ひよこ・ペンギン・パンダ、最大4ひき）。つれていく子がついて歩く（友だちにも見える）。なでる・ごはんでなかよし度が上がり、6時間でおなかが空く。毎日ログイン時に、なかよし度の高い子からアメのおくりもの | 実装 |
-| ガーデニング | 「おはなや」でたねを買い、マイルームの家具「はたけ」（限定・にわカテゴリ）に植える。育つまで4〜15分、水やり（最大3回）で早まり、収穫物は売る・ペットのごはんにできる。友だちの畑にも水やりでき、お礼のアメが出る | 実装 |
+| ガーデニング | **マイガーデン**（プレイヤーごとの屋外の庭。レベルで広がる）でたがやす→たねまき→水やり→収穫。5段階の成長、かわいた土は遅い、雑草・虫（友だちも取れる）、ひりょう、★きんの作物、ガーデンレベル・図鑑・季節とレアのたね、りょうり・毎日のちゅうもん、じょうろ（3×3）・スプリンクラー・かかし・まとめて収穫。部屋の家具「はたけ」も引き続き使える。育つまで4〜15分、水やり（最大3回）で早まり、収穫物は売る・ペットのごはんにできる。友だちの畑にも水やりでき、お礼のアメが出る | 実装 |
 | ペット・庭 | — | 未実装 |
 
 ## 3. 構成
@@ -169,10 +169,21 @@ ode --no-warnings scripts/reel-sim.mjs。魚10種・図鑑つき。PERFECT の�
 
 ### ペットとガーデニング
 
-- 設定は economy.json の pets / garden（クライアントとサーバーが同じファイルを読む）。画面は components/PetPanel.tsx・GardenPanel.tsx・PlotPopup.tsx、ペットの絵は vatar/draw/pet.ts。ヘッダーの 🐾・🌱、街のスポット（petshop / gardenshop）、畑のクリックから開く。
+- 設定は economy.json の pets / garden（クライアントとサーバーが同じファイルを読む）。画面は components/PetPanel.tsx・GardenBook.tsx・PlotPopup.tsx、ペットの絵は vatar/draw/pet.ts。ヘッダーの 🐾・🌱、街のスポット（petshop / gardenshop）、畑のクリックから開く。
 - ペット: 	own-pet-buy|active|rename|pat|feed（返信 	own-pet-done）。なかよし度は0〜100（1日の上限あり）、おなか（hunger）は最後にごはんを食べた時刻から計算。おなかが一定以上空いていないとごはんは受け付けず（NOT_HUNGRY）、食べ物は減らない。つれている子は 	own-member-updated の pet で他の人に伝わり、位置は各クライアントが持ち主に追従させて描く（サーバーには位置を送らない）。
 - 畑: plot 家具の crop（id, plantedAt, eadyAt, waters, lastWaterAt）。	own-garden-plant|water|harvest（返信 	own-garden-done）。植える・収穫は持ち主だけ、水やりは誰でも（NOT_OWNER など）。クライアントが crop 付きで畑を置いても空の畑になる。時間はすべてサーバー時刻で判定する。
 - たね・収穫物・ペットフード・ペットは players[] の seeds / goods / petFood / pets / ctivePet に保存。
+
+### マイガーデン
+
+- **場所**: エリアID `garden:<gardenId>`（プレイヤーごと。16進16けた）。サイドの「🌱 マイガーデンへ」「みんなのガーデン」、プロフィールカードの「ガーデンへ」から行ける。広さと畑の上限はガーデンレベルで増える（`gardenRules.mjs` の `gardenSizeFor` / `maxPlotsFor`）。入り口の門からひろばへ戻れる。
+- **ルールの共有**: 成長の計算は `apps/web/src/games/town/shared/gardenRules.mjs`（サーバーとクライアントが同じファイルを使う）。成長は「最後に計算した時点からの進み」をその場で求める方式（しめった土 1.0 / かわいた土 `dryRate`、ひりょう・旬で加速、雑草で減速）。実ってから `witherMs` 放っておくとかれて、収穫するとたいひになる。時間はサーバー時刻（クライアントは `serverNow` との差 `clockOffset` で表示だけ合わせる）。
+- **むし・ざっそう**: サーバーが20秒ごと（`GARDEN_TICK_MS`）に抽選。かかしのまわりは虫が出ない。持ち主以外が水やり・草取りをすると、1日の上限までお礼のアメ（`helped` に記録）。
+- **レベル・図鑑**: たがやす・植える・収穫・料理・ちゅうもんでけいけんち。レベルでたね・料理・どうぐ・畑数が解放（`town-garden-levelup`）。図鑑は初めて収穫した作物を記録し、達成率のごほうび（`dexMilestones`）を `town-garden-dex` で受け取る。季節（`seasonOf`）で旬のたねだけ売られ、レアのたねは「ふしぎなたね」から出る。
+- **料理・ちゅうもん**: `economy.json` の `garden.recipes`（16品）を `town-garden-cook` で作る。ちゅうもんは日本時間の1日ごとに3つ（`town-garden-order`、`refresh` で1日に数回とりかえ）。
+- **通信**: `town-garden-act`（`op`: till / untill / plant / water / weed / fert / harvest / harvestAll / decoPlace / decoRemove、`area: true` で3×3）→ 更新は同じガーデンの全員へ `town-garden`（`fx` で水しぶきなどのエフェクト）。ほかに `town-garden-shop` / `town-garden-sell` / `town-gardens`（一覧）/ `town-garden-news`。畑しごとの連打はトークンバケット（8回ぶん、毎秒6回回復）で制限。
+- **保存**: `server/data/town-data.json` の `gardens[]` と、プレイヤーの `gp`（xp・図鑑・どうぐ・ひりょう など）。サーバーの処理は `server/town-garden.mjs`。
+- **画面**: `GardenToolbar.tsx`（上の状態表示＋下のどうぐ）、`GardenPlotCard.tsx`（畑のようす）、`GardenBook.tsx`（ショップ・もちもの・りょうり・ちゅうもん・ずかん・レベル）。描画は `world/garden.ts`（エリア生成）と `objects.ts` の `drawCropArt`（5段階）。
 
 ### ボリュームアップ（ミッション・エリア・カジノ・きせかえ）
 

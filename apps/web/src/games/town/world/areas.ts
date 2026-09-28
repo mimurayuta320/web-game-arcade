@@ -1,5 +1,6 @@
 // Town area definitions. Width/height/spawn must match server/town-world.mjs.
 import type { PlotCrop } from "../shared/shop";
+import type { GardenData, GardenPlotView } from "./garden";
 import {
   FURNITURE_BY_KIND, LEVEL_PX, ROOM_SIZES, WALL_STYLES, blockHeightOfKind, footprintOf, isBlockKind, isStairsKind, levelOf, roomDoor, roomSpawn,
   standHeights, surfaceHeights, type FurnitureKind, type RoomData,
@@ -19,6 +20,7 @@ export type ObjectKind =
   | "shop" | "vending" | "streetlight" | "planter"
   | "slotmachine" | "roulettetable" | "cardtable"
   | "tent" | "campfire" | "log" | "slide" | "swing" | "sandbox" | "lilypad"
+  | "gsoil" | "gcrop" | "sprinkler"
   | FurnitureKind;
 
 export type TownObject = {
@@ -38,6 +40,8 @@ export type TownObject = {
   rot?: 1;
   /** What is growing in a plot. */
   crop?: PlotCrop;
+  /** My Garden plot (soil or what grows on it). */
+  gplot?: GardenPlotView;
   /** Level it sits on (0 = the floor, 1 = on top of one block, ...). */
   z?: number;
   /** Which way a staircase climbs (0-3). */
@@ -45,8 +49,8 @@ export type TownObject = {
 };
 
 export type StaticAreaId = "plaza" | "cafe" | "beach" | "shrine" | "street" | "casino" | "park" | "camp";
-/** Static areas, or "room:<16 hex>" for a player's room. */
-export type AreaId = StaticAreaId | `room:${string}`;
+/** Static areas, "room:<16 hex>" for a player's room, or "garden:<16 hex>" for their garden. */
+export type AreaId = StaticAreaId | `room:${string}` | `garden:${string}`;
 
 export type Portal = { x: number; y: number; to: AreaId; spawn: [number, number]; label: string };
 
@@ -69,6 +73,7 @@ export type AreaDef = {
   spots?: GameSpot[];
   wallStyle?: string;
   room?: RoomData;
+  garden?: GardenData;
   /** Rooms with blocks: per tile, where an avatar stands (null = blocked), in levels. Absent = everything is level 0. */
   heights?: Array<number | null>;
   /** Rooms with blocks: per tile, the height of the surface under the pointer, in levels. */
@@ -360,8 +365,12 @@ export function isRoomAreaId(value: unknown): value is `room:${string}` {
   return typeof value === "string" && /^room:[0-9a-f]{16}$/.test(value);
 }
 
+export function isGardenAreaId(value: unknown): value is `garden:${string}` {
+  return typeof value === "string" && /^garden:[0-9a-f]{16}$/.test(value);
+}
+
 export function isAreaId(value: unknown): value is AreaId {
-  return isStaticAreaId(value) || isRoomAreaId(value);
+  return isStaticAreaId(value) || isRoomAreaId(value) || isGardenAreaId(value);
 }
 
 // ------------------------------------------------------------------- rooms

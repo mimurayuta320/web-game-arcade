@@ -16,7 +16,10 @@ import { useCasinoBank } from "@/games/casino/useCasinoBank";
 import { FishingPanel } from "@/games/town/components/FishingPanel";
 import { PointShop } from "@/games/town/components/PointShop";
 import { PetPanel } from "@/games/town/components/PetPanel";
-import { GardenPanel } from "@/games/town/components/GardenPanel";
+import { GardenBook, type GardenBookTab } from "@/games/town/components/GardenBook";
+import { GardenToolbar, gardenHint, type GardenToolState } from "@/games/town/components/GardenToolbar";
+import { GardenPlotCard } from "@/games/town/components/GardenPlotCard";
+import { gardenDecoAt, gardenPlotAt } from "@/games/town/world/garden";
 import { PlotPopup } from "@/games/town/components/PlotPopup";
 import { MissionPanel, claimableCount } from "@/games/town/components/MissionPanel";
 import type { ShopId } from "@/games/town/shared/shop";
@@ -112,7 +115,10 @@ export default function TownPage() {
   const [fishingOpen, setFishingOpen] = useState(false);
   const [pointShop, setPointShop] = useState<ShopId | null>(null);
   const [petPanel, setPetPanel] = useState<"mine" | "shop" | null>(null);
-  const [gardenOpen, setGardenOpen] = useState(false);
+  const [gardenBook, setGardenBook] = useState<GardenBookTab | null>(null);
+  const [gardenTools, setGardenTools] = useState<GardenToolState>({ tool: "hand", seed: "", fert: "", deco: "fence", wide: true });
+  const [gardenPlotPos, setGardenPlotPos] = useState<{ x: number; y: number } | null>(null);
+  const [gardensOpen, setGardensOpen] = useState(false);
   const [missionsOpen, setMissionsOpen] = useState(false);
   const [plotPos, setPlotPos] = useState<{ x: number; y: number } | null>(null);
   const casinoBank = useCasinoBank();
@@ -232,7 +238,7 @@ export default function TownPage() {
         else if (spot === "fishshop") setPointShop("fishing");
         else if (spot === "prizeshop") setPointShop("casino");
         else if (spot === "petshop") setPetPanel("shop");
-        else if (spot === "gardenshop") setGardenOpen(true);
+        else if (spot === "gardenshop") setGardenBook("shop");
         else setCasinoGame(spot);
         return;
       }
@@ -258,12 +264,28 @@ export default function TownPage() {
         window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200);
         return;
       }
+      if (event.type === "garden-levelup") {
+        const id = ++toastSeq.current;
+        const text = `🌱 ガーデンレベル ${event.level}！${event.unlocks.length ? ` ${event.unlocks.slice(0, 3).join("・")}${event.unlocks.length > 3 ? " ほか" : ""}` : ""}`;
+        setToasts((list) => [...list.slice(-3), { id, text, kind: "ame" }]);
+        window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 5000);
+        return;
+      }
+      if (event.type === "garden-news") {
+        const id = ++toastSeq.current;
+        setToasts((list) => [...list.slice(-3), { id, text: `🌱 ${event.text}`, kind: "info" }]);
+        window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200);
+        return;
+      }
       if (event.type === "garden-done") {
+        // Quick field work (till, water, weed, decorate) shows up in the garden itself, not as toasts.
+        if (!event.label) return;
         const text = event.op === "sell" ? `${event.label} を売って 🍬+${event.total ?? 0}`
-          : event.op === "harvest" ? `🧺 収穫！ ${event.label}`
-          : event.op === "plant" ? `🌱 ${event.label} を植えました`
+          : event.op === "harvest" || event.op === "harvestAll" ? event.label
+          : event.op === "plant" ? (event.label.includes("植えました") ? `🌱 ${event.label}` : `🌱 ${event.label} を植えました`)
           : event.op === "water" ? `💧 ${event.label}`
-          : `🛍 ${event.label} を手に入れました`;
+          : event.op === "buy" ? `🛍 ${event.label} を手に入れました`
+          : event.label;
         const id = ++toastSeq.current;
         setToasts((list) => [...list.slice(-3), { id, text, kind: "info" }]);
         window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200);
@@ -338,11 +360,12 @@ export default function TownPage() {
     const tick = () => {
       gameRef.current?.refreshAreaCounts();
       if (roomsOpen) gameRef.current?.requestRooms();
+      if (gardensOpen) gameRef.current?.requestGardens();
     };
     tick();
     const timer = window.setInterval(tick, 10000);
     return () => window.clearInterval(timer);
-  }, [hasProfile, roomsOpen]);
+  }, [hasProfile, roomsOpen, gardensOpen]);
 
   // Leave edit mode whenever we're not in our own room.
   const isOwnRoom = Boolean(snapshot?.isOwnRoom);
@@ -358,6 +381,8 @@ export default function TownPage() {
       if (e.key !== "Escape") return;
       setPaletteOpen(false);
       setProfileId(null);
+      setGardenPlotPos(null);
+      setGardenBook(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -377,9 +402,18 @@ export default function TownPage() {
       editor.pointerDown(tile);
       return;
     }
+    const garden = snapshot?.garden;
+    if (garden && tile && gardenTools.tool !== "hand") {
+      handleGardenTool(tile[0], tile[1]);
+      return;
+    }
     const hit = game.avatarAt(px, py);
     if (hit) {
       setProfileId(hit);
+      return;
+    }
+    if (garden && tile && gardenPlotAt(garden, tile[0], tile[1])) {
+      setGardenPlotPos({ x: tile[0], y: tile[1] });
       return;
     }
     // Garden plots are not walkable: clicking one opens its card instead.
@@ -391,6 +425,58 @@ export default function TownPage() {
       }
     }
     if (tile) game.moveTo(tile);
+  };
+
+  /** Use the selected garden tool on a tile. The server checks everything; errors come back as toasts. */
+  const handleGardenTool = (x: number, y: number) => {
+    const game = gameRef.current;
+    const garden = snapshot?.garden;
+    if (!game || !garden) return;
+    const t = gardenTools;
+    switch (t.tool) {
+      case "till":
+        game.gardenAct("till", { x, y });
+        break;
+      case "plant":
+        if (!t.seed) {
+          showToast("うえるたねを下からえらんでね", "error");
+          return;
+        }
+        game.gardenAct("plant", { x, y, crop: t.seed });
+        break;
+      case "water":
+        game.gardenAct("water", { x, y, area: t.wide });
+        break;
+      case "weed":
+        game.gardenAct("weed", { x, y, area: t.wide });
+        break;
+      case "fert":
+        if (!t.fert) {
+          showToast("まくひりょうを下からえらんでね", "error");
+          return;
+        }
+        game.gardenAct("fert", { x, y, fert: t.fert });
+        break;
+      case "harvest":
+        game.gardenAct("harvest", { x, y });
+        break;
+      case "deco":
+        game.gardenAct("decoPlace", { x, y, kind: t.deco });
+        break;
+      case "remove": {
+        if (gardenDecoAt(garden, x, y)) {
+          game.gardenAct("decoRemove", { x, y });
+          break;
+        }
+        const plot = gardenPlotAt(garden, x, y);
+        if (!plot) return;
+        if (plot.crop && !window.confirm("育っている作物ごと畑を片づけます。いいですか？")) return;
+        game.gardenAct("untill", { x, y });
+        break;
+      }
+      default:
+        break;
+    }
   };
 
   const handleSaveProfile = (name: string, avatar: AvatarConfig) => {
@@ -429,6 +515,8 @@ export default function TownPage() {
     setFishingOpen(false);
     setCasinoGame(null);
     setPlotPos(null);
+    setGardenPlotPos(null);
+    setGardenTools((t) => ({ ...t, tool: "hand" }));
   }, [areaId]);
 
   const walletItems = snapshot?.wallet?.items;
@@ -486,7 +574,7 @@ export default function TownPage() {
                   <button type="button" className={styles.iconButton} title="ペット" aria-label="ペット" onClick={() => setPetPanel("mine")}>
                     🐾
                   </button>
-                  <button type="button" className={styles.iconButton} title="ガーデンショップ（たね・畑）" aria-label="ガーデンショップ" onClick={() => setGardenOpen(true)}>
+                  <button type="button" className={styles.iconButton} title="ガーデン手帳（たね・りょうり・ちゅうもん・ずかん）" aria-label="ガーデン手帳" onClick={() => setGardenBook("shop")}>
                     🌱
                   </button>
                 </>
@@ -547,10 +635,24 @@ export default function TownPage() {
                 onClose={() => setFishingOpen(false)}
               />
             ) : null}
-            <p className={styles.hint}>
+            {snapshot?.garden && snapshot.wallet ? (
+              <GardenToolbar
+                garden={snapshot.garden}
+                wallet={snapshot.wallet}
+                isOwner={snapshot.isOwnGarden}
+                clockOffset={snapshot.clockOffset}
+                state={gardenTools}
+                onChange={(next) => setGardenTools((t) => ({ ...t, ...next }))}
+                onOpenBook={() => setGardenBook("shop")}
+                onHarvestAll={() => gameRef.current?.gardenAct("harvestAll")}
+              />
+            ) : null}
+            <p className={styles.hint} data-garden={Boolean(snapshot?.garden)}>
               {editing
                 ? editor.pending || "ブロックを積んで、かいだんで2階へ ・ Ctrl+Z でもどす ・ Rキーで向き"
-                : "床をクリックで移動 ・ 人をクリックでプロフィール ・ 光っている場所から別のエリアへ"}
+                : snapshot?.garden
+                  ? gardenHint(gardenTools.tool, snapshot.isOwnGarden)
+                  : "床をクリックで移動 ・ 人をクリックでプロフィール ・ 光っている場所から別のエリアへ"}
             </p>
             {snapshot?.status === "replaced" ? (
               <div className={styles.replacedOverlay}>
@@ -688,6 +790,50 @@ export default function TownPage() {
                   みんなのへや
                 </button>
               </div>
+              <div className={styles.roomButtons}>
+                <button
+                  type="button"
+                  className={styles.gardenButton}
+                  disabled={snapshot?.isOwnGarden}
+                  onClick={() => gameRef.current?.goMyGarden()}
+                >
+                  🌱 マイガーデンへ
+                </button>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  aria-expanded={gardensOpen}
+                  onClick={() => setGardensOpen(!gardensOpen)}
+                >
+                  みんなのガーデン
+                </button>
+              </div>
+              {gardensOpen ? (
+                <ul className={styles.roomList}>
+                  {snapshot?.gardens.length ? (
+                    snapshot.gardens.map((g) => (
+                      <li key={g.id}>
+                        <button
+                          type="button"
+                          className={styles.roomListButton}
+                          aria-current={snapshot.areaId === `garden:${g.id}` ? "location" : undefined}
+                          onClick={() => gameRef.current?.visitGarden(g.id)}
+                        >
+                          <span className={styles.roomListTitle}>
+                            🌱 {g.owner}のガーデン
+                            {g.mine ? <em>（じぶん）</em> : null}
+                          </span>
+                          <span className={styles.areaCount}>
+                            {g.count > 0 ? `${g.count}人 ・ ` : ""}Lv.{g.level} ・ 畑{g.plots} ・ そだち中{g.growing}
+                          </span>
+                        </button>
+                      </li>
+                    ))
+                  ) : (
+                    <li className={styles.chatSystem}>まだガーデンはありません</li>
+                  )}
+                </ul>
+              ) : null}
 
               {snapshot?.wallet && snapshot.wallet.rooms.length > 1 ? (
                 <ul className={styles.myRooms} aria-label="じぶんのへや">
@@ -785,6 +931,10 @@ export default function TownPage() {
               setProfileId(null);
             }
             : undefined}
+          onVisitGarden={member.gardenId ? () => {
+            gameRef.current?.visitGarden(member.gardenId);
+            setProfileId(null);
+          } : undefined}
           onClose={() => setProfileId(null)}
         />
       ) : null}
@@ -808,9 +958,24 @@ export default function TownPage() {
         <MissionPanel game={gameRef.current} wallet={snapshot.wallet} onClose={() => setMissionsOpen(false)} />
       ) : null}
 
-      {gardenOpen && snapshot?.wallet && gameRef.current ? (
-        <GardenPanel game={gameRef.current} wallet={snapshot.wallet} onClose={() => setGardenOpen(false)} />
+      {gardenBook && snapshot?.wallet && gameRef.current ? (
+        <GardenBook game={gameRef.current} wallet={snapshot.wallet} initialTab={gardenBook} onClose={() => setGardenBook(null)} />
       ) : null}
+
+      {gardenPlotPos && snapshot?.garden && snapshot.wallet && gameRef.current ? (() => {
+        const plot = gardenPlotAt(snapshot.garden, gardenPlotPos.x, gardenPlotPos.y);
+        return plot ? (
+          <GardenPlotCard
+            game={gameRef.current}
+            garden={snapshot.garden}
+            plot={plot}
+            wallet={snapshot.wallet}
+            isOwner={snapshot.isOwnGarden}
+            clockOffset={snapshot.clockOffset}
+            onClose={() => setGardenPlotPos(null)}
+          />
+        ) : null;
+      })() : null}
 
       {plotPos && snapshot?.room && gameRef.current ? (() => {
         const item = itemAt(snapshot.room, plotPos.x, plotPos.y);

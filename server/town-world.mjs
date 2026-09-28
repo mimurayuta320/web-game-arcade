@@ -10,6 +10,12 @@ import {
   normalizeName, ownsFurniture, ownsPart, players, publicRoom, resolvePlayerId, roomSpawn, rooms, sanitizeItem,
   sanitizeRoom, scheduleSave, walletOf,
 } from "./town-data.mjs";
+import { gardens } from "./town-data.mjs";
+import {
+  advanceGarden, ensureGarden, gardenExtras, gardenIdOfArea, handleGardenAct, handleGardenCook, handleGardenDex, handleGardenOrder,
+  handleGardenSell, handleGardenShop, listGardens, publicGarden,
+} from "./town-garden.mjs";
+import { gardenSpawn } from "../apps/web/src/games/town/shared/gardenRules.mjs";
 
 // Keep in sync with apps/web/src/games/town/world/areas.ts (size and spawn only).
 const AREAS = {
@@ -60,6 +66,8 @@ const ACTION_MIN_INTERVAL_MS = 500;
 const MOVE_MIN_INTERVAL_MS = 80;
 const EDIT_MIN_INTERVAL_MS = 120;
 const SHOP_MIN_INTERVAL_MS = 300;
+const GARDEN_ACT_BURST = 8;
+const GARDEN_ACT_PER_SEC = 6;
 const GOOD_PIGG_COOLDOWN_MS = 30000;
 const WHERE_MIN_INTERVAL_MS = 3000;
 const WHERE_MAX_IDS = 100;
@@ -101,9 +109,16 @@ function playerOf(ws) {
   return ws.town?.playerId ? players.get(ws.town.playerId) || null : null;
 }
 
+/** walletOf + the garden parts that are computed on the fly (today's orders, dex %). */
+function fullWallet(player) {
+  const wallet = walletOf(player);
+  wallet.garden = { ...wallet.garden, ...gardenExtras(player) };
+  return wallet;
+}
+
 function sendWallet(ws) {
   const player = playerOf(ws);
-  if (player) send(ws, { type: "town-wallet", wallet: walletOf(player) });
+  if (player) send(ws, { type: "town-wallet", wallet: fullWallet(player) });
 }
 
 /** Credit アメ and tell the player why (for the toast). */
@@ -162,6 +177,11 @@ function roomIdOfArea(area) {
 }
 
 function areaSize(area) {
+  const gardenId = gardenIdOfArea(area);
+  if (gardenId) {
+    const size = gardens.get(gardenId)?.size || 12;
+    return { width: size, height: size, spawn: gardenSpawn(size) };
+  }
   const roomId = roomIdOfArea(area);
   if (roomId) {
     const size = rooms.get(roomId)?.size || ROOM_SIZES[0];
@@ -183,7 +203,8 @@ function publicMember(ws) {
   const player = playerOf(ws);
   return {
     id: t.id, name: t.name, avatar: t.avatar, x: t.x, y: t.y,
-    roomId: player?.rooms[0] || "", goodPigg: player?.goodPigg || 0, friendId: t.friendId || "", pet: publicPet(player),
+    roomId: player?.rooms[0] || "", gardenId: player && gardens.has(player.id) ? player.id : "",
+    goodPigg: player?.goodPigg || 0, friendId: t.friendId || "", pet: publicPet(player),
   };
 }
 
@@ -192,7 +213,7 @@ function areaOfChannel(channelKey) {
 }
 
 function pickChannel(area, preferred = 0) {
-  const capacity = roomIdOfArea(area) ? ROOM_CHANNEL_CAPACITY : CHANNEL_CAPACITY;
+  const capacity = roomIdOfArea(area) || gardenIdOfArea(area) ? ROOM_CHANNEL_CAPACITY : CHANNEL_CAPACITY;
   // Joining a friend: use their channel when it still has space.
   if (Number.isInteger(preferred) && preferred >= 1 && preferred < 1000) {
     const key = `${area}#${preferred}`;
@@ -247,6 +268,30 @@ function checkChatRate(t, text) {
   t.lastChatAt = now;
   return "";
 }
+
+/** Send a garden's state (plus optional one-off effects at tiles) to everyone in it. */
+function broadcastGarden(garden, fx = []) {
+  const areaKey = `garden:${garden.id}`;
+  const payload = { type: "town-garden", garden: publicGarden(garden), fx };
+  for (const key of channels.keys()) {
+    if (areaOfChannel(key) === areaKey) broadcast(key, payload);
+  }
+}
+
+function socketOfPlayer(playerId) {
+  for (const member of socketsByClientKey.values()) if (member.town?.playerId === playerId) return member;
+  return null;
+}
+
+/** What the garden handlers need from the town (kept here to avoid a circular import). */
+const gardenCtx = {
+  send,
+  sendWallet,
+  earn,
+  error: (ws, code) => send(ws, { type: "town-error", code }),
+  broadcastGarden,
+  socketOf: socketOfPlayer,
+};
 
 function broadcastRoom(room) {
   const areaKey = `room:${room.id}`;
@@ -855,17 +900,6 @@ function gardenDone(ws, payload) {
   scheduleSave();
 }
 
-function handleSeedBuy(ws, player, payload) {
-  const crop = CROPS.get(String(payload.id || ""));
-  const count = [1, 5, 10].includes(Number(payload.count)) ? Number(payload.count) : 1;
-  if (!crop) return;
-  const price = crop.seedPrice * count;
-  if (player.ame < price) return send(ws, { type: "town-error", code: "NOT_ENOUGH_AME" });
-  addAme(player, -price);
-  player.seeds[crop.id] = Math.min(9999, (player.seeds[crop.id] || 0) + count);
-  gardenDone(ws, { op: "seed", label: `${crop.emoji} ${crop.label}のたね ×${count}` });
-}
-
 function handleFoodBuy(ws, player, payload) {
   const count = [1, 5, 10].includes(Number(payload.count)) ? Number(payload.count) : 1;
   const price = PETS.foodPrice * count;
@@ -873,21 +907,6 @@ function handleFoodBuy(ws, player, payload) {
   addAme(player, -price);
   player.petFood = Math.min(9999, player.petFood + count);
   gardenDone(ws, { op: "food", label: `🍖 ペットフード ×${count}` });
-}
-
-function handleGoodsSell(ws, player, payload) {
-  const crop = CROPS.get(String(payload.id || ""));
-  if (!crop) return;
-  const have = player.goods[crop.id] || 0;
-  const count = payload.all ? have : Math.min(have, Math.max(0, Math.floor(Number(payload.count) || 0)));
-  if (count <= 0) return send(ws, { type: "town-error", code: "NO_GOODS" });
-  player.goods[crop.id] -= count;
-  if (player.goods[crop.id] <= 0) delete player.goods[crop.id];
-  const total = crop.sell * count;
-  addAme(player, total);
-  bump(player, "sell");
-  send(ws, { type: "town-ame", delta: total, reason: `${crop.label}を売った`, ame: player.ame });
-  gardenDone(ws, { op: "sell", label: `${crop.emoji} ${crop.label} ×${count}`, total });
 }
 
 function handlePlant(ws, t, player, area, payload) {
@@ -1018,8 +1037,18 @@ function handleJoin(ws, payload, verified = null) {
   const wantsHome = requestedArea === "home";
   let area = wantsHome ? (player?.rooms[0] ? `room:${player.rooms[0]}` : DEFAULT_AREA) : requestedArea;
   const roomId = roomIdOfArea(area);
+  const gardenId = gardenIdOfArea(area);
   let room = null;
-  if (roomId) {
+  let garden = null;
+  if (gardenId) {
+    garden = player && gardenId === player.id ? ensureGarden(player) : gardens.get(gardenId) || null;
+    if (!garden) {
+      send(ws, { type: "town-error", code: "NO_GARDEN" });
+      area = DEFAULT_AREA;
+    } else {
+      advanceGarden(garden, nowTs());
+    }
+  } else if (roomId) {
     room = rooms.get(roomId) || null;
     if (!room) {
       send(ws, { type: "town-error", code: "NO_ROOM" });
@@ -1043,6 +1072,7 @@ function handleJoin(ws, payload, verified = null) {
     type: "town-welcome",
     selfId: t.id,
     selfRoomId: player?.rooms[0] || "",
+    selfGardenId: player?.id || "",
     requestedArea,
     area,
     channel: number,
@@ -1050,7 +1080,8 @@ function handleJoin(ws, payload, verified = null) {
     members: [...members].filter((m) => m !== ws).map(publicMember),
     areaCounts: areaCounts(),
     room: room && roomIdOfArea(area) ? publicRoom(room) : null,
-    wallet: player ? walletOf(player) : null,
+    garden: garden && gardenIdOfArea(area) ? publicGarden(garden) : null,
+    wallet: player ? fullWallet(player) : null,
     // Sent only for logged-in players: their saved name + look, so a new device matches.
     profile: player && verified ? { name: t.name, avatar: t.avatar } : null,
     cloud: Boolean(verified),
@@ -1202,6 +1233,10 @@ export function handleTownMessage(ws, payload) {
     send(ws, { type: "town-rooms", rooms: listRooms(ws.town?.playerId || "") });
     return true;
   }
+  if (type === "town-gardens") {
+    send(ws, { type: "town-gardens", gardens: listGardens(ws.town?.playerId || "", countIn) });
+    return true;
+  }
 
   const t = ws.town;
   if (!t || !t.channelKey) return true;
@@ -1347,20 +1382,42 @@ export function handleTownMessage(ws, payload) {
   }
   if (type.startsWith("town-pet-") || type.startsWith("town-garden-")) {
     if (!player) return true;
-    if (now - t.lastShopAt < 120) return send(ws, { type: "town-error", code: "BUSY" }), true;
-    t.lastShopAt = now;
+    if (type === "town-garden-act") {
+      // Field work comes in quick bursts of clicks: a small token bucket instead of a fixed gap.
+      t.gardenTokens = Math.min(GARDEN_ACT_BURST, (t.gardenTokens ?? GARDEN_ACT_BURST) + ((now - (t.gardenTokenAt || now)) / 1000) * GARDEN_ACT_PER_SEC);
+      t.gardenTokenAt = now;
+      if (t.gardenTokens < 1) return send(ws, { type: "town-error", code: "BUSY" }), true;
+      t.gardenTokens -= 1;
+    } else {
+      if (now - t.lastShopAt < 120) return send(ws, { type: "town-error", code: "BUSY" }), true;
+      t.lastShopAt = now;
+    }
     switch (type) {
       case "town-pet-buy": handlePetBuy(ws, player, payload); break;
       case "town-pet-active": handlePetActive(ws, player, payload); break;
       case "town-pet-rename": handlePetRename(ws, player, payload); break;
       case "town-pet-pat": handlePetPat(ws, player, payload, now); break;
       case "town-pet-feed": handlePetFeed(ws, player, payload, now); break;
-      case "town-garden-seed": handleSeedBuy(ws, player, payload); break;
+      case "town-garden-seed": handleGardenShop(gardenCtx, ws, player, { what: "seed", id: payload.id, count: payload.count }); break;
       case "town-garden-food": handleFoodBuy(ws, player, payload); break;
-      case "town-garden-sell": handleGoodsSell(ws, player, payload); break;
-      case "town-garden-plant": handlePlant(ws, t, player, area, payload); break;
-      case "town-garden-water": handleWater(ws, t, player, area, payload, now); break;
-      case "town-garden-harvest": handleHarvest(ws, t, player, area, payload, now); break;
+      case "town-garden-sell": handleGardenSell(gardenCtx, ws, player, payload); break;
+      case "town-garden-shop": handleGardenShop(gardenCtx, ws, player, payload); break;
+      case "town-garden-cook": handleGardenCook(gardenCtx, ws, player, payload); break;
+      case "town-garden-order": handleGardenOrder(gardenCtx, ws, player, payload); break;
+      case "town-garden-dex": handleGardenDex(gardenCtx, ws, player, payload); break;
+      case "town-garden-act": handleGardenAct(gardenCtx, ws, player, area, payload, now); break;
+      case "town-garden-plant":
+        if (gardenIdOfArea(area)) handleGardenAct(gardenCtx, ws, player, area, { ...payload, op: "plant" }, now);
+        else handlePlant(ws, t, player, area, payload);
+        break;
+      case "town-garden-water":
+        if (gardenIdOfArea(area)) handleGardenAct(gardenCtx, ws, player, area, { ...payload, op: "water" }, now);
+        else handleWater(ws, t, player, area, payload, now);
+        break;
+      case "town-garden-harvest":
+        if (gardenIdOfArea(area)) handleGardenAct(gardenCtx, ws, player, area, { ...payload, op: "harvest" }, now);
+        else handleHarvest(ws, t, player, area, payload, now);
+        break;
       default: break;
     }
     return true;
@@ -1412,3 +1469,12 @@ function sweepStaleMembers() {
 }
 
 setInterval(sweepStaleMembers, STALE_SWEEP_INTERVAL_MS).unref();
+
+const GARDEN_TICK_MS = 20000;
+setInterval(() => {
+  const now = nowTs();
+  for (const garden of gardens.values()) {
+    if (countIn(`garden:${garden.id}`) === 0) continue;
+    if (advanceGarden(garden, now)) broadcastGarden(garden);
+  }
+}, GARDEN_TICK_MS).unref();

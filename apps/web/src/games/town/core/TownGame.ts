@@ -4,13 +4,14 @@ import { normalizeAvatar, type AvatarConfig } from "../avatar/parts";
 import type { AvatarPose } from "../avatar/drawAvatar";
 import { directionOf, type Direction8 } from "../avatar/draw/common";
 import { actionDef, actionFromChat, isActionId, type ActionId } from "../avatar/actions";
+import { buildGardenArea, emptyGarden, type GardenData } from "../world/garden";
 import {
-  AREAS, bedAt, buildRoomArea, objectsAt, emptyRoom, findPath, isAreaId, isRoomAreaId, isStaticAreaId, isWalkable,
+  AREAS, bedAt, buildRoomArea, objectsAt, emptyRoom, findPath, isAreaId, isGardenAreaId, isRoomAreaId, isStaticAreaId, isWalkable,
   movementHeightAt, pickTile, portalAt, seatAt, spotAt, type AreaDef, type AreaId, type SpotGame, type StaticAreaId,
 } from "../world/areas";
 import type { RoomData } from "../world/furniture";
 import {
-  avatarHitBox, computeCamera, renderArea, type Camera, type PlacementGhost, type RenderAvatar,
+  avatarHitBox, computeCamera, renderArea, type Camera, type PlacementGhost, type RenderAvatar, type TileEffect,
 } from "../world/render";
 
 export type ConnectionStatus = "connecting" | "online" | "offline" | "replaced";
@@ -31,12 +32,34 @@ export type Wallet = {
   seeds: Record<string, number>;
   goods: Record<string, number>;
   petFood: number;
+  garden: GardenWallet;
   pets: Array<{ id: string; species: string; name: string; bond: number; level: number; hunger: number }>;
   activePet: string;
   missions: { list: QuestEntry[]; bonus: { reward: number; ready: boolean; claimed: boolean } };
   achievements: AchievementEntry[];
   today: { login: boolean; coinLogin: boolean; dress: boolean; onlineEarned: number; praiseReceived: number; praiseGiven: number; visits: number };
 };
+
+export type GardenOrder = { id: string; needs: Record<string, number>; ame: number; xp: number; done: boolean };
+export type GardenWallet = {
+  xp: number;
+  level: number;
+  dex: Record<string, { n: number; gold: number }>;
+  cooked: Record<string, number>;
+  dishes: Record<string, number>;
+  /** ★gold crops (sell for 5×). */
+  gold: Record<string, number>;
+  ferts: Record<string, number>;
+  tools: string[];
+  items: Record<string, number>;
+  mystery: number;
+  dexClaimed: number[];
+  helped: number;
+  hasGarden: boolean;
+  orders: { day: string; refreshes: number; list: GardenOrder[] };
+  dexPct: number;
+};
+export type GardenListing = { id: string; owner: string; level: number; plots: number; growing: number; count: number; mine: boolean };
 
 export type ScratchPrize =
   | { type: "ame"; amount: number; symbol: string }
@@ -60,6 +83,8 @@ export type TownEvent =
   | { type: "shop-bought"; id: string; label: string; shop: "fishing" | "casino"; price: number }
   | { type: "pet-done"; op: string; id?: string; label?: string; gain?: number; hungry?: boolean; capped?: boolean }
   | { type: "garden-done"; op: string; label: string; total?: number; amount?: number }
+  | { type: "garden-levelup"; level: number; unlocks: string[] }
+  | { type: "garden-news"; text: string }
   | { type: "error"; text: string; code?: string };
 
 /** Where a cloud friend currently is in town (best-effort: the friend ID is self-declared). */
@@ -76,7 +101,7 @@ export type TownIdentity = {
 };
 
 export type MemberInfo = {
-  id: string; name: string; avatar: AvatarConfig; goodPigg: number; roomId: string; friendId: string; isSelf: boolean;
+  id: string; name: string; avatar: AvatarConfig; goodPigg: number; roomId: string; gardenId: string; friendId: string; isSelf: boolean;
 };
 
 export type QuestEntry = { id: string; label: string; target: number; reward: number; progress: number; claimed: boolean };
@@ -95,6 +120,12 @@ export type TownSnapshot = {
   isOwnRoom: boolean;
   rooms: RoomListing[];
   wallet: Wallet | null;
+  garden: GardenData | null;
+  isOwnGarden: boolean;
+  selfGardenId: string;
+  gardens: GardenListing[];
+  /** Server clock minus local clock, measured when the garden arrived. */
+  clockOffset: number;
 };
 
 type Member = {
@@ -115,6 +146,7 @@ type Member = {
   praisedAt: number;
   bubble: RenderAvatar["bubble"];
   roomId: string;
+  gardenId: string;
   goodPigg: number;
   friendId: string;
   /** Companion walking with them, and where it currently is. */
@@ -127,7 +159,7 @@ type Member = {
 
 type RemotePet = { species?: unknown; name?: unknown; level?: unknown } | null;
 type RemoteMember = {
-  id: string; name: string; avatar: unknown; x: number; y: number; roomId?: string; goodPigg?: number; friendId?: string; pet?: RemotePet;
+  id: string; name: string; avatar: unknown; x: number; y: number; roomId?: string; gardenId?: string; goodPigg?: number; friendId?: string; pet?: RemotePet;
 };
 
 function toPet(raw: RemotePet | undefined): Member["pet"] {
@@ -223,6 +255,7 @@ function createMember(id: string, name: string, avatar: AvatarConfig, x: number,
     praisedAt: -1e9,
     bubble: null,
     roomId: "",
+    gardenId: "",
     goodPigg: 0,
     friendId: "",
     pet: null,
@@ -233,8 +266,31 @@ function createMember(id: string, name: string, avatar: AvatarConfig, x: number,
 }
 
 function areaFor(id: AreaId): AreaDef {
-  return isStaticAreaId(id) ? AREAS[id] : buildRoomArea(emptyRoom(id.slice(5)));
+  if (isStaticAreaId(id)) return AREAS[id];
+  if (isGardenAreaId(id)) return buildGardenArea(emptyGarden(id.slice(7)), 0);
+  return buildRoomArea(emptyRoom(id.slice(5)));
 }
+
+const ERROR_TEXT_GARDEN: Record<string, string> = {
+  NO_GARDEN: "そのガーデンは見つかりませんでした",
+  NOT_GARDEN_OWNER: "それはガーデンの持ち主だけができます（水やり・草取りはできます）",
+  ALREADY_TILLED: "もう畑になっています",
+  CANT_TILL: "そこはたがやせません",
+  PLOT_LIMIT: "畑の数が上限です（ガーデンレベルを上げると増えます）",
+  LOCKED: "まだガーデンレベルが足りません",
+  STILL_WET: "まだ土がしめっています",
+  NOTHING_TO_WATER: "水やりする作物がありません",
+  NO_WEED: "雑草も虫もいません",
+  ALREADY_FERT: "この作物にはもうひりょうをまきました",
+  NO_FERT: "そのひりょうを持っていません",
+  NEED_BASKET: "まとめて収穫には「しゅうかくかご」が必要です",
+  DECO_LIMIT: "かざりはこれ以上置けません",
+  NO_ITEM: "そのアイテムを持っていません",
+  OUT_OF_SEASON: "そのたねは今の季節には売っていません",
+  MISSING_INGREDIENTS: "材料が足りません",
+  MISSING_GOODS: "とどける物が足りません",
+  ALREADY_DONE: "もう完了しています",
+};
 
 export class TownGame {
   private area: AreaDef;
@@ -258,6 +314,10 @@ export class TownGame {
   private listeners = new Set<(s: TownSnapshot) => void>();
   private eventListeners = new Set<(e: TownEvent) => void>();
   private wallet: Wallet | null = null;
+  private gardens: GardenListing[] = [];
+  private selfGardenId = "";
+  private clockOffset = 0;
+  private effects: TileEffect[] = [];
   private readonly clientKey = loadClientKey();
   private readonly handlePageHide = () => {
     // Tell the server right away instead of waiting for the socket to time out.
@@ -341,6 +401,11 @@ export class TownGame {
       isOwnRoom: Boolean(room && this.wallet?.rooms.some((r) => r.id === room.id)),
       rooms: this.rooms,
       wallet: this.wallet,
+      garden: this.area.garden ?? null,
+      isOwnGarden: Boolean(this.area.garden && this.selfGardenId && this.area.garden.id === this.selfGardenId),
+      selfGardenId: this.selfGardenId,
+      gardens: this.gardens,
+      clockOffset: this.clockOffset,
     };
   }
 
@@ -430,6 +495,9 @@ export class TownGame {
         }
         const room = msg.room as RoomData | null;
         if (room && isRoomAreaId(msg.area)) this.area = buildRoomArea(room);
+        const garden = msg.garden as GardenData | null;
+        if (garden && isGardenAreaId(msg.area)) this.setGarden(garden);
+        this.selfGardenId = String(msg.selfGardenId || this.selfGardenId);
         this.status = "online";
         this.channel = Number(msg.channel) || 1;
         this.self.id = String(msg.selfId || "self");
@@ -437,6 +505,7 @@ export class TownGame {
         const selfInfo = msg.self as RemoteMember | undefined;
         if (selfInfo) {
           this.self.roomId = String(selfInfo.roomId || "");
+          this.self.gardenId = String(selfInfo.gardenId || "");
           this.self.goodPigg = Number(selfInfo.goodPigg) || 0;
           this.self.x = Number(selfInfo.x);
           this.self.y = Number(selfInfo.y);
@@ -583,7 +652,7 @@ export class TownGame {
           this.fire({ type: "login-required", expired: msg.code === "AUTH_FAILED" });
           break;
         }
-        const text = ERROR_TEXT[String(msg.code)] || "エラーが発生しました";
+        const text = ERROR_TEXT[String(msg.code)] || ERROR_TEXT_GARDEN[String(msg.code)] || "エラーが発生しました";
         this.system(text);
         this.fire({ type: "error", text, code: String(msg.code || "") });
         break;
@@ -621,16 +690,45 @@ export class TownGame {
         }
         break;
       }
+      case "town-garden": {
+        const garden = msg.garden as GardenData;
+        if (!garden || this.area.id !== `garden:${garden.id}`) return;
+        this.setGarden(garden);
+        const born = performance.now();
+        for (const fx of (Array.isArray(msg.fx) ? msg.fx : []) as Array<Omit<TileEffect, "born">>) this.effects.push({ ...fx, born });
+        break;
+      }
+      case "town-gardens":
+        this.gardens = (msg.gardens as GardenListing[]) || [];
+        break;
+      case "town-garden-levelup": {
+        const level = Number(msg.level) || 1;
+        const unlocks = Array.isArray(msg.unlocks) ? (msg.unlocks as string[]) : [];
+        this.system(`🌱 ガーデンレベル ${level} になった！${unlocks.length ? ` ${unlocks.join("・")}` : ""}`);
+        this.fire({ type: "garden-levelup", level, unlocks });
+        break;
+      }
+      case "town-garden-news":
+        this.system(`🌱 ${String(msg.text || "")}`);
+        this.fire({ type: "garden-news", text: String(msg.text || "") });
+        break;
       default:
         return;
     }
     this.emit();
   }
 
+  /** Rebuild the garden area from server data, keeping everyone where they are. */
+  private setGarden(garden: GardenData) {
+    this.clockOffset = garden.serverNow - Date.now();
+    this.area = buildGardenArea(garden, this.clockOffset);
+  }
+
   private addRemote(r: RemoteMember) {
     if (!r || !r.id || r.id === this.self.id) return;
     const m = createMember(r.id, String(r.name || "ゲスト"), normalizeAvatar(r.avatar), Number(r.x) || 0, Number(r.y) || 0);
     m.roomId = String(r.roomId || "");
+    m.gardenId = String(r.gardenId || "");
     m.goodPigg = Number(r.goodPigg) || 0;
     m.friendId = String(r.friendId || "");
     m.pet = toPet(r.pet);
@@ -772,6 +870,28 @@ export class TownGame {
   plant(x: number, y: number, crop: string) { this.command({ type: "town-garden-plant", x, y, crop }); }
   water(x: number, y: number) { this.command({ type: "town-garden-water", x, y }); }
   harvest(x: number, y: number) { this.command({ type: "town-garden-harvest", x, y }); }
+  /** My Garden: till, untill, plant, water, weed, fert, harvest, harvestAll, decoPlace, decoRemove. */
+  gardenAct(op: string, params: Record<string, unknown> = {}) { this.command({ type: "town-garden-act", op, ...params }); }
+  gardenShop(what: "seed" | "fert" | "tool" | "item", id: string, count = 1) { this.command({ type: "town-garden-shop", what, id, count }); }
+  gardenSell(kind: "crop" | "gold" | "dish", id: string) { this.command({ type: "town-garden-sell", kind, id, all: true }); }
+  cook(id: string) { this.command({ type: "town-garden-cook", id }); }
+  deliverOrder(id: string) { this.command({ type: "town-garden-order", id }); }
+  refreshOrder(id: string) { this.command({ type: "town-garden-order", id, refresh: true }); }
+  claimDex(pct: number) { this.command({ type: "town-garden-dex", pct }); }
+  requestGardens() { this.send({ type: "town-gardens" }); }
+
+  goMyGarden() {
+    if (!this.selfGardenId) {
+      this.system("マイガーデンはオンラインのときに入れます");
+      this.emit();
+      return;
+    }
+    this.changeArea(`garden:${this.selfGardenId}`);
+  }
+
+  visitGarden(gardenId: string) {
+    if (/^[0-9a-f]{16}$/.test(gardenId)) this.changeArea(`garden:${gardenId}`);
+  }
 
   /** Pets trot after their owner, keeping about a tile away. */
   private stepPet(m: Member, dt: number) {
@@ -882,7 +1002,7 @@ export class TownGame {
     const m = id === this.self.id ? this.self : this.members.get(id);
     if (!m) return null;
     return {
-      id: m.id, name: m.name, avatar: m.avatar, goodPigg: m.goodPigg, roomId: m.roomId,
+      id: m.id, name: m.name, avatar: m.avatar, goodPigg: m.goodPigg, roomId: m.roomId, gardenId: m.gardenId,
       friendId: m === this.self ? this.identity.friendId : m.friendId, isSelf: m === this.self,
     };
   }
@@ -1047,6 +1167,7 @@ export class TownGame {
     this.stepPet(this.self, dt);
     for (const m of this.members.values()) this.stepPet(m, dt);
     const avatars = [this.toRender(this.self, now, true), ...[...this.members.values()].map((m) => this.toRender(m, now, false))];
-    renderArea(ctx, this.area, avatars, this.camera, this.viewSize.width, this.viewSize.height, now, this.hoverTile, this.ghost);
+    if (this.effects.length) this.effects = this.effects.filter((fx) => now - fx.born < 1400);
+    renderArea(ctx, this.area, avatars, this.camera, this.viewSize.width, this.viewSize.height, now, this.hoverTile, this.ghost, this.effects);
   }
 }

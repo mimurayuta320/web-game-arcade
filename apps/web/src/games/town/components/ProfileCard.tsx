@@ -12,11 +12,13 @@ type Props = {
   onDressUp: () => void;
   /** Shown only when this person can be added as a cloud friend. */
   onAddFriend?: () => void;
+  /** Shown when this person has a garden. */
+  onVisitGarden?: () => void;
   onClose: () => void;
 };
 
 /** Pigg-style profile popup shown when clicking someone in town. */
-export function ProfileCard({ member, onPraise, onVisitRoom, onWave, onDressUp, onAddFriend, onClose }: Props) {
+export function ProfileCard({ member, onPraise, onVisitRoom, onWave, onDressUp, onAddFriend, onVisitGarden, onClose }: Props) {
   return (
     <div className={styles.modalBackdrop} role="dialog" aria-modal="true" aria-label={`${member.name}のプロフィール`} onClick={onClose}>
       <div className={styles.profileCard} onClick={(e) => e.stopPropagation()}>
@@ -35,6 +37,7 @@ export function ProfileCard({ member, onPraise, onVisitRoom, onWave, onDressUp, 
             <>
               <button type="button" className={styles.primaryButton} onClick={onDressUp}>着せかえ</button>
               {member.roomId ? <button type="button" className={styles.secondaryButton} onClick={onVisitRoom}>マイルームへ</button> : null}
+              {onVisitGarden ? <button type="button" className={styles.secondaryButton} onClick={onVisitGarden}>マイガーデンへ</button> : null}
             </>
           ) : (
             <>
@@ -42,6 +45,7 @@ export function ProfileCard({ member, onPraise, onVisitRoom, onWave, onDressUp, 
               <button type="button" className={styles.secondaryButton} onClick={onWave}>手をふる</button>
               {onAddFriend ? <button type="button" className={styles.secondaryButton} onClick={onAddFriend}>ピグともになる</button> : null}
               {member.roomId ? <button type="button" className={styles.secondaryButton} onClick={onVisitRoom}>へやに遊びに行く</button> : null}
+              {onVisitGarden ? <button type="button" className={styles.secondaryButton} onClick={onVisitGarden}>ガーデンに遊びに行く</button> : null}
             </>
           )}
         </div>

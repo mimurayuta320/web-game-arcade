@@ -144,6 +144,7 @@
     ]
   },
   "garden": {
+    "starterSeeds": 10,
     "waterCooldownMs": 60000,
     "maxWater": 3,
     "waterSpeedup": 0.15,
@@ -151,18 +152,825 @@
     "visitorWaterDailyCap": 10,
     "sellAllMax": 999,
     "crops": [
-      { "id": "carrot", "label": "にんじん", "emoji": "🥕", "kind": "veg", "seedPrice": 10, "growMs": 240000, "yield": [2, 3], "sell": 12, "feed": 15 },
-      { "id": "tomato", "label": "トマト", "emoji": "🍅", "kind": "veg", "seedPrice": 20, "growMs": 420000, "yield": [2, 4], "sell": 15, "feed": 20 },
-      { "id": "strawberry", "label": "いちご", "emoji": "🍓", "kind": "fruit", "seedPrice": 40, "growMs": 600000, "yield": [3, 4], "sell": 22, "feed": 25 },
-      { "id": "pumpkin", "label": "かぼちゃ", "emoji": "🎃", "kind": "veg", "seedPrice": 60, "growMs": 900000, "yield": [2, 3], "sell": 45, "feed": 30 },
-      { "id": "sunflower", "label": "ひまわり", "emoji": "🌻", "kind": "flower", "seedPrice": 30, "growMs": 480000, "yield": [2, 3], "sell": 25, "feed": 5 },
-      { "id": "tulip", "label": "チューリップ", "emoji": "🌷", "kind": "flower", "seedPrice": 30, "growMs": 480000, "yield": [2, 3], "sell": 25, "feed": 5 },
-      { "id": "potato", "label": "じゃがいも", "emoji": "🥔", "kind": "veg", "seedPrice": 15, "growMs": 300000, "yield": [3, 4], "sell": 12, "feed": 20 },
-      { "id": "corn", "label": "とうもろこし", "emoji": "🌽", "kind": "veg", "seedPrice": 35, "growMs": 540000, "yield": [2, 3], "sell": 28, "feed": 22 },
-      { "id": "eggplant", "label": "なす", "emoji": "🍆", "kind": "veg", "seedPrice": 45, "growMs": 660000, "yield": [2, 3], "sell": 34, "feed": 18 },
-      { "id": "watermelon", "label": "すいか", "emoji": "🍉", "kind": "fruit", "seedPrice": 90, "growMs": 1200000, "yield": [1, 2], "sell": 110, "feed": 40 },
-      { "id": "rose", "label": "バラ", "emoji": "🌹", "kind": "flower", "seedPrice": 70, "growMs": 840000, "yield": [2, 3], "sell": 50, "feed": 5 },
-      { "id": "cosmos", "label": "コスモス", "emoji": "🌸", "kind": "flower", "seedPrice": 25, "growMs": 420000, "yield": [2, 4], "sell": 18, "feed": 5 }
+      {
+        "id": "carrot",
+        "label": "にんじん",
+        "emoji": "🥕",
+        "kind": "veg",
+        "seedPrice": 10,
+        "growMs": 240000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 12,
+        "feed": 15,
+        "unlock": 1,
+        "xp": 3
+      },
+      {
+        "id": "tomato",
+        "label": "トマト",
+        "emoji": "🍅",
+        "kind": "veg",
+        "seedPrice": 20,
+        "growMs": 420000,
+        "yield": [
+          2,
+          4
+        ],
+        "sell": 15,
+        "feed": 20,
+        "unlock": 2,
+        "xp": 4
+      },
+      {
+        "id": "strawberry",
+        "label": "いちご",
+        "emoji": "🍓",
+        "kind": "fruit",
+        "seedPrice": 40,
+        "growMs": 600000,
+        "yield": [
+          3,
+          4
+        ],
+        "sell": 22,
+        "feed": 25,
+        "unlock": 4,
+        "xp": 5,
+        "season": "spring"
+      },
+      {
+        "id": "pumpkin",
+        "label": "かぼちゃ",
+        "emoji": "🎃",
+        "kind": "veg",
+        "seedPrice": 60,
+        "growMs": 900000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 45,
+        "feed": 30,
+        "unlock": 7,
+        "xp": 7,
+        "season": "autumn"
+      },
+      {
+        "id": "sunflower",
+        "label": "ひまわり",
+        "emoji": "🌻",
+        "kind": "flower",
+        "seedPrice": 30,
+        "growMs": 480000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 25,
+        "feed": 5,
+        "unlock": 2,
+        "xp": 4,
+        "season": "summer"
+      },
+      {
+        "id": "tulip",
+        "label": "チューリップ",
+        "emoji": "🌷",
+        "kind": "flower",
+        "seedPrice": 30,
+        "growMs": 480000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 25,
+        "feed": 5,
+        "unlock": 3,
+        "xp": 4,
+        "season": "spring"
+      },
+      {
+        "id": "potato",
+        "label": "じゃがいも",
+        "emoji": "🥔",
+        "kind": "veg",
+        "seedPrice": 15,
+        "growMs": 300000,
+        "yield": [
+          3,
+          4
+        ],
+        "sell": 12,
+        "feed": 20,
+        "unlock": 1,
+        "xp": 3
+      },
+      {
+        "id": "corn",
+        "label": "とうもろこし",
+        "emoji": "🌽",
+        "kind": "veg",
+        "seedPrice": 35,
+        "growMs": 540000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 28,
+        "feed": 22,
+        "unlock": 5,
+        "xp": 5,
+        "season": "summer"
+      },
+      {
+        "id": "eggplant",
+        "label": "なす",
+        "emoji": "🍆",
+        "kind": "veg",
+        "seedPrice": 45,
+        "growMs": 660000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 34,
+        "feed": 18,
+        "unlock": 6,
+        "xp": 6
+      },
+      {
+        "id": "watermelon",
+        "label": "すいか",
+        "emoji": "🍉",
+        "kind": "fruit",
+        "seedPrice": 90,
+        "growMs": 1200000,
+        "yield": [
+          1,
+          2
+        ],
+        "sell": 110,
+        "feed": 40,
+        "unlock": 10,
+        "xp": 10,
+        "season": "summer"
+      },
+      {
+        "id": "rose",
+        "label": "バラ",
+        "emoji": "🌹",
+        "kind": "flower",
+        "seedPrice": 70,
+        "growMs": 840000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 50,
+        "feed": 5,
+        "unlock": 9,
+        "xp": 8
+      },
+      {
+        "id": "cosmos",
+        "label": "コスモス",
+        "emoji": "🌸",
+        "kind": "flower",
+        "seedPrice": 25,
+        "growMs": 420000,
+        "yield": [
+          2,
+          4
+        ],
+        "sell": 18,
+        "feed": 5,
+        "unlock": 4,
+        "xp": 4,
+        "season": "autumn"
+      },
+      {
+        "id": "lettuce",
+        "label": "レタス",
+        "emoji": "🥬",
+        "kind": "veg",
+        "seedPrice": 8,
+        "growMs": 180000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 10,
+        "feed": 12,
+        "unlock": 1,
+        "xp": 2
+      },
+      {
+        "id": "onion",
+        "label": "たまねぎ",
+        "emoji": "🧅",
+        "kind": "veg",
+        "seedPrice": 12,
+        "growMs": 300000,
+        "yield": [
+          2,
+          4
+        ],
+        "sell": 12,
+        "feed": 8,
+        "unlock": 3,
+        "xp": 3
+      },
+      {
+        "id": "pepper",
+        "label": "ピーマン",
+        "emoji": "🫑",
+        "kind": "veg",
+        "seedPrice": 25,
+        "growMs": 360000,
+        "yield": [
+          2,
+          4
+        ],
+        "sell": 18,
+        "feed": 10,
+        "unlock": 5,
+        "xp": 4
+      },
+      {
+        "id": "sweetpotato",
+        "label": "さつまいも",
+        "emoji": "🍠",
+        "kind": "veg",
+        "seedPrice": 30,
+        "growMs": 480000,
+        "yield": [
+          2,
+          4
+        ],
+        "sell": 22,
+        "feed": 25,
+        "unlock": 4,
+        "xp": 5,
+        "season": "autumn"
+      },
+      {
+        "id": "broccoli",
+        "label": "ブロッコリー",
+        "emoji": "🥦",
+        "kind": "veg",
+        "seedPrice": 35,
+        "growMs": 480000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 28,
+        "feed": 18,
+        "unlock": 5,
+        "xp": 5,
+        "season": "winter"
+      },
+      {
+        "id": "cherry",
+        "label": "さくらんぼ",
+        "emoji": "🍒",
+        "kind": "fruit",
+        "seedPrice": 50,
+        "growMs": 600000,
+        "yield": [
+          3,
+          5
+        ],
+        "sell": 26,
+        "feed": 15,
+        "unlock": 6,
+        "xp": 6,
+        "season": "spring"
+      },
+      {
+        "id": "lavender",
+        "label": "ラベンダー",
+        "emoji": "🪻",
+        "kind": "flower",
+        "seedPrice": 40,
+        "growMs": 540000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 32,
+        "feed": 3,
+        "unlock": 7,
+        "xp": 6
+      },
+      {
+        "id": "grape",
+        "label": "ぶどう",
+        "emoji": "🍇",
+        "kind": "fruit",
+        "seedPrice": 60,
+        "growMs": 780000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 48,
+        "feed": 20,
+        "unlock": 8,
+        "xp": 8,
+        "season": "autumn"
+      },
+      {
+        "id": "chestnut",
+        "label": "くり",
+        "emoji": "🌰",
+        "kind": "fruit",
+        "seedPrice": 55,
+        "growMs": 720000,
+        "yield": [
+          3,
+          4
+        ],
+        "sell": 30,
+        "feed": 22,
+        "unlock": 8,
+        "xp": 7,
+        "season": "autumn"
+      },
+      {
+        "id": "poinsettia",
+        "label": "ポインセチア",
+        "emoji": "🌺",
+        "kind": "flower",
+        "seedPrice": 50,
+        "growMs": 660000,
+        "yield": [
+          2,
+          3
+        ],
+        "sell": 42,
+        "feed": 3,
+        "unlock": 9,
+        "xp": 7,
+        "season": "winter"
+      },
+      {
+        "id": "melon",
+        "label": "メロン",
+        "emoji": "🍈",
+        "kind": "fruit",
+        "seedPrice": 120,
+        "growMs": 1080000,
+        "yield": [
+          1,
+          2
+        ],
+        "sell": 150,
+        "feed": 40,
+        "unlock": 12,
+        "xp": 12,
+        "season": "summer"
+      },
+      {
+        "id": "rainbowrose",
+        "label": "にじいろのバラ",
+        "emoji": "🌈",
+        "kind": "flower",
+        "seedPrice": 0,
+        "growMs": 900000,
+        "yield": [
+          1,
+          2
+        ],
+        "sell": 380,
+        "feed": 5,
+        "unlock": 1,
+        "xp": 20,
+        "rare": true
+      },
+      {
+        "id": "goldapple",
+        "label": "きんのりんご",
+        "emoji": "🍎",
+        "kind": "fruit",
+        "seedPrice": 0,
+        "growMs": 1200000,
+        "yield": [
+          1,
+          2
+        ],
+        "sell": 520,
+        "feed": 60,
+        "unlock": 1,
+        "xp": 25,
+        "rare": true
+      },
+      {
+        "id": "starfruit",
+        "label": "ほしのみ",
+        "emoji": "⭐",
+        "kind": "fruit",
+        "seedPrice": 0,
+        "growMs": 1080000,
+        "yield": [
+          1,
+          3
+        ],
+        "sell": 300,
+        "feed": 45,
+        "unlock": 1,
+        "xp": 20,
+        "rare": true
+      },
+      {
+        "id": "crystalberry",
+        "label": "クリスタルベリー",
+        "emoji": "💎",
+        "kind": "fruit",
+        "seedPrice": 0,
+        "growMs": 1500000,
+        "yield": [
+          1,
+          2
+        ],
+        "sell": 800,
+        "feed": 70,
+        "unlock": 1,
+        "xp": 30,
+        "rare": true
+      }
+    ],
+    "wetMs": 900000,
+    "dryRate": 0.5,
+    "weedRate": 0.6,
+    "seasonBoost": 1.25,
+    "pestIntervalMs": 480000,
+    "weedChance": 0.16,
+    "bugChance": 0.12,
+    "scarecrowRadius": 2,
+    "sprinklerRadius": 1,
+    "witherMs": 86400000,
+    "goldBase": 0.03,
+    "goldCare": 0.07,
+    "seedBackChance": 0.2,
+    "mysteryChance": 0.04,
+    "helpAme": 2,
+    "helpDailyCap": 20,
+    "xp": {
+      "till": 1,
+      "water": 1,
+      "weed": 2,
+      "cook": 5,
+      "order": 25,
+      "help": 2
+    },
+    "maxLevel": 30,
+    "sizes": [
+      {
+        "level": 1,
+        "size": 12
+      },
+      {
+        "level": 6,
+        "size": 14
+      },
+      {
+        "level": 12,
+        "size": 16
+      },
+      {
+        "level": 20,
+        "size": 18
+      }
+    ],
+    "plotsBase": 6,
+    "plotsPerLevel": 2,
+    "plotsMax": 60,
+    "maxDecos": 40,
+    "ferts": [
+      {
+        "id": "basic",
+        "label": "ひりょう",
+        "emoji": "🟤",
+        "price": 15,
+        "speed": 1.4,
+        "desc": "はやく育つ（1.4倍）"
+      },
+      {
+        "id": "rich",
+        "label": "とくせいひりょう",
+        "emoji": "🟢",
+        "price": 45,
+        "speed": 1.1,
+        "yieldBonus": 2,
+        "unlock": 5,
+        "desc": "収穫 +2・少し早く育つ"
+      },
+      {
+        "id": "gold",
+        "label": "きんのひりょう",
+        "emoji": "🟡",
+        "price": 120,
+        "goldBonus": 0.25,
+        "unlock": 10,
+        "desc": "★きんの作物が出やすい（+25%）"
+      },
+      {
+        "id": "compost",
+        "label": "たいひ",
+        "emoji": "🍂",
+        "price": 0,
+        "speed": 1.25,
+        "desc": "かれた作物からできる・1.25倍早く育つ"
+      }
+    ],
+    "tools": [
+      {
+        "id": "basket",
+        "label": "しゅうかくかご",
+        "emoji": "🧺",
+        "price": 200,
+        "unlock": 3,
+        "desc": "実った作物をまとめて収穫"
+      },
+      {
+        "id": "bigcan",
+        "label": "おおきなじょうろ",
+        "emoji": "🚿",
+        "price": 300,
+        "unlock": 4,
+        "desc": "まわり3×3にまとめて水やり"
+      },
+      {
+        "id": "sickle",
+        "label": "ぎんのかま",
+        "emoji": "🪒",
+        "price": 250,
+        "unlock": 6,
+        "desc": "まわり3×3の雑草・虫をまとめて取る"
+      }
+    ],
+    "items": [
+      {
+        "id": "scarecrow",
+        "label": "かかし",
+        "emoji": "🧍",
+        "price": 120,
+        "unlock": 3,
+        "desc": "まわり2マスに虫が来なくなる"
+      },
+      {
+        "id": "sprinkler",
+        "label": "スプリンクラー",
+        "emoji": "⛲",
+        "price": 400,
+        "unlock": 8,
+        "desc": "まわり1マスがずっとしめった土に"
+      }
+    ],
+    "decos": [
+      "fence",
+      "flowerbed",
+      "gnome",
+      "well",
+      "bench",
+      "lamp"
+    ],
+    "recipes": [
+      {
+        "id": "salad",
+        "label": "やさいサラダ",
+        "emoji": "🥗",
+        "unlock": 2,
+        "ingredients": {
+          "lettuce": 2,
+          "tomato": 1,
+          "carrot": 1
+        },
+        "sell": 90,
+        "feed": 40
+      },
+      {
+        "id": "potatosalad",
+        "label": "ポテトサラダ",
+        "emoji": "🥔",
+        "unlock": 2,
+        "ingredients": {
+          "potato": 2,
+          "carrot": 1,
+          "onion": 1
+        },
+        "sell": 95,
+        "feed": 45
+      },
+      {
+        "id": "curry",
+        "label": "カレーライス",
+        "emoji": "🍛",
+        "unlock": 4,
+        "ingredients": {
+          "potato": 2,
+          "carrot": 2,
+          "onion": 1
+        },
+        "sell": 130,
+        "feed": 60
+      },
+      {
+        "id": "cornsoup",
+        "label": "コーンスープ",
+        "emoji": "🥣",
+        "unlock": 5,
+        "ingredients": {
+          "corn": 2,
+          "onion": 1
+        },
+        "sell": 110,
+        "feed": 45
+      },
+      {
+        "id": "jam",
+        "label": "いちごジャム",
+        "emoji": "🍓",
+        "unlock": 5,
+        "ingredients": {
+          "strawberry": 3
+        },
+        "sell": 120,
+        "feed": 35
+      },
+      {
+        "id": "yakiimo",
+        "label": "やきいも",
+        "emoji": "🍠",
+        "unlock": 5,
+        "ingredients": {
+          "sweetpotato": 2
+        },
+        "sell": 75,
+        "feed": 55
+      },
+      {
+        "id": "pizza",
+        "label": "やさいピザ",
+        "emoji": "🍕",
+        "unlock": 6,
+        "ingredients": {
+          "tomato": 2,
+          "pepper": 1,
+          "onion": 1
+        },
+        "sell": 150,
+        "feed": 60
+      },
+      {
+        "id": "nasuden",
+        "label": "なすのみそやき",
+        "emoji": "🍆",
+        "unlock": 6,
+        "ingredients": {
+          "eggplant": 2,
+          "onion": 1
+        },
+        "sell": 120,
+        "feed": 50
+      },
+      {
+        "id": "bouquet",
+        "label": "はなたば",
+        "emoji": "💐",
+        "unlock": 4,
+        "ingredients": {
+          "sunflower": 1,
+          "tulip": 1,
+          "cosmos": 1
+        },
+        "sell": 140,
+        "feed": 0
+      },
+      {
+        "id": "pumpkinpie",
+        "label": "パンプキンパイ",
+        "emoji": "🥧",
+        "unlock": 7,
+        "ingredients": {
+          "pumpkin": 2,
+          "sweetpotato": 1
+        },
+        "sell": 190,
+        "feed": 70
+      },
+      {
+        "id": "sachet",
+        "label": "ラベンダーのかおりぶくろ",
+        "emoji": "👝",
+        "unlock": 7,
+        "ingredients": {
+          "lavender": 3
+        },
+        "sell": 150,
+        "feed": 0
+      },
+      {
+        "id": "stew",
+        "label": "ブロッコリーシチュー",
+        "emoji": "🍲",
+        "unlock": 8,
+        "ingredients": {
+          "broccoli": 2,
+          "potato": 1,
+          "carrot": 1
+        },
+        "sell": 170,
+        "feed": 70
+      },
+      {
+        "id": "tart",
+        "label": "フルーツタルト",
+        "emoji": "🍰",
+        "unlock": 9,
+        "ingredients": {
+          "strawberry": 2,
+          "grape": 1,
+          "cherry": 2
+        },
+        "sell": 260,
+        "feed": 60
+      },
+      {
+        "id": "montblanc",
+        "label": "モンブラン",
+        "emoji": "🧁",
+        "unlock": 9,
+        "ingredients": {
+          "chestnut": 3,
+          "sweetpotato": 1
+        },
+        "sell": 220,
+        "feed": 55
+      },
+      {
+        "id": "rosebouquet",
+        "label": "バラのはなたば",
+        "emoji": "🌹",
+        "unlock": 10,
+        "ingredients": {
+          "rose": 3,
+          "poinsettia": 1
+        },
+        "sell": 320,
+        "feed": 0
+      },
+      {
+        "id": "juice",
+        "label": "すいかジュース",
+        "emoji": "🧃",
+        "unlock": 10,
+        "ingredients": {
+          "watermelon": 1,
+          "melon": 1
+        },
+        "sell": 380,
+        "feed": 80
+      }
+    ],
+    "orders": {
+      "perDay": 3,
+      "refreshCost": 20,
+      "rewardRate": 1.6,
+      "rewardBonus": 30,
+      "xpRate": 1.5
+    },
+    "dexMilestones": [
+      {
+        "pct": 25,
+        "ame": 150,
+        "label": "ずかん 25%"
+      },
+      {
+        "pct": 50,
+        "ame": 400,
+        "item": "scarecrow",
+        "label": "ずかん 50%"
+      },
+      {
+        "pct": 75,
+        "ame": 800,
+        "item": "sprinkler",
+        "label": "ずかん 75%"
+      },
+      {
+        "pct": 100,
+        "ame": 2000,
+        "fert": {
+          "id": "gold",
+          "count": 10
+        },
+        "label": "ずかん コンプリート"
+      }
     ]
   },
   "fishing": {

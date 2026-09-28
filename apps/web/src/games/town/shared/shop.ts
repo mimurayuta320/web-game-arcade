@@ -42,18 +42,43 @@ export const POINT_SHOP = economy.pointShop as ShopEntry[];
 export type PetSpeciesId = "dog" | "cat" | "rabbit" | "chick" | "penguin" | "panda" | "hamster" | "frog" | "bear" | "fox" | "owl";
 export type PetSpecies = { id: PetSpeciesId; label: string; emoji: string; price: number };
 export type CropKind = "veg" | "fruit" | "flower";
+export type Season = "spring" | "summer" | "autumn" | "winter";
 export type CropDef = {
   id: string; label: string; emoji: string; kind: CropKind; seedPrice: number; growMs: number;
   yield: [number, number]; sell: number; feed: number;
+  /** Garden level that unlocks the seed. */
+  unlock: number;
+  xp: number;
+  /** Seasonal crops grow faster in season and their seeds are only sold then. */
+  season?: Season;
+  /** Only grows from mystery seeds. */
+  rare?: boolean;
 };
+export type FertDef = { id: string; label: string; emoji: string; price: number; speed?: number; yieldBonus?: number; goldBonus?: number; unlock?: number; desc: string };
+export type GardenToolDef = { id: string; label: string; emoji: string; price: number; unlock: number; desc: string };
+export type RecipeDef = { id: string; label: string; emoji: string; unlock: number; ingredients: Record<string, number>; sell: number; feed: number };
 
 export const PET_CONFIG = economy.pets;
 export const PET_SPECIES = economy.pets.species as PetSpecies[];
 export const GARDEN = economy.garden;
 export const CROPS = economy.garden.crops as CropDef[];
+export const FERTS = economy.garden.ferts as FertDef[];
+export const GARDEN_TOOLS = economy.garden.tools as GardenToolDef[];
+/** Things placed in the garden that do something (scarecrow, sprinkler). */
+export const GARDEN_ITEMS = economy.garden.items as GardenToolDef[];
+export const GARDEN_DECOS = economy.garden.decos as string[];
+export const RECIPES = economy.garden.recipes as unknown as RecipeDef[];
 
 export function cropDef(id: string): CropDef | undefined {
   return CROPS.find((c) => c.id === id);
+}
+
+export function recipeDef(id: string): RecipeDef | undefined {
+  return RECIPES.find((r) => r.id === id);
+}
+
+export function fertDef(id: string): FertDef | undefined {
+  return FERTS.find((f) => f.id === id);
 }
 
 export function petSpecies(id: string): PetSpecies | undefined {

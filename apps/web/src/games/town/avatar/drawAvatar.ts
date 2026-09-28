@@ -41,6 +41,10 @@ export type AvatarPose = {
 type Expression = { eyes?: string; mouth?: string; brows?: string; cheek?: string; browRaise?: number };
 
 const HEAD_PIVOT_Y = -33;
+/** Pigg-style big head: the whole head group (hair, hats, glasses) is drawn a bit larger around the neck. */
+const HEAD_SCALE = 1.1;
+const NECK_Y = -30;
+const headY = (y: number) => NECK_Y + (y - NECK_Y) * HEAD_SCALE;
 
 type DirView = {
   facing: Facing;
@@ -122,11 +126,12 @@ function armsFor(action: ActionId | null | undefined, t: number, swing: number):
 export function avatarTopY(a: AvatarConfig): number {
   const up = a.ride && a.ride !== "none" ? rideLift(a.ride) : 0;
   if (a.hand === "umbrella" || a.hand === "balloon") return -96 - up;
-  if (a.hat === "witch") return -94 - up;
-  if (a.hat === "mushroom" || a.hat === "unicorn" || a.hand === "flag") return -86 - up;
-  if (a.hat === "silk" || a.hat === "bunnyears") return -86 - up;
-  if (a.hair === "mohawk" || a.hat === "halo") return -76 - up;
-  return -70 - up;
+  if (a.hat === "witch") return headY(-94) - up;
+  if (a.hand === "flag") return -86 - up;
+  if (a.hat === "mushroom" || a.hat === "unicorn") return headY(-86) - up;
+  if (a.hat === "silk" || a.hat === "bunnyears") return headY(-86) - up;
+  if (a.hair === "mohawk" || a.hat === "halo") return headY(-76) - up;
+  return headY(-70) - up;
 }
 
 // ------------------------------------------------------------------ effects
@@ -357,7 +362,9 @@ export function drawAvatar(ctx: Ctx, a: AvatarConfig, pose: AvatarPose) {
 
   const headGroup = (paint: () => void) => {
     ctx.save();
-    ctx.translate(0, bowDip);
+    ctx.translate(0, bowDip + NECK_Y);
+    ctx.scale(HEAD_SCALE, HEAD_SCALE);
+    ctx.translate(0, -NECK_Y);
     paint();
     ctx.restore();
   };

@@ -5,7 +5,8 @@ import {
   circle, faceQuad, facePoint, footprintPath, isoBox, label, polyFill, shade, shadow, type Ctx, type Pt,
 } from "./drawUtil";
 import { ellipse, line, poly, starPath } from "../avatar/draw/common";
-import { cropStage, type PlotCrop } from "../shared/shop";
+import { cropStage, fertDef, type PlotCrop } from "../shared/shop";
+import { plotState, serverNow } from "./garden";
 
 function stroke(ctx: Ctx, pts: Pt[], color: string, width: number) {
   ctx.beginPath();
@@ -54,6 +55,10 @@ export function drawFlatObject(ctx: Ctx, o: TownObject) {
 }
 
 function drawFlatRaw(ctx: Ctx, o: TownObject) {
+  if (o.kind === "gsoil" && o.gplot) {
+    drawGardenSoil(ctx, o);
+    return;
+  }
   if (o.kind !== "rug") return;
   const c = o.color ?? "#e0525c";
   footprintPath(ctx, o.x, o.y, o.w ?? 2, o.h ?? 2, 0.12);
@@ -78,16 +83,39 @@ export function drawObject(ctx: Ctx, o: TownObject, time: number) {
   if (lift) ctx.restore();
 }
 
-/** A crop in a plot: seed → sprout → growing → ripe (bobbing, with a sparkle). */
+/** A crop in a room plot (4 stages: seed, sprout, growing, ripe). */
 function drawCrop(ctx: Ctx, crop: PlotCrop, x: number, y: number, time: number) {
-  const stage = cropStage(crop, Date.now());
+  const stage4 = cropStage(crop, Date.now());
+  drawCropArt(ctx, crop.id, ([0, 2, 3, 4] as const)[stage4], x, y, time);
+}
+
+/**
+ * Crop art in 5 stages: 0 seeds in the soil, 1 sprout, 2 leafy, 3 flowering / fruit forming,
+ * 4 ripe (with a sparkle). A withered crop is the grown plant, faded to brown.
+ */
+function drawCropArt(ctx: Ctx, cropId: string, stage5: 0 | 1 | 2 | 3 | 4, x: number, y: number, time: number, withered = false) {
   const leaf = "#4fa64a";
   const dark = "#357a35";
-  if (stage === 0) {
+  if (stage5 === 0) {
     for (const dx of [-5, 0, 5]) circle(ctx, x + dx, y - 1, 1.2, "#5a3a20", "");
-    line(ctx, [[x, y - 1], [x, y - 5]], leaf, 1.4);
-    circle(ctx, x, y - 6, 1.6, leaf, "");
+    line(ctx, [[x, y - 1], [x, y - 3]], leaf, 1.2);
     return;
+  }
+  if (stage5 === 1) {
+    const sway0 = Math.sin(time * 1.6 + x) * 0.6;
+    line(ctx, [[x, y], [x + sway0, y - 6]], dark, 1.3);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(x + sway0 + side * 2.6, y - 6.4, 2.8, 1.4, side * -0.5, 0, Math.PI * 2);
+      ctx.fillStyle = leaf;
+      ctx.fill();
+    }
+    return;
+  }
+  const stage = stage5 === 2 ? 1 : stage5 === 3 ? 2 : 3;
+  if (withered) {
+    ctx.save();
+    ctx.filter = "grayscale(0.6) sepia(0.8) brightness(0.8)";
   }
   const grow = stage === 1 ? 0.6 : stage === 2 ? 0.85 : 1;
   ctx.save();
@@ -107,8 +135,8 @@ function drawCrop(ctx: Ctx, crop: PlotCrop, x: number, y: number, time: number) 
       ctx.stroke();
     }
   };
-  const ripe = stage === 3;
-  switch (crop.id) {
+  const ripe = stage === 3 && !withered;
+  switch (cropId) {
     case "carrot":
       leaves(16, 3);
       stem(10);
@@ -224,11 +252,172 @@ function drawCrop(ctx: Ctx, crop: PlotCrop, x: number, y: number, time: number) 
         circle(ctx, sway, -22, 2, "#f5cf47", "");
       }
       break;
+    case "lettuce":
+      leaves(8, 2);
+      for (let i = 0; i < 5; i += 1) {
+        const a = (i / 5) * Math.PI * 2;
+        ellipse(ctx, Math.cos(a) * 4, -5 + Math.sin(a) * 2, 4.4, 3, "#7cc95a", true, a);
+      }
+      if (stage >= 2) circle(ctx, 0, -7, ripe ? 6.4 : 4.2, ripe ? "#a6e07a" : "#b8e39a");
+      break;
+    case "onion":
+      for (const dx of [-2, 0, 2]) line(ctx, [[dx * 0.5, -2], [dx + sway, -18]], "#5fae4a", 1.4);
+      if (stage >= 2) {
+        ellipse(ctx, 0, -3, ripe ? 5.2 : 3, ripe ? 4.4 : 2.6, ripe ? "#e6c37a" : "#e9dcb4");
+        poly(ctx, [[-1.4, -6.4], [1.4, -6.4], [0, -10]], ripe ? "#d9a54a" : "#dcd0a0");
+      }
+      break;
+    case "pepper":
+      stem(18);
+      leaves(18, 3);
+      if (stage >= 2) {
+        const pc = ripe ? "#2f8f3a" : "#a8d88a";
+        ellipse(ctx, -4, -9, ripe ? 3 : 1.8, ripe ? 4.6 : 2.8, pc, true, 0.25);
+        ellipse(ctx, 4, -12, ripe ? 2.8 : 1.6, ripe ? 4.2 : 2.6, pc, true, -0.2);
+      }
+      break;
+    case "sweetpotato":
+      leaves(12, 3);
+      stem(8);
+      if (ripe) {
+        for (const [dx, dy, rot] of [[-5, 1, 0.5], [1, 2, -0.3], [6, 0, 0.2]] as Array<[number, number, number]>) ellipse(ctx, dx, dy, 4, 2.2, "#9a4a78", true, rot);
+      }
+      break;
+    case "broccoli":
+      stem(10);
+      leaves(10, 2);
+      if (stage >= 2) {
+        const r = ripe ? 3.4 : 2.2;
+        for (const [dx, dy] of [[-4, -11], [0, -14], [4, -11], [-2, -9], [2, -9]] as Array<[number, number]>) circle(ctx, dx, dy, r, ripe ? "#2f7a3a" : "#8fc47a");
+      }
+      break;
+    case "cherry":
+      line(ctx, [[0, 0], [0, -14]], "#7a4a2a", 2);
+      circle(ctx, 0, -18, 8, "#5fae4a");
+      circle(ctx, -5, -15, 5, "#6bbb52");
+      circle(ctx, 5, -15, 5, "#55a343");
+      if (stage >= 2) {
+        for (const [dx, dy] of [[-4, -12], [3, -13], [0, -9]] as Array<[number, number]>) {
+          line(ctx, [[dx, dy - 3], [dx + 1, dy - 5]], dark, 0.8);
+          circle(ctx, dx, dy, ripe ? 2.4 : 1.4, ripe ? "#c8203a" : "#e9b0b0");
+          circle(ctx, dx + 2.2, dy + 0.6, ripe ? 2.4 : 1.4, ripe ? "#c8203a" : "#e9b0b0");
+        }
+      }
+      break;
+    case "lavender":
+      for (const dx of [-5, 0, 5]) {
+        line(ctx, [[dx * 0.4, 0], [dx + sway, -20]], dark, 1.1);
+        if (stage >= 2) {
+          for (let k = 0; k < 5; k += 1) ellipse(ctx, dx + sway, -20 + k * 2.2, 1.6, 1.4, ripe ? "#9a6bd8" : "#c9c0e0", false);
+        }
+      }
+      break;
+    case "grape":
+      stem(20);
+      leaves(20, 3);
+      if (stage >= 2) {
+        const gc = ripe ? "#6a3a8a" : "#b8d88a";
+        for (const [dx, dy] of [[-2, -14], [2, -14], [0, -11], [-3, -11], [3, -11], [-1, -8], [2, -8], [0, -5]] as Array<[number, number]>) circle(ctx, dx + 3, dy, 1.9, gc, "rgba(40,20,60,0.4)");
+      }
+      break;
+    case "chestnut":
+      line(ctx, [[0, 0], [0, -14]], "#6b4430", 2.2);
+      circle(ctx, 0, -18, 9, "#4f9e3f");
+      circle(ctx, -6, -14, 5, "#5fae4a");
+      circle(ctx, 6, -14, 5, "#4a9540");
+      if (stage >= 2) {
+        for (const [dx, dy] of [[-5, -12], [4, -16], [1, -10]] as Array<[number, number]>) {
+          if (ripe) {
+            ellipse(ctx, dx, dy, 2.4, 2.2, "#7a4a2a");
+            ellipse(ctx, dx, dy + 1.2, 1.8, 0.8, "#e9d7b0", false);
+          } else {
+            circle(ctx, dx, dy, 2.6, "#9ccf5a", "rgba(40,80,20,0.6)");
+          }
+        }
+      }
+      break;
+    case "poinsettia":
+      stem(12);
+      leaves(12, 3);
+      if (stage >= 2) {
+        const pc = ripe ? "#d8243a" : "#8fc47a";
+        for (let i = 0; i < 6; i += 1) {
+          const a = (i / 6) * Math.PI * 2;
+          ellipse(ctx, sway + Math.cos(a) * 4.4, -15 + Math.sin(a) * 2.8, 3.6, 1.6, pc, true, a);
+        }
+        circle(ctx, sway, -15, 1.6, "#f5cf47", "");
+      }
+      break;
+    case "melon":
+      leaves(10, 3);
+      if (stage >= 2) {
+        const r = ripe ? 7.4 : 4.2;
+        ellipse(ctx, 0, -r * 0.7, r, r * 0.9, ripe ? "#cbd98a" : "#a8cf7a");
+        if (ripe) {
+          ctx.strokeStyle = "rgba(255,255,255,0.7)";
+          ctx.lineWidth = 0.6;
+          for (const dx of [-3, 0, 3]) {
+            ctx.beginPath();
+            ctx.moveTo(dx - 2, -r * 1.3);
+            ctx.lineTo(dx + 2, -1);
+            ctx.stroke();
+          }
+        }
+      }
+      break;
+    case "rainbowrose":
+      stem(20);
+      leaves(18, 3);
+      if (stage >= 2) {
+        const colors = ["#e0525c", "#f08a3c", "#f5cf47", "#5fbf6a", "#4f8fe0", "#9a6bd8"];
+        for (let i = 0; i < 6; i += 1) {
+          const a = (i / 6) * Math.PI * 2 + time * 0.6;
+          circle(ctx, sway + Math.cos(a) * 3, -22 + Math.sin(a) * 3, ripe ? 3 : 1.8, ripe ? colors[i] : "#e4d8e8", "");
+        }
+        circle(ctx, sway, -22, ripe ? 2.2 : 1.4, ripe ? "#ffffff" : "#efe8f0", "");
+      }
+      break;
+    case "goldapple":
+      line(ctx, [[0, 0], [0, -14]], "#7a4a2a", 2);
+      circle(ctx, 0, -19, 9, "#4f9e3f");
+      circle(ctx, -6, -15, 5, "#5fae4a");
+      circle(ctx, 6, -15, 5, "#55a343");
+      if (stage >= 2) {
+        for (const [dx, dy] of [[-4, -13], [4, -17], [1, -10]] as Array<[number, number]>) {
+          circle(ctx, dx, dy, ripe ? 3 : 1.8, ripe ? "#f5c542" : "#d8e28a", "rgba(120,80,10,0.5)");
+          if (ripe) circle(ctx, dx - 1, dy - 1, 0.9, "#fff8d0", "");
+        }
+      }
+      break;
+    case "starfruit":
+      stem(16);
+      leaves(16, 3);
+      if (stage >= 2) {
+        for (const [dx, dy] of [[-4, -12], [4, -16]] as Array<[number, number]>) {
+          starPath(ctx, dx, dy, ripe ? 4.4 : 2.6);
+          ctx.fillStyle = ripe ? "#f5cf47" : "#d8e28a";
+          ctx.fill();
+        }
+      }
+      break;
+    case "crystalberry":
+      leaves(10, 3);
+      stem(10);
+      if (stage >= 2) {
+        const glow = 0.7 + Math.sin(time * 3 + x) * 0.3;
+        for (const [dx, dy] of [[-4, -10], [3, -12], [0, -7]] as Array<[number, number]>) {
+          ctx.globalAlpha = ripe ? glow : 0.6;
+          poly(ctx, [[dx, dy - 3.6], [dx + 2.4, dy], [dx, dy + 3], [dx - 2.4, dy]], ripe ? "#8fe3f5" : "#cfe8ee");
+          ctx.globalAlpha = 1;
+        }
+      }
+      break;
     default:
       stem(14);
       leaves(14, 2);
   }
   ctx.restore();
+  if (withered) ctx.restore();
   if (ripe) {
     const glint = (Math.sin(time * 4 + x) + 1) / 2;
     ctx.globalAlpha = 0.35 + glint * 0.6;
@@ -237,6 +426,99 @@ function drawCrop(ctx: Ctx, crop: PlotCrop, x: number, y: number, time: number) 
     ctx.fill();
     ctx.globalAlpha = 1;
   }
+}
+
+
+// ------------------------------------------------------------ My Garden
+
+const FERT_DOT: Record<string, string> = { basic: "#6b4a2a", rich: "#3f9a4a", gold: "#f5c542", compost: "#b8763a" };
+
+/** Tilled soil: dark when wet, with furrows, a fertilizer mark and a blue sheen near a sprinkler. */
+function drawGardenSoil(ctx: Ctx, o: TownObject) {
+  const view = o.gplot!;
+  const st = plotState(view.plot, view.garden, serverNow(view.clockOffset));
+  footprintPath(ctx, o.x, o.y, 1, 1, 0.05);
+  ctx.fillStyle = st.wet ? "#5c3b22" : "#9a6a3c";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(58,34,18,0.55)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  for (const k of [-0.22, 0, 0.22]) {
+    const a = toScreen(o.x - 0.34, o.y + k);
+    const b = toScreen(o.x + 0.34, o.y + k);
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+    ctx.strokeStyle = st.wet ? "rgba(30,16,8,0.5)" : "rgba(70,40,20,0.45)";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+  }
+  if (st.sprinkled) {
+    footprintPath(ctx, o.x, o.y, 1, 1, 0.08);
+    ctx.fillStyle = "rgba(120,190,255,0.16)";
+    ctx.fill();
+  }
+  const fert = view.plot.crop?.fert;
+  if (fert && !st.ripe) {
+    const [cx, cy] = toScreen(o.x, o.y);
+    for (const [dx, dy] of [[-10, 2], [9, 3], [0, 6]] as Array<[number, number]>) circle(ctx, cx + dx, cy + dy, 1.6, FERT_DOT[fert] ?? "#6b4a2a", "");
+    if (fertDef(fert)?.goldBonus) {
+      starPath(ctx, cx - 12, cy - 2, 2, 4, 0.4);
+      ctx.fillStyle = "#fff3a0";
+      ctx.fill();
+    }
+  }
+}
+
+/** What grows on a garden plot, plus weeds and a crawling bug. */
+function drawGardenPlant(ctx: Ctx, o: TownObject, sx: number, sy: number, time: number) {
+  const view = o.gplot!;
+  const plot = view.plot;
+  const st = plotState(plot, view.garden, serverNow(view.clockOffset));
+  if (plot.crop && st.crop) {
+    // Garden plots are the whole point of the area, so the plants are drawn a bit larger than room planters.
+    ctx.save();
+    ctx.translate(sx, sy - 2);
+    ctx.scale(1.35, 1.35);
+    drawCropArt(ctx, plot.crop.id, st.stage, 0, 0, time, st.withered);
+    ctx.restore();
+  }
+  if (plot.weed) {
+    for (const [dx, dy] of [[-12, 3], [11, 2], [-3, 7]] as Array<[number, number]>) {
+      const bx = sx + dx;
+      const by = sy + dy;
+      for (const lean of [-2.4, 0, 2.4]) {
+        const tip = Math.sin(time * 2 + dx) * 0.8;
+        line(ctx, [[bx, by], [bx + lean + tip, by - 7]], "#3f7a2a", 1.2);
+      }
+    }
+  }
+  if (plot.bug) {
+    const t = time * 1.4 + o.x;
+    const bx = sx + Math.sin(t) * 6;
+    const by = sy - 8 + Math.cos(t * 1.3) * 3;
+    ellipse(ctx, bx, by, 2.6, 2.1, "#d8243a", true);
+    line(ctx, [[bx, by - 2.1], [bx, by + 2.1]], "#2b1d1a", 0.6);
+    circle(ctx, bx - 1, by - 0.6, 0.5, "#2b1d1a", "");
+    circle(ctx, bx + 1, by + 0.7, 0.5, "#2b1d1a", "");
+    circle(ctx, bx + Math.cos(t) * 2.6, by - 1.8, 0.9, "#2b1d1a", "");
+  }
+}
+
+function drawSprinkler(ctx: Ctx, sx: number, sy: number, time: number) {
+  shadow(ctx, sx, sy + 1, 8, 4);
+  ctx.fillStyle = "#6b7280";
+  ctx.fillRect(sx - 1.5, sy - 14, 3, 14);
+  circle(ctx, sx, sy - 15, 3, "#9aa0aa", "#4b5563");
+  const spin = time * 3;
+  for (let i = 0; i < 10; i += 1) {
+    const a = spin + (i / 10) * Math.PI * 2;
+    const p = (time * 1.8 + i * 0.1) % 1;
+    const r = 6 + p * 22;
+    ctx.globalAlpha = 1 - p;
+    circle(ctx, sx + Math.cos(a) * r, sy - 15 + Math.sin(a) * r * 0.5 + p * 12, 1.4, "#8fd3f5", "");
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawObjectRaw(ctx: Ctx, o: TownObject, time: number) {
@@ -1552,6 +1834,12 @@ function drawObjectRaw(ctx: Ctx, o: TownObject, time: number) {
       isoBox(ctx, o.x, o.y, 1, 1, 6, shade(pc, -0.1), 0.22, LEVEL_PX * 2 - 6);
       break;
     }
+    case "gcrop":
+      if (o.gplot) drawGardenPlant(ctx, o, sx, sy, time);
+      break;
+    case "sprinkler":
+      drawSprinkler(ctx, sx, sy, time);
+      break;
     case "plot": {
       isoBox(ctx, o.x, o.y, 1, 1, 5, "#7a5230", 0.05);
       // Furrows across the soil.

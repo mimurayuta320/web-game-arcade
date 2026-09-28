@@ -1254,7 +1254,8 @@ export class CloudService {
       this.db.exec(`ALTER TABLE users ADD COLUMN pass_hash_hex VARCHAR(255) NOT NULL DEFAULT ''`);
     }
     if (!hasColumn('users', 'profile_json')) {
-      this.db.exec(`ALTER TABLE users ADD COLUMN profile_json MEDIUMTEXT NOT NULL DEFAULT '{}'`);
+      // MySQL 8 only accepts TEXT defaults as an expression: DEFAULT ('...').
+      this.db.exec(`ALTER TABLE users ADD COLUMN profile_json MEDIUMTEXT NOT NULL DEFAULT ('{}')`);
       this.db.exec(`UPDATE users SET profile_json = '{}' WHERE profile_json IS NULL OR profile_json = ''`);
     }
     if (!hasColumn('users', 'friend_id')) {

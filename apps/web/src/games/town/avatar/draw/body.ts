@@ -1,7 +1,7 @@
 // Legs, shoes, bottoms, tops, one-pieces and arms.
 import type { AvatarConfig } from "../parts";
 import {
-  HIP_Y, LINE, LINE_WIDTH, ellipse, fillStroke, line, luminance, poly, roundRect, shade, type Ctx, type Facing,
+  HIP_Y, LINE_WIDTH, ellipse, fillStroke, line, luminance, outlineOf, poly, roundRect, shade, type Ctx, type Facing,
 } from "./common";
 
 export type Point = [number, number];
@@ -42,7 +42,11 @@ export function drawLegs(ctx: Ctx, a: AvatarConfig, lift: [number, number], sitt
   const op = onepieceOf(a);
   [-4, 4].forEach((x, i) => {
     const bottom = footY - lift[i];
-    roundRect(ctx, x - 2.6, HIP_Y - 1, 5.2, bottom - HIP_Y + 1, 2.2, color);
+    roundRect(ctx, x - 2.8, HIP_Y - 1, 5.6, bottom - HIP_Y + 1, 2.6, color);
+    ctx.save();
+    ctx.globalAlpha = 0.14;
+    roundRect(ctx, x + (x < 0 ? 0.8 : -2.6), HIP_Y, 1.8, bottom - HIP_Y - 1, 0.9, shade(color, -0.5), false);
+    ctx.restore();
     if (!op && a.bottom === "shorts") roundRect(ctx, x - 2.9, HIP_Y - 1, 5.8, 5, 1.5, a.bottomColor);
     if (!op && a.bottom === "cargo") roundRect(ctx, x + (x < 0 ? -2.4 : 0.6), (bottom + HIP_Y) / 2 - 1, 2, 3.2, 0.6, shade(a.bottomColor, -0.22), false);
     if (!op && a.bottom === "wide") roundRect(ctx, x - 3.2, bottom - 6, 6.4, 6, 1.2, shade(a.bottomColor, -0.12), false);
@@ -64,10 +68,12 @@ function drawShoe(ctx: Ctx, a: AvatarConfig, x: number, y: number, side: number)
       line(ctx, [[toe - 3.6, y + 1.5], [toe + 3.6, y + 1.5]], "#ffffff", 1);
       break;
     case "loafers":
-      ellipse(ctx, toe, y + 0.3, 3.6, 2.2, shade(c, -0.25));
+      ellipse(ctx, toe, y + 0.4, 4, 2.5, shade(c, -0.2));
+      ellipse(ctx, toe - 1, y - 0.5, 1.2, 0.6, "rgba(255,255,255,0.45)", false, -0.2);
+      roundRect(ctx, toe - 3.9, y + 1.8, 7.8, 1, 0.5, shade(c, -0.45), false);
       break;
     case "pumps":
-      ellipse(ctx, toe, y, 3.3, 2, c);
+      ellipse(ctx, toe, y + 0.2, 3.6, 2.3, c);
       ellipse(ctx, toe - 0.6, y - 0.6, 1, 0.6, "rgba(255,255,255,0.6)", false);
       roundRect(ctx, x - side * 2.2 - 0.6, y, 1.2, 2.2, 0.4, shade(c, -0.3), false);
       break;
@@ -105,8 +111,13 @@ function drawShoe(ctx: Ctx, a: AvatarConfig, x: number, y: number, side: number)
       line(ctx, [[toe - 2.4, y + 0.4], [toe, y - 1.4], [toe + 2.4, y + 0.4]], c, 1.1);
       break;
     default: // sneakers
-      ellipse(ctx, toe, y + 0.2, 4, 2.6, c);
-      line(ctx, [[toe - 3.6, y + 1.4], [toe + 3.6, y + 1.4]], "#ffffff", 1);
+      ctx.beginPath();
+      ctx.moveTo(toe - 4, y + 1.6);
+      ctx.bezierCurveTo(toe - 4.4, y - 3.2, toe + 4.4, y - 3.4, toe + 4.2, y + 1.6);
+      ctx.closePath();
+      fillStroke(ctx, c);
+      roundRect(ctx, toe - 4.3, y + 0.9, 8.6, 1.9, 0.9, "#ffffff");
+      ellipse(ctx, toe - 1.2, y - 1.1, 1.3, 0.7, "rgba(255,255,255,0.55)", false, -0.2);
   }
 }
 
@@ -183,12 +194,31 @@ export function drawBottomOverTorso(ctx: Ctx, a: AvatarConfig, facing: Facing) {
 
 export function torsoPath(ctx: Ctx) {
   ctx.beginPath();
-  ctx.moveTo(-7, -30);
-  ctx.quadraticCurveTo(0, -31.5, 7, -30);
-  ctx.quadraticCurveTo(9.2, -22, 9, -14);
-  ctx.lineTo(-9, -14);
-  ctx.quadraticCurveTo(-9.2, -22, -7, -30);
+  ctx.moveTo(-5.6, -31);
+  ctx.quadraticCurveTo(0, -32, 5.6, -31);
+  ctx.bezierCurveTo(8.6, -30.4, 9, -27, 9, -24);
+  ctx.bezierCurveTo(9.2, -20, 9.6, -16, 9, -14);
+  ctx.quadraticCurveTo(0, -12.8, -9, -14);
+  ctx.bezierCurveTo(-9.6, -16, -9.2, -20, -9, -24);
+  ctx.bezierCurveTo(-9, -27, -8.6, -30.4, -5.6, -31);
   ctx.closePath();
+}
+
+/** Soft shading over the body: darker toward the sides, a shadow under the chin. */
+function torsoShading(ctx: Ctx) {
+  ctx.save();
+  torsoPath(ctx);
+  ctx.clip();
+  const g = ctx.createLinearGradient(-10, 0, 10, 0);
+  g.addColorStop(0, "rgba(70, 36, 36, 0.16)");
+  g.addColorStop(0.3, "rgba(70, 36, 36, 0)");
+  g.addColorStop(0.62, "rgba(255, 255, 255, 0.08)");
+  g.addColorStop(1, "rgba(70, 36, 36, 0.14)");
+  ctx.fillStyle = g;
+  ctx.fillRect(-11, -33, 22, 21);
+  ctx.globalAlpha = 0.18;
+  ellipse(ctx, 0, -31.4, 8, 2.6, "#5a2e2e", false);
+  ctx.restore();
 }
 
 function torso(ctx: Ctx, color: string) {
@@ -196,14 +226,14 @@ function torso(ctx: Ctx, color: string) {
   fillStroke(ctx, color);
 }
 
-function clipTorso(ctx: Ctx, paint: () => void) {
+function clipTorso(ctx: Ctx, paint: () => void, base = "#808080") {
   ctx.save();
   torsoPath(ctx);
   ctx.clip();
   paint();
   ctx.restore();
   torsoPath(ctx);
-  ctx.strokeStyle = LINE;
+  ctx.strokeStyle = outlineOf(base);
   ctx.lineWidth = LINE_WIDTH;
   ctx.stroke();
 }
@@ -232,7 +262,7 @@ function drawTop(ctx: Ctx, a: AvatarConfig, facing: Facing) {
       clipTorso(ctx, () => {
         ctx.fillStyle = luminance(c) > 0.8 ? "#3651a8" : "rgba(255,255,255,0.85)";
         for (let y = -28; y < -14; y += 3.4) ctx.fillRect(-10, y, 20, 1.5);
-      });
+      }, c);
       if (front) neckline(ctx, shade(c, -0.3));
       return;
     case "dots":
@@ -242,7 +272,7 @@ function drawTop(ctx: Ctx, a: AvatarConfig, facing: Facing) {
           const y = -29 + row * 4;
           for (let x = -9; x < 10; x += 4.4) ellipse(ctx, x + (row % 2 ? 2.2 : 0), y, 0.9, 0.9, luminance(c) > 0.8 ? "#e0525c" : "#ffffff", false);
         }
-      });
+      }, c);
       if (front) neckline(ctx, shade(c, -0.3));
       return;
     case "polo":
@@ -261,7 +291,7 @@ function drawTop(ctx: Ctx, a: AvatarConfig, facing: Facing) {
           for (let k = 0; k < 5; k += 1) ellipse(ctx, x + Math.cos(k * 1.257) * 1.6, y + Math.sin(k * 1.257) * 1.6, 1.1, 1.1, flower, false);
           ellipse(ctx, x, y, 0.7, 0.7, "#ffffff", false);
         }
-      });
+      }, c);
       if (front) {
         poly(ctx, [[-4.6, -30.6], [0, -27.4], [-2, -25.4], [-5, -28.6]], shade(c, 0.4));
         poly(ctx, [[4.6, -30.6], [0, -27.4], [2, -25.4], [5, -28.6]], shade(c, 0.4));
@@ -278,7 +308,7 @@ function drawTop(ctx: Ctx, a: AvatarConfig, facing: Facing) {
         ctx.fillStyle = c;
         ctx.fillRect(-10, -31, 5, 17);
         ctx.fillRect(5, -31, 5, 17);
-      });
+      }, WHITE);
       if (front) {
         ctx.fillStyle = shade(c, -0.1);
         ctx.font = "bold 8px system-ui, sans-serif";
@@ -327,7 +357,7 @@ function drawTop(ctx: Ctx, a: AvatarConfig, facing: Facing) {
           for (let y = -28; y <= -16; y += 2) ctx.lineTo(x + (y % 4 === 0 ? 0.9 : -0.9), y);
           ctx.stroke();
         }
-      });
+      }, c);
       roundRect(ctx, -9.2, -16.4, 18.4, 2.6, 1, shade(c, -0.15));
       if (front) roundRect(ctx, -4, -31.6, 8, 2.4, 1.2, shade(c, -0.15));
       return;
@@ -397,7 +427,7 @@ function drawTop(ctx: Ctx, a: AvatarConfig, facing: Facing) {
           ctx.closePath();
           ctx.fill();
         }
-      });
+      }, WHITE);
       if (!front) return;
       buttons(ctx, -1.8, -20, -16, "#f5cf47");
       ellipse(ctx, -2.2, -29.4, 2.2, 1.4, "#b8323f", true, 0.3);
@@ -608,6 +638,7 @@ export function drawTorso(ctx: Ctx, a: AvatarConfig, facing: Facing, sitting: bo
   const op = onepieceOf(a);
   if (op) drawOnepiece(ctx, a, op, facing, sitting);
   else drawTop(ctx, a, facing);
+  torsoShading(ctx);
 }
 
 /** Kigurumi hood frames the face; drawn after the hair, before the hat. */
@@ -623,7 +654,7 @@ export function drawKigurumiHood(ctx: Ctx, a: AvatarConfig, facing: Facing) {
   if (facing === "front") ctx.ellipse(0, -41.5, 14.2, 12.6, 0, 0, Math.PI * 2, true);
   ctx.fillStyle = c;
   ctx.fill("evenodd");
-  ctx.strokeStyle = LINE;
+  ctx.strokeStyle = outlineOf(c);
   ctx.lineWidth = LINE_WIDTH;
   ctx.stroke();
 }
@@ -643,9 +674,13 @@ export function drawArms(ctx: Ctx, a: AvatarConfig, arms: ArmPose) {
     const at = (t: number): Point => [sx + (hx - sx) * t, sy + (hy - sy) * t];
 
     ctx.lineCap = "round";
-    line(ctx, [[sx, sy], [hx, hy]], LINE, 5.4);
-    line(ctx, [[sx, sy], [hx, hy]], kind === "long" || kind === "wide" ? color : a.skin, 3.4);
-    if (kind === "short") line(ctx, [[sx, sy], at(0.45)], color, 4.6);
+    const armColor = kind === "long" || kind === "wide" ? color : a.skin;
+    line(ctx, [[sx, sy], [hx, hy]], outlineOf(armColor), 5.6);
+    line(ctx, [[sx, sy], [hx, hy]], armColor, 3.8);
+    if (kind === "short") {
+      line(ctx, [[sx, sy], at(0.45)], outlineOf(color), 6.4);
+      line(ctx, [[sx, sy], at(0.45)], color, 4.8);
+    }
     if (kind === "puff") {
       const [px, py] = at(0.25);
       ellipse(ctx, px, py, 3.6, 3.2, color);
@@ -660,6 +695,7 @@ export function drawArms(ctx: Ctx, a: AvatarConfig, arms: ArmPose) {
     }
     if (a.top === "sailor" && !onepieceOf(a)) line(ctx, [at(0.82), at(0.9)], a.topColor, 3.6);
     const handColor = onepieceOf(a) === "kigurumi" ? a.onepieceColor : a.skin;
-    ellipse(ctx, hx, hy + 0.6, 2.4, 2.4, handColor);
+    ellipse(ctx, hx, hy + 0.6, 2.7, 2.6, handColor);
+    ellipse(ctx, hx - 0.8, hy - 0.2, 0.9, 0.7, "rgba(255,255,255,0.4)", false);
   }
 }

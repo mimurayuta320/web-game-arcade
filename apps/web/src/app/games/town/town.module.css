@@ -1814,3 +1814,195 @@
 .layoutBox { display: grid; gap: 6px; padding: 10px; margin-bottom: 8px; border-radius: 12px; background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 0, 0, 0.08); }
 .layoutRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
 .layoutInfo { flex: 1; min-width: 90px; opacity: 0.75; font-size: 12px; }
+
+/* ------------------------------------------------------------ my garden */
+
+.gardenButton {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #4fae5b;
+  color: #fff;
+}
+.gardenButton:disabled { opacity: 0.45; cursor: default; }
+
+.gardenHud {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(58, 44, 44, 0.12);
+  font-size: 12px;
+  pointer-events: none;
+}
+.gardenHud > button { pointer-events: auto; }
+.gardenHudTitle { font-weight: 800; font-size: 13px; }
+.gardenHudTitle b { color: #3b8f46; }
+.gardenHudXp {
+  width: 80px;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+.gardenHudXp > span,
+.xpBar > span,
+.growBar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6cc56f, #b6e36b);
+  transition: width 0.3s;
+}
+.gardenHudBadge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #fff1c9;
+  font-weight: 700;
+}
+.gardenHudBadge[data-kind="dry"] { background: #dcefff; }
+.gardenHudBadge[data-kind="bug"] { background: #ffe0dc; }
+
+.gardenToolbar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 40px;
+  pointer-events: none;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+.gardenTools,
+.gardenPicker { pointer-events: auto; }
+.gardenTools {
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 14px rgba(58, 44, 44, 0.18);
+  overflow-x: auto;
+  max-width: 100%;
+}
+.gardenToolButton {
+  flex: none;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  min-width: 48px;
+  padding: 4px 6px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--town-ink);
+  font-size: 20px;
+  line-height: 1.1;
+  cursor: pointer;
+}
+.gardenToolButton small { font-size: 10px; color: var(--town-muted); }
+.gardenToolButton:hover { background: var(--town-soft); }
+.gardenToolButton[aria-pressed="true"] { border-color: #4fae5b; background: #e8f7e6; }
+.gardenPicker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  max-width: 560px;
+  max-height: 84px;
+  overflow-y: auto;
+  padding: 5px 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+}
+.hint[data-garden="true"] { bottom: 10px; }
+
+.gardenBook { width: min(720px, 100%); }
+.gardenBookTitle { font-weight: 800; font-size: 16px; }
+.gardenBookTitle small { font-weight: 600; font-size: 12px; color: var(--town-muted); margin-left: 6px; }
+.xpBar,
+.growBar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+.gardenTabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.shopItem[data-locked="true"] { opacity: 0.5; }
+.shopItem[data-gold="true"] { background: #fff4c7; border-color: #f0cf62; }
+.seasonTag {
+  font-style: normal;
+  font-size: 10px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #eee;
+}
+.seasonTag[data-season="spring"] { background: #ffe1ee; }
+.seasonTag[data-season="summer"] { background: #d9f2ff; }
+.seasonTag[data-season="autumn"] { background: #ffe5c9; }
+.seasonTag[data-season="winter"] { background: #e6e9ff; }
+
+.recipeList { display: grid; gap: 8px; }
+.recipeCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--town-line);
+  border-radius: 12px;
+  background: var(--town-soft);
+}
+.recipeCard[data-locked="true"] { opacity: 0.55; }
+.recipeCard[data-done="true"] { background: #e8f7e6; }
+.recipeBody { flex: 1; display: grid; gap: 3px; min-width: 0; font-size: 13px; }
+.recipeBody small { color: var(--town-muted); }
+.recipeIngredients { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
+.recipeIngredients > span {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--town-panel);
+  border: 1px solid var(--town-line);
+}
+.recipeIngredients > span[data-short="true"] { color: #c23a3a; border-color: #f3b6b6; }
+.orderButtons { display: flex; flex-direction: column; gap: 4px; }
+
+.dexMilestones { display: flex; flex-wrap: wrap; gap: 6px; }
+.dexGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+.dexCell {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border-radius: 10px;
+  border: 1px solid var(--town-line);
+  background: #f1ece8;
+  font-size: 24px;
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+.dexCell[data-found="true"] { background: var(--town-soft); filter: none; opacity: 1; }
+.dexCount { font-size: 10px; color: var(--town-muted); }
+
+.plotFacts { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+.plotFacts > li[data-bad="true"] { color: #c2572a; font-weight: 700; }
+.unlockList { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
+
+@media (max-width: 640px) {
+  .gardenToolButton { min-width: 40px; font-size: 18px; }
+  .gardenToolButton small { display: none; }
+  .gardenHud { font-size: 11px; }
+}
