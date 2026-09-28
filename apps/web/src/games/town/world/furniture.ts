@@ -230,7 +230,11 @@ export type RoomData = {
   goodPigg?: number;
   /** Saved layouts (my room only matters to its owner): when it was saved and how many pieces. */
   layouts?: Array<{ savedAt: number; count: number } | null>;
+  /** "きたよ！" guestbook: most recent distinct visitors, newest first. */
+  guests?: RoomGuest[];
 };
+
+export type RoomGuest = { name: string; friendId: string; at: number };
 
 // ------------------------------------------------------------- building rules
 // Same rules as canPlace() / tileTop() in server/town-data.mjs.

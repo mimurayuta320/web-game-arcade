@@ -277,6 +277,12 @@ export default function TownPage() {
         window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200);
         return;
       }
+      if (event.type === "room-guest") {
+        const id = ++toastSeq.current;
+        setToasts((list) => [...list.slice(-3), { id, text: `🚪 ${event.name}さんが「${event.roomTitle}」に遊びに来たよ！`, kind: "ame" }]);
+        window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 4200);
+        return;
+      }
       if (event.type === "garden-done") {
         // Quick field work (till, water, weed, decorate) shows up in the garden itself, not as toasts.
         if (!event.label) return;

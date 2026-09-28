@@ -798,6 +798,41 @@
   font-size: 12px;
 }
 
+.guestbookRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--town-soft);
+  font-size: 12px;
+}
+
+.guestbookLabel {
+  font-weight: 700;
+  color: var(--town-muted);
+}
+
+.guestbookList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guestbookList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.guestbookList small {
+  color: var(--town-muted);
+  flex: none;
+}
+
 .dangerButton {
   border: none;
   border-radius: 999px;

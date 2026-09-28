@@ -85,6 +85,8 @@ export type TownEvent =
   | { type: "garden-done"; op: string; label: string; total?: number; amount?: number }
   | { type: "garden-levelup"; level: number; unlocks: string[] }
   | { type: "garden-news"; text: string }
+  /** Someone visited one of my rooms today — the "きたよ！" notification. */
+  | { type: "room-guest"; roomTitle: string; name: string }
   | { type: "error"; text: string; code?: string };
 
 /** Where a cloud friend currently is in town (best-effort: the friend ID is self-declared). */
@@ -712,6 +714,13 @@ export class TownGame {
         this.system(`🌱 ${String(msg.text || "")}`);
         this.fire({ type: "garden-news", text: String(msg.text || "") });
         break;
+      case "town-room-guest": {
+        const name = String(msg.name || "");
+        const roomTitle = String(msg.roomTitle || "");
+        this.system(`🚪 ${name}さんが「${roomTitle}」に遊びに来たよ！`);
+        this.fire({ type: "room-guest", roomTitle, name });
+        break;
+      }
       default:
         return;
     }

@@ -6,7 +6,7 @@ import {
   BAITS, CASINO_ITEMS, CROPS, FLAT_FURNITURE, FLOOR_STYLES, LIMITED_FURNITURE, LIMITED_PARTS, PET_SPECIES, POINT_SHOP, RODS, ROOM_SIZES, WALL_STYLES,
   normalizePetName, petHunger, petLevel, publicPet,
   BLOCK_KINDS, LAYOUT_SLOTS, MAX_LEVEL, autoLevel, hasAbove, settleItems, footprint,
-  addAme, bindCloud, bump, canPlace, claimAchievement, claimMission, claimMissionBonus, cloudKeyOf, dailyOf, economy, ensurePlayer, itemAt, linkedPlayerId, maxItems, newRoomId,
+  addAme, addRoomGuest, bindCloud, bump, canPlace, claimAchievement, claimMission, claimMissionBonus, cloudKeyOf, dailyOf, economy, ensurePlayer, itemAt, linkedPlayerId, maxItems, newRoomId,
   normalizeName, ownsFurniture, ownsPart, players, publicRoom, resolvePlayerId, roomSpawn, rooms, sanitizeItem,
   sanitizeRoom, scheduleSave, walletOf,
 } from "./town-data.mjs";
@@ -1112,6 +1112,11 @@ function handleJoin(ws, payload, verified = null) {
     bump(player, "visit");
     if (daily.visits.length * EARN.visitRoom <= EARN.visitRoomDailyCap) earn(ws, player, EARN.visitRoom, "へや訪問ボーナス");
     else scheduleSave();
+    // Guestbook: record the visit and let the owner know, even if they're elsewhere in town.
+    addRoomGuest(room, t.name, t.friendId);
+    broadcastRoom(room);
+    const ownerWs = socketOfPlayer(room.ownerId);
+    if (ownerWs) send(ownerWs, { type: "town-room-guest", roomId: room.id, roomTitle: room.title, name: t.name });
   }
 }
 

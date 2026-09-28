@@ -25,6 +25,15 @@ const TOOLS: Array<{ id: RoomTool; label: string; hint: string }> = [
 
 const ARROWS = ["↘", "↙", "↖", "↗"];
 
+function timeAgo(at: number): string {
+  const mins = Math.max(0, Math.round((Date.now() - at) / 60000));
+  if (mins < 1) return "たった今";
+  if (mins < 60) return `${mins}分前`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}時間前`;
+  return `${Math.round(hours / 24)}日前`;
+}
+
 type Props = {
   room: RoomData;
   ame: number;
@@ -231,6 +240,20 @@ export function RoomEditorPanel({
           <span className={styles.ownedTag}>さいだい</span>
         )}
       </div>
+
+      {room.guests && room.guests.length > 0 ? (
+        <div className={styles.guestbookRow}>
+          <span className={styles.guestbookLabel}>🚪 さいきん遊びに来た人</span>
+          <ul className={styles.guestbookList}>
+            {room.guests.slice(0, 6).map((g, i) => (
+              <li key={`${g.at}-${i}`}>
+                <span>{g.name}さん</span>
+                <small>{timeAgo(g.at)}</small>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className={styles.clearRow}>
         {confirmClear ? (

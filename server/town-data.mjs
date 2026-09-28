@@ -643,6 +643,20 @@ function sanitizeLayouts(raw, size) {
   return out;
 }
 
+/** "誰々さんが遊びに来たよ！" guestbook: the most recent distinct visitors to a room. */
+const MAX_ROOM_GUESTS = 12;
+
+function sanitizeGuest(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const name = normalizeName(raw.name);
+  if (!name) return null;
+  return { name, friendId: String(raw.friendId || "").slice(0, 20), at: Number(raw.at) || nowTs() };
+}
+
+function sanitizeGuests(raw) {
+  return (Array.isArray(raw) ? raw : []).map(sanitizeGuest).filter(Boolean).slice(0, MAX_ROOM_GUESTS);
+}
+
 export function sanitizeRoom(raw) {
   const size = ROOM_SIZES.includes(Number(raw.size)) ? Number(raw.size) : ROOM_SIZES[0];
   const room = {
@@ -655,17 +669,26 @@ export function sanitizeRoom(raw) {
     size,
     items: [],
     layouts: sanitizeLayouts(raw.layouts, size),
+    guests: sanitizeGuests(raw.guests),
     updatedAt: Number(raw.updatedAt) || nowTs(),
   };
   const items = (Array.isArray(raw.items) ? raw.items : []).map(sanitizeItem).filter(Boolean);
   room.items = settleItems(size, items, maxItems(size));
   return room;
 }
+
+/** Record a visit for the room's guestbook (called at most once per visitor per day). */
+export function addRoomGuest(room, name, friendId) {
+  room.guests = [{ name: normalizeName(name), friendId: String(friendId || "").slice(0, 20), at: nowTs() }, ...(room.guests || [])].slice(0, MAX_ROOM_GUESTS);
+  scheduleSave();
+}
+
 export function publicRoom(room) {
   const owner = players.get(room.ownerId);
   return {
     id: room.id, owner: room.owner, title: room.title, wall: room.wall, floor: room.floor,
     size: room.size, items: room.items, goodPigg: owner?.goodPigg || 0,
+    guests: room.guests || [],
     layouts: (room.layouts || []).map((l) => (l ? { savedAt: l.savedAt, count: l.items.length } : null)),
   };
 }
