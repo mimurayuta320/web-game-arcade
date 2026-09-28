@@ -4,7 +4,7 @@ import type { ShopId } from "../shared/shop";
 import { useState } from "react";
 import styles from "@/app/games/town/town.module.css";
 import {
-  AVATAR_CATEGORIES, MAX_WEAR_ITEMS, limitedKey, normalizeAvatar, randomAvatar, withWearItems,
+  AVATAR_CATEGORIES, MAX_WEAR_ITEMS, limitedKey, normalizeAvatar, randomAvatar, randomizeCategory, withWearItems,
   type AvatarConfig, type AvatarPartKey, type PartCategory, type WearItem,
 } from "../avatar/parts";
 import type { AvatarPose } from "../avatar/drawAvatar";
@@ -215,9 +215,15 @@ export function AvatarEditor({
                 className={styles.categoryTab}
                 onClick={() => setCategoryKey(c.key)}
               >
-                {c.label}
+                <span aria-hidden="true">{c.icon}</span> {c.label}
               </button>
             ))}
+          </div>
+
+          <div className={styles.categoryRandomRow}>
+            <button type="button" className={styles.linkButton} onClick={() => setAvatar(randomizeCategory(avatar, category.key))}>
+              🎲 {category.label}だけおまかせ
+            </button>
           </div>
 
           {group === "wear" ? (

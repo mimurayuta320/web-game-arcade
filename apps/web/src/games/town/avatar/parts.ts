@@ -64,6 +64,8 @@ export type ThumbFocus = "head" | "upper" | "lower" | "feet" | "body";
 export type PartCategory = {
   key: AvatarPartKey;
   label: string;
+  /** Small glyph shown on the category tab, so the closet reads at a glance like Pigg's icon row. */
+  icon: string;
   group: "face" | "wear";
   options: PartOption[];
   colorKey?: AvatarPartKey;
@@ -99,22 +101,22 @@ const opts = (list: Array<[string, string]>): PartOption[] => list.map(([id, lab
 export const AVATAR_CATEGORIES: PartCategory[] = [
   // ---------------------------------------------------------------- face
   {
-    key: "skin", label: "はだ", group: "face", focus: "head",
+    key: "skin", label: "はだ", icon: "🖐️", group: "face", focus: "head",
     options: SKIN_COLORS.map((c, i) => ({ id: c, label: `はだ${i + 1}` })),
   },
   {
-    key: "face", label: "りんかく", group: "face", focus: "head",
+    key: "face", label: "りんかく", icon: "⚪", group: "face", focus: "head",
     options: opts([["round", "まる"], ["egg", "たまご"], ["sharp", "シャープ"], ["square", "しかく"], ["wide", "ぷにぷに"]]),
   },
   {
-    key: "brows", label: "まゆげ", group: "face", focus: "head", colorKey: "browColor", palette: HAIR_COLORS,
+    key: "brows", label: "まゆげ", icon: "🤨", group: "face", focus: "head", colorKey: "browColor", palette: HAIR_COLORS,
     options: opts([
       ["normal", "ふつう"], ["thin", "ほそ"], ["thick", "ふと"], ["angry", "キリッ"], ["worried", "こまり"],
       ["short", "まろ"], ["arch", "アーチ"], ["none", "なし"],
     ]),
   },
   {
-    key: "eyes", label: "め", group: "face", focus: "head", colorKey: "eyeColor", palette: EYE_COLORS,
+    key: "eyes", label: "め", icon: "👀", group: "face", focus: "head", colorKey: "eyeColor", palette: EYE_COLORS,
     options: opts([
       ["round", "まる"], ["sparkle", "キラキラ"], ["big", "ぱっちり"], ["tare", "たれ目"], ["tsuri", "つり目"],
       ["lashes", "まつげ"], ["smile", "にっこり"], ["sleepy", "ねむそう"], ["dot", "てん"], ["line", "ほそ目"],
@@ -122,29 +124,29 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
     ]),
   },
   {
-    key: "nose", label: "はな", group: "face", focus: "head",
+    key: "nose", label: "はな", icon: "👃", group: "face", focus: "head",
     options: opts([["none", "なし"], ["dot", "てん"], ["ku", "く"], ["round", "まる"], ["line", "すじ"], ["pig", "ぶた"]]),
   },
   {
-    key: "mouth", label: "くち", group: "face", focus: "head",
+    key: "mouth", label: "くち", icon: "👄", group: "face", focus: "head",
     options: opts([
       ["smile", "にこ"], ["open", "わーい"], ["grin", "にかっ"], ["three", "3"], ["cat", "ねこ"],
       ["tongue", "てへ"], ["neutral", "ふつう"], ["o", "おっ"], ["frown", "へ"], ["wavy", "もにょ"], ["fang", "きば"],
     ]),
   },
   {
-    key: "cheek", label: "ほっぺ", group: "face", focus: "head",
+    key: "cheek", label: "ほっぺ", icon: "😊", group: "face", focus: "head",
     options: opts([["soft", "うっすら"], ["pink", "ピンク"], ["lines", "てれ"], ["star", "ほし"], ["heart", "ハート"], ["none", "なし"]]),
   },
   {
-    key: "mark", label: "ほくろ・ひげ", group: "face", focus: "head",
+    key: "mark", label: "ほくろ・ひげ", icon: "🩹", group: "face", focus: "head",
     options: opts([
       ["none", "なし"], ["mole", "なきぼくろ"], ["freckles", "そばかす"], ["mustache", "くちひげ"],
       ["beard", "あごひげ"], ["bandaid", "ばんそうこう"], ["sticker", "ハートシール"], ["whiskers", "ねこひげ"],
     ]),
   },
   {
-    key: "hair", label: "かみがた", group: "face", focus: "head", colorKey: "hairColor", palette: HAIR_COLORS,
+    key: "hair", label: "かみがた", icon: "💇", group: "face", focus: "head", colorKey: "hairColor", palette: HAIR_COLORS,
     options: opts([
       ["short", "ショート"], ["spiky", "ツンツン"], ["sidepart", "七三"], ["messy", "ボサボサ"], ["mash", "マッシュ"],
       ["bob", "ボブ"], ["hime", "ひめカット"], ["long", "ロング"], ["wavy", "ゆるふわ"], ["ponytail", "ポニーテール"],
@@ -156,7 +158,7 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
   },
   // ---------------------------------------------------------------- wear
   {
-    key: "top", label: "トップス", group: "wear", focus: "upper", colorKey: "topColor", palette: CLOTH_COLORS,
+    key: "top", label: "トップス", icon: "👕", group: "wear", focus: "upper", colorKey: "topColor", palette: CLOTH_COLORS,
     options: opts([
       ["none", "なし"],
       ["tshirt", "Tシャツ"], ["stripe", "ボーダー"], ["dots", "みずたま"], ["tank", "タンクトップ"], ["shirt", "シャツ"],
@@ -166,7 +168,7 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
     ]),
   },
   {
-    key: "bottom", label: "ボトムス", group: "wear", focus: "lower", colorKey: "bottomColor", palette: CLOTH_COLORS,
+    key: "bottom", label: "ボトムス", icon: "👖", group: "wear", focus: "lower", colorKey: "bottomColor", palette: CLOTH_COLORS,
     options: opts([
       ["none", "なし"],
       ["pants", "パンツ"], ["jeans", "デニム"], ["shorts", "ショートパンツ"], ["skirt", "プリーツ"],
@@ -175,14 +177,14 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
     ]),
   },
   {
-    key: "onepiece", label: "ワンピース", group: "wear", focus: "body", colorKey: "onepieceColor", palette: CLOTH_COLORS,
+    key: "onepiece", label: "ワンピース", icon: "👗", group: "wear", focus: "body", colorKey: "onepieceColor", palette: CLOTH_COLORS,
     options: opts([
       ["none", "なし"], ["dress", "ワンピース"], ["princess", "ドレス"], ["maid", "メイド"], ["yukata", "ゆかた"],
       ["suit", "スーツ"], ["tsunagi", "つなぎ"], ["kigurumi", "きぐるみ"],
     ]),
   },
   {
-    key: "shoes", label: "くつ", group: "wear", focus: "feet", colorKey: "shoesColor", palette: CLOTH_COLORS,
+    key: "shoes", label: "くつ", icon: "👟", group: "wear", focus: "feet", colorKey: "shoesColor", palette: CLOTH_COLORS,
     options: opts([
       ["none", "なし"],
       ["sneakers", "スニーカー"], ["hightops", "ハイカット"], ["loafers", "ローファー"], ["pumps", "パンプス"],
@@ -190,7 +192,7 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
     ]),
   },
   {
-    key: "hat", label: "ぼうし", group: "wear", focus: "head", colorKey: "hatColor", palette: CLOTH_COLORS,
+    key: "hat", label: "ぼうし", icon: "🧢", group: "wear", focus: "head", colorKey: "hatColor", palette: CLOTH_COLORS,
     options: opts([
       ["none", "なし"], ["cap", "キャップ"], ["beanie", "ニット帽"], ["beret", "ベレー帽"], ["straw", "むぎわら"],
       ["silk", "シルクハット"], ["witch", "まほう使い"], ["santa", "サンタ"], ["ribbon", "リボン"], ["flower", "おはな"],
@@ -199,28 +201,28 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
     ]),
   },
   {
-    key: "glasses", label: "メガネ", group: "wear", focus: "head", colorKey: "glassesColor", palette: CLOTH_COLORS,
+    key: "glasses", label: "メガネ", icon: "👓", group: "wear", focus: "head", colorKey: "glassesColor", palette: CLOTH_COLORS,
     options: opts([
       ["none", "なし"], ["round", "まるメガネ"], ["square", "しかくメガネ"], ["sunglasses", "サングラス"],
       ["heart", "ハートグラス"], ["star", "スターグラス"], ["goggles", "ゴーグル"], ["mask", "マスク"],
     ]),
   },
   {
-    key: "neck", label: "くびもと", group: "wear", focus: "upper", colorKey: "neckColor", palette: CLOTH_COLORS,
+    key: "neck", label: "くびもと", icon: "🎀", group: "wear", focus: "upper", colorKey: "neckColor", palette: CLOTH_COLORS,
     options: opts([
       ["none", "なし"], ["necktie", "ネクタイ"], ["bowtie", "ちょうネクタイ"], ["ribbon", "リボン"],
       ["scarf", "マフラー"], ["necklace", "ネックレス"], ["bell", "すず"],
     ]),
   },
   {
-    key: "back", label: "せなか", group: "wear", focus: "body", thumbBack: true, colorKey: "backColor", palette: CLOTH_COLORS,
+    key: "back", label: "せなか", icon: "🎒", group: "wear", focus: "body", thumbBack: true, colorKey: "backColor", palette: CLOTH_COLORS,
     options: opts([
       ["none", "なし"], ["backpack", "リュック"], ["randoseru", "ランドセル"], ["angel", "てんしの羽"],
       ["devil", "あくまの羽"], ["fairy", "ようせいの羽"], ["cape", "マント"], ["tail", "しっぽ"],
     ]),
   },
   {
-    key: "hand", label: "てもち", group: "wear", focus: "body", colorKey: "handColor", palette: CLOTH_COLORS,
+    key: "hand", label: "てもち", icon: "🎈", group: "wear", focus: "body", colorKey: "handColor", palette: CLOTH_COLORS,
     options: opts([
       ["none", "なし"], ["balloon", "ふうせん"], ["icecream", "アイス"], ["bouquet", "はなたば"], ["bag", "バッグ"],
       ["umbrella", "かさ"], ["bear", "くまのぬいぐるみ"], ["phone", "スマホ"], ["wand", "まほうのステッキ"],
@@ -228,7 +230,7 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
     ]),
   },
   {
-    key: "ride", label: "のりもの", group: "wear", focus: "body",
+    key: "ride", label: "のりもの", icon: "🛼", group: "wear", focus: "body",
     options: opts([["none", "なし"]]),
   },
 ];
@@ -388,4 +390,26 @@ export function randomAvatar(): AvatarConfig {
   if (Math.random() < 0.4) out.mark = "none";
   out.browColor = out.hairColor;
   return normalizeAvatar({ ...out, wearItems: undefined });
+}
+
+/** Reroll just one category (Pigg's per-part "おまかせ" dice), keeping everything else as-is. */
+export function randomizeCategory(avatar: AvatarConfig, key: AvatarPartKey): AvatarConfig {
+  const category = AVATAR_CATEGORIES.find((c) => c.key === key);
+  const pool = category?.options.filter((o) => !o.price && o.id !== "none") ?? [];
+  if (!category || pool.length === 0) return avatar;
+  const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+  const id = pick(pool).id;
+  const color = category.colorKey && category.palette ? pick(category.palette) : undefined;
+  if (category.group === "wear") {
+    const items: WearItem[] = [
+      ...avatar.wearItems.filter((item) => item.key !== key),
+      { key: key as WearKey, id, ...(color ? { color } : {}) },
+    ];
+    return withWearItems(avatar, items);
+  }
+  return normalizeAvatar({
+    ...avatar,
+    [key]: id,
+    ...(color && category.colorKey ? { [category.colorKey]: color } : {}),
+  });
 }

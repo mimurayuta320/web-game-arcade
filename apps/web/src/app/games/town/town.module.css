@@ -406,6 +406,11 @@
   gap: 6px;
 }
 
+.categoryRandomRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .categoryTab {
   border: 1px solid var(--town-line);
   background: var(--town-soft);
