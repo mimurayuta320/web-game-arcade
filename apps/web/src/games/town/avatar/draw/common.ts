@@ -50,7 +50,7 @@ export function outlineOf(fill: string): string {
   if (!HEX.test(fill)) return LINE;
   let out = outlineCache.get(fill);
   if (!out) {
-    out = mix(shade(fill, -0.52), "#4a2e2a", 0.3);
+    out = mix(shade(fill, -0.58), "#3a2620", 0.45);
     outlineCache.set(fill, out);
   }
   return out;

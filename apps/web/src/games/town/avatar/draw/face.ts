@@ -136,26 +136,24 @@ function drawBrowShapes(ctx: Ctx, a: AvatarConfig, look: number, raise: number, 
 
 // ---------------------------------------------------------------------- eyes
 
-/** Glossy iris: deep at the top, lighter at the bottom, with two catchlights. */
+/**
+ * Flat Pigg-style iris: one solid fill color (no gradient banding), a small
+ * dark pupil dot, a thin darker rim and a single bold highlight — real Pigg
+ * eyes read as flat shapes with one sparkle, not shaded glass beads.
+ */
 function iris(ctx: Ctx, ex: number, ey: number, rx: number, ry: number, c: string, shine = 1) {
-  const g = ctx.createLinearGradient(0, ey - ry, 0, ey + ry);
-  g.addColorStop(0, shade(c, -0.45));
-  g.addColorStop(0.55, c);
-  g.addColorStop(1, mix(c, "#ffffff", 0.32));
+  ellipse(ctx, ex, ey, rx, ry, c, false);
+  // Pupil.
+  ellipse(ctx, ex, ey + ry * 0.1, rx * 0.42, ry * 0.46, shade(c, -0.62), false);
+  // Rim.
   ctx.beginPath();
   ctx.ellipse(ex, ey, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fillStyle = g;
-  ctx.fill();
-  // Pupil and rim.
-  ellipse(ctx, ex, ey + ry * 0.08, rx * 0.46, ry * 0.5, shade(c, -0.6), false);
-  ctx.beginPath();
-  ctx.ellipse(ex, ey, rx, ry, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = shade(c, -0.55);
-  ctx.lineWidth = 0.6;
+  ctx.strokeStyle = shade(c, -0.5);
+  ctx.lineWidth = 0.65;
   ctx.stroke();
-  // Catchlights.
-  ellipse(ctx, ex + rx * 0.34, ey - ry * 0.38, rx * 0.44 * shine, ry * 0.34 * shine, "#ffffff", false, -0.3);
-  ellipse(ctx, ex - rx * 0.36, ey + ry * 0.46, rx * 0.2, rx * 0.2, "rgba(255,255,255,0.9)", false);
+  // One big sparkle plus a tiny secondary one, like the real thing.
+  ellipse(ctx, ex + rx * 0.3, ey - ry * 0.42, rx * 0.46 * shine, ry * 0.4 * shine, "#ffffff", false, -0.3);
+  ellipse(ctx, ex - rx * 0.34, ey + ry * 0.42, rx * 0.16, rx * 0.16, "rgba(255,255,255,0.95)", false);
 }
 
 /** A thick upper lid line; `tilt` > 0 lifts the outer corner (つり目), < 0 drops it (たれ目). */
