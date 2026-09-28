@@ -2,10 +2,11 @@
 // WebSocket link to server/town-world.mjs. React only renders UI around it.
 import { normalizeAvatar, type AvatarConfig } from "../avatar/parts";
 import type { AvatarPose } from "../avatar/drawAvatar";
+import { directionOf, type Direction8 } from "../avatar/draw/common";
 import { actionDef, actionFromChat, isActionId, type ActionId } from "../avatar/actions";
 import {
   AREAS, bedAt, buildRoomArea, objectsAt, emptyRoom, findPath, isAreaId, isRoomAreaId, isStaticAreaId, isWalkable,
-  portalAt, seatAt, toGrid, type AreaDef, type AreaId, type StaticAreaId,
+  movementHeightAt, pickTile, portalAt, seatAt, spotAt, type AreaDef, type AreaId, type SpotGame, type StaticAreaId,
 } from "../world/areas";
 import type { RoomData } from "../world/furniture";
 import {
@@ -22,7 +23,19 @@ export type Wallet = {
   owned: { parts: string[]; furniture: string[] };
   rooms: Array<{ id: string; title: string; size: number; items: number }>;
   goodPigg: number;
-  today: { login: boolean; dress: boolean; onlineEarned: number; praiseReceived: number; praiseGiven: number; visits: number };
+  fishPoints: number;
+  fishing: { rod: string; bait: string; rods: string[]; baits: Record<string, number> };
+  fishLog: Record<string, { count: number; best: number }>;
+  /** Casino items (consumables) by id. */
+  items: Record<string, number>;
+  seeds: Record<string, number>;
+  goods: Record<string, number>;
+  petFood: number;
+  pets: Array<{ id: string; species: string; name: string; bond: number; level: number; hunger: number }>;
+  activePet: string;
+  missions: { list: QuestEntry[]; bonus: { reward: number; ready: boolean; claimed: boolean } };
+  achievements: AchievementEntry[];
+  today: { login: boolean; coinLogin: boolean; dress: boolean; onlineEarned: number; praiseReceived: number; praiseGiven: number; visits: number };
 };
 
 export type ScratchPrize =
@@ -34,11 +47,40 @@ export type TownEvent =
   | { type: "ame"; delta: number; reason: string; ame: number }
   | { type: "scratch"; cells: string[]; prize: ScratchPrize; ame: number }
   | { type: "bought"; label: string; roomId?: string }
-  | { type: "error"; text: string };
+  | { type: "spot"; game: SpotGame }
+  | { type: "where"; found: FriendLocation[] }
+  | { type: "profile"; name: string; avatar: AvatarConfig }
+  | { type: "login-required"; expired: boolean }
+  /** Casino coins to add to this browser's bank (the bank itself lives outside the town). */
+  | { type: "coins"; delta: number; reason: string }
+  | { type: "fish-cast"; castId: string; biteMs: number; rod: string; bait: string; power: number; speed: number; rarity: string; frame: number }
+  | { type: "fish-caught"; fish: { id: string; label: string; emoji: string; rarity: string }; cm: number; points: number; perfect: number; isRecord: boolean }
+  | { type: "fish-escaped" }
+  /** A point-shop purchase went through; for the casino shop the page then takes the coins. */
+  | { type: "shop-bought"; id: string; label: string; shop: "fishing" | "casino"; price: number }
+  | { type: "pet-done"; op: string; id?: string; label?: string; gain?: number; hungry?: boolean; capped?: boolean }
+  | { type: "garden-done"; op: string; label: string; total?: number; amount?: number }
+  | { type: "error"; text: string; code?: string };
+
+/** Where a cloud friend currently is in town (best-effort: the friend ID is self-declared). */
+export type FriendLocation = { friendId: string; area: string; channel: number };
+
+/** Cloud login sent with `town-join`; the server checks it against the cloud API before linking the account. */
+export type CloudAuth = { userId: string; password: string; sessionId: string };
+
+export type TownIdentity = {
+  /** Own friend ID (from the login), only used to hide "add friend" on yourself. */
+  friendId: string;
+  shareLocation: boolean;
+  auth: CloudAuth | null;
+};
 
 export type MemberInfo = {
-  id: string; name: string; avatar: AvatarConfig; goodPigg: number; roomId: string; isSelf: boolean;
+  id: string; name: string; avatar: AvatarConfig; goodPigg: number; roomId: string; friendId: string; isSelf: boolean;
 };
+
+export type QuestEntry = { id: string; label: string; target: number; reward: number; progress: number; claimed: boolean };
+export type AchievementEntry = QuestEntry & { desc: string };
 
 export type TownSnapshot = {
   areaId: AreaId;
@@ -64,6 +106,8 @@ type Member = {
   path: Array<[number, number]>;
   facing: AvatarPose["facing"];
   flip: boolean;
+  /** Which way it last walked (8 screen directions). */
+  dir: Direction8;
   walkPhase: number;
   walking: boolean;
   action: ActionId | null;
@@ -72,12 +116,28 @@ type Member = {
   bubble: RenderAvatar["bubble"];
   roomId: string;
   goodPigg: number;
+  friendId: string;
+  /** Companion walking with them, and where it currently is. */
+  pet: { species: string; name: string; level: number } | null;
+  petPos: { x: number; y: number; flip: boolean; phase: number; walking: boolean } | null;
+  /** How high it stands, in levels (0 = the floor). */
+  z: number;
   seed: number;
 };
 
-type RemoteMember = { id: string; name: string; avatar: unknown; x: number; y: number; roomId?: string; goodPigg?: number };
+type RemotePet = { species?: unknown; name?: unknown; level?: unknown } | null;
+type RemoteMember = {
+  id: string; name: string; avatar: unknown; x: number; y: number; roomId?: string; goodPigg?: number; friendId?: string; pet?: RemotePet;
+};
+
+function toPet(raw: RemotePet | undefined): Member["pet"] {
+  if (!raw || typeof raw !== "object" || !raw.species) return null;
+  return { species: String(raw.species), name: String(raw.name || "ペット"), level: Number(raw.level) || 0 };
+}
 
 const WALK_SPEED = 3.4; // tiles per second
+const RIDE_SPEED = 5.4;
+const PET_SPEED = 5.2;
 const BUBBLE_MS = 6500;
 const CHAT_LOG_LIMIT = 80;
 const PING_INTERVAL_MS = 15000;
@@ -97,6 +157,27 @@ const ERROR_TEXT: Record<string, string> = {
   NOT_ENOUGH_AME: "アメがたりません",
   ROOM_LIMIT: "へやはこれ以上ふやせません",
   BUSY: "少し待ってからもう一度どうぞ",
+  NOT_FISHING_SPOT: "つり場（岸の光っている場所）に立ってから釣ってね",
+  NOT_ENOUGH_FISH: "釣りポイントがたりません",
+  ALREADY_OWNED: "もう持っています",
+  HAS_ABOVE: "上に何かがのっているので、先にそちらを片づけてね",
+  TOO_HIGH: "これ以上は高く積めません",
+  NOTHING: "そこには何もありません",
+  BAD_OP: "その操作はできません",
+  PET_LIMIT: "ペットはこれ以上迎えられません",
+  PET_BUSY: "さっきなでたばかりです。少し待ってね",
+  NO_FOOD: "そのごはんを持っていません",
+  NOT_HUNGRY: "まだおなかがすいていないみたい",
+  NO_PLOT: "そこに畑はありません",
+  NO_SEED: "そのたねを持っていません",
+  NO_GOODS: "売れる収穫物がありません",
+  PLOT_BUSY: "この畑にはもう植わっています",
+  PLOT_EMPTY: "この畑には何も植わっていません",
+  NOT_RIPE: "まだ実っていません",
+  ALREADY_RIPE: "もう実っているので水やりは不要です",
+  WATER_MAX: "この作物には水やりしきりました",
+  WATER_WAIT: "水やりは少し時間をあけてね",
+  NOT_READY: "まだ受け取れません",
 };
 
 function isLoopbackHost(hostname: string): boolean {
@@ -134,6 +215,7 @@ function createMember(id: string, name: string, avatar: AvatarConfig, x: number,
     path: [],
     facing: "front",
     flip: false,
+    dir: "down",
     walkPhase: 0,
     walking: false,
     action: null,
@@ -142,6 +224,10 @@ function createMember(id: string, name: string, avatar: AvatarConfig, x: number,
     bubble: null,
     roomId: "",
     goodPigg: 0,
+    friendId: "",
+    pet: null,
+    petPos: null,
+    z: 0,
     seed: Math.random() * 4,
   };
 }
@@ -179,7 +265,22 @@ export class TownGame {
     this.ws?.close();
   };
 
-  constructor(name: string, avatar: AvatarConfig, areaId: AreaId = "plaza") {
+  private identity: TownIdentity;
+  /** Channel to ask for on the next join (set when warping to a friend). */
+  private wantedChannel = 0;
+  /** Casino item uses waiting for the server (request id -> resolve). */
+  private itemRequests = new Map<string, (ok: boolean) => void>();
+  private itemSeq = 0;
+
+  /** Until the first welcome arrives, ask the server to put us in our own room. */
+  private startHome: boolean;
+
+  constructor(
+    name: string, avatar: AvatarConfig, areaId: AreaId = "plaza",
+    identity: TownIdentity = { friendId: "", shareLocation: true, auth: null }, startHome = false,
+  ) {
+    this.identity = identity;
+    this.startHome = startHome;
     this.area = areaFor(areaId);
     const [sx, sy] = this.area.spawn;
     this.self = createMember("self", name, avatar, sx, sy);
@@ -306,8 +407,10 @@ export class TownGame {
 
   private sendJoin(spawn: [number, number]) {
     this.send({
-      type: "town-join", area: this.area.id, name: this.self.name, avatar: this.self.avatar, spawn, clientKey: this.clientKey,
+      type: "town-join", area: this.startHome ? "home" : this.area.id, name: this.self.name, avatar: this.self.avatar, spawn, clientKey: this.clientKey,
+      auth: this.identity.auth ?? undefined, shareLocation: this.identity.shareLocation, channel: this.wantedChannel || undefined,
     });
+    this.wantedChannel = 0;
   }
 
   private system(text: string) {
@@ -318,8 +421,9 @@ export class TownGame {
     switch (msg.type) {
       case "town-welcome": {
         // Ignore welcomes for an area we've already left.
-        if (msg.requestedArea !== undefined && msg.requestedArea !== this.area.id) return;
+        if (msg.requestedArea !== undefined && msg.requestedArea !== (this.startHome ? "home" : this.area.id)) return;
         if (!isAreaId(msg.area)) return;
+        this.startHome = false;
         if (msg.area !== this.area.id) {
           // Server redirected us (e.g. the room doesn't exist).
           this.area = areaFor(msg.area);
@@ -342,6 +446,18 @@ export class TownGame {
         for (const m of (msg.members as RemoteMember[]) || []) this.addRemote(m);
         this.areaCounts = (msg.areaCounts as TownSnapshot["areaCounts"]) || {};
         if (msg.wallet) this.wallet = msg.wallet as Wallet;
+        this.syncSelfPet();
+        // Logged-in accounts keep their look on the server; adopt it if this device differs.
+        const saved = msg.profile as { name?: unknown; avatar?: unknown } | null | undefined;
+        if (saved) {
+          const name = String(saved.name || this.self.name);
+          const avatar = normalizeAvatar(saved.avatar);
+          if (name !== this.self.name || JSON.stringify(avatar) !== JSON.stringify(this.self.avatar)) {
+            this.self.name = name;
+            this.self.avatar = avatar;
+            this.fire({ type: "profile", name, avatar });
+          }
+        }
         this.system(`${this.area.name}（${this.channel}）に入りました`);
         break;
       }
@@ -376,6 +492,8 @@ export class TownGame {
         if (m) {
           m.name = String(r.name || m.name);
           m.avatar = normalizeAvatar(r.avatar);
+          m.pet = toPet(r.pet);
+          if (!m.pet) m.petPos = null;
         }
         break;
       }
@@ -414,14 +532,36 @@ export class TownGame {
         this.system(`${String(msg.fromName || "だれか")} が ${toName} にグッピグしました！`);
         break;
       }
+      case "town-where":
+        this.fire({ type: "where", found: Array.isArray(msg.found) ? (msg.found as FriendLocation[]) : [] });
+        break;
       case "town-wallet":
         this.wallet = msg.wallet as Wallet;
+        this.syncSelfPet();
+        break;
+      case "town-pet-done":
+        this.fire({
+          type: "pet-done", op: String(msg.op || ""), id: msg.id ? String(msg.id) : undefined, label: msg.label ? String(msg.label) : undefined,
+          gain: Number(msg.gain) || 0, hungry: Boolean(msg.hungry), capped: Boolean(msg.capped),
+        });
+        break;
+      case "town-garden-done":
+        this.fire({ type: "garden-done", op: String(msg.op || ""), label: String(msg.label || ""), total: Number(msg.total) || 0, amount: Number(msg.amount) || 0 });
         break;
       case "town-ame": {
         const delta = Number(msg.delta) || 0;
         const reason = String(msg.reason || "");
         this.system(`🍬 ${reason} +${delta} アメ`);
         this.fire({ type: "ame", delta, reason, ame: Number(msg.ame) || 0 });
+        break;
+      }
+      case "town-coins": {
+        const delta = Math.floor(Number(msg.delta) || 0);
+        const reason = String(msg.reason || "");
+        if (delta > 0) {
+          this.system(`🪙 ${reason} +${delta} カジノコイン`);
+          this.fire({ type: "coins", delta, reason });
+        }
         break;
       }
       case "town-scratch":
@@ -438,9 +578,47 @@ export class TownGame {
         this.ws?.close();
         break;
       case "town-error": {
+        // The town only admits verified accounts; the page sends the player back to the login screen.
+        if (msg.code === "LOGIN_REQUIRED" || msg.code === "AUTH_FAILED") {
+          this.fire({ type: "login-required", expired: msg.code === "AUTH_FAILED" });
+          break;
+        }
         const text = ERROR_TEXT[String(msg.code)] || "エラーが発生しました";
         this.system(text);
-        this.fire({ type: "error", text });
+        this.fire({ type: "error", text, code: String(msg.code || "") });
+        break;
+      }
+      case "town-fish-cast":
+        this.fire({
+          type: "fish-cast", castId: String(msg.castId), biteMs: Number(msg.biteMs) || 3000, rod: String(msg.rod || "bamboo"),
+          bait: String(msg.bait || "none"), power: Number(msg.power) || 0.5, speed: Number(msg.speed) || 1, rarity: String(msg.rarity || "common"),
+          frame: Number(msg.frame) || 1,
+        });
+        break;
+      case "town-fish-caught": {
+        const fish = msg.fish as { id: string; label: string; emoji: string; rarity: string };
+        const cm = Number(msg.cm) || 0;
+        const points = Number(msg.points) || 0;
+        this.system(`🎣 ${fish.emoji} ${fish.label}（${cm}cm）を釣り上げた！ +${points} 釣りポイント`);
+        this.fire({ type: "fish-caught", fish, cm, points, perfect: Number(msg.perfect) || 0, isRecord: Boolean(msg.isRecord) });
+        break;
+      }
+      case "town-fish-escaped":
+        this.fire({ type: "fish-escaped" });
+        break;
+      case "town-fish-news":
+        this.system(`🎣 ${String(msg.name || "だれか")} が ${String(msg.emoji || "")}${String(msg.label || "")}（${Number(msg.cm) || 0}cm）を釣り上げた！`);
+        break;
+      case "town-shop-bought":
+        this.system(`🛍 ${String(msg.label || "")} を手に入れました`);
+        this.fire({ type: "shop-bought", id: String(msg.id), label: String(msg.label || ""), shop: msg.shop === "casino" ? "casino" : "fishing", price: Number(msg.price) || 0 });
+        break;
+      case "town-item-used": {
+        const pending = this.itemRequests.get(String(msg.req || ""));
+        if (pending) {
+          this.itemRequests.delete(String(msg.req || ""));
+          pending(Boolean(msg.ok));
+        }
         break;
       }
       default:
@@ -454,6 +632,8 @@ export class TownGame {
     const m = createMember(r.id, String(r.name || "ゲスト"), normalizeAvatar(r.avatar), Number(r.x) || 0, Number(r.y) || 0);
     m.roomId = String(r.roomId || "");
     m.goodPigg = Number(r.goodPigg) || 0;
+    m.friendId = String(r.friendId || "");
+    m.pet = toPet(r.pet);
     if (seatAt(this.area, m.x, m.y)) m.action = "sit";
     else if (bedAt(this.area, m.x, m.y)) this.lieOnBed(m, m.x, m.y);
     this.members.set(r.id, m);
@@ -467,7 +647,13 @@ export class TownGame {
 
   moveTo(tile: [number, number]) {
     if (!isWalkable(this.area, tile[0], tile[1])) return;
-    if (this.walkTo(this.self, tile)) this.send({ type: "town-move", x: tile[0], y: tile[1] });
+    if (this.walkTo(this.self, tile)) {
+      this.send({ type: "town-move", x: tile[0], y: tile[1] });
+      return;
+    }
+    // Already standing on a game spot: tapping it again reopens the game.
+    const spot = this.self.path.length === 0 ? spotAt(this.area, tile[0], tile[1]) : undefined;
+    if (spot) this.fire({ type: "spot", game: spot.game });
   }
 
   say(textRaw: string) {
@@ -501,11 +687,150 @@ export class TownGame {
     this.send({ type: "town-update", name, avatar });
   }
 
-  changeArea(areaId: AreaId, spawn?: [number, number]) {
+  // ------------------------------------------------------------ fishing & point shops
+
+  /** Throw the line (you must be standing on a fishing spot). The server answers with `fish-cast`. */
+  fishCast(): boolean {
+    if (!this.send({ type: "town-fish-cast" })) {
+      this.fire({ type: "error", text: "釣りはオンラインのときにできます" });
+      return false;
+    }
+    // "fish" is a held pose: sending it again would toggle it off, so only the first cast raises the rod.
+    if (this.self.action !== "fish") {
+      this.applyAction(this.self, "fish");
+      this.send({ type: "town-action", action: "fish" });
+    }
+    return true;
+  }
+
+  fishResult(castId: string, caught: boolean, perfect: number) {
+    this.send({ type: "town-fish-result", castId, caught, perfect });
+  }
+
+  /** Put the rod away (stand up from the fishing pose). */
+  stopFishing() {
+    if (this.self.action !== "fish") return;
+    this.self.action = null;
+    this.send({ type: "town-action", action: "fish" });
+  }
+
+  setFishGear(gear: { rod?: string; bait?: string }) {
+    this.send({ type: "town-fish-gear", ...gear });
+  }
+
+  shopBuy(id: string) {
+    if (!this.send({ type: "town-shop-buy", id })) this.fire({ type: "error", text: "ショップはオンラインのときに使えます" });
+  }
+
+  /** Spend one casino item; resolves false when there is none left or the server is unreachable. */
+  useItem(id: string): Promise<boolean> {
+    if ((this.wallet?.items[id] ?? 0) <= 0) return Promise.resolve(false);
+    const req = `i${++this.itemSeq}`;
+    return new Promise((resolve) => {
+      if (!this.send({ type: "town-item-use", id, req })) {
+        resolve(false);
+        return;
+      }
+      this.itemRequests.set(req, resolve);
+      window.setTimeout(() => {
+        if (!this.itemRequests.has(req)) return;
+        this.itemRequests.delete(req);
+        resolve(false);
+      }, 5000);
+    });
+  }
+
+  getWallet(): Wallet | null {
+    return this.wallet;
+  }
+
+  // ------------------------------------------------------------ pets & garden
+
+  /** The companion shown next to me is whichever pet is active in my wallet. */
+  private syncSelfPet() {
+    const w = this.wallet;
+    const pet = w?.activePet ? w.pets.find((p) => p.id === w.activePet) : null;
+    this.self.pet = pet ? { species: pet.species, name: pet.name, level: pet.level } : null;
+    if (!pet) this.self.petPos = null;
+  }
+
+  private command(payload: Record<string, unknown>) {
+    if (!this.send(payload)) this.fire({ type: "error", text: "オンラインのときに使えます" });
+  }
+
+  claimMission(id: string) { this.command({ type: "town-mission-claim", id }); }
+  claimMissionBonus() { this.command({ type: "town-mission-bonus" }); }
+  claimAchievement(id: string) { this.command({ type: "town-ach-claim", id }); }
+  petBuy(species: string, name?: string) { this.command({ type: "town-pet-buy", species, name }); }
+  petActive(id: string) { this.command({ type: "town-pet-active", id }); }
+  petRename(id: string, name: string) { this.command({ type: "town-pet-rename", id, name }); }
+  petPat(id: string) { this.command({ type: "town-pet-pat", id }); }
+  petFeed(id: string, food: string) { this.command({ type: "town-pet-feed", id, food }); }
+  buySeed(id: string, count: number) { this.command({ type: "town-garden-seed", id, count }); }
+  buyPetFood(count: number) { this.command({ type: "town-garden-food", count }); }
+  sellGoods(id: string, all = true, count = 0) { this.command({ type: "town-garden-sell", id, all, count }); }
+  plant(x: number, y: number, crop: string) { this.command({ type: "town-garden-plant", x, y, crop }); }
+  water(x: number, y: number) { this.command({ type: "town-garden-water", x, y }); }
+  harvest(x: number, y: number) { this.command({ type: "town-garden-harvest", x, y }); }
+
+  /** Pets trot after their owner, keeping about a tile away. */
+  private stepPet(m: Member, dt: number) {
+    if (!m.pet) return;
+    let pp = m.petPos;
+    if (!pp) {
+      pp = { x: m.x - 0.9, y: m.y + 0.3, flip: false, phase: 0, walking: false };
+      m.petPos = pp;
+      if (!isWalkable(this.area, Math.round(pp.x), Math.round(pp.y))) [pp.x, pp.y] = [m.x, m.y];
+    }
+    const dx = m.x - pp.x;
+    const dy = m.y - pp.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 5) {
+      [pp.x, pp.y] = [m.x, m.y];
+      pp.walking = false;
+      return;
+    }
+    if (dist > 1.1) {
+      const step = Math.min(dist - 0.9, PET_SPEED * dt);
+      const nx = pp.x + (dx / dist) * step;
+      const ny = pp.y + (dy / dist) * step;
+      if (isWalkable(this.area, Math.round(nx), Math.round(ny))) {
+        pp.x = nx;
+        pp.y = ny;
+      }
+      // Screen-space: moving right on screen faces right.
+      if (Math.abs(dx - dy) > 0.05) pp.flip = dx - dy < 0;
+      pp.phase += dt * 14;
+      pp.walking = true;
+    } else {
+      pp.walking = false;
+    }
+  }
+
+  setShareLocation(shareLocation: boolean) {
+    this.identity = { ...this.identity, shareLocation };
+    this.send({ type: "town-update", name: this.self.name, avatar: this.self.avatar, shareLocation });
+  }
+
+  /** Ask the server where these cloud friends are (only friends who allow it are reported). */
+  whereFriends(ids: string[]) {
+    if (ids.length === 0) return;
+    this.send({ type: "town-where", ids });
+  }
+
+  warpToFriend(location: FriendLocation) {
+    if (!isAreaId(location.area)) return;
+    this.changeArea(location.area, undefined, location.channel);
+  }
+
+  changeArea(areaId: AreaId, spawn?: [number, number], channel = 0) {
+    this.wantedChannel = channel;
+    this.startHome = false;
     this.area = areaFor(areaId);
     const [sx, sy] = spawn ?? this.area.spawn;
-    Object.assign(this.self, { x: sx, y: sy, path: [], walking: false, action: null, facing: "front" });
+    Object.assign(this.self, { x: sx, y: sy, path: [], walking: false, action: null, facing: "front", dir: "down" });
     this.members.clear();
+    this.self.petPos = null;
     this.channel = 0;
     this.ghost = null;
     this.sendJoin([sx, sy]);
@@ -556,7 +881,10 @@ export class TownGame {
   memberInfo(id: string): MemberInfo | null {
     const m = id === this.self.id ? this.self : this.members.get(id);
     if (!m) return null;
-    return { id: m.id, name: m.name, avatar: m.avatar, goodPigg: m.goodPigg, roomId: m.roomId, isSelf: m === this.self };
+    return {
+      id: m.id, name: m.name, avatar: m.avatar, goodPigg: m.goodPigg, roomId: m.roomId,
+      friendId: m === this.self ? this.identity.friendId : m.friendId, isSelf: m === this.self,
+    };
   }
 
   // ------------------------------------------------------------ simulation
@@ -565,13 +893,8 @@ export class TownGame {
     const from: [number, number] = [Math.round(m.x), Math.round(m.y)];
     if (from[0] === tile[0] && from[1] === tile[1]) return false;
     const path = findPath(this.area, from, tile);
-    if (path.length === 0) {
-      // Unknown route (e.g. desynced position): snap instead of walking through walls.
-      m.x = tile[0];
-      m.y = tile[1];
-      m.path = [];
-      return true;
-    }
+    // No continuous route means the destination is unreachable. Never snap across missing stairs or walls.
+    if (path.length === 0) return false;
     m.path = path;
     m.action = null;
     return true;
@@ -601,11 +924,13 @@ export class TownGame {
       const dx = tx - m.x;
       const dy = ty - m.y;
       const dist = Math.hypot(dx, dy);
-      const step = WALK_SPEED * dt;
+      const riding = Boolean(m.avatar.ride && m.avatar.ride !== "none");
+      const step = (riding ? RIDE_SPEED : WALK_SPEED) * dt;
       // Screen-space direction decides which way the avatar faces.
       const sdx = dx - dy;
       const sdy = dx + dy;
       if (Math.abs(sdx) > 0.01 || Math.abs(sdy) > 0.01) {
+        m.dir = directionOf(sdx, sdy);
         m.facing = sdy >= -0.01 ? "front" : "back";
         m.flip = sdx < -0.01;
       }
@@ -645,7 +970,12 @@ export class TownGame {
 
   private onSelfArrived(x: number, y: number) {
     const portal = portalAt(this.area, x, y);
-    if (portal) this.changeArea(portal.to, portal.spawn);
+    if (portal) {
+      this.changeArea(portal.to, portal.spawn);
+      return;
+    }
+    const spot = spotAt(this.area, x, y);
+    if (spot) this.fire({ type: "spot", game: spot.game });
   }
 
   private toRender(m: Member, now: number, isSelf: boolean): RenderAvatar {
@@ -655,12 +985,15 @@ export class TownGame {
       avatar: m.avatar,
       x: m.x,
       y: m.y,
+      z: m.z,
       isSelf,
       bubble: m.bubble,
       praisedAt: m.praisedAt,
+      pet: m.pet && m.petPos ? { ...m.pet, ...m.petPos, z: m.z } : null,
       pose: {
         facing: m.facing,
         flip: m.flip,
+        dir: m.dir,
         walkPhase: m.walking ? m.walkPhase : null,
         action: m.action,
         actionTime: (now - m.actionStart) / 1000,
@@ -679,9 +1012,15 @@ export class TownGame {
 
   tileAt(px: number, py: number): [number, number] | null {
     const { offsetX, offsetY, zoom } = this.camera;
-    const [gx, gy] = toGrid((px - offsetX) / zoom, (py - offsetY) / zoom);
-    if (gx < 0 || gy < 0 || gx >= this.area.width || gy >= this.area.height) return null;
-    return [gx, gy];
+    return pickTile(this.area, (px - offsetX) / zoom, (py - offsetY) / zoom);
+  }
+
+  /** Everyone glides up and down to the height of the tile they stand on (blocks, stairs). */
+  private settleHeight(m: Member, dt: number) {
+    const target = movementHeightAt(this.area, m.x, m.y, m.path[0]);
+    const diff = target - m.z;
+    if (Math.abs(diff) < 0.001) return;
+    m.z += Math.sign(diff) * Math.min(Math.abs(diff), dt * 4);
   }
 
   /** Front-most avatar under the pointer, if any. */
@@ -703,6 +1042,10 @@ export class TownGame {
     this.camera = computeCamera(this.area, this.viewSize.width, this.viewSize.height);
     this.stepMember(this.self, dt, now);
     for (const m of this.members.values()) this.stepMember(m, dt, now);
+    this.settleHeight(this.self, dt);
+    for (const m of this.members.values()) this.settleHeight(m, dt);
+    this.stepPet(this.self, dt);
+    for (const m of this.members.values()) this.stepPet(m, dt);
     const avatars = [this.toRender(this.self, now, true), ...[...this.members.values()].map((m) => this.toRender(m, now, false))];
     renderArea(ctx, this.area, avatars, this.camera, this.viewSize.width, this.viewSize.height, now, this.hoverTile, this.ghost);
   }

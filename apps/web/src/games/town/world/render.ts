@@ -1,9 +1,10 @@
 // Canvas renderer for a town area: floor, walls, objects, avatars, bubbles.
 import { avatarTopY, drawAvatar, type AvatarPose } from "../avatar/drawAvatar";
+import { drawPet } from "../avatar/draw/pet";
 import type { AvatarConfig } from "../avatar/parts";
 import { starPath } from "../avatar/draw/common";
 import { TILE_H, TILE_W, toScreen, type AreaDef, type FloorKind, type TownObject } from "./areas";
-import { WALL_STYLES } from "./furniture";
+import { LEVEL_PX, WALL_STYLES } from "./furniture";
 import { circle, diamond, footprintPath, shade, shadow, type Ctx, type Pt } from "./drawUtil";
 import { drawFlatObject, drawObject } from "./objects";
 
@@ -13,15 +14,27 @@ export type RenderAvatar = {
   avatar: AvatarConfig;
   x: number;
   y: number;
+  /** How high it stands, in levels (blocks and stairs raise it). */
+  z: number;
   pose: AvatarPose;
   isSelf: boolean;
   bubble: { text: string; until: number } | null;
   /** performance.now() of the last グッピグ received, for the sparkle burst. */
   praisedAt: number;
+  /** Companion trotting along, in tile coordinates. */
+  pet: RenderPet | null;
 };
 
-/** Furniture preview while editing a room. */
-export type PlacementGhost = { object: TownObject; valid: boolean };
+export type RenderPet = {
+  species: string; name: string; level: number; x: number; y: number; z: number; flip: boolean; phase: number; walking: boolean;
+};
+
+/** Furniture preview while editing a room; `rect` previews a whole area (fill / erase). */
+export type PlacementGhost = {
+  object: TownObject;
+  valid: boolean;
+  rect?: { x0: number; y0: number; x1: number; y1: number; z: number; color: string };
+};
 
 export const AVATAR_SCALE = 1.25;
 const WALL_H = 86;
@@ -45,6 +58,12 @@ const FLOOR_COLORS: Record<FloorKind, [string, string]> = {
   carpetPink: ["#f2a9c4", "#efa2be"],
   carpetBlue: ["#8fb5e8", "#88aee2"],
   marble: ["#f1eee9", "#e6e2dc"],
+  carpetGreen: ["#a8dca0", "#a0d698"],
+  carpetRed: ["#d9727a", "#d26a73"],
+  tile: ["#e9f3f7", "#dbeaf0"],
+  slate: ["#9aa3ad", "#929ba6"],
+  snow: ["#f7fbff", "#eaf3fb"],
+  darkwood: ["#8a5a35", "#81522f"],
 };
 
 // ------------------------------------------------------------------ floor/walls
@@ -94,6 +113,26 @@ function drawFloor(ctx: Ctx, area: AreaDef, time: number) {
           }
           ctx.restore();
           break;
+        case "tile":
+          ctx.strokeStyle = "rgba(90,130,150,0.25)";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(sx - 16, sy);
+          ctx.lineTo(sx + 16, sy);
+          ctx.moveTo(sx, sy - 8);
+          ctx.lineTo(sx, sy + 8);
+          ctx.stroke();
+          break;
+        case "darkwood":
+          ctx.strokeStyle = "rgba(30,15,5,0.25)";
+          ctx.beginPath();
+          ctx.moveTo(sx - 16, sy - 8);
+          ctx.lineTo(sx + 16, sy + 8);
+          ctx.stroke();
+          break;
+        case "slate":
+          for (let i = 0; i < 3; i += 1) circle(ctx, sx + ((x * 5 + i * 9) % 26) - 13, sy + ((y * 3 + i * 5) % 10) - 5, 1.6, "rgba(0,0,0,0.1)", "");
+          break;
         case "marble":
           ctx.strokeStyle = "rgba(150,140,130,0.25)";
           ctx.beginPath();
@@ -124,6 +163,17 @@ function drawFloor(ctx: Ctx, area: AreaDef, time: number) {
     ctx.fillStyle = `rgba(255, 226, 92, ${pulse})`;
     ctx.fill();
     ctx.strokeStyle = "rgba(255, 190, 40, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  for (const spot of area.spots ?? []) {
+    const [sx, sy] = toScreen(spot.x, spot.y);
+    const pulse = 0.3 + Math.sin(time * 3 + spot.x) * 0.15;
+    diamond(ctx, sx, sy, 4);
+    ctx.fillStyle = `rgba(80, 230, 255, ${pulse})`;
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 61, 154, 0.9)";
     ctx.lineWidth = 2;
     ctx.stroke();
   }
@@ -268,12 +318,25 @@ function drawBubble(ctx: Ctx, x: number, y: number, text: string, alpha: number)
 }
 
 function drawAvatarSprite(ctx: Ctx, a: RenderAvatar) {
-  const [sx, sy] = toScreen(a.x, a.y);
+  const [sx, sy0] = toScreen(a.x, a.y);
+  const sy = sy0 - a.z * LEVEL_PX;
   shadow(ctx, sx, sy + 1, 18, 8);
   ctx.save();
   ctx.translate(sx, sy + 2);
   ctx.scale(AVATAR_SCALE, AVATAR_SCALE);
   drawAvatar(ctx, a.avatar, a.pose);
+  ctx.restore();
+}
+
+function drawPetSprite(ctx: Ctx, p: RenderPet, clock: number) {
+  const [sx, sy0] = toScreen(p.x, p.y);
+  const sy = sy0 - p.z * LEVEL_PX;
+  shadow(ctx, sx, sy + 1, 11, 5);
+  ctx.save();
+  ctx.translate(sx, sy + 2);
+  ctx.scale(AVATAR_SCALE, AVATAR_SCALE);
+  if (p.flip) ctx.scale(-1, 1);
+  drawPet(ctx, { species: p.species, walkPhase: p.walking ? p.phase : null, clock, level: p.level });
   ctx.restore();
 }
 
@@ -284,7 +347,8 @@ function toView(camera: Camera, gx: number, gy: number): Pt {
 
 /** Name tag, praise burst and chat bubble, in screen pixels so text stays readable at any zoom. */
 function drawAvatarOverlay(ctx: Ctx, a: RenderAvatar, camera: Camera, now: number) {
-  const [sx, sy] = toView(camera, a.x, a.y);
+  const [sx, sy0] = toView(camera, a.x, a.y);
+  const sy = sy0 - a.z * LEVEL_PX * camera.zoom;
   const headTop = sy + avatarTopY(a.avatar) * AVATAR_SCALE * camera.zoom;
 
   ctx.font = "bold 11px system-ui, sans-serif";
@@ -331,7 +395,7 @@ export type Camera = { offsetX: number; offsetY: number; zoom: number };
 export function computeCamera(area: AreaDef, width: number, height: number): Camera {
   const left = -area.height * (TILE_W / 2);
   const right = area.width * (TILE_W / 2);
-  const top = -(TILE_H / 2) - (area.indoor ? WALL_H : 90);
+  const top = -(TILE_H / 2) - Math.max(area.indoor ? WALL_H : 90, (area.risePx ?? 0) + 24);
   const bottom = (area.width + area.height - 1) * (TILE_H / 2) + 30;
   const zoom = Math.max(0.35, Math.min(1.6, Math.min(width / (right - left + 24), height / (bottom - top + 24))));
   return {
@@ -342,8 +406,9 @@ export function computeCamera(area: AreaDef, width: number, height: number): Cam
 }
 
 /** Screen-space hit box of an avatar (for clicking on people). */
-export function avatarHitBox(camera: Camera, a: { x: number; y: number }): { x0: number; x1: number; y0: number; y1: number } {
-  const [sx, sy] = toView(camera, a.x, a.y);
+export function avatarHitBox(camera: Camera, a: { x: number; y: number; z?: number }): { x0: number; x1: number; y0: number; y1: number } {
+  const [sx, sy0] = toView(camera, a.x, a.y);
+  const sy = sy0 - (a.z ?? 0) * LEVEL_PX * camera.zoom;
   const s = AVATAR_SCALE * camera.zoom;
   return { x0: sx - 20 * s, x1: sx + 20 * s, y0: sy - 70 * s, y1: sy + 4 * s };
 }
@@ -374,7 +439,8 @@ export function renderArea(
   drawFloor(ctx, area, time);
 
   if (hoverTile && !ghost) {
-    const [hx, hy] = toScreen(hoverTile[0], hoverTile[1]);
+    const [hx, hy0] = toScreen(hoverTile[0], hoverTile[1]);
+    const hy = hy0 - (area.heights ? (area.heights[hoverTile[1] * area.width + hoverTile[0]] ?? 0) : 0) * LEVEL_PX;
     diamond(ctx, hx, hy, 2);
     ctx.strokeStyle = "rgba(255,255,255,0.9)";
     ctx.lineWidth = 2;
@@ -387,24 +453,49 @@ export function renderArea(
     if (o.flat) continue;
     // Walkable furniture (beds, sofas, chairs) sorts by its nearest tile so
     // avatars sitting or lying on any part of it are drawn on top.
-    const depth = o.walkable ? o.x + o.y - 0.5 : o.x + (o.w ?? 1) - 1 + o.y + (o.h ?? 1) - 1;
+    const depth = (o.walkable ? o.x + o.y - 0.5 : o.x + (o.w ?? 1) - 1 + o.y + (o.h ?? 1) - 1) + (o.z ?? 0) * 0.02;
     drawables.push({ depth, draw: () => drawObject(ctx, o, time) });
   }
   for (const a of avatars) {
-    drawables.push({ depth: a.x + a.y + 0.01, draw: () => drawAvatarSprite(ctx, a) });
+    drawables.push({ depth: a.x + a.y + 0.01 + a.z * 0.02, draw: () => drawAvatarSprite(ctx, a) });
+    if (a.pet) {
+      const pet = a.pet;
+      drawables.push({ depth: pet.x + pet.y + 0.008 + pet.z * 0.02, draw: () => drawPetSprite(ctx, pet, time) });
+    }
   }
   if (ghost) {
     const o = ghost.object;
     drawables.push({
-      depth: o.x + (o.w ?? 1) - 1 + o.y + (o.h ?? 1) - 1 + 0.02,
+      depth: o.x + (o.w ?? 1) - 1 + o.y + (o.h ?? 1) - 1 + 0.02 + (o.z ?? 0) * 0.02 + 0.5,
       draw: () => {
+        ctx.save();
+        ctx.translate(0, -(o.z ?? 0) * LEVEL_PX);
         footprintPath(ctx, o.x, o.y, o.w ?? 1, o.h ?? 1, 0.04);
         ctx.fillStyle = ghost.valid ? "rgba(90,210,120,0.35)" : "rgba(230,70,70,0.35)";
         ctx.fill();
+        ctx.restore();
         ctx.save();
         ctx.globalAlpha = 0.6;
         if (o.flat) drawFlatObject(ctx, o);
         else drawObject(ctx, o, time);
+        ctx.restore();
+      },
+    });
+  }
+  if (ghost?.rect) {
+    const r = ghost.rect;
+    drawables.push({
+      depth: 1000,
+      draw: () => {
+        ctx.save();
+        ctx.translate(0, -r.z * LEVEL_PX);
+        for (let y = r.y0; y <= r.y1; y += 1) {
+          for (let x = r.x0; x <= r.x1; x += 1) {
+            footprintPath(ctx, x, y, 1, 1, 0.05);
+            ctx.fillStyle = r.color;
+            ctx.fill();
+          }
+        }
         ctx.restore();
       },
     });
@@ -434,6 +525,47 @@ export function renderArea(
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, sx, sy + 14 * camera.zoom + 14);
+  }
+  // One label per cluster of touching spots of the same game (fishing spots are spread along the shore).
+  const clusters: Array<NonNullable<AreaDef["spots"]>> = [];
+  for (const spot of area.spots ?? []) {
+    const near = clusters.find((cl) => cl[0].game === spot.game && cl.some((s) => Math.abs(s.x - spot.x) + Math.abs(s.y - spot.y) <= 1));
+    if (near) near.push(spot);
+    else clusters.push([spot]);
+  }
+  for (const group of clusters) {
+    const spot = group[0];
+    const gx = group.reduce((s, p) => s + p.x, 0) / group.length;
+    const gy = group.reduce((s, p) => s + p.y, 0) / group.length;
+    const [sx, sy] = toView(camera, gx, gy);
+    ctx.font = "bold 12px system-ui, sans-serif";
+    const text = `▶ ${spot.label}`;
+    const w = ctx.measureText(text).width + 14;
+    ctx.beginPath();
+    ctx.roundRect(sx - w / 2, sy + 14 * camera.zoom + 4, w, 20, 6);
+    ctx.fillStyle = "rgba(255,61,154,0.95)";
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, sx, sy + 14 * camera.zoom + 14);
+  }
+  // Small name tags for companions.
+  for (const a of avatars) {
+    if (!a.pet) continue;
+    const [px, py0] = toView(camera, a.pet.x, a.pet.y);
+    const py = py0 - a.pet.z * LEVEL_PX * camera.zoom;
+    ctx.font = "bold 9px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const label = `${a.pet.name}${a.pet.level >= 4 ? " ♥" : ""}`;
+    const w = ctx.measureText(label).width + 8;
+    ctx.beginPath();
+    ctx.roundRect(px - w / 2, py + 4 * camera.zoom, w, 12, 6);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fill();
+    ctx.fillStyle = "#5a4038";
+    ctx.fillText(label, px, py + 4 * camera.zoom + 6.5);
   }
   const byDepth = [...avatars].sort((p, q) => p.x + p.y - (q.x + q.y));
   for (const a of byDepth) drawAvatarOverlay(ctx, a, camera, now);

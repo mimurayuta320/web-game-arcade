@@ -1,9 +1,11 @@
 "use client";
 
+import type { ShopId } from "../shared/shop";
 import { useState } from "react";
 import styles from "@/app/games/town/town.module.css";
 import {
-  AVATAR_CATEGORIES, limitedKey, normalizeAvatar, randomAvatar, type AvatarConfig, type PartCategory,
+  AVATAR_CATEGORIES, MAX_WEAR_ITEMS, limitedKey, normalizeAvatar, randomAvatar, withWearItems,
+  type AvatarConfig, type AvatarPartKey, type PartCategory, type WearItem,
 } from "../avatar/parts";
 import type { AvatarPose } from "../avatar/drawAvatar";
 import type { ActionId } from "../avatar/actions";
@@ -52,15 +54,16 @@ type Props = {
   /** Limited parts this player owns ("key:id"). */
   ownedParts?: Set<string>;
   onOpenShop?: () => void;
+  onOpenPointShop?: (shop: ShopId) => void;
 };
 
 export function AvatarEditor({
-  initialName, initialAvatar, required = false, onSave, onCancel, ownedParts = new Set(), onOpenShop,
+  initialName, initialAvatar, required = false, onSave, onCancel, ownedParts = new Set(), onOpenShop, onOpenPointShop,
 }: Props) {
   const [name, setName] = useState(initialName);
   const [avatar, setAvatar] = useState<AvatarConfig>(initialAvatar);
   const [group, setGroup] = useState<PartCategory["group"]>("face");
-  const [categoryKey, setCategoryKey] = useState<keyof AvatarConfig>("hair");
+  const [categoryKey, setCategoryKey] = useState<AvatarPartKey>("hair");
   const [facing, setFacing] = useState<AvatarPose["facing"]>("front");
   const [walking, setWalking] = useState(false);
   const [previewAction, setPreviewAction] = useState<ActionId | null>(null);
@@ -71,9 +74,11 @@ export function AvatarEditor({
   const category = categories.find((c) => c.key === categoryKey) ?? categories[0];
   const trimmedName = name.trim().slice(0, 12);
   // Limited parts can be tried on, but only owned ones can be saved.
-  const lockedWorn = AVATAR_CATEGORIES.flatMap((c) =>
-    c.options.filter((o) => o.price && avatar[c.key] === o.id && !ownedParts.has(limitedKey(c.key, o.id))),
-  );
+  const lockedWorn = avatar.wearItems.flatMap((item) => {
+    const category = AVATAR_CATEGORIES.find((c) => c.key === item.key);
+    const option = category?.options.find((o) => o.id === item.id);
+    return option?.price && !ownedParts.has(limitedKey(item.key, item.id)) ? [option] : [];
+  });
   const isSkin = category.key === "skin";
   const colorKey = isSkin ? "skin" : category.colorKey;
   const palette = isSkin ? category.options.map((o) => o.id) : category.palette;
@@ -81,6 +86,27 @@ export function AvatarEditor({
   const selectGroup = (next: PartCategory["group"]) => {
     setGroup(next);
     setCategoryKey(next === "face" ? "hair" : "top");
+  };
+
+  const itemLabel = (item: WearItem) => {
+    const category = AVATAR_CATEGORIES.find((c) => c.key === item.key);
+    return category?.options.find((option) => option.id === item.id)?.label ?? item.id;
+  };
+
+  const removeWearItem = (index: number) => {
+    setAvatar(withWearItems(avatar, avatar.wearItems.filter((_, itemIndex) => itemIndex !== index)));
+  };
+
+  const changeColor = (nextColor: string) => {
+    if (category.group === "wear" && category.colorKey) {
+      const index = avatar.wearItems.findLastIndex((item) => item.key === category.key);
+      if (index >= 0) {
+        const items = avatar.wearItems.map((item, itemIndex) => itemIndex === index ? { ...item, color: nextColor } : item);
+        setAvatar(withWearItems(avatar, items));
+        return;
+      }
+    }
+    if (colorKey) setAvatar({ ...avatar, [colorKey]: nextColor });
   };
 
   const handleOutfitSlot = (index: number) => {
@@ -194,23 +220,55 @@ export function AvatarEditor({
             ))}
           </div>
 
+          {group === "wear" ? (
+            <div className={styles.previewButtons} aria-label="いま着ているアイテム">
+              <strong>装着 {avatar.wearItems.length}/{MAX_WEAR_ITEMS}</strong>
+              {avatar.wearItems.map((item, index) => (
+                <button
+                  key={`${item.key}-${item.id}-${index}`}
+                  type="button"
+                  className={styles.chip}
+                  title="クリックして1個外す"
+                  onClick={() => removeWearItem(index)}
+                >
+                  {itemLabel(item)} ×
+                </button>
+              ))}
+              {avatar.wearItems.length ? (
+                <button type="button" className={styles.secondaryButton} onClick={() => setAvatar(withWearItems(avatar, []))}>
+                  全部脱ぐ
+                </button>
+              ) : <span>標準パンツのみ</span>}
+            </div>
+          ) : null}
+
           {!isSkin ? (
             <div className={styles.optionGrid}>
               {category.options.map((option) => {
-                const next = { ...avatar, [category.key]: option.id };
-                const selected = avatar[category.key] === option.id;
+                const isWear = category.group === "wear";
+                const count = isWear ? avatar.wearItems.filter((item) => item.key === category.key && item.id === option.id).length : 0;
+                const color = category.colorKey ? String(avatar[category.colorKey]) : undefined;
+                const nextItems = option.id === "none"
+                  ? avatar.wearItems.filter((item) => item.key !== category.key)
+                  : [...avatar.wearItems, { key: category.key, id: option.id, ...(color ? { color } : {}) } as WearItem];
+                const next = isWear ? withWearItems(avatar, nextItems) : { ...avatar, [category.key]: option.id };
+                const selected = isWear
+                  ? option.id === "none" ? !avatar.wearItems.some((item) => item.key === category.key) : count > 0
+                  : avatar[category.key] === option.id;
+                const full = isWear && option.id !== "none" && avatar.wearItems.length >= MAX_WEAR_ITEMS;
                 return (
                   <button
                     key={option.id}
                     type="button"
                     className={styles.optionCard}
                     aria-pressed={selected}
+                    disabled={full}
                     onClick={() => setAvatar(next)}
                   >
                     <AvatarCanvas avatar={next} width={72} height={72} focus={category.focus} facing={category.thumbBack ? "back" : "front"} />
-                    <span>{option.label}</span>
+                    <span>{option.label}{count > 1 ? ` ×${count}` : ""}</span>
                     {option.price && !ownedParts.has(limitedKey(category.key, option.id)) ? (
-                      <span className={styles.lockTag}>🔒 {option.price}</span>
+                      <span className={styles.lockTag}>{option.shop === "casino" ? "🪙" : option.shop === "fishing" ? "🎣" : "🔒"} {option.price}</span>
                     ) : option.price ? (
                       <span className={styles.limitedTag}>★げんてい</span>
                     ) : null}
@@ -232,14 +290,14 @@ export function AvatarEditor({
                     style={{ background: color }}
                     aria-label={color}
                     aria-pressed={avatar[colorKey] === color}
-                    onClick={() => setAvatar({ ...avatar, [colorKey]: color })}
+                    onClick={() => changeColor(color)}
                   />
                 ))}
                 <label className={styles.customColor} title="すきな色をえらぶ">
                   <input
                     type="color"
                     value={avatar[colorKey]}
-                    onChange={(e) => setAvatar({ ...avatar, [colorKey]: e.target.value.toLowerCase() })}
+                    onChange={(e) => changeColor(e.target.value.toLowerCase())}
                   />
                   <span>じゆう</span>
                 </label>
@@ -252,7 +310,11 @@ export function AvatarEditor({
             {lockedWorn.length ? (
               <p className={styles.lockNote}>
                 「{lockedWorn.map((o) => o.label).join("・")}」はまだ持っていません。
-                {onOpenShop ? (
+                {lockedWorn[0]?.shop && onOpenPointShop ? (
+                  <button type="button" className={styles.linkButton} onClick={() => onOpenPointShop(lockedWorn[0].shop as ShopId)}>
+                    {lockedWorn[0].shop === "casino" ? "景品交換所" : "釣り具屋"}で買う
+                  </button>
+                ) : onOpenShop ? (
                   <button type="button" className={styles.linkButton} onClick={onOpenShop}>ショップで買う</button>
                 ) : null}
               </p>

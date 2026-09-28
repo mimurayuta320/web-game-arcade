@@ -1,8 +1,13 @@
 import economy from "../shared/economy.json";
+import { SHOP_PARTS, type ShopId } from "../shared/shop";
 
 // Avatar part catalog. Every part is drawn procedurally (no image assets),
 // so any style can be combined with any color — Pigg-style "face first,
-// then dress up" editing with one-slot-per-category layering.
+// then dress up" editing. Wear items use an ordered, duplicate-friendly list.
+
+export const MAX_WEAR_ITEMS = 20;
+export type WearKey = "top" | "bottom" | "onepiece" | "shoes" | "hat" | "glasses" | "neck" | "back" | "hand" | "ride";
+export type WearItem = { key: WearKey; id: string; color?: string };
 
 export type AvatarConfig = {
   // face
@@ -37,23 +42,31 @@ export type AvatarConfig = {
   backColor: string;
   hand: string;
   handColor: string;
+  /** のりもの (skateboard, bike...); rides walk faster. */
+  ride: string;
+  /** Ordered equipped items. Duplicates are allowed; the last item in a category is drawn on top. */
+  wearItems: WearItem[];
 };
+
+export type AvatarPartKey = Exclude<keyof AvatarConfig, "wearItems">;
 
 export type PartOption = {
   id: string;
   label: string;
   /** Limited part: must be bought (shop / scratch) before it can be worn. */
   price?: number;
+  /** Where it is sold when not with アメ: the fishing or casino point shop. */
+  shop?: ShopId;
 };
 
 export type ThumbFocus = "head" | "upper" | "lower" | "feet" | "body";
 
 export type PartCategory = {
-  key: keyof AvatarConfig;
+  key: AvatarPartKey;
   label: string;
   group: "face" | "wear";
   options: PartOption[];
-  colorKey?: keyof AvatarConfig;
+  colorKey?: AvatarPartKey;
   palette?: string[];
   /** Thumbnail framing in the editor. */
   focus: ThumbFocus;
@@ -136,23 +149,29 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
       ["short", "ショート"], ["spiky", "ツンツン"], ["sidepart", "七三"], ["messy", "ボサボサ"], ["mash", "マッシュ"],
       ["bob", "ボブ"], ["hime", "ひめカット"], ["long", "ロング"], ["wavy", "ゆるふわ"], ["ponytail", "ポニーテール"],
       ["sidetail", "サイドテール"], ["twintail", "ツインテール"], ["bun", "おだんご"], ["doublebun", "ダブルおだんご"],
-      ["braid", "みつあみ"], ["afro", "アフロ"], ["mohawk", "モヒカン"], ["none", "なし"],
+      ["braid", "みつあみ"], ["afro", "アフロ"], ["mohawk", "モヒカン"],
+      ["curly", "くるくる"], ["longstraight", "ぱっつんロング"], ["hipony", "ハイポニー"], ["sidebraid", "サイドみつあみ"],
+      ["wolf", "ウルフ"], ["pompadour", "リーゼント"], ["none", "なし"],
     ]),
   },
   // ---------------------------------------------------------------- wear
   {
     key: "top", label: "トップス", group: "wear", focus: "upper", colorKey: "topColor", palette: CLOTH_COLORS,
     options: opts([
+      ["none", "なし"],
       ["tshirt", "Tシャツ"], ["stripe", "ボーダー"], ["dots", "みずたま"], ["tank", "タンクトップ"], ["shirt", "シャツ"],
       ["blouse", "ブラウス"], ["sweater", "ニット"], ["hoodie", "パーカー"], ["cardigan", "カーディガン"],
       ["jacket", "ジャケット"], ["sailor", "セーラー"], ["gakuran", "学ラン"],
+      ["polo", "ポロシャツ"], ["aloha", "アロハ"], ["turtleneck", "タートルネック"], ["baseball", "ベースボール"],
     ]),
   },
   {
     key: "bottom", label: "ボトムス", group: "wear", focus: "lower", colorKey: "bottomColor", palette: CLOTH_COLORS,
     options: opts([
+      ["none", "なし"],
       ["pants", "パンツ"], ["jeans", "デニム"], ["shorts", "ショートパンツ"], ["skirt", "プリーツ"],
       ["mini", "ミニスカ"], ["long", "ロングスカート"], ["overalls", "サロペット"],
+      ["cargo", "カーゴパンツ"], ["wide", "ワイドパンツ"], ["kilt", "チェックスカート"],
     ]),
   },
   {
@@ -165,6 +184,7 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
   {
     key: "shoes", label: "くつ", group: "wear", focus: "feet", colorKey: "shoesColor", palette: CLOTH_COLORS,
     options: opts([
+      ["none", "なし"],
       ["sneakers", "スニーカー"], ["hightops", "ハイカット"], ["loafers", "ローファー"], ["pumps", "パンプス"],
       ["boots", "ブーツ"], ["longboots", "ロングブーツ"], ["sandals", "サンダル"], ["geta", "げた"],
     ]),
@@ -207,6 +227,10 @@ export const AVATAR_CATEGORIES: PartCategory[] = [
       ["fan", "うちわ"], ["drink", "ドリンク"],
     ]),
   },
+  {
+    key: "ride", label: "のりもの", group: "wear", focus: "body",
+    options: opts([["none", "なし"]]),
+  },
 ];
 
 // Limited parts live in shared/economy.json (prices are enforced by the server).
@@ -216,13 +240,20 @@ for (const part of economy.limitedParts) {
     category.options.push({ id: part.id, label: part.label, price: part.price });
   }
 }
+// Point-shop parts (rides, casino clothes) are limited too, but bought with fishing points / casino coins.
+for (const entry of SHOP_PARTS) {
+  const category = AVATAR_CATEGORIES.find((c) => c.key === entry.key);
+  if (category && entry.part && !category.options.some((o) => o.id === entry.part)) {
+    category.options.push({ id: entry.part, label: entry.label, price: entry.price, shop: entry.shop });
+  }
+}
 
-export function limitedKey(key: keyof AvatarConfig, id: string): string {
+export function limitedKey(key: AvatarPartKey, id: string): string {
   return `${key}:${id}`;
 }
 
-export function isLimitedPart(key: keyof AvatarConfig, id: string): boolean {
-  return economy.limitedParts.some((p) => p.key === key && p.id === id);
+export function isLimitedPart(key: AvatarPartKey, id: string): boolean {
+  return economy.limitedParts.some((p) => p.key === key && p.id === id) || SHOP_PARTS.some((e) => e.key === key && e.part === id);
 }
 
 export const DEFAULT_AVATAR: AvatarConfig = {
@@ -256,12 +287,20 @@ export const DEFAULT_AVATAR: AvatarConfig = {
   backColor: "#4f8fe0",
   hand: "none",
   handColor: "#f28fb8",
+  ride: "none",
+  wearItems: [
+    { key: "top", id: "tshirt", color: "#46b3a0" },
+    { key: "bottom", id: "pants", color: "#3651a8" },
+    { key: "shoes", id: "sneakers", color: "#e0525c" },
+  ],
 };
 
-export const AVATAR_KEYS = Object.keys(DEFAULT_AVATAR) as Array<keyof AvatarConfig>;
+export const AVATAR_KEYS = Object.keys(DEFAULT_AVATAR).filter((key) => key !== "wearItems") as AvatarPartKey[];
+export const WEAR_KEYS: WearKey[] = ["top", "bottom", "onepiece", "shoes", "hat", "glasses", "neck", "back", "hand", "ride"];
+const WEAR_KEY_SET = new Set<AvatarPartKey>(WEAR_KEYS);
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
-const COLOR_KEYS = new Set<keyof AvatarConfig>([
+const COLOR_KEYS = new Set<AvatarPartKey>([
   "skin", "browColor", "eyeColor", "hairColor", "topColor", "bottomColor", "onepieceColor",
   "shoesColor", "hatColor", "glassesColor", "neckColor", "backColor", "handColor",
 ]);
@@ -286,7 +325,7 @@ function migrateV1(src: Record<string, unknown>): Record<string, unknown> {
 /** Fill unknown or missing values (e.g. from other clients) with defaults. */
 export function normalizeAvatar(raw: unknown): AvatarConfig {
   const src = migrateV1(raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {});
-  const out: AvatarConfig = { ...DEFAULT_AVATAR };
+  const out: AvatarConfig = { ...DEFAULT_AVATAR, wearItems: [] };
   for (const key of AVATAR_KEYS) {
     const value = String(src[key] ?? "");
     if (COLOR_KEYS.has(key)) {
@@ -296,7 +335,42 @@ export function normalizeAvatar(raw: unknown): AvatarConfig {
     const category = AVATAR_CATEGORIES.find((c) => c.key === key);
     if (category?.options.some((o) => o.id === value)) out[key] = value;
   }
+  const hasWearItems = Array.isArray(src.wearItems);
+  const wearItems: WearItem[] = [];
+  if (hasWearItems) {
+    for (const rawItem of src.wearItems as unknown[]) {
+      if (wearItems.length >= MAX_WEAR_ITEMS || !rawItem || typeof rawItem !== "object") break;
+      const candidate = rawItem as Record<string, unknown>;
+      const key = String(candidate.key || "") as WearKey;
+      const id = String(candidate.id || "");
+      const category = AVATAR_CATEGORIES.find((c) => c.key === key && c.group === "wear");
+      if (!category || id === "none" || !category.options.some((option) => option.id === id)) continue;
+      const color = String(candidate.color || "");
+      wearItems.push({ key, id, ...(category.colorKey && HEX_COLOR.test(color) ? { color: color.toLowerCase() } : {}) });
+    }
+  } else {
+    // Legacy one-slot avatars become an ordered outfit once, without changing their appearance.
+    for (const key of WEAR_KEYS) {
+      const id = String(out[key] || "");
+      if (!id || id === "none") continue;
+      const category = AVATAR_CATEGORIES.find((c) => c.key === key);
+      const color = category?.colorKey ? String(out[category.colorKey]) : "";
+      wearItems.push({ key, id, ...(category?.colorKey && HEX_COLOR.test(color) ? { color } : {}) });
+    }
+  }
+  // Compatibility fields always describe the top-most item of each category.
+  for (const key of WEAR_KEYS) out[key] = "none";
+  for (const item of wearItems) {
+    out[item.key] = item.id;
+    const category = AVATAR_CATEGORIES.find((c) => c.key === item.key);
+    if (item.color && category?.colorKey) out[category.colorKey] = item.color;
+  }
+  out.wearItems = wearItems;
   return out;
+}
+
+export function withWearItems(avatar: AvatarConfig, wearItems: WearItem[]): AvatarConfig {
+  return normalizeAvatar({ ...avatar, wearItems: wearItems.slice(0, MAX_WEAR_ITEMS) });
 }
 
 export function randomAvatar(): AvatarConfig {
@@ -313,5 +387,5 @@ export function randomAvatar(): AvatarConfig {
   if (Math.random() < 0.5) out.glasses = "none";
   if (Math.random() < 0.4) out.mark = "none";
   out.browColor = out.hairColor;
-  return out;
+  return normalizeAvatar({ ...out, wearItems: undefined });
 }

@@ -32,7 +32,7 @@ export function ActionPalette({ onAct, onClose }: Props) {
         </button>
       </div>
       <div className={styles.actionGrid}>
-        {ACTIONS.filter((a) => a.category === category).map((a) => (
+        {ACTIONS.filter((a) => a.category === category && !a.hidden).map((a) => (
           <button key={a.id} type="button" className={styles.actionButton} onClick={() => onAct(a.id)}>
             <span className={styles.actionIcon} aria-hidden="true">{a.icon}</span>
             <span>{a.label}</span>

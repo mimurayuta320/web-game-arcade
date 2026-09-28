@@ -3,6 +3,16 @@
 
 export type Ctx = CanvasRenderingContext2D;
 export type Facing = "front" | "back";
+/** Which way the avatar heads on screen (up = away from the camera). */
+export type Direction8 = "down" | "down-right" | "right" | "up-right" | "up" | "up-left" | "left" | "down-left";
+
+const DIRECTION_BY_SECTOR: readonly Direction8[] = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"];
+
+/** Nearest of the 8 screen directions for a screen-space movement vector (y grows downward). */
+export function directionOf(screenDx: number, screenDy: number): Direction8 {
+  const sector = Math.round(Math.atan2(screenDy, screenDx) / (Math.PI / 4));
+  return DIRECTION_BY_SECTOR[((sector % 8) + 8) % 8];
+}
 
 export const LINE = "rgba(58, 38, 38, 0.9)";
 export const LINE_WIDTH = 1.1;

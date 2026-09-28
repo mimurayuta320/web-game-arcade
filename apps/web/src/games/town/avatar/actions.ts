@@ -4,11 +4,16 @@
 export type ActionId =
   | "laugh" | "cry" | "angry" | "shy" | "surprise" | "love" | "sweat" | "sleep"
   | "wave" | "bow" | "clap" | "banzai" | "peace" | "heart"
-  | "jump" | "spin" | "dance" | "backflip" | "sit" | "lie";
+  | "jump" | "spin" | "dance" | "backflip" | "sit" | "lie"
+  | "fish";
 
 export type ActionCategory = "feel" | "greet" | "move";
 
-export type ActionDef = { id: ActionId; label: string; icon: string; category: ActionCategory; durationMs: number };
+export type ActionDef = {
+  id: ActionId; label: string; icon: string; category: ActionCategory; durationMs: number;
+  /** Set by the game (e.g. fishing), not offered in the action palette. */
+  hidden?: boolean;
+};
 
 export const ACTION_CATEGORIES: Array<{ id: ActionCategory; label: string }> = [
   { id: "feel", label: "きもち" },
@@ -37,6 +42,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "backflip", label: "バク宙", icon: "🤸", category: "move", durationMs: 900 },
   { id: "sit", label: "すわる", icon: "🪑", category: "move", durationMs: 0 },
   { id: "lie", label: "ねころぶ", icon: "🛌", category: "move", durationMs: 0 },
+  { id: "fish", label: "つり", icon: "🎣", category: "move", durationMs: 0, hidden: true },
 ];
 
 const BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));

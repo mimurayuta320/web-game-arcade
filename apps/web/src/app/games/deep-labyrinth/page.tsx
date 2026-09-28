@@ -445,7 +445,7 @@ export default function DeepLabyrinthPage() {
                 type="button"
                 className="dlBtnGhost"
                 onClick={() => {
-                  router.push("/");
+                  router.push("/arcade");
                 }}
               >
                 メニューに戻る
