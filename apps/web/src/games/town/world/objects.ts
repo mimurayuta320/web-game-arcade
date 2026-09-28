@@ -1,9 +1,11 @@
 // Drawers for every placeable thing: town scenery and my-room furniture.
 import { toScreen, type TownObject } from "./areas";
+import { LEVEL_PX } from "./furniture";
 import {
   circle, faceQuad, facePoint, footprintPath, isoBox, label, polyFill, shade, shadow, type Ctx, type Pt,
 } from "./drawUtil";
-import { starPath } from "../avatar/draw/common";
+import { ellipse, line, poly, starPath } from "../avatar/draw/common";
+import { cropStage, type PlotCrop } from "../shared/shop";
 
 function stroke(ctx: Ctx, pts: Pt[], color: string, width: number) {
   ctx.beginPath();
@@ -16,6 +18,15 @@ function stroke(ctx: Ctx, pts: Pt[], color: string, width: number) {
 }
 
 /** Upright panel standing on the back edge (y - 0.5) of a footprint. */
+function roundRect_(ctx: Ctx, x: number, y: number, w: number, h: number, fill: string) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 1.5);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(40,28,24,0.35)";
+  ctx.stroke();
+}
+
 function backPanel(ctx: Ctx, x: number, y: number, w: number, height: number, lift: number, color: string, inset = 0.1) {
   const a = toScreen(x - 0.5 + inset, y - 0.5 + inset);
   const b = toScreen(x + w - 0.5 - inset, y - 0.5 + inset);
@@ -57,7 +68,175 @@ function drawFlatRaw(ctx: Ctx, o: TownObject) {
 }
 
 export function drawObject(ctx: Ctx, o: TownObject, time: number) {
+  // Pieces on top of blocks are lifted by one level per block.
+  const lift = (o.z ?? 0) * LEVEL_PX;
+  if (lift) {
+    ctx.save();
+    ctx.translate(0, -lift);
+  }
   withRotation(ctx, o, (obj) => drawObjectRaw(ctx, obj, time));
+  if (lift) ctx.restore();
+}
+
+/** A crop in a plot: seed → sprout → growing → ripe (bobbing, with a sparkle). */
+function drawCrop(ctx: Ctx, crop: PlotCrop, x: number, y: number, time: number) {
+  const stage = cropStage(crop, Date.now());
+  const leaf = "#4fa64a";
+  const dark = "#357a35";
+  if (stage === 0) {
+    for (const dx of [-5, 0, 5]) circle(ctx, x + dx, y - 1, 1.2, "#5a3a20", "");
+    line(ctx, [[x, y - 1], [x, y - 5]], leaf, 1.4);
+    circle(ctx, x, y - 6, 1.6, leaf, "");
+    return;
+  }
+  const grow = stage === 1 ? 0.6 : stage === 2 ? 0.85 : 1;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(grow, grow);
+  const sway = Math.sin(time * 1.6 + x) * 0.8;
+  const stem = (h: number) => line(ctx, [[0, 0], [sway * 0.5, -h * 0.5], [sway, -h]], dark, 1.6);
+  const leaves = (h: number, n: number) => {
+    for (let i = 0; i < n; i += 1) {
+      const side = i % 2 === 0 ? -1 : 1;
+      ctx.beginPath();
+      ctx.ellipse(side * 4.4 + sway * 0.4, -h * (0.35 + 0.18 * i), 4.4, 2, side * -0.5, 0, Math.PI * 2);
+      ctx.fillStyle = leaf;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(20,60,20,0.4)";
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
+  };
+  const ripe = stage === 3;
+  switch (crop.id) {
+    case "carrot":
+      leaves(16, 3);
+      stem(10);
+      if (ripe) {
+        poly(ctx, [[-3.4, -1], [3.4, -1], [0, 8]], "#f08a3c");
+        line(ctx, [[-1, 1], [1, 1]], "#c96a1c", 0.7);
+      }
+      break;
+    case "tomato":
+      stem(20);
+      leaves(20, 3);
+      if (stage >= 2) circle(ctx, 3.6, -11, ripe ? 3.8 : 2.2, ripe ? "#e0303c" : "#8fcf5a");
+      if (stage >= 2) circle(ctx, -4, -6, ripe ? 3.4 : 1.8, ripe ? "#e0303c" : "#8fcf5a");
+      break;
+    case "strawberry":
+      leaves(12, 3);
+      for (const [dx, dy] of [[-5, -4], [4, -3], [0, -8]] as Array<[number, number]>) {
+        if (stage >= 2) {
+          poly(ctx, [[dx - 2.4, dy - 2], [dx + 2.4, dy - 2], [dx, dy + 3]], ripe ? "#e0303c" : "#f2b4b8");
+          circle(ctx, dx, dy - 2.4, 1.6, dark, "");
+        }
+      }
+      break;
+    case "pumpkin":
+      leaves(14, 2);
+      if (stage >= 2) {
+        ctx.beginPath();
+        ctx.ellipse(0, -5, ripe ? 8 : 5, ripe ? 6 : 4, 0, 0, Math.PI * 2);
+        ctx.fillStyle = ripe ? "#f08a3c" : "#b9d06a";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(140,70,10,0.5)";
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        line(ctx, [[0, -10], [1, -13]], dark, 1.6);
+      }
+      break;
+    case "sunflower":
+      stem(24);
+      leaves(24, 2);
+      if (stage >= 2) {
+        const r = ripe ? 8 : 4.6;
+        for (let i = 0; i < 10; i += 1) {
+          const a = (i / 10) * Math.PI * 2;
+          circle(ctx, sway + Math.cos(a) * r * 0.9, -26 + Math.sin(a) * r * 0.9, r * 0.34, ripe ? "#f5cf47" : "#d8e28a", "");
+        }
+        circle(ctx, sway, -26, r * 0.55, ripe ? "#6b4430" : "#8a9a4a", "");
+      }
+      break;
+    case "tulip":
+      stem(18);
+      leaves(18, 2);
+      if (stage >= 2) {
+        const c = ripe ? "#f2648c" : "#c9e0a0";
+        poly(ctx, [[sway - 4, -19], [sway - 4.6, -25], [sway - 1.6, -22], [sway, -26], [sway + 1.6, -22], [sway + 4.6, -25], [sway + 4, -19]], c);
+        ellipse(ctx, sway, -19.4, 4, 2.2, c);
+      }
+      break;
+    case "potato":
+      leaves(13, 3);
+      stem(9);
+      if (ripe) {
+        for (const [dx, dy] of [[-4, 1], [2, 2], [5, 0]] as Array<[number, number]>) ellipse(ctx, dx, dy, 3.2, 2.4, "#c9a066");
+      }
+      break;
+    case "corn":
+      stem(26);
+      leaves(24, 3);
+      if (stage >= 2) {
+        const cob = ripe ? "#f5cf47" : "#d8e28a";
+        ellipse(ctx, 4 + sway * 0.4, -14, 2.6, 6.4, cob, true, 0.25);
+        poly(ctx, [[2, -8], [6.4, -9], [5, -18], [1.4, -12]], leaf);
+      }
+      break;
+    case "eggplant":
+      stem(18);
+      leaves(18, 3);
+      if (stage >= 2) {
+        const c = ripe ? "#6a3a8a" : "#a58cc0";
+        ellipse(ctx, -3.6, -8, ripe ? 3.2 : 2, ripe ? 6 : 3.6, c, true, 0.2);
+        ellipse(ctx, 4.2, -11, ripe ? 3 : 1.8, ripe ? 5.4 : 3.2, c, true, -0.2);
+        circle(ctx, -3.6, -13.6, 1.5, dark, "");
+      }
+      break;
+    case "watermelon":
+      leaves(10, 3);
+      if (stage >= 2) {
+        const r = ripe ? 8.6 : 4.6;
+        ellipse(ctx, 0, -r * 0.6, r * 1.15, r, ripe ? "#3f9a4a" : "#9ccf7a");
+        if (ripe) {
+          for (const dx of [-5, -1.6, 1.8, 5]) line(ctx, [[dx, -1.2], [dx * 1.1, -r * 1.5]], "#2a7034", 1.1);
+        }
+      }
+      break;
+    case "rose":
+      stem(20);
+      leaves(18, 3);
+      if (stage >= 2) {
+        const c = ripe ? "#d8324c" : "#e9b7c0";
+        circle(ctx, sway, -22, ripe ? 5 : 3, c);
+        circle(ctx, sway, -22, ripe ? 3 : 1.8, ripe ? "#b81f3a" : "#dca0ac", "");
+        if (ripe) circle(ctx, sway + 1, -23, 1.3, "#8f1530", "");
+      }
+      break;
+    case "cosmos":
+      stem(20);
+      leaves(16, 2);
+      if (stage >= 2) {
+        const c = ripe ? "#f6a6c8" : "#e4ecc4";
+        for (let i = 0; i < 8; i += 1) {
+          const a = (i / 8) * Math.PI * 2;
+          ellipse(ctx, sway + Math.cos(a) * 4.2, -22 + Math.sin(a) * 4.2, 2.6, 1.5, c, true, a);
+        }
+        circle(ctx, sway, -22, 2, "#f5cf47", "");
+      }
+      break;
+    default:
+      stem(14);
+      leaves(14, 2);
+  }
+  ctx.restore();
+  if (ripe) {
+    const glint = (Math.sin(time * 4 + x) + 1) / 2;
+    ctx.globalAlpha = 0.35 + glint * 0.6;
+    starPath(ctx, x + 8, y - 22 - glint * 2, 2.6, 4, 0.35);
+    ctx.fillStyle = "#fff6a8";
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawObjectRaw(ctx: Ctx, o: TownObject, time: number) {
@@ -703,6 +882,726 @@ function drawObjectRaw(ctx: Ctx, o: TownObject, time: number) {
       const stick = facePoint(body.left, 0.35, 0.42);
       stroke(ctx, [stick, [stick[0], stick[1] - 6]], "#2e2e38", 1.6);
       circle(ctx, stick[0], stick[1] - 7, 2.2, "#e0525c", "");
+      break;
+    }
+    // -------------------------------------------------------------- casino
+    case "slotmachine": {
+      const body = isoBox(ctx, o.x, o.y, 1, 1, 48, "#c0392b", 0.14);
+      polyFill(ctx, faceQuad(body.left, 0.1, 0.9, 0.48, 0.88), "#140a24");
+      const step = Math.floor(time * 7 + o.x * 2);
+      const reelColors = ["#ffd54a", "#ff5c8a", "#5cf0ff", "#8fe36a"];
+      for (let i = 0; i < 3; i += 1) {
+        const p = facePoint(body.left, 0.28 + i * 0.22, 0.68);
+        circle(ctx, p[0], p[1], 3.2, reelColors[(step + i * 2) % reelColors.length], "");
+      }
+      polyFill(ctx, faceQuad(body.left, 0.22, 0.78, 0.06, 0.2), "#2e2e38", null);
+      const lamp = facePoint(body.left, 0.5, 1);
+      const on = Math.sin(time * 6 + o.x) > 0;
+      circle(ctx, lamp[0], lamp[1] - 3, 3, on ? "#ffe066" : "#8a6d1a", "");
+      const lever = facePoint(body.right, 0.5, 0.55);
+      stroke(ctx, [lever, [lever[0] + 5, lever[1] - 12]], "#cfd3dc", 2);
+      circle(ctx, lever[0] + 5, lever[1] - 13, 2.6, "#ff3d3d", "");
+      break;
+    }
+    case "roulettetable": {
+      isoBox(ctx, o.x, o.y, w, h, 17, "#5a3a22", 0.08);
+      isoBox(ctx, o.x, o.y, w, h, 3, "#0f6b3f", 0.14, 17);
+      const wx = sx - 16;
+      const wy = sy - 25;
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, 17, 8.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#e3b53c";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, 13, 6.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#8f1d1d";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, 6, 3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#1b1b1b";
+      ctx.fill();
+      circle(ctx, wx + Math.cos(time * 4) * 10, wy + Math.sin(time * 4) * 5, 1.6, "#ffffff", "");
+      for (let i = 0; i < 6; i += 1) {
+        circle(ctx, sx + 6 + (i % 3) * 7, sy - 22 + Math.floor(i / 3) * 4, 2.2, ["#e0525c", "#ffffff", "#4f8fe0"][i % 3], "rgba(0,0,0,0.3)");
+      }
+      if (o.label) label(ctx, o.label, sx, sy - 46, "#ff3d9a");
+      break;
+    }
+    // ------------------------------------------------------- second furniture wave
+    case "lowtable": {
+      const tc = c ?? "#c9965f";
+      shadow(ctx, sx, sy + 1, 20, 9);
+      for (const [dx, dy] of [[0.12, 0.12], [0.74, 0.12], [0.12, 0.74], [0.74, 0.74]]) isoBox(ctx, o.x + dx, o.y + dy, 0.14, 0.14, 9, shade(tc, -0.4), 0);
+      isoBox(ctx, o.x, o.y, 1, 1, 3, tc, 0.08, 9);
+      circle(ctx, sx + 3, sy - 15, 3.6, "#ffffff", "#999");
+      circle(ctx, sx + 3, sy - 15.6, 2.2, "#7a4a2a", "");
+      break;
+    }
+    case "cactus": {
+      isoBox(ctx, o.x, o.y, 1, 1, 10, "#c96f4a", 0.3);
+      ellipse(ctx, sx, sy - 24, 6.4, 15, "#4f9f4a");
+      ellipse(ctx, sx - 9, sy - 24, 3.2, 7, "#4f9f4a");
+      ellipse(ctx, sx + 9, sy - 30, 3.2, 6, "#4f9f4a");
+      line(ctx, [[sx - 8, sy - 20], [sx - 3, sy - 20]], "#4f9f4a", 3);
+      line(ctx, [[sx + 3, sy - 26], [sx + 8, sy - 26]], "#4f9f4a", 3);
+      for (const dy of [-16, -24, -32]) line(ctx, [[sx - 1, sy + dy], [sx + 1, sy + dy]], "#e8f4c8", 0.7);
+      circle(ctx, sx, sy - 40, 2.6, "#f28fb8", "");
+      break;
+    }
+    case "vase": {
+      const vc = c ?? "#4f8fe0";
+      shadow(ctx, sx, sy + 1, 11, 5);
+      ctx.beginPath();
+      ctx.moveTo(sx - 5, sy - 26);
+      ctx.bezierCurveTo(sx - 13, sy - 14, sx - 9, sy - 2, sx - 6, sy);
+      ctx.lineTo(sx + 6, sy);
+      ctx.bezierCurveTo(sx + 9, sy - 2, sx + 13, sy - 14, sx + 5, sy - 26);
+      ctx.closePath();
+      ctx.fillStyle = vc;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(40,28,24,0.35)";
+      ctx.stroke();
+      ellipse(ctx, sx - 3, sy - 14, 1.6, 5, "rgba(255,255,255,0.4)", false);
+      line(ctx, [[sx - 2, sy - 26], [sx - 6, sy - 40]], "#3f8f4a", 1.2);
+      line(ctx, [[sx + 2, sy - 26], [sx + 7, sy - 38]], "#3f8f4a", 1.2);
+      line(ctx, [[sx, sy - 26], [sx, sy - 44]], "#3f8f4a", 1.2);
+      circle(ctx, sx - 6, sy - 41, 3.4, "#f2648c", "");
+      circle(ctx, sx + 7, sy - 39, 3.4, "#f5cf47", "");
+      circle(ctx, sx, sy - 45, 3.6, "#ffffff", "");
+      break;
+    }
+    case "petbed": {
+      const pc = c ?? "#f0a04b";
+      isoBox(ctx, o.x, o.y, 1, 1, 7, pc, 0.14);
+      const [tx, ty] = [sx, sy - 7];
+      ctx.beginPath();
+      ctx.ellipse(tx, ty, 14, 7, 0, 0, Math.PI * 2);
+      ctx.fillStyle = shade(pc, 0.4);
+      ctx.fill();
+      ellipse(ctx, tx + 4, ty - 1, 4, 2, "#f7f1e3", false);
+      poly(ctx, [[tx - 8, ty - 1], [tx - 4, ty - 4], [tx - 4, ty + 1]], "#f7f1e3");
+      break;
+    }
+    case "fruitbasket": {
+      ctx.beginPath();
+      ctx.ellipse(sx, sy - 6, 15, 8, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#b8823f";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(40,28,24,0.4)";
+      ctx.stroke();
+      for (const [dx, dy, col] of [[-6, -14, "#e0525c"], [5, -15, "#f5cf47"], [-1, -19, "#8fcf5a"], [8, -10, "#f08a3c"], [-9, -10, "#f08a3c"]] as Array<[number, number, string]>) circle(ctx, sx + dx, sy + dy, 4.6, col, "rgba(40,28,24,0.3)");
+      line(ctx, [[sx - 15, sy - 8], [sx - 12, sy - 22], [sx, sy - 26], [sx + 12, sy - 22], [sx + 15, sy - 8]], "#8a5a35", 1.4);
+      break;
+    }
+    case "cakestand": {
+      shadow(ctx, sx, sy + 1, 14, 6);
+      ctx.fillStyle = "#e8d8f8";
+      ctx.fillRect(sx - 1.6, sy - 18, 3.2, 18);
+      ellipse(ctx, sx, sy - 1, 8, 3, "#e8d8f8");
+      ellipse(ctx, sx, sy - 19, 15, 6, "#ffffff");
+      ctx.fillStyle = "#f7d9a0";
+      ctx.fillRect(sx - 9, sy - 30, 18, 10);
+      ellipse(ctx, sx, sy - 30, 9, 3.6, "#fff4e0");
+      ellipse(ctx, sx, sy - 20, 9, 3.6, "#f7d9a0", false);
+      for (const dx of [-5, 0, 5]) circle(ctx, sx + dx, sy - 32, 2.2, "#e0303c", "");
+      circle(ctx, sx, sy - 36, 1.6, "#f5cf47", "");
+      break;
+    }
+    case "shower": {
+      isoBox(ctx, o.x, o.y, 1, 1, 2, "#dfe6ee", 0.08);
+      ctx.globalAlpha = 0.35;
+      isoBox(ctx, o.x, o.y, 1, 1, 62, "#9fd8f2", 0.1, 2);
+      ctx.globalAlpha = 1;
+      line(ctx, [[sx + 8, sy - 60], [sx + 8, sy - 50]], "#9aa0aa", 2);
+      ellipse(ctx, sx + 2, sy - 50, 7, 2.6, "#c9d0d8");
+      for (let i = 0; i < 6; i += 1) {
+        const drop = ((time * 1.6 + i * 0.17) % 1);
+        circle(ctx, sx - 2 + i * 1.6, sy - 48 + drop * 46, 1, "rgba(120,190,240,0.85)", "");
+      }
+      break;
+    }
+    case "duck": {
+      shadow(ctx, sx, sy + 1, 10, 4);
+      ellipse(ctx, sx, sy - 6, 9, 6.4, "#ffd84a");
+      circle(ctx, sx + 6, sy - 13, 5, "#ffd84a", "rgba(120,90,10,0.4)");
+      poly(ctx, [[sx + 10, sy - 13], [sx + 15, sy - 11.6], [sx + 10, sy - 10.6]], "#f08a3c");
+      circle(ctx, sx + 7.6, sy - 14.4, 1, "#2b2320", "");
+      ellipse(ctx, sx - 2, sy - 6.4, 4.6, 3, "#f0c030", false, -0.3);
+      break;
+    }
+    case "shoji": {
+      const b = isoBox(ctx, o.x, o.y, w, h, 48, "#f7efd8", 0.42);
+      for (let i = 0; i <= 4; i += 1) line(ctx, [facePoint(b.left, i / 4, 0.02), facePoint(b.left, i / 4, 0.98)], "#8a5a35", 1.3);
+      for (const v of [0.02, 0.34, 0.66, 0.98]) line(ctx, [facePoint(b.left, 0, v), facePoint(b.left, 1, v)], "#8a5a35", 1.3);
+      break;
+    }
+    case "futon": {
+      const fc = c ?? "#f28fb8";
+      isoBox(ctx, o.x, o.y, 1, 2, 5, "#fdf6e3", 0.1);
+      isoBox(ctx, o.x, o.y + 0.5, 1, 1.5, 3, fc, 0.14, 5);
+      const [px, py] = toScreen(o.x, o.y + 0.1);
+      ellipse(ctx, px, py - 8, 9, 4, "#ffffff");
+      break;
+    }
+    case "jukebox": {
+      const b = isoBox(ctx, o.x, o.y, 1, 1, 52, "#b8323f", 0.12);
+      polyFill(ctx, faceQuad(b.left, 0.14, 0.86, 0.3, 0.86), "#2a1a2a", null);
+      const glow = 0.6 + Math.sin(time * 3) * 0.2;
+      polyFill(ctx, faceQuad(b.left, 0.2, 0.8, 0.36, 0.8), `rgba(255,210,110,${glow})`, null);
+      for (let i = 0; i < 4; i += 1) polyFill(ctx, faceQuad(b.left, 0.22 + i * 0.15, 0.32 + i * 0.15, 0.1, 0.2), ["#f5cf47", "#4f8fe0", "#8fcf5a", "#f28fb8"][i], null);
+      polyFill(ctx, faceQuad(b.left, 0.1, 0.9, 0.86, 0.94), "#f5cf47", null);
+      break;
+    }
+    case "pooltable": {
+      isoBox(ctx, o.x, o.y, 2, 2, 14, "#5a3a24", 0.16);
+      isoBox(ctx, o.x, o.y, 2, 2, 4, "#6b4430", 0.1, 14);
+      isoBox(ctx, o.x, o.y, 2, 2, 1, "#2f8f5a", 0.22, 18);
+      const [bx, by] = toScreen(o.x + 0.5, o.y + 0.5);
+      for (const [dx, dy, col] of [[-6, -22, "#ffffff"], [4, -25, "#e0525c"], [10, -22, "#f5cf47"], [2, -20, "#2e2e38"], [-2, -27, "#4f8fe0"]] as Array<[number, number, string]>) circle(ctx, bx + dx + 6, by + dy, 2.4, col, "rgba(0,0,0,0.3)");
+      break;
+    }
+    case "telescope": {
+      shadow(ctx, sx, sy + 1, 14, 6);
+      line(ctx, [[sx - 10, sy], [sx, sy - 26]], "#6b4a33", 2);
+      line(ctx, [[sx + 10, sy], [sx, sy - 26]], "#6b4a33", 2);
+      line(ctx, [[sx, sy + 2], [sx, sy - 26]], "#6b4a33", 2);
+      line(ctx, [[sx - 8, sy - 20], [sx + 16, sy - 40]], "#3a3a46", 8);
+      line(ctx, [[sx - 8, sy - 20], [sx + 16, sy - 40]], "#c9b04a", 5);
+      ellipse(ctx, sx + 16, sy - 40, 3.2, 4.4, "#8fd3f0", true, 0.7);
+      break;
+    }
+    case "globe": {
+      shadow(ctx, sx, sy + 1, 11, 5);
+      ellipse(ctx, sx, sy - 2, 8, 3, "#6b4a33");
+      ctx.fillStyle = "#6b4a33";
+      ctx.fillRect(sx - 1.4, sy - 16, 2.8, 14);
+      circle(ctx, sx, sy - 27, 12, "#4f8fe0", "rgba(20,40,80,0.5)");
+      ellipse(ctx, sx - 4, sy - 29, 4.6, 3.6, "#6cc35a", false, -0.4);
+      ellipse(ctx, sx + 5, sy - 23, 3.4, 2.6, "#6cc35a", false, 0.5);
+      ctx.beginPath();
+      ctx.arc(sx, sy - 27, 15, Math.PI * 1.1, Math.PI * 1.9);
+      ctx.strokeStyle = "#c9b04a";
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      break;
+    }
+    case "koinobori": {
+      shadow(ctx, sx, sy + 1, 8, 4);
+      line(ctx, [[sx, sy], [sx, sy - 70]], "#9b6a47", 2);
+      const cols = ["#3651a8", "#e0525c", "#46b3a0"];
+      cols.forEach((col, i) => {
+        const wave = Math.sin(time * 3 + i) * 2.4;
+        const yy = sy - 62 + i * 15;
+        ctx.beginPath();
+        ctx.moveTo(sx + 1, yy - 5);
+        ctx.quadraticCurveTo(sx + 14 + wave, yy - 7, sx + 26 + wave, yy - 3);
+        ctx.lineTo(sx + 28 + wave, yy + 7);
+        ctx.quadraticCurveTo(sx + 14 + wave, yy + 9, sx + 1, yy + 6);
+        ctx.closePath();
+        ctx.fillStyle = col;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(40,28,24,0.4)";
+        ctx.stroke();
+        circle(ctx, sx + 6, yy - 1, 1.8, "#ffffff", "");
+      });
+      circle(ctx, sx, sy - 72, 3, "#f5cf47", "");
+      break;
+    }
+    case "kagamimochi": {
+      shadow(ctx, sx, sy + 1, 13, 6);
+      isoBox(ctx, o.x, o.y, 1, 1, 6, "#b8323f", 0.28);
+      ellipse(ctx, sx, sy - 10, 13, 6, "#ffffff");
+      ellipse(ctx, sx, sy - 18, 9, 5, "#ffffff");
+      ellipse(ctx, sx, sy - 24, 4.4, 3.2, "#f08a3c");
+      line(ctx, [[sx, sy - 27], [sx + 3, sy - 31]], "#3f8f4a", 1.4);
+      break;
+    }
+    case "ghost": {
+      const bob = Math.sin(time * 2.4) * 2.4;
+      ctx.globalAlpha = 0.25;
+      ellipse(ctx, sx, sy + 1, 10, 4, "#000000", false);
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.moveTo(sx - 12, sy - 12 + bob);
+      ctx.bezierCurveTo(sx - 12, sy - 44 + bob, sx + 12, sy - 44 + bob, sx + 12, sy - 12 + bob);
+      for (let i = 0; i < 4; i += 1) ctx.quadraticCurveTo(sx + 12 - i * 6 - 1.5, sy - 4 + bob + (i % 2 ? -2 : 4), sx + 12 - (i + 1) * 6, sy - 12 + bob);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(60,60,90,0.35)";
+      ctx.stroke();
+      ellipse(ctx, sx - 4, sy - 26 + bob, 1.8, 2.6, "#2b2320", false);
+      ellipse(ctx, sx + 4, sy - 26 + bob, 1.8, 2.6, "#2b2320", false);
+      ellipse(ctx, sx, sy - 19 + bob, 2.2, 2.6, "#2b2320", false);
+      break;
+    }
+    case "kamakura": {
+      shadow(ctx, sx, sy + 1, 24, 10);
+      ctx.beginPath();
+      ctx.ellipse(sx, sy - 2, 24, 22, 0, Math.PI, 0);
+      ctx.closePath();
+      ctx.fillStyle = "#f2f7fb";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(90,120,150,0.45)";
+      ctx.stroke();
+      for (const [dx, dy] of [[-12, -8], [-4, -16], [8, -12], [14, -5], [0, -6]]) line(ctx, [[sx + dx - 4, sy + dy], [sx + dx + 4, sy + dy]], "rgba(120,150,180,0.35)", 0.8);
+      ctx.beginPath();
+      ctx.ellipse(sx, sy - 2, 8, 9, 0, Math.PI, 0);
+      ctx.closePath();
+      ctx.fillStyle = "#3a3a56";
+      ctx.fill();
+      break;
+    }
+    case "crystal": {
+      const pulse = 0.5 + Math.sin(time * 2.4) * 0.15;
+      ctx.globalAlpha = 0.25 * pulse;
+      circle(ctx, sx, sy - 24, 26, "#c9a0ff", "");
+      ctx.globalAlpha = 1;
+      shadow(ctx, sx, sy + 1, 12, 5);
+      poly(ctx, [[sx - 6, sy - 2], [sx - 10, sy - 26], [sx - 2, sy - 40]], "#8a6be0");
+      poly(ctx, [[sx - 2, sy - 40], [sx - 6, sy - 2], [sx + 5, sy - 2]], "#b08cff");
+      poly(ctx, [[sx - 2, sy - 40], [sx + 5, sy - 2], [sx + 10, sy - 24]], "#6f9cf0");
+      poly(ctx, [[sx + 8, sy - 3], [sx + 13, sy - 18], [sx + 16, sy - 3]], "#c9b0ff");
+      line(ctx, [[sx - 3, sy - 34], [sx - 5, sy - 14]], "rgba(255,255,255,0.65)", 1);
+      break;
+    }
+    case "rocket": {
+      shadow(ctx, sx, sy + 1, 14, 6);
+      poly(ctx, [[sx - 8, sy - 10], [sx - 17, sy + 0], [sx - 8, sy - 22]], "#e0525c");
+      poly(ctx, [[sx + 8, sy - 10], [sx + 17, sy + 0], [sx + 8, sy - 22]], "#e0525c");
+      ctx.beginPath();
+      ctx.moveTo(sx - 9, sy - 4);
+      ctx.bezierCurveTo(sx - 12, sy - 40, sx - 6, sy - 58, sx, sy - 68);
+      ctx.bezierCurveTo(sx + 6, sy - 58, sx + 12, sy - 40, sx + 9, sy - 4);
+      ctx.closePath();
+      ctx.fillStyle = "#f4f6fa";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(40,28,24,0.4)";
+      ctx.stroke();
+      poly(ctx, [[sx - 6, sy - 48], [sx, sy - 68], [sx + 6, sy - 48]], "#e0525c");
+      circle(ctx, sx, sy - 34, 5, "#8fd3f0", "#3a4552");
+      const fl = 5 + Math.sin(time * 18) * 2.4;
+      poly(ctx, [[sx - 4, sy - 2], [sx, sy - 2 + fl + 4], [sx + 4, sy - 2]], "#f5a53c");
+      break;
+    }
+    case "bigtank": {
+      isoBox(ctx, o.x, o.y, w, h, 10, "#3a3f4a", 0.1);
+      ctx.globalAlpha = 0.5;
+      isoBox(ctx, o.x, o.y, w, h, 34, "#7fcbee", 0.13, 10);
+      ctx.globalAlpha = 1;
+      const [bx, by] = toScreen(o.x + (w - 1) / 2, o.y);
+      for (let i = 0; i < 4; i += 1) {
+        const fx = bx + Math.sin(time * (0.7 + i * 0.25) + i * 1.7) * 26;
+        const fy = by - 20 - (i % 3) * 8;
+        ellipse(ctx, fx, fy, 4.4, 2.4, ["#f08a3c", "#f5cf47", "#e0525c", "#8fcf5a"][i]);
+        poly(ctx, [[fx - 4, fy], [fx - 8, fy - 2.4], [fx - 8, fy + 2.4]], ["#f08a3c", "#f5cf47", "#e0525c", "#8fcf5a"][i]);
+      }
+      for (const dx of [-24, 18]) line(ctx, [[bx + dx, by - 10], [bx + dx + Math.sin(time * 2 + dx) * 2, by - 26]], "#3f8f4a", 2);
+      break;
+    }
+    case "carousel": {
+      const [bx, by] = toScreen(o.x + 0.5, o.y + 0.5);
+      isoBox(ctx, o.x, o.y, w, h, 6, "#e8d8f8", 0.1);
+      line(ctx, [[bx, by - 6], [bx, by - 58]], "#f5cf47", 3);
+      for (let i = 0; i < 3; i += 1) {
+        const ang = time * 1.2 + (i / 3) * Math.PI * 2;
+        const hx = bx + Math.cos(ang) * 20;
+        const hy = by - 8 + Math.sin(ang) * 9;
+        const bounce = Math.sin(time * 3 + i * 2) * 3;
+        line(ctx, [[hx, hy - 34], [hx, hy - 6 + bounce]], "#f5cf47", 1.4);
+        ellipse(ctx, hx, hy - 16 + bounce, 8, 5, ["#ffffff", "#f28fb8", "#8fd3f0"][i]);
+        circle(ctx, hx + 6, hy - 22 + bounce, 3.2, ["#ffffff", "#f28fb8", "#8fd3f0"][i], "rgba(40,28,24,0.35)");
+      }
+      for (let i = 0; i < 6; i += 1) {
+        const a0 = -0.3 + i * 0.9;
+        poly(ctx, [[bx + Math.cos(a0) * 34, by - 50 + Math.sin(a0) * 12], [bx + Math.cos(a0 + 0.9) * 34, by - 50 + Math.sin(a0 + 0.9) * 12], [bx, by - 66]], i % 2 ? "#e0525c" : "#ffffff");
+      }
+      circle(ctx, bx, by - 68, 2.6, "#f5cf47", "");
+      break;
+    }
+    case "lighthouse": {
+      shadow(ctx, sx, sy + 1, 18, 8);
+      for (let i = 0; i < 4; i += 1) {
+        const y0 = sy - i * 15;
+        const wBot = 14 - i * 1.8;
+        const wTop = 14 - (i + 1) * 1.8;
+        poly(ctx, [[sx - wBot, y0], [sx + wBot, y0], [sx + wTop, y0 - 15], [sx - wTop, y0 - 15]], i % 2 ? "#ffffff" : "#e0525c");
+      }
+      roundRect_(ctx, sx - 9, sy - 66, 18, 4, "#3a3a46");
+      ellipse(ctx, sx, sy - 72, 6.6, 6.6, "#fff1a0");
+      poly(ctx, [[sx - 8, sy - 76], [sx + 8, sy - 76], [sx, sy - 88]], "#e0525c");
+      const beam = 0.15 + (Math.sin(time * 2) + 1) * 0.12;
+      ctx.globalAlpha = beam;
+      poly(ctx, [[sx, sy - 72], [sx + 60, sy - 82], [sx + 60, sy - 60]], "#fff6a8", false);
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "ufo": {
+      const bob = Math.sin(time * 2) * 3;
+      ctx.globalAlpha = 0.18;
+      poly(ctx, [[sx - 8, sy - 26 + bob], [sx + 8, sy - 26 + bob], [sx + 18, sy], [sx - 18, sy]], "#9dffcf", false);
+      ctx.globalAlpha = 1;
+      ellipse(ctx, sx, sy - 40 + bob, 9, 8, "#bfe8ff");
+      ellipse(ctx, sx, sy - 30 + bob, 22, 7, "#9aa0aa");
+      ellipse(ctx, sx, sy - 33 + bob, 16, 4, "#c9d0d8", false);
+      for (let i = 0; i < 5; i += 1) {
+        const on = Math.sin(time * 6 + i) > 0;
+        circle(ctx, sx - 16 + i * 8, sy - 29 + bob + Math.abs(i - 2) * 0.6, 1.8, on ? "#f5cf47" : "#e0525c", "");
+      }
+      break;
+    }
+    case "fence": {
+      const a = toScreen(o.x - 0.5, o.y);
+      const b = toScreen(o.x + 0.5, o.y);
+      line(ctx, [[a[0], a[1] - 6], [b[0], b[1] - 6]], "#c9a878", 2);
+      line(ctx, [[a[0], a[1] - 13], [b[0], b[1] - 13]], "#c9a878", 2);
+      for (const t of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+        const px = a[0] + (b[0] - a[0]) * t;
+        const py = a[1] + (b[1] - a[1]) * t;
+        poly(ctx, [[px - 2.4, py], [px + 2.4, py], [px + 2.4, py - 17], [px, py - 20], [px - 2.4, py - 17]], c ?? "#f7f1e3");
+      }
+      break;
+    }
+    case "scarecrow": {
+      shadow(ctx, sx, sy + 1, 9, 4);
+      line(ctx, [[sx, sy], [sx, sy - 48]], "#8a5a35", 2.4);
+      line(ctx, [[sx - 16, sy - 34], [sx + 16, sy - 34]], "#8a5a35", 2.4);
+      poly(ctx, [[sx - 8, sy - 34], [sx + 8, sy - 34], [sx + 7, sy - 14], [sx - 7, sy - 14]], "#4f8fe0");
+      for (const dx of [-16, 16]) for (const dy of [0, 3, 6]) line(ctx, [[sx + dx, sy - 34 + dy], [sx + dx + (dx < 0 ? -4 : 4), sy - 31 + dy]], "#e8c96a", 1);
+      circle(ctx, sx, sy - 46, 7, "#f2d9a0", "rgba(60,40,20,0.4)");
+      ellipse(ctx, sx, sy - 51, 12, 3.2, "#c9965f");
+      poly(ctx, [[sx - 6, sy - 51], [sx + 6, sy - 51], [sx + 3, sy - 60], [sx - 3, sy - 60]], "#c9965f");
+      circle(ctx, sx - 2.6, sy - 47, 1, "#2b2320", "");
+      circle(ctx, sx + 2.6, sy - 47, 1, "#2b2320", "");
+      break;
+    }
+    case "well": {
+      isoBox(ctx, o.x, o.y, 1, 1, 14, "#9a9aa0", 0.12);
+      ellipse(ctx, sx, sy - 14, 14, 6.5, "#4f8fe0");
+      ellipse(ctx, sx, sy - 14, 14, 6.5, "rgba(0,0,0,0)", true);
+      for (const dx of [-13, 13]) {
+        ctx.fillStyle = "#8a5a35";
+        ctx.fillRect(sx + dx - 1.4, sy - 40, 2.8, 26);
+      }
+      poly(ctx, [[sx - 18, sy - 38], [sx + 18, sy - 38], [sx, sy - 52]], "#c96f4a");
+      line(ctx, [[sx, sy - 38], [sx, sy - 24]], "#c9b04a", 1);
+      roundRect_(ctx, sx - 3, sy - 26, 6, 5, "#8a5a35");
+      break;
+    }
+    case "flowerbed": {
+      isoBox(ctx, o.x, o.y, 1, 1, 6, "#8a5a35", 0.1);
+      isoBox(ctx, o.x, o.y, 1, 1, 1, "#5a3a20", 0.18, 6);
+      const cols = ["#f2648c", "#f5cf47", "#ffffff", "#9a6bd8", "#f08a3c", "#4f8fe0"];
+      for (let i = 0; i < 9; i += 1) {
+        const fx = sx - 15 + (i % 3) * 15 + (Math.floor(i / 3) - 1) * 4;
+        const fy = sy - 6 - Math.floor(i / 3) * 4 - (i % 3) * 3 + 6;
+        const sway = Math.sin(time * 2 + i) * 1;
+        line(ctx, [[fx, fy], [fx + sway, fy - 9]], "#3f8f4a", 1);
+        circle(ctx, fx + sway, fy - 11, 3.2, cols[i % cols.length], "rgba(40,28,24,0.25)");
+        circle(ctx, fx + sway, fy - 11, 1, "#f5cf47", "");
+      }
+      break;
+    }
+    case "gnome": {
+      shadow(ctx, sx, sy + 1, 9, 4);
+      ellipse(ctx, sx, sy - 8, 8, 8, "#4f8fe0");
+      circle(ctx, sx, sy - 18, 6, "#f2d9a0", "rgba(60,40,20,0.4)");
+      poly(ctx, [[sx - 7, sy - 19], [sx + 7, sy - 19], [sx, sy - 40]], "#e0525c");
+      ctx.beginPath();
+      ctx.moveTo(sx - 6, sy - 16);
+      ctx.quadraticCurveTo(sx, sy - 2, sx + 6, sy - 16);
+      ctx.closePath();
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      circle(ctx, sx - 2.4, sy - 19, 0.9, "#2b2320", "");
+      circle(ctx, sx + 2.4, sy - 19, 0.9, "#2b2320", "");
+      circle(ctx, sx, sy - 16.4, 1.6, "#f2a0a0", "");
+      break;
+    }
+    // ------------------------------------------------------- park and campsite
+    case "lilypad": {
+      const bob = Math.sin(time * 1.4 + o.x * 2) * 0.8;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy + bob, 13, 6.4, 0, 0.35, Math.PI * 2 - 0.1);
+      ctx.lineTo(sx, sy + bob);
+      ctx.closePath();
+      ctx.fillStyle = "#4fae56";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(20,70,30,0.45)";
+      ctx.stroke();
+      if ((o.x + o.y) % 2 === 0) {
+        circle(ctx, sx + 3, sy - 2 + bob, 3.2, "#f9b6d2", "rgba(150,60,90,0.4)");
+        circle(ctx, sx + 3, sy - 2.6 + bob, 1.2, "#f5cf47", "");
+      }
+      break;
+    }
+    case "swing": {
+      const a = toScreen(o.x - 0.5, o.y);
+      const b = toScreen(o.x + w - 0.5, o.y);
+      for (const p of [a, b]) {
+        line(ctx, [[p[0], p[1]], [p[0] + (p === a ? -3 : 3), p[1] - 46]], "#c9503c", 3);
+      }
+      line(ctx, [[a[0] - 3, a[1] - 46], [b[0] + 3, b[1] - 46]], "#c9503c", 3.4);
+      const sw = Math.sin(time * 1.8 + o.x) * 6;
+      for (const t of [0.3, 0.7]) {
+        const px = a[0] + (b[0] - a[0]) * t;
+        const py = a[1] + (b[1] - a[1]) * t;
+        line(ctx, [[px, py - 46], [px + sw, py - 12]], "#6b6b78", 0.9);
+        roundRect_(ctx, px + sw - 5, py - 12, 10, 2.6, "#8a5a35");
+      }
+      break;
+    }
+    case "slide": {
+      shadow(ctx, sx, sy + 2, 18, 8);
+      isoBox(ctx, o.x, o.y, 1, 1, 30, "#4f8fe0", 0.34);
+      polyFill(ctx, [[sx + 6, sy - 26], [sx + 16, sy - 2], [sx + 26, sy - 4], [sx + 12, sy - 32]], "#f5cf47");
+      line(ctx, [[sx + 8, sy - 30], [sx + 20, sy - 4]], "rgba(255,255,255,0.6)", 1);
+      line(ctx, [[sx - 12, sy], [sx - 8, sy - 30]], "#8a5a35", 1.6);
+      line(ctx, [[sx - 8, sy - 34], [sx + 6, sy - 34]], "#c9503c", 1.6);
+      break;
+    }
+    case "sandbox": {
+      isoBox(ctx, o.x, o.y, w, h, 5, "#c9965f", 0.06);
+      isoBox(ctx, o.x, o.y, w, h, 1, "#f2dca0", 0.16, 4);
+      const [bx, by] = toScreen(o.x + (w - 1) / 2, o.y);
+      ctx.beginPath();
+      ctx.moveTo(bx - 4, by - 5);
+      ctx.lineTo(bx + 4, by - 5);
+      ctx.lineTo(bx + 3, by - 10);
+      ctx.lineTo(bx - 3, by - 10);
+      ctx.closePath();
+      ctx.fillStyle = "#e0525c";
+      ctx.fill();
+      circle(ctx, bx + 12, by - 6, 3, "#4f8fe0", "");
+      break;
+    }
+    case "tent": {
+      const tc = c ?? "#e0525c";
+      shadow(ctx, sx, sy + 2, 30, 13);
+      const front = toScreen(o.x + (w - 1) / 2, o.y + h - 1);
+      polyFill(ctx, [[sx - 34, sy + 6], [sx + 34, sy + 6], [sx + 1, sy - 42]], shade(tc, -0.2));
+      polyFill(ctx, [[sx - 34, sy + 6], [sx - 2, sy + 12], [sx + 1, sy - 42]], tc);
+      polyFill(ctx, [[sx - 2, sy + 12], [sx + 34, sy + 6], [sx + 1, sy - 42]], shade(tc, -0.12));
+      polyFill(ctx, [[sx - 2, sy + 12], [sx - 9, sy - 8], [sx + 1, sy - 34], [sx + 6, sy - 8], [sx + 6, sy + 10]], "#3a2a2a");
+      line(ctx, [[sx - 34, sy + 6], [sx - 42, sy + 12]], "#c9b04a", 1);
+      line(ctx, [[sx + 34, sy + 6], [sx + 42, sy + 12]], "#c9b04a", 1);
+      void front;
+      break;
+    }
+    case "campfire": {
+      shadow(ctx, sx, sy + 1, 18, 8);
+      for (const [dx, dy, rot] of [[-7, -2, -0.5], [7, -2, 0.5], [0, 2, 0]] as Array<[number, number, number]>) ellipse(ctx, sx + dx, sy + dy, 9, 2.6, "#6b4430", true, rot);
+      for (let i = 0; i < 6; i += 1) {
+        const ang = (i / 6) * Math.PI * 2;
+        circle(ctx, sx + Math.cos(ang) * 13, sy + 2 + Math.sin(ang) * 6, 2.6, "#8f8f96", "rgba(0,0,0,0.3)");
+      }
+      const fl = 14 + Math.sin(time * 9) * 3;
+      poly(ctx, [[sx - 6, sy - 2], [sx - 2, sy - fl - 4], [sx + 1, sy - 6], [sx + 4, sy - fl], [sx + 7, sy - 2]], "#f08a3c");
+      poly(ctx, [[sx - 3, sy - 2], [sx, sy - fl + 2], [sx + 4, sy - 2]], "#f5cf47");
+      ctx.globalAlpha = 0.16 + Math.sin(time * 5) * 0.04;
+      circle(ctx, sx, sy - 10, 30, "#ffb84d", "");
+      ctx.globalAlpha = 1;
+      for (let i = 0; i < 3; i += 1) {
+        const rise = (time * 1.4 + i * 0.33) % 1;
+        ctx.globalAlpha = 1 - rise;
+        circle(ctx, sx + Math.sin(rise * 6 + i) * 4, sy - 22 - rise * 26, 1, "#ffcf6b", "");
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "log": {
+      shadow(ctx, sx, sy + 1, 18, 7);
+      ellipse(ctx, sx, sy - 6, 16, 6.4, "#8a5a35");
+      ellipse(ctx, sx - 14, sy - 6, 3.6, 5.6, "#c9965f");
+      ellipse(ctx, sx - 14, sy - 6, 1.6, 2.6, "#a8763f", false);
+      for (const dx of [-6, 2, 8]) line(ctx, [[sx + dx, sy - 10], [sx + dx + 3, sy - 4]], "rgba(60,30,10,0.35)", 0.8);
+      break;
+    }
+    // ------------------------------------------------------- building pieces
+    case "halfblock": {
+      const hc = c ?? "#c9b6f0";
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX / 2, hc, 0);
+      polyFill(ctx, faceQuad(faces.left, 0.08, 0.92, 0.12, 0.28), shade(hc, 0.25), null);
+      break;
+    }
+    case "block": {
+      const bc = c ?? "#c9b6f0";
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX, bc, 0);
+      polyFill(ctx, faceQuad(faces.left, 0.08, 0.92, 0.08, 0.16), shade(bc, 0.25), null);
+      break;
+    }
+    case "woodblock": {
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX, "#c08a52", 0);
+      for (const face of [faces.left, faces.right]) {
+        for (const v of [0.33, 0.66]) line(ctx, [facePoint(face, 0, v), facePoint(face, 1, v)], "rgba(70,40,15,0.35)", 0.9);
+      }
+      for (const u of [0.25, 0.7]) line(ctx, [facePoint(faces.left, u, 0), facePoint(faces.left, u, 0.33)], "rgba(70,40,15,0.3)", 0.8);
+      break;
+    }
+    case "brickblock": {
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX, "#c9745a", 0);
+      for (const face of [faces.left, faces.right]) {
+        for (const v of [0.25, 0.5, 0.75]) line(ctx, [facePoint(face, 0, v), facePoint(face, 1, v)], "rgba(255,255,255,0.4)", 0.9);
+        for (const [u, v0] of [[0.5, 0], [0.25, 0.25], [0.75, 0.25], [0.5, 0.5], [0.25, 0.75], [0.75, 0.75]] as Array<[number, number]>) {
+          line(ctx, [facePoint(face, u, v0), facePoint(face, u, v0 + 0.25)], "rgba(255,255,255,0.35)", 0.9);
+        }
+      }
+      break;
+    }
+    case "stoneblock": {
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX, "#a4adb7", 0);
+      line(ctx, [facePoint(faces.left, 0.15, 0.7), facePoint(faces.left, 0.4, 0.5), facePoint(faces.left, 0.35, 0.2)], "rgba(60,70,80,0.4)", 0.9);
+      line(ctx, [facePoint(faces.right, 0.6, 0.85), facePoint(faces.right, 0.8, 0.55)], "rgba(60,70,80,0.4)", 0.9);
+      polyFill(ctx, faceQuad(faces.left, 0.55, 0.78, 0.3, 0.45), "rgba(70,80,90,0.25)", null);
+      break;
+    }
+    case "grassblock": {
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX, "#6cc35a", 0);
+      polyFill(ctx, faces.left, "#8a5a35");
+      polyFill(ctx, faces.right, "#6b4327");
+      polyFill(ctx, faces.top, "#6cc35a");
+      for (const face of [faces.left, faces.right]) {
+        polyFill(ctx, faceQuad(face, 0, 1, 0.72, 1), face === faces.left ? "#5aae4a" : "#4a9a3c", null);
+        for (const u of [0.12, 0.4, 0.68, 0.9]) polyFill(ctx, faceQuad(face, u, u + 0.1, 0.55, 0.75), face === faces.left ? "#5aae4a" : "#4a9a3c", null);
+      }
+      break;
+    }
+    case "glassblock": {
+      ctx.globalAlpha = 0.45;
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX, "#bfe8ff", 0);
+      ctx.globalAlpha = 1;
+      line(ctx, [facePoint(faces.left, 0.15, 0.2), facePoint(faces.left, 0.4, 0.75)], "rgba(255,255,255,0.8)", 1.4);
+      line(ctx, [facePoint(faces.left, 0.3, 0.12), facePoint(faces.left, 0.45, 0.45)], "rgba(255,255,255,0.6)", 1);
+      break;
+    }
+    case "iceblock": {
+      ctx.globalAlpha = 0.85;
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX, "#a9dcf5", 0);
+      ctx.globalAlpha = 1;
+      polyFill(ctx, faceQuad(faces.left, 0.1, 0.5, 0.55, 0.9), "rgba(255,255,255,0.45)", null);
+      line(ctx, [facePoint(faces.right, 0.2, 0.3), facePoint(faces.right, 0.7, 0.7)], "rgba(255,255,255,0.55)", 0.9);
+      break;
+    }
+    case "neonblock": {
+      const glow = 0.5 + Math.sin(time * 2.4 + o.x + o.y) * 0.25;
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX, "#23222e", 0);
+      const hue = c ?? "#ff3d9a";
+      ctx.strokeStyle = hue;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6 + glow * 0.4;
+      for (const face of [faces.left, faces.right, faces.top]) {
+        ctx.beginPath();
+        ctx.moveTo(face[0][0], face[0][1]);
+        for (const p of face.slice(1)) ctx.lineTo(p[0], p[1]);
+        ctx.closePath();
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.18 * glow;
+      polyFill(ctx, faces.top, hue, null);
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "goldblock": {
+      const faces = isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX, "#f5cf47", 0);
+      polyFill(ctx, faceQuad(faces.left, 0.1, 0.45, 0.6, 0.9), "rgba(255,255,255,0.45)", null);
+      const spark = (Math.sin(time * 3 + o.x * 2 + o.y) + 1) / 2;
+      ctx.globalAlpha = spark;
+      starPath(ctx, facePoint(faces.top, 0.5, 0.5)[0], facePoint(faces.top, 0.5, 0.5)[1], 3.2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "stairs":
+    case "woodstairs":
+    case "stonestairs":
+    case "goldstairs": {
+      const base = o.kind === "woodstairs" ? "#b8834f" : o.kind === "stonestairs" ? "#a4adb7" : o.kind === "goldstairs" ? "#f5cf47" : c ?? "#e8c9a0";
+      const dir = o.dir ?? 0;
+      const steps: Array<{ depth: number; draw: () => void }> = [];
+      for (let k = 0; k < 3; k += 1) {
+        // Along the climbing axis the lowest step is k = 0; the top step is the highest.
+        const along = dir === 0 || dir === 1 ? k / 3 : (2 - k) / 3;
+        const x = dir === 0 || dir === 2 ? o.x + along : o.x;
+        const y = dir === 1 || dir === 3 ? o.y + along : o.y;
+        const sw = dir === 0 || dir === 2 ? 1 / 3 : 1;
+        const sh = dir === 1 || dir === 3 ? 1 / 3 : 1;
+        steps.push({ depth: x + y, draw: () => { isoBox(ctx, x, y, sw, sh, (LEVEL_PX * (k + 1)) / 3, k === 2 ? shade(base, 0.12) : base, 0); } });
+      }
+      steps.sort((a, b) => a.depth - b.depth);
+      for (const step of steps) step.draw();
+      break;
+    }
+    case "railing": {
+      const rc = c ?? "#f7f1e3";
+      const a = toScreen(o.x - 0.5, o.y + 0.5);
+      const b = toScreen(o.x + 0.5, o.y + 0.5);
+      line(ctx, [[a[0], a[1] - 10], [b[0], b[1] - 10]], rc, 2.4);
+      line(ctx, [[a[0], a[1] - 20], [b[0], b[1] - 20]], rc, 2.4);
+      for (const t of [0, 0.5, 1]) {
+        const px = a[0] + (b[0] - a[0]) * t;
+        const py = a[1] + (b[1] - a[1]) * t;
+        line(ctx, [[px, py], [px, py - 22]], shade(rc, -0.15), 2.6);
+      }
+      break;
+    }
+    case "pillar": {
+      const pc = c ?? "#f7f1e3";
+      isoBox(ctx, o.x, o.y, 1, 1, 6, shade(pc, -0.1), 0.22);
+      isoBox(ctx, o.x, o.y, 1, 1, LEVEL_PX * 2 - 12, pc, 0.32, 6);
+      isoBox(ctx, o.x, o.y, 1, 1, 6, shade(pc, -0.1), 0.22, LEVEL_PX * 2 - 6);
+      break;
+    }
+    case "plot": {
+      isoBox(ctx, o.x, o.y, 1, 1, 5, "#7a5230", 0.05);
+      // Furrows across the soil.
+      for (const k of [-0.22, 0, 0.22]) {
+        const a = toScreen(o.x - 0.34, o.y + k);
+        const b = toScreen(o.x + 0.34, o.y + k);
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1] - 5);
+        ctx.lineTo(b[0], b[1] - 5);
+        ctx.strokeStyle = "rgba(58,34,18,0.45)";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+      if (o.crop) drawCrop(ctx, o.crop, sx, sy - 6, time);
+      break;
+    }
+    case "chiptower": {
+      isoBox(ctx, o.x, o.y, 1, 1, 8, "#5a3a22", 0.18);
+      const colors = ["#e0525c", "#2e2e38", "#4f8fe0", "#3f8f4a", "#f5cf47"];
+      for (let stack = 0; stack < 3; stack += 1) {
+        const px = sx - 9 + stack * 9;
+        const py = sy - 8 + (stack === 1 ? -3 : 0);
+        const count = 5 + stack * 2;
+        for (let k = 0; k < count; k += 1) {
+          ctx.beginPath();
+          ctx.ellipse(px, py - k * 2.4, 5, 2.4, 0, 0, Math.PI * 2);
+          ctx.fillStyle = colors[(k + stack) % colors.length];
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.7)";
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+      }
+      const glint = 0.4 + Math.sin(time * 4) * 0.4;
+      ctx.globalAlpha = Math.max(0, glint);
+      starPath(ctx, sx + 6, sy - 34, 3, 4, 0.35);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "cardtable": {
+      const fc = c ?? "#1d7a4a";
+      isoBox(ctx, o.x, o.y, w, h, 17, "#5a3a22", 0.08);
+      isoBox(ctx, o.x, o.y, w, h, 3, fc, 0.14, 17);
+      for (let i = 0; i < 3; i += 1) {
+        polyFill(ctx, [[sx - 16 + i * 11, sy - 24], [sx - 8 + i * 11, sy - 27], [sx - 5 + i * 11, sy - 23], [sx - 13 + i * 11, sy - 20]], "#ffffff");
+      }
+      for (let i = 0; i < 4; i += 1) circle(ctx, sx + 12 + (i % 2) * 6, sy - 22 + Math.floor(i / 2) * 3, 2.4, ["#e0525c", "#f5cf47"][i % 2], "rgba(0,0,0,0.3)");
+      if (o.label) label(ctx, o.label, sx, sy - 44, shade(fc, -0.1));
       break;
     }
     case "snowman":

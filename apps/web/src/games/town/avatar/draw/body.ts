@@ -18,18 +18,19 @@ type SleeveKind = "none" | "short" | "long" | "puff" | "wide";
 function sleeveOf(a: AvatarConfig): { kind: SleeveKind; color: string } {
   const op = onepieceOf(a);
   if (op) {
-    const kind: SleeveKind = op === "dress" || op === "wedding" ? "none" : op === "princess" || op === "maid" || op === "idol" ? "puff" : op === "yukata" ? "wide" : "long";
+    const kind: SleeveKind = op === "dress" || op === "wedding" || op === "swimsuit" ? "none" : op === "princess" || op === "maid" || op === "idol" ? "puff" : op === "yukata" ? "wide" : op === "swimsuit" ? "none" : op === "china" ? "short" : "long";
     return { kind, color: op === "suit" ? shade(a.onepieceColor, -0.05) : a.onepieceColor };
   }
-  const kinds: Record<string, SleeveKind> = { tank: "none", tshirt: "short", dots: "short", blouse: "puff" };
+  if (a.top === "none") return { kind: "none", color: a.skin };
+  const kinds: Record<string, SleeveKind> = { tank: "none", tshirt: "short", dots: "short", blouse: "puff", polo: "short", aloha: "short" };
   return { kind: kinds[a.top] ?? "long", color: a.top === "sailor" ? WHITE : a.topColor };
 }
 
 function legColor(a: AvatarConfig): string {
   const op = onepieceOf(a);
-  if (op === "suit" || op === "tsunagi" || op === "kigurumi") return a.onepieceColor;
+  if (op === "suit" || op === "tsunagi" || op === "kigurumi" || op === "astronaut" || op === "ninja") return a.onepieceColor;
   if (op) return a.skin;
-  if (a.bottom === "pants" || a.bottom === "jeans" || a.bottom === "overalls") return a.bottomColor;
+  if (a.bottom === "pants" || a.bottom === "jeans" || a.bottom === "overalls" || a.bottom === "cargo" || a.bottom === "wide") return a.bottomColor;
   return a.skin;
 }
 
@@ -43,6 +44,8 @@ export function drawLegs(ctx: Ctx, a: AvatarConfig, lift: [number, number], sitt
     const bottom = footY - lift[i];
     roundRect(ctx, x - 2.6, HIP_Y - 1, 5.2, bottom - HIP_Y + 1, 2.2, color);
     if (!op && a.bottom === "shorts") roundRect(ctx, x - 2.9, HIP_Y - 1, 5.8, 5, 1.5, a.bottomColor);
+    if (!op && a.bottom === "cargo") roundRect(ctx, x + (x < 0 ? -2.4 : 0.6), (bottom + HIP_Y) / 2 - 1, 2, 3.2, 0.6, shade(a.bottomColor, -0.22), false);
+    if (!op && a.bottom === "wide") roundRect(ctx, x - 3.2, bottom - 6, 6.4, 6, 1.2, shade(a.bottomColor, -0.12), false);
     if (!op && a.bottom === "jeans") line(ctx, [[x + (x < 0 ? 1.4 : -1.4), HIP_Y], [x + (x < 0 ? 1.4 : -1.4), bottom - 1]], shade(a.bottomColor, 0.35), 0.6);
     drawShoe(ctx, a, x, bottom, x < 0 ? -1 : 1);
   });
@@ -52,6 +55,8 @@ function drawShoe(ctx: Ctx, a: AvatarConfig, x: number, y: number, side: number)
   const c = a.shoesColor;
   const toe = x + side * 0.6;
   switch (a.shoes) {
+    case "none":
+      return;
     case "hightops":
       roundRect(ctx, x - 2.9, y - 4, 5.8, 4.5, 1.5, c);
       ellipse(ctx, toe, y + 0.3, 4, 2.5, c);
@@ -74,6 +79,18 @@ function drawShoe(ctx: Ctx, a: AvatarConfig, x: number, y: number, side: number)
       roundRect(ctx, x - 3, y - 9, 6, 10, 1.5, c);
       ellipse(ctx, toe, y + 0.6, 3.8, 2.2, c);
       line(ctx, [[x - 3, y - 8], [x + 3, y - 8]], shade(c, -0.3), 0.8);
+      break;
+    case "rollerskates":
+      roundRect(ctx, x - 2.9, y - 3.6, 5.8, 4.2, 1.4, c);
+      ellipse(ctx, toe, y - 0.4, 3.8, 2.2, c);
+      roundRect(ctx, x - 3.4, y + 0.6, 7.4, 1.4, 0.5, "#dfe6ee", false);
+      for (const dx of [-2.4, 2.4]) ellipse(ctx, x + dx, y + 2.6, 1.3, 1.3, "#2e2e38");
+      break;
+    case "rainboots":
+      roundRect(ctx, x - 3, y - 7, 6, 8, 1.6, c);
+      ellipse(ctx, toe, y + 0.5, 3.9, 2.3, c);
+      roundRect(ctx, x - 3, y - 7, 6, 1.6, 0.6, shade(c, 0.35), false);
+      ellipse(ctx, x, y - 3.4, 1.1, 1.1, "#ffffff", false);
       break;
     case "sandals":
       ellipse(ctx, toe, y + 0.4, 3.4, 2, a.skin);
@@ -106,12 +123,31 @@ export function drawBottom(ctx: Ctx, a: AvatarConfig, sitting: boolean) {
   const c = a.bottomColor;
   const s = sitting ? 1 : 0;
   switch (a.bottom) {
+    case "none":
+      // Standard underwear remains when every removable clothing item is taken off.
+      roundRect(ctx, -8.4, -16, 16.8, 4.8, 1.5, "#f7f4ee");
+      line(ctx, [[-7.2, -13], [0, -11.5], [7.2, -13]], "#c9c4ba", 0.7);
+      break;
     case "skirt":
       skirt(ctx, c, -7.5, 2.9 + s, true);
       break;
     case "mini":
       skirt(ctx, c, -10, 1.6 + s, false);
       roundRect(ctx, -8.8, -16.5, 17.6, 2, 1, shade(c, -0.2), false);
+      break;
+    case "kilt":
+      skirt(ctx, c, -7.5, 2.9 + s, false);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(-8.6, -16);
+      ctx.lineTo(8.6, -16);
+      ctx.lineTo(8.6 + 2.9 + s, -7.5);
+      ctx.lineTo(-8.6 - 2.9 - s, -7.5);
+      ctx.closePath();
+      ctx.clip();
+      for (let x = -12; x <= 12; x += 4) line(ctx, [[x, -16], [x * 1.2, -7]], shade(c, 0.4), 0.8);
+      for (const y of [-13.5, -10]) line(ctx, [[-13, y], [13, y]], shade(c, -0.3), 0.8);
+      ctx.restore();
       break;
     case "long":
       skirt(ctx, c, -3.5, 4.5 + s, false);
@@ -188,6 +224,9 @@ function drawTop(ctx: Ctx, a: AvatarConfig, facing: Facing) {
   const c = a.topColor;
   const front = facing === "front";
   switch (a.top) {
+    case "none":
+      torso(ctx, a.skin);
+      return;
     case "stripe":
       torso(ctx, c);
       clipTorso(ctx, () => {
@@ -205,6 +244,48 @@ function drawTop(ctx: Ctx, a: AvatarConfig, facing: Facing) {
         }
       });
       if (front) neckline(ctx, shade(c, -0.3));
+      return;
+    case "polo":
+      torso(ctx, c);
+      if (!front) return;
+      poly(ctx, [[-4.6, -30.6], [0, -27.4], [-2, -25.2], [-5.2, -28.4]], shade(c, 0.3));
+      poly(ctx, [[4.6, -30.6], [0, -27.4], [2, -25.2], [5.2, -28.4]], shade(c, 0.3));
+      line(ctx, [[0, -27.4], [0, -22]], shade(c, -0.25), 0.7);
+      buttons(ctx, 0, -26, -23, shade(c, 0.6));
+      return;
+    case "aloha":
+      torso(ctx, c);
+      clipTorso(ctx, () => {
+        const flower = luminance(c) > 0.8 ? "#e0525c" : "#ffd84a";
+        for (const [x, y] of [[-5, -27], [3, -24], [-3, -19], [6, -18], [-7, -16]]) {
+          for (let k = 0; k < 5; k += 1) ellipse(ctx, x + Math.cos(k * 1.257) * 1.6, y + Math.sin(k * 1.257) * 1.6, 1.1, 1.1, flower, false);
+          ellipse(ctx, x, y, 0.7, 0.7, "#ffffff", false);
+        }
+      });
+      if (front) {
+        poly(ctx, [[-4.6, -30.6], [0, -27.4], [-2, -25.4], [-5, -28.6]], shade(c, 0.4));
+        poly(ctx, [[4.6, -30.6], [0, -27.4], [2, -25.4], [5, -28.6]], shade(c, 0.4));
+      }
+      return;
+    case "turtleneck":
+      torso(ctx, c);
+      roundRect(ctx, -5.2, -33, 10.4, 4.6, 2, shade(c, 0.12));
+      line(ctx, [[-4.6, -30.6], [4.6, -30.6]], shade(c, -0.2), 0.6);
+      return;
+    case "baseball":
+      torso(ctx, WHITE);
+      clipTorso(ctx, () => {
+        ctx.fillStyle = c;
+        ctx.fillRect(-10, -31, 5, 17);
+        ctx.fillRect(5, -31, 5, 17);
+      });
+      if (front) {
+        ctx.fillStyle = shade(c, -0.1);
+        ctx.font = "bold 8px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("7", 0, -22.5);
+      }
       return;
     case "tank":
       torso(ctx, c);
@@ -297,6 +378,33 @@ function drawTop(ctx: Ctx, a: AvatarConfig, facing: Facing) {
       line(ctx, [[0, -29.5], [0, -14.5]], shade(c, 0.25), 0.6);
       buttons(ctx, 0, -27, -16, "#f5cf47");
       return;
+    case "dealer": {
+      // White shirt, a vest in the chosen color and a red bow tie.
+      torso(ctx, WHITE);
+      clipTorso(ctx, () => {
+        ctx.fillStyle = c;
+        if (!front) {
+          ctx.fillRect(-10, -31, 20, 17);
+          return;
+        }
+        for (const side of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(side * 10, -31);
+          ctx.lineTo(side * 2.6, -31);
+          ctx.lineTo(side * 0.4, -21);
+          ctx.lineTo(side * 0.4, -14);
+          ctx.lineTo(side * 10, -14);
+          ctx.closePath();
+          ctx.fill();
+        }
+      });
+      if (!front) return;
+      buttons(ctx, -1.8, -20, -16, "#f5cf47");
+      ellipse(ctx, -2.2, -29.4, 2.2, 1.4, "#b8323f", true, 0.3);
+      ellipse(ctx, 2.2, -29.4, 2.2, 1.4, "#b8323f", true, -0.3);
+      ellipse(ctx, 0, -29.4, 0.9, 0.9, "#b8323f");
+      return;
+    }
     default: // tshirt
       torso(ctx, c);
       if (front) neckline(ctx, shade(c, -0.3));
@@ -437,6 +545,62 @@ function drawOnepiece(ctx: Ctx, a: AvatarConfig, op: string, facing: Facing, sit
       if (front) ellipse(ctx, 0, -20, 5.2, 5.8, shade(c, 0.45), false);
       else ellipse(ctx, 0, -14.5, 3, 3, shade(c, 0.3));
       return;
+    case "swimsuit": {
+      // Trunks-and-top swimwear with a polka-dot pattern.
+      roundRect(ctx, -8.8, -16, 17.6, 5, 1.6, c);
+      torso(ctx, c);
+      ctx.save();
+      torsoPath(ctx);
+      ctx.clip();
+      for (const [x, y] of [[-5, -26], [0, -22], [5, -27], [-4, -17], [4, -19], [0, -30]]) ellipse(ctx, x, y, 1.2, 1.2, shade(c, 0.55), false);
+      ctx.restore();
+      if (front) ellipse(ctx, 0, -30.4, 6, 3.2, a.skin, false);
+      return;
+    }
+    case "china": {
+      flaredSkirt(ctx, c, -18, -5, 9.6, sitting);
+      torso(ctx, c);
+      const trim = "#f5cf47";
+      if (front) {
+        line(ctx, [[-1, -18], [-1.6, -5.4]], shade(c, -0.35), 0.9);
+        roundRect(ctx, -3.6, -31.6, 7.2, 3.4, 1.6, c);
+        line(ctx, [[-2, -29.4], [5.6, -17.6]], trim, 1);
+        for (const [x, y] of [[-4.5, -22], [-2, -17.2]]) ellipse(ctx, x, y, 1.1, 1.1, trim, false);
+        ellipse(ctx, 6, -18.2, 1.1, 1.1, trim, false);
+      } else {
+        roundRect(ctx, -3.6, -31.6, 7.2, 3.4, 1.6, c);
+      }
+      line(ctx, [[-9.6, -5.2], [9.6, -5.2]], trim, 1);
+      return;
+    }
+    case "astronaut": {
+      roundRect(ctx, -8.8, -16, 17.6, 4, 1.5, c);
+      torso(ctx, c);
+      ellipse(ctx, 0, -30.4, 8.4, 2.8, shade(c, -0.12), false);
+      if (front) {
+        roundRect(ctx, -5.4, -26, 10.8, 7, 1.4, shade(c, -0.1));
+        ellipse(ctx, -2.6, -22.6, 1, 1, "#e0525c", false);
+        ellipse(ctx, 0.2, -22.6, 1, 1, "#4f8fe0", false);
+        ellipse(ctx, 3, -22.6, 1, 1, "#8fcf5a", false);
+        ellipse(ctx, 6.4, -27.6, 2.2, 2.2, "#3651a8");
+      }
+      roundRect(ctx, -9, -16.5, 18, 1.8, 0.6, shade(c, -0.3), false);
+      return;
+    }
+    case "ninja": {
+      roundRect(ctx, -8.8, -16, 17.6, 4, 1.5, c);
+      torso(ctx, c);
+      const sash = "#e0525c";
+      roundRect(ctx, -9, -20.4, 18, 3.6, 1, sash);
+      if (front) {
+        line(ctx, [[-4, -30.5], [3, -20.6]], shade(c, 0.3), 1);
+        line(ctx, [[4, -30.5], [-3, -20.6]], shade(c, 0.3), 1);
+      } else {
+        poly(ctx, [[-1.6, -18.6], [-6.6, -12], [-3.4, -12]], sash);
+        poly(ctx, [[1.6, -18.6], [6.6, -12], [3.4, -12]], shade(sash, -0.2));
+      }
+      return;
+    }
   }
 }
 

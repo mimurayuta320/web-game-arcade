@@ -1,25 +1,50 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "./town.module.css";
 import { AvatarEditor } from "@/games/town/components/AvatarEditor";
 import { AvatarCanvas } from "@/games/town/components/AvatarCanvas";
 import { ActionPalette } from "@/games/town/components/ActionPalette";
 import { ProfileCard } from "@/games/town/components/ProfileCard";
-import { RoomEditorPanel, type RoomTool } from "@/games/town/components/RoomEditorPanel";
+import { RoomEditorPanel } from "@/games/town/components/RoomEditorPanel";
+import { useRoomEditor } from "@/games/town/components/useRoomEditor";
 import { AmeShop } from "@/games/town/components/AmeShop";
+import { CasinoOverlay, type OverlayGame } from "@/games/casino/components/CasinoOverlay";
+import { addCoins } from "@/games/casino/bank";
+import { CasinoItemsContext, type CasinoItemsApi } from "@/games/casino/items";
+import { useCasinoBank } from "@/games/casino/useCasinoBank";
+import { FishingPanel } from "@/games/town/components/FishingPanel";
+import { PointShop } from "@/games/town/components/PointShop";
+import { PetPanel } from "@/games/town/components/PetPanel";
+import { GardenPanel } from "@/games/town/components/GardenPanel";
+import { PlotPopup } from "@/games/town/components/PlotPopup";
+import { MissionPanel, claimableCount } from "@/games/town/components/MissionPanel";
+import type { ShopId } from "@/games/town/shared/shop";
+import { FriendsPanel } from "@/games/town/components/FriendsPanel";
+import { friendErrorText, friendsApi, loadCloudSession, type CloudSession } from "@/games/town/friends/cloudFriends";
+import { fetchCloudProfile } from "@/games/town/friends/cloudProfile";
 import { DEFAULT_AVATAR, normalizeAvatar, type AvatarConfig } from "@/games/town/avatar/parts";
 import type { ActionId } from "@/games/town/avatar/actions";
-import { AREAS, AREA_ORDER } from "@/games/town/world/areas";
-import {
-  FURNITURE_BY_KIND, FURNITURE_COLORS, canPlaceItem, footprintOf, itemAt, type FurnitureKind,
-} from "@/games/town/world/furniture";
+import { AREAS, AREA_ORDER, isStaticAreaId } from "@/games/town/world/areas";
+import { itemAt } from "@/games/town/world/furniture";
 import { TownGame, type TownEvent, type TownSnapshot } from "@/games/town/core/TownGame";
 
 const PROFILE_STORAGE_KEY = "neon-town-profile-v1";
+const SHARE_LOCATION_STORAGE_KEY = "neon-town-share-location";
+
+function loadShareLocation(): boolean {
+  try {
+    return localStorage.getItem(SHARE_LOCATION_STORAGE_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
 const CLOUD_USER_ID_STORAGE_KEY = "neon-cloud-user-id";
 
 type Profile = { name: string; avatar: AvatarConfig };
+
+/** The arcade hall is a separate page; every casino game is played inside the town. */
+const ARCADE_URL = "/arcade?from=town";
 
 function loadProfile(): Profile | null {
   try {
@@ -80,12 +105,19 @@ export default function TownPage() {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [tool, setTool] = useState<RoomTool>("place");
-  const [furnitureKind, setFurnitureKind] = useState<FurnitureKind>("sofa");
-  const [furnitureColor, setFurnitureColor] = useState(FURNITURE_COLORS[5]);
   const [flash, setFlash] = useState(false);
-  const [turned, setTurned] = useState(false);
   const [shopTab, setShopTab] = useState<"scratch" | "shop" | "earn" | null>(null);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [casinoGame, setCasinoGame] = useState<OverlayGame | null>(null);
+  const [fishingOpen, setFishingOpen] = useState(false);
+  const [pointShop, setPointShop] = useState<ShopId | null>(null);
+  const [petPanel, setPetPanel] = useState<"mine" | "shop" | null>(null);
+  const [gardenOpen, setGardenOpen] = useState(false);
+  const [missionsOpen, setMissionsOpen] = useState(false);
+  const [plotPos, setPlotPos] = useState<{ x: number; y: number } | null>(null);
+  const casinoBank = useCasinoBank();
+  const [cloudSession, setCloudSession] = useState<CloudSession | null>(null);
+  const [shareLocation, setShareLocation] = useState(true);
   const [heldAme, setHeldAme] = useState<number | null>(null);
   const [toasts, setToasts] = useState<Array<{ id: number; text: string; kind: "ame" | "info" | "error" }>>([]);
   const toastSeq = useRef(0);
@@ -95,21 +127,148 @@ export default function TownPage() {
   const chatLogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    // The town is for logged-in accounts only; everyone else starts at the arcade's login screen.
+    const session = loadCloudSession();
+    if (!session) {
+      window.location.replace("/arcade?reason=town-login");
+      return undefined;
+    }
     const saved = loadProfile();
-    setProfile(saved);
-    setEditorOpen(!saved);
-    setProfileLoaded(true);
+    setCloudSession(session);
+    setShareLocation(loadShareLocation());
+    if (saved) {
+      setProfile(saved);
+      setEditorOpen(false);
+      setProfileLoaded(true);
+      return undefined;
+    }
+    // A logged-in account on a device with no look yet: use the one saved on the server, if any.
+    let cancelled = false;
+    void fetchCloudProfile(session).then((remote) => {
+      if (cancelled) return;
+      if (remote) {
+        saveProfile(remote);
+        setProfile(remote);
+      }
+      setEditorOpen(!remote);
+      setProfileLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const showToast = (text: string, kind: "ame" | "info" | "error" = "info") => {
+    const id = ++toastSeq.current;
+    setToasts((list) => [...list.slice(-3), { id, text, kind }]);
+    window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200);
+  };
+
+  // Room decorating: tools, preview, undo/redo, layouts.
+  const editor = useRoomEditor({ game: gameRef, room: snapshot?.room ?? null, editing, notify: (text) => showToast(text, "error") });
+
+  const handleShareLocation = (value: boolean) => {
+    setShareLocation(value);
+    try {
+      localStorage.setItem(SHARE_LOCATION_STORAGE_KEY, value ? "1" : "0");
+    } catch {
+      // storage unavailable – applies to this visit only
+    }
+    gameRef.current?.setShareLocation(value);
+  };
+
+  const addFriend = async (friendId: string) => {
+    if (!cloudSession) return;
+    try {
+      await friendsApi.sendRequest(cloudSession, friendId);
+      showToast("ピグとも申請をおくりました");
+    } catch (error) {
+      showToast(friendErrorText(error), "error");
+    }
+  };
 
   // Start the town once a profile exists. The game instance lives for the page.
   const hasProfile = profile !== null;
   useEffect(() => {
     if (!hasProfile || !profile) return;
-    const game = new TownGame(profile.name, profile.avatar);
+    // Coming back from a casino game lands in the casino (?area=casino), not the plaza.
+    const query = new URLSearchParams(window.location.search);
+    const areaParam = query.get("area");
+    // Entering the town always starts in your own room; only an explicit ?area= (e.g. back from the casino) overrides it.
+    const startHome = !isStaticAreaId(areaParam);
+    const session = loadCloudSession();
+    const identity = {
+      friendId: session?.friendId ?? "",
+      shareLocation: loadShareLocation(),
+      auth: session ? { userId: session.userId, password: session.password, sessionId: session.sessionId } : null,
+    };
+    const game = new TownGame(profile.name, profile.avatar, isStaticAreaId(areaParam) ? areaParam : undefined, identity, startHome);
     gameRef.current = game;
     const unsubscribe = game.subscribe(setSnapshot);
     const unsubscribeEvents = game.onEvent((event: TownEvent) => {
-      if (event.type === "scratch") return;
+      if (event.type === "scratch" || event.type === "where") return;
+      if (event.type === "coins") {
+        addCoins(event.delta);
+        const id = ++toastSeq.current;
+        setToasts((list) => [...list.slice(-3), { id, text: `🪙 ${event.reason} +${event.delta} カジノコイン`, kind: "info" }]);
+        window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200);
+        return;
+      }
+      if (event.type === "login-required") {
+        window.location.replace(`/arcade?reason=${event.expired ? "town-expired" : "town-login"}`);
+        return;
+      }
+      if (event.type === "profile") {
+        // The server's saved look for this account (e.g. set on another device).
+        const next = { name: event.name, avatar: event.avatar };
+        saveProfile(next);
+        setProfile(next);
+        return;
+      }
+      if (event.type === "spot") {
+        const spot = event.game;
+        if (spot === "arcade") window.location.href = ARCADE_URL;
+        else if (spot === "fishing") setFishingOpen(true);
+        else if (spot === "fishshop") setPointShop("fishing");
+        else if (spot === "prizeshop") setPointShop("casino");
+        else if (spot === "petshop") setPetPanel("shop");
+        else if (spot === "gardenshop") setGardenOpen(true);
+        else setCasinoGame(spot);
+        return;
+      }
+      if (event.type === "fish-cast" || event.type === "fish-caught" || event.type === "fish-escaped") return;
+      if (event.type === "shop-bought") {
+        // Casino coins live in the browser: the prize counter takes them once the server has handed over the item.
+        if (event.shop === "casino") addCoins(-event.price);
+        const id = ++toastSeq.current;
+        setToasts((list) => [...list.slice(-3), { id, text: `🛍 ${event.label} を手に入れました`, kind: "info" }]);
+        window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200);
+        return;
+      }
+      if (event.type === "pet-done") {
+        let text = "";
+        if (event.op === "buy") text = `🐾 ${event.label} をむかえました！`;
+        else if (event.op === "rename") text = `なまえを「${event.label}」にしました`;
+        else if (event.op === "pat") {
+          text = event.hungry ? "おなかがすいているみたい…ごはんをあげよう" : event.gain ? `💗 なかよし度 +${event.gain}` : event.capped ? "今日はもう十分なかよし！（また明日）" : "すりすり";
+        } else if (event.op === "feed") text = `🍖 もぐもぐ… なかよし度 +${event.gain ?? 0}`;
+        else return;
+        const id = ++toastSeq.current;
+        setToasts((list) => [...list.slice(-3), { id, text, kind: "info" }]);
+        window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200);
+        return;
+      }
+      if (event.type === "garden-done") {
+        const text = event.op === "sell" ? `${event.label} を売って 🍬+${event.total ?? 0}`
+          : event.op === "harvest" ? `🧺 収穫！ ${event.label}`
+          : event.op === "plant" ? `🌱 ${event.label} を植えました`
+          : event.op === "water" ? `💧 ${event.label}`
+          : `🛍 ${event.label} を手に入れました`;
+        const id = ++toastSeq.current;
+        setToasts((list) => [...list.slice(-3), { id, text, kind: "info" }]);
+        window.setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 3200);
+        return;
+      }
       const text = event.type === "ame"
         ? `🍬 +${event.delta} ${event.reason}`
         : event.type === "bought" ? `🛍 ${event.label} を手に入れました` : event.text;
@@ -209,71 +368,27 @@ export default function TownPage() {
     return [e.clientX - rect.left, e.clientY - rect.top] as const;
   };
 
-  const updateGhost = (tile: [number, number] | null) => {
-    const game = gameRef.current;
-    const room = snapshot?.room;
-    if (!game || !room || !tile) {
-      game?.setGhost(null);
-      return;
-    }
-    if (tool === "remove" || tool === "rotate") {
-      const hit = itemAt(room, tile[0], tile[1]);
-      if (!hit) {
-        game.setGhost(null);
-        return;
-      }
-      if (tool === "rotate") {
-        // Preview the turned piece; red when it wouldn't fit.
-        const turnedItem = { ...hit, rot: hit.rot ? undefined : (1 as const) };
-        const { w, h } = footprintOf(turnedItem);
-        game.setGhost({
-          object: { ...turnedItem, w, h, flat: FURNITURE_BY_KIND.get(hit.kind)?.flat },
-          valid: canPlaceItem(room, turnedItem, hit),
-        });
-        return;
-      }
-      const { w, h } = footprintOf(hit);
-      game.setGhost({ object: { ...hit, w, h, flat: FURNITURE_BY_KIND.get(hit.kind)?.flat }, valid: false });
-      return;
-    }
-    const item = newItemAt(tile);
-    const { w, h } = footprintOf(item);
-    game.setGhost({
-      object: { ...item, w, h, flat: FURNITURE_BY_KIND.get(furnitureKind)?.flat },
-      valid: canPlaceItem(room, item),
-    });
-  };
-
-  const newItemAt = (tile: [number, number]) => {
-    const def = FURNITURE_BY_KIND.get(furnitureKind);
-    return {
-      kind: furnitureKind,
-      x: tile[0],
-      y: tile[1],
-      color: def?.colorable ? furnitureColor : undefined,
-      rot: turned && def && def.w !== def.h ? (1 as const) : undefined,
-    };
-  };
-
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const game = gameRef.current;
     if (!game) return;
     const [px, py] = pointerPos(e);
     const tile = game.tileAt(px, py);
     if (editing && snapshot?.room) {
-      if (!tile) return;
-      if (tool === "remove" || tool === "rotate") {
-        game.roomEdit({ op: tool, x: tile[0], y: tile[1] });
-      } else {
-        const item = newItemAt(tile);
-        if (canPlaceItem(snapshot.room, item)) game.roomEdit({ op: "place", item });
-      }
+      editor.pointerDown(tile);
       return;
     }
     const hit = game.avatarAt(px, py);
     if (hit) {
       setProfileId(hit);
       return;
+    }
+    // Garden plots are not walkable: clicking one opens its card instead.
+    if (tile && snapshot?.room) {
+      const plot = itemAt(snapshot.room, tile[0], tile[1]);
+      if (plot?.kind === "plot") {
+        setPlotPos({ x: plot.x, y: plot.y });
+        return;
+      }
     }
     if (tile) game.moveTo(tile);
   };
@@ -308,6 +423,20 @@ export default function TownPage() {
     }, "image/png");
   };
 
+  // Games and panels belong to the place you opened them in.
+  const areaId = snapshot?.areaId;
+  useEffect(() => {
+    setFishingOpen(false);
+    setCasinoGame(null);
+    setPlotPos(null);
+  }, [areaId]);
+
+  const walletItems = snapshot?.wallet?.items;
+  const casinoItems = useMemo<CasinoItemsApi>(() => ({
+    count: (id) => walletItems?.[id] ?? 0,
+    use: (id) => gameRef.current?.useItem(id) ?? Promise.resolve(false),
+  }), [walletItems]);
+
   const act = (action: ActionId) => gameRef.current?.act(action);
   const member = profileId ? gameRef.current?.memberInfo(profileId) ?? null : null;
   const inRoom = Boolean(snapshot?.room);
@@ -315,8 +444,8 @@ export default function TownPage() {
   return (
     <div className={styles.root}>
       <header className={styles.header}>
-        <button type="button" className={styles.backButton} aria-label="アーケードへ" onClick={() => { window.location.href = "/"; }}>
-          ←<span className={styles.wideOnly}> アーケードへ</span>
+        <button type="button" className={styles.backButton} aria-label="ゲームセンターへ" onClick={() => { window.location.href = "/arcade?from=town"; }}>
+          🎮<span className={styles.wideOnly}> ゲームセンター</span>
         </button>
         <div className={styles.titleBlock}>
           <h1 className={styles.title}>ネオンタウン</h1>
@@ -340,6 +469,31 @@ export default function TownPage() {
                   🍬 {(heldAme ?? snapshot.wallet.ame).toLocaleString()}
                 </button>
               ) : null}
+              {snapshot?.wallet ? (
+                <button type="button" className={styles.pointBadge} title="釣りポイント（釣り具屋）" onClick={() => setPointShop("fishing")}>
+                  🎣 {snapshot.wallet.fishPoints.toLocaleString()}
+                </button>
+              ) : null}
+              <button type="button" className={styles.pointBadge} title="カジノコイン（景品交換所）" onClick={() => setPointShop("casino")}>
+                🪙 {casinoBank.ready ? casinoBank.bank.toLocaleString() : "…"}
+              </button>
+              {snapshot?.wallet ? (
+                <>
+                  <button type="button" className={styles.iconButton} title="ミッション・じっせき" aria-label="ミッション" onClick={() => setMissionsOpen(true)}>
+                    📋
+                    {claimableCount(snapshot.wallet) > 0 ? <span className={styles.badgeDot}>{claimableCount(snapshot.wallet)}</span> : null}
+                  </button>
+                  <button type="button" className={styles.iconButton} title="ペット" aria-label="ペット" onClick={() => setPetPanel("mine")}>
+                    🐾
+                  </button>
+                  <button type="button" className={styles.iconButton} title="ガーデンショップ（たね・畑）" aria-label="ガーデンショップ" onClick={() => setGardenOpen(true)}>
+                    🌱
+                  </button>
+                </>
+              ) : null}
+              <button type="button" className={styles.iconButton} title="ピグとも" aria-label="ピグとも" onClick={() => setFriendsOpen(true)}>
+                👥
+              </button>
               <button type="button" className={styles.iconButton} title="写真をとる" aria-label="写真をとる" onClick={takePhoto}>
                 📷
               </button>
@@ -364,7 +518,7 @@ export default function TownPage() {
                   if (!game) return;
                   const [px, py] = pointerPos(e);
                   const tile = game.tileAt(px, py);
-                  if (editing) updateGhost(tile);
+                  if (editing) editor.pointerMove(tile);
                   else game.setHover(tile);
                 }}
                 onPointerLeave={() => {
@@ -380,9 +534,22 @@ export default function TownPage() {
                 <div key={t.id} className={styles.toast} data-kind={t.kind}>{t.text}</div>
               ))}
             </div>
+            {casinoGame ? (
+              <CasinoItemsContext.Provider value={casinoItems}>
+                <CasinoOverlay game={casinoGame} onClose={() => setCasinoGame(null)} />
+              </CasinoItemsContext.Provider>
+            ) : null}
+            {fishingOpen && gameRef.current ? (
+              <FishingPanel
+                game={gameRef.current}
+                wallet={snapshot?.wallet ?? null}
+                onOpenShop={() => setPointShop("fishing")}
+                onClose={() => setFishingOpen(false)}
+              />
+            ) : null}
             <p className={styles.hint}>
               {editing
-                ? tool === "place" ? "床をクリックして家具をおく" : "家具をクリックして片づける"
+                ? editor.pending || "ブロックを積んで、かいだんで2階へ ・ Ctrl+Z でもどす ・ Rキーで向き"
                 : "床をクリックで移動 ・ 人をクリックでプロフィール ・ 光っている場所から別のエリアへ"}
             </p>
             {snapshot?.status === "replaced" ? (
@@ -455,18 +622,27 @@ export default function TownPage() {
               room={snapshot.room}
               ame={snapshot.wallet?.ame ?? 0}
               ownedFurniture={new Set(snapshot.wallet?.owned.furniture ?? [])}
-              tool={tool}
-              kind={furnitureKind}
-              color={furnitureColor}
-              turned={turned}
-              onTool={setTool}
-              onKind={setFurnitureKind}
-              onColor={setFurnitureColor}
-              onTurned={setTurned}
-              onStyle={(style) => gameRef.current?.roomEdit({ op: "style", ...style })}
-              onClear={() => gameRef.current?.roomEdit({ op: "clear" })}
+              tool={editor.tool}
+              kind={editor.kind}
+              color={editor.color}
+              turned={editor.turned}
+              dir={editor.dir}
+              pending={editor.pending}
+              canUndo={editor.canUndo}
+              canRedo={editor.canRedo}
+              onTool={editor.setTool}
+              onKind={editor.setKind}
+              onColor={editor.setColor}
+              onTurned={editor.setTurned}
+              onDir={editor.setDir}
+              onUndo={editor.undo}
+              onRedo={editor.redo}
+              onLayout={editor.layout}
+              onStyle={(style) => editor.send({ op: "style", ...style })}
+              onClear={() => editor.send({ op: "clear" })}
               onExpand={() => gameRef.current?.buy("expand", { roomId: snapshot.room?.id })}
               onOpenShop={() => setShopTab("shop")}
+              onOpenPointShop={(shop) => setPointShop(shop)}
               onDone={() => setEditing(false)}
             />
           ) : (
@@ -603,7 +779,53 @@ export default function TownPage() {
             setProfileId(null);
             setEditorOpen(true);
           }}
+          onAddFriend={cloudSession && member.friendId && !member.isSelf && member.friendId !== cloudSession.friendId
+            ? () => {
+              void addFriend(member.friendId);
+              setProfileId(null);
+            }
+            : undefined}
           onClose={() => setProfileId(null)}
+        />
+      ) : null}
+
+      {pointShop && snapshot?.wallet && gameRef.current && profile ? (
+        <PointShop
+          game={gameRef.current}
+          wallet={snapshot.wallet}
+          avatar={profile.avatar}
+          coins={casinoBank.bank}
+          initialShop={pointShop}
+          onClose={() => setPointShop(null)}
+        />
+      ) : null}
+
+      {petPanel && snapshot?.wallet && gameRef.current ? (
+        <PetPanel game={gameRef.current} wallet={snapshot.wallet} initialTab={petPanel} onClose={() => setPetPanel(null)} />
+      ) : null}
+
+      {missionsOpen && snapshot?.wallet && gameRef.current ? (
+        <MissionPanel game={gameRef.current} wallet={snapshot.wallet} onClose={() => setMissionsOpen(false)} />
+      ) : null}
+
+      {gardenOpen && snapshot?.wallet && gameRef.current ? (
+        <GardenPanel game={gameRef.current} wallet={snapshot.wallet} onClose={() => setGardenOpen(false)} />
+      ) : null}
+
+      {plotPos && snapshot?.room && gameRef.current ? (() => {
+        const item = itemAt(snapshot.room, plotPos.x, plotPos.y);
+        return item?.kind === "plot" ? (
+          <PlotPopup game={gameRef.current} item={item} wallet={snapshot.wallet} isOwner={snapshot.isOwnRoom} onClose={() => setPlotPos(null)} />
+        ) : null;
+      })() : null}
+
+      {friendsOpen && gameRef.current ? (
+        <FriendsPanel
+          game={gameRef.current}
+          session={cloudSession}
+          shareLocation={shareLocation}
+          onShareLocation={handleShareLocation}
+          onClose={() => setFriendsOpen(false)}
         />
       ) : null}
 
@@ -616,6 +838,7 @@ export default function TownPage() {
           onCancel={() => setEditorOpen(false)}
           ownedParts={new Set(snapshot?.wallet?.owned.parts ?? [])}
           onOpenShop={snapshot?.wallet ? () => setShopTab("shop") : undefined}
+          onOpenPointShop={snapshot?.wallet ? (shop) => setPointShop(shop) : undefined}
         />
       ) : null}
 

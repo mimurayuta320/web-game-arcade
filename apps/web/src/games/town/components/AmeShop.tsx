@@ -213,6 +213,11 @@ export function AmeShop({ game, wallet, avatar, currentRoom, initialTab = "scrat
                 <b>+{earn.login}</b>
                 <em>{wallet.today.login ? "きょうはもらった" : "まだ"}</em>
               </li>
+              <li data-done={wallet.today.coinLogin}>
+                <span>毎日のログインボーナス（カジノコイン）</span>
+                <b>+{earn.loginCoins}</b>
+                <em>{wallet.today.coinLogin ? "きょうはもらった" : "まだ"}</em>
+              </li>
               <li data-done={wallet.today.dress}>
                 <span>きせかえをする（1日1回）</span>
                 <b>+{earn.dress}</b>

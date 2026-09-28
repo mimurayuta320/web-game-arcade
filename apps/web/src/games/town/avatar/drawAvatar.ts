@@ -3,7 +3,7 @@
 // body moves and effects). Local coordinates: feet at (0, 0), up is -y.
 import type { AvatarConfig } from "./parts";
 import type { ActionId } from "./actions";
-import { LINE, ellipse, fillStroke, headScaleX, heartPath, line, starPath, type Ctx, type Facing } from "./draw/common";
+import { LINE, ellipse, fillStroke, headScaleX, heartPath, line, starPath, type Ctx, type Direction8, type Facing } from "./draw/common";
 import {
   drawBrows, drawCheek, drawEyes, drawHead, drawMark, drawMouth, drawNose,
 } from "./draw/face";
@@ -13,6 +13,7 @@ import {
   type ArmPose,
 } from "./draw/body";
 import { drawBackItem, drawGlasses, drawHandItem, drawHat, drawNeck, handItemIsBehind } from "./draw/items";
+import { drawRide, rideLift } from "./draw/ride";
 
 export { shade } from "./draw/common";
 
@@ -21,6 +22,11 @@ export type AvatarPose = {
   facing: Facing;
   /** Mirror horizontally; front+flip faces screen-left. */
   flip: boolean;
+  /**
+   * Heading on screen. When set it decides facing, mirroring and how far the body and head turn
+   * (so walking up-right really faces up-right); `facing`/`flip` are then only a fallback.
+   */
+  dir?: Direction8;
   /** Walk cycle phase in radians, or null when standing still. */
   walkPhase: number | null;
   action?: ActionId | null;
@@ -35,6 +41,31 @@ export type AvatarPose = {
 type Expression = { eyes?: string; mouth?: string; brows?: string; cheek?: string; browRaise?: number };
 
 const HEAD_PIVOT_Y = -33;
+
+type DirView = {
+  facing: Facing;
+  flip: boolean;
+  /** Sideways shift of the face features (0 = straight at the camera). */
+  look: number;
+  /** Lean of the whole body toward the heading (negative = toward +x before mirroring). */
+  skew: number;
+  /** Narrower body when seen from the side. */
+  bodyScale: number;
+  /** Extra head turn (radians) when walking away diagonally. */
+  headTurn: number;
+};
+
+/** Unmirrored variants face screen-right; `flip` mirrors them to face screen-left. */
+const DIR_VIEW: Record<Direction8, DirView> = {
+  "down":       { facing: "front", flip: false, look: 0,   skew: 0,     bodyScale: 1,    headTurn: 0 },
+  "down-right": { facing: "front", flip: false, look: 1.8, skew: -0.03, bodyScale: 1,    headTurn: 0 },
+  "right":      { facing: "front", flip: false, look: 3.8, skew: -0.07, bodyScale: 0.84, headTurn: 0 },
+  "up-right":   { facing: "back",  flip: false, look: 0,   skew: -0.09, bodyScale: 0.92, headTurn: 0.17 },
+  "up":         { facing: "back",  flip: false, look: 0,   skew: 0,     bodyScale: 1,    headTurn: 0 },
+  "up-left":    { facing: "back",  flip: true,  look: 0,   skew: -0.09, bodyScale: 0.92, headTurn: 0.17 },
+  "left":       { facing: "front", flip: true,  look: 3.8, skew: -0.07, bodyScale: 0.84, headTurn: 0 },
+  "down-left":  { facing: "front", flip: true,  look: 1.8, skew: -0.03, bodyScale: 1,    headTurn: 0 },
+};
 
 function expressionFor(action: ActionId | null | undefined, t: number): Expression {
   switch (action) {
@@ -80,6 +111,8 @@ function armsFor(action: ActionId | null | undefined, t: number, swing: number):
       return { left: [-5.5, -36], right: [5.5, -36] };
     case "angry":
       return { left: [-8, -18], right: [8, -18] };
+    case "fish":
+      return { left: [-5, -22], right: [9, -26] };
     default:
       return defaultArms(swing);
   }
@@ -87,11 +120,13 @@ function armsFor(action: ActionId | null | undefined, t: number, swing: number):
 
 /** Highest point of the avatar (for placing chat bubbles), in local units. */
 export function avatarTopY(a: AvatarConfig): number {
-  if (a.hand === "umbrella" || a.hand === "balloon") return -96;
-  if (a.hat === "witch") return -94;
-  if (a.hat === "silk" || a.hat === "bunnyears") return -86;
-  if (a.hair === "mohawk" || a.hat === "halo") return -76;
-  return -70;
+  const up = a.ride && a.ride !== "none" ? rideLift(a.ride) : 0;
+  if (a.hand === "umbrella" || a.hand === "balloon") return -96 - up;
+  if (a.hat === "witch") return -94 - up;
+  if (a.hat === "mushroom" || a.hat === "unicorn" || a.hand === "flag") return -86 - up;
+  if (a.hat === "silk" || a.hat === "bunnyears") return -86 - up;
+  if (a.hair === "mohawk" || a.hat === "halo") return -76 - up;
+  return -70 - up;
 }
 
 // ------------------------------------------------------------------ effects
@@ -202,6 +237,26 @@ function drawEffects(ctx: Ctx, action: ActionId | null | undefined, t: number, c
   }
 }
 
+/** Rod held out toward the water, line and a bobbing float. */
+function drawFishingRod(ctx: Ctx, hand: [number, number], clock: number) {
+  const [hx, hy] = hand;
+  const tip: [number, number] = [hx + 24, hy - 40];
+  line(ctx, [[hx - 3, hy + 4], tip], "#8a5a35", 1.6);
+  const bob = Math.sin(clock * 3) * 1.5;
+  const float: [number, number] = [hx + 34, hy - 6 + bob];
+  ctx.beginPath();
+  ctx.moveTo(tip[0], tip[1]);
+  ctx.quadraticCurveTo(tip[0] + 8, tip[1] + 14, float[0], float[1]);
+  ctx.strokeStyle = "rgba(255,255,255,0.85)";
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+  ellipse(ctx, float[0], float[1], 2.2, 2.2, "#ffffff");
+  ctx.beginPath();
+  ctx.arc(float[0], float[1], 2.2, Math.PI, 0);
+  ctx.fillStyle = "#e0303c";
+  ctx.fill();
+}
+
 function drawPeaceFingers(ctx: Ctx, hand: [number, number]) {
   const [hx, hy] = hand;
   for (const dx of [-1.2, 1.2]) {
@@ -223,11 +278,14 @@ export function drawAvatar(ctx: Ctx, a: AvatarConfig, pose: AvatarPose) {
   const clock = pose.clock ?? 0;
   const walking = pose.walkPhase !== null;
   const swing = walking ? Math.sin(pose.walkPhase as number) : 0;
-  const lift: [number, number] = walking ? [Math.max(0, swing) * 2, Math.max(0, -swing) * 2] : [0, 0];
   const sitting = action === "sit";
+  const ride = a.ride && a.ride !== "none" && !sitting && action !== "lie" ? a.ride : "";
+  // On a ride the legs stay still and the wheels turn instead.
+  const lift: [number, number] = walking && !ride ? [Math.max(0, swing) * 2, Math.max(0, -swing) * 2] : [0, 0];
 
-  let facing = pose.facing;
-  let flip = pose.flip;
+  const view = pose.dir ? DIR_VIEW[pose.dir] : null;
+  let facing = view ? view.facing : pose.facing;
+  let flip = view ? view.flip : pose.flip;
   if (action === "spin") {
     const k = Math.floor(t / 0.15) % 4;
     facing = k === 1 || k === 2 ? "back" : "front";
@@ -242,6 +300,8 @@ export function drawAvatar(ctx: Ctx, a: AvatarConfig, pose: AvatarPose) {
     facing = "front";
   }
   const front = facing === "front";
+  // Actions that pick their own facing (spin, dance, sitting...) switch the heading cues off.
+  const heading = view && facing === view.facing && flip === view.flip ? view : null;
 
   // Vertical offset (bob, hops) and rotation for acrobatics.
   let dy = walking ? -Math.abs(Math.sin(pose.walkPhase as number)) * 1.2 : 0;
@@ -270,12 +330,17 @@ export function drawAvatar(ctx: Ctx, a: AvatarConfig, pose: AvatarPose) {
     cheek: expr.cheek ?? a.cheek,
   };
   const mouth = expr.mouth ?? a.mouth;
-  const look = front ? 1.8 : 0;
+  const look = heading && front ? heading.look : front ? 1.8 : 0;
   const arms = armsFor(action, t, swing);
   const sx = headScaleX(a.face);
 
   ctx.save();
   if (flip) ctx.scale(-1, 1);
+  if (heading && action !== "lie") ctx.transform(heading.bodyScale, 0, heading.skew, 1, 0, 0);
+  if (ride) {
+    drawRide(ctx, ride, walking ? (pose.walkPhase as number) : 0, clock);
+    ctx.translate(0, -rideLift(ride));
+  }
   if (action === "lie") {
     // Lie along the iso y axis (like a bed), head toward the back-right,
     // with the middle of the body on the anchor point.
@@ -342,6 +407,12 @@ export function drawAvatar(ctx: Ctx, a: AvatarConfig, pose: AvatarPose) {
     drawBackItem(ctx, a, "back", "under", clock);
     drawBackItem(ctx, a, "back", "over", clock);
     headGroup(() => {
+      // Walking away diagonally: turn the head toward the heading (the back of the head only, no face).
+      if (heading && heading.headTurn) {
+        ctx.translate(0, HEAD_PIVOT_Y);
+        ctx.rotate(heading.headTurn);
+        ctx.translate(heading.headTurn * 12, -HEAD_PIVOT_Y);
+      }
       drawHead(ctx, a);
       scaledHead(() => {
         drawHairBackView(ctx, a);
@@ -350,6 +421,7 @@ export function drawAvatar(ctx: Ctx, a: AvatarConfig, pose: AvatarPose) {
       });
     });
   }
+  if (action === "fish") drawFishingRod(ctx, arms.right, clock);
   ctx.restore();
 
   // Effects are drawn unmirrored so text and marks stay readable.

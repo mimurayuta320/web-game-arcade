@@ -82,7 +82,7 @@ export default function AdminInquiryViewerPage() {
       window.history.back();
       return;
     }
-    window.location.href = "/";
+    window.location.href = "/arcade";
   };
 
   const readCloudAuth = () => {

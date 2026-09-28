@@ -1,7 +1,7 @@
 // Accessories: hats, glasses, neckwear, back items and hand-held items.
 import type { AvatarConfig } from "../parts";
 import {
-  EYE_X, EYE_Y, LINE, ellipse, fillStroke, heartPath, line, poly, roundRect, shade, starPath, type Ctx, type Facing,
+  EYE_X, EYE_Y, LINE, ellipse, fillStroke, heartPath, line, luminance, poly, roundRect, shade, starPath, type Ctx, type Facing,
 } from "./common";
 import type { Point } from "./body";
 
@@ -47,6 +47,18 @@ export function drawHat(ctx: Ctx, a: AvatarConfig, facing: Facing, look: number,
       ellipse(ctx, 0, -79, 10.5, 2.6, shade(c, 0.15));
       ctx.fillStyle = c === "#e0525c" ? "#2e2e38" : "#e0525c";
       ctx.fillRect(-10.4, -62, 20.8, 3.2);
+      break;
+    case "fedora":
+      ellipse(ctx, 0, -55, 22, 5, shade(c, -0.12));
+      ctx.beginPath();
+      ctx.moveTo(-12, -56);
+      ctx.quadraticCurveTo(-13, -70, -4, -71);
+      ctx.quadraticCurveTo(0, -67, 4, -71);
+      ctx.quadraticCurveTo(13, -70, 12, -56);
+      ctx.closePath();
+      fillStroke(ctx, c);
+      ctx.fillStyle = luminance(c) < 0.3 ? "#e0525c" : "#2e2e38";
+      ctx.fillRect(-11.6, -60, 23.2, 3);
       break;
     case "witch":
       ellipse(ctx, 0, -54, 25, 6, c);
@@ -181,6 +193,77 @@ export function drawHat(ctx: Ctx, a: AvatarConfig, facing: Facing, look: number,
       for (const dy of [0, 4, 8]) ellipse(ctx, x + 6, -55 + dy, 1.1, 1.1, "#f28fb8", false);
       break;
     }
+    case "cowboy":
+      ctx.beginPath();
+      ctx.moveTo(-25, -57);
+      ctx.quadraticCurveTo(-14, -47, 0, -50);
+      ctx.quadraticCurveTo(14, -47, 25, -57);
+      ctx.quadraticCurveTo(14, -52, 0, -54);
+      ctx.quadraticCurveTo(-14, -52, -25, -57);
+      ctx.closePath();
+      fillStroke(ctx, shade(c, -0.12));
+      ctx.beginPath();
+      ctx.moveTo(-12, -54);
+      ctx.quadraticCurveTo(-13, -70, -5, -71);
+      ctx.quadraticCurveTo(0, -66, 5, -71);
+      ctx.quadraticCurveTo(13, -70, 12, -54);
+      ctx.closePath();
+      fillStroke(ctx, c);
+      line(ctx, [[-11.6, -58], [11.6, -58]], "#6b4430", 2);
+      break;
+    case "sprout": {
+      const sway = Math.sin(time * 2) * 1.2;
+      line(ctx, [[0, -55], [sway * 0.5, -61], [sway, -65]], "#3f8f4a", 1.6);
+      for (const side of [-1, 1]) {
+        ctx.save();
+        ctx.translate(sway, -65);
+        ctx.rotate(side * 0.7);
+        ellipse(ctx, side * 5, 0, 5.4, 2.8, "#6cc35a");
+        ctx.restore();
+      }
+      break;
+    }
+    case "mushroom":
+      ctx.beginPath();
+      ctx.moveTo(-21, -52);
+      ctx.bezierCurveTo(-22, -78, 22, -78, 21, -52);
+      ctx.quadraticCurveTo(0, -47, -21, -52);
+      ctx.closePath();
+      fillStroke(ctx, c);
+      for (const [dx, dy, r] of [[-10, -62, 3.2], [3, -68, 3.8], [12, -59, 2.8], [-2, -57, 2.2]]) ellipse(ctx, dx, dy, r, r, "#ffffff", false);
+      break;
+    case "sailorcap":
+      ellipse(ctx, 0, -52, 18, 4, "#ffffff");
+      capDome(ctx, "#ffffff", -52, -70, 14);
+      ctx.fillStyle = c;
+      ctx.fillRect(-14.4, -58, 28.8, 3.4);
+      ellipse(ctx, 0, -60, 2, 2, GOLD, false);
+      break;
+    case "bandana":
+      capDome(ctx, c, -49, -66, 17.6);
+      for (let i = -3; i <= 3; i += 1) ellipse(ctx, i * 4.6, -55 - Math.abs(i) * 0.4, 0.9, 0.9, "#ffffff", false);
+      if (back) {
+        poly(ctx, [[-2, -51], [-9, -46], [-3, -45.5]], shade(c, -0.15));
+        poly(ctx, [[2, -51], [9, -46], [3, -45.5]], shade(c, -0.15));
+      } else {
+        line(ctx, [[-17.6, -49], [17.6, -49]], shade(c, -0.2), 2.2);
+      }
+      break;
+    case "miner":
+      capDome(ctx, c, -49, -68, 18.4);
+      ellipse(ctx, 0, -49.5, 20, 3.2, shade(c, -0.15));
+      roundRect(ctx, -4, -66, 8, 6, 2, "#f7f1e3");
+      if (!back) {
+        ctx.globalAlpha = 0.35 + (Math.sin(time * 5) + 1) * 0.1;
+        poly(ctx, [[-3, -62], [3, -62], [10, -50], [-10, -50]], "#fff6a8", false);
+        ctx.globalAlpha = 1;
+      }
+      break;
+    case "unicorn":
+      poly(ctx, [[-3, -57], [3, -57], [0, -76]], "#f7f1e3");
+      for (const t of [0.25, 0.5, 0.75]) line(ctx, [[-2.6 * (1 - t), -57 - t * 19], [2.6 * (1 - t), -57 - t * 19 + 2]], "#d8b8e8", 0.8);
+      for (const side of [-1, 1]) poly(ctx, [[side * 6, -56], [side * 10, -64], [side * 13, -55]], c);
+      break;
     case "halo": {
       const y = -70 + Math.sin(time * 3) * 1.2;
       ctx.beginPath();
@@ -262,6 +345,25 @@ export function drawGlasses(ctx: Ctx, a: AvatarConfig, look: number) {
       ctx.fill();
       break;
     }
+    case "monocle":
+      ctx.beginPath();
+      ctx.arc(rx, y, 4.6, 0, Math.PI * 2);
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ellipse(ctx, rx - 1.6, y - 1.6, 1.2, 0.8, "rgba(255,255,255,0.7)", false);
+      ctx.beginPath();
+      ctx.moveTo(rx + 3, y + 3.6);
+      ctx.quadraticCurveTo(rx + 5, y + 10, rx + 2, y + 14);
+      ctx.strokeStyle = "rgba(245,207,71,0.8)";
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+      break;
+    case "threed":
+      roundRect(ctx, lx - 4.6, y - 3.4, 9, 6.4, 1.2, "#ff5b6b");
+      roundRect(ctx, rx - 4.4, y - 3.4, 9, 6.4, 1.2, "#3fd2ff");
+      line(ctx, [[lx + 4.4, y - 0.5], [rx - 4.2, y - 0.5]], "#f7f1e3", 1.4);
+      break;
     case "mask":
       ctx.beginPath();
       ctx.roundRect(-8 + look * 0.6, -39.5, 16, 9.5, 3.5);
@@ -313,6 +415,33 @@ export function drawNeck(ctx: Ctx, a: AvatarConfig, facing: Facing) {
         ellipse(ctx, Math.cos(ang) * 5.4, -31 + Math.sin(ang) * 5, 0.8, 0.8, "#ffffff", true);
       }
       ellipse(ctx, 0, -25.4, 1.5, 1.8, c);
+      break;
+    case "lei": {
+      const colors = [c, "#ffd84a", "#ff9ac0", "#ffffff"];
+      for (let i = 0; i <= 9; i += 1) {
+        const ang = Math.PI * (0.05 + (i / 9) * 0.9);
+        ellipse(ctx, Math.cos(ang) * 7.4, -31.4 + Math.sin(ang) * 5.4, 2.2, 2.2, colors[i % colors.length]);
+      }
+      break;
+    }
+    case "camera":
+      if (!front) {
+        line(ctx, [[-6, -31], [0, -33], [6, -31]], "#2e2e38", 1);
+        return;
+      }
+      line(ctx, [[-6, -31], [-3, -19]], "#2e2e38", 1);
+      line(ctx, [[6, -31], [3, -19]], "#2e2e38", 1);
+      roundRect(ctx, -5.6, -20.4, 11.2, 7.6, 1.6, "#3a3a46");
+      ellipse(ctx, 0, -16.6, 2.6, 2.6, "#9aa0aa");
+      ellipse(ctx, 0, -16.6, 1.4, 1.4, "#2a3a5a", false);
+      break;
+    case "medal":
+      line(ctx, [[-5, -31], [0, -22]], c, 2);
+      line(ctx, [[5, -31], [0, -22]], shade(c, -0.2), 2);
+      if (!front) return;
+      ellipse(ctx, 0, -20, 4.2, 4.2, GOLD);
+      starPath(ctx, 0, -20, 2.4);
+      fillStroke(ctx, "#fff1b8", false);
       break;
     case "bell":
       roundRect(ctx, -6.6, -31.2, 13.2, 2.4, 1.2, c);
@@ -458,6 +587,28 @@ export function drawBackItem(ctx: Ctx, a: AvatarConfig, facing: Facing, layer: "
         line(ctx, [[5.5, -29.5], [6.5, -16]], "#3e4552", 1.8);
       }
       break;
+    case "turtle":
+      if (!front && layer === "over") {
+        ellipse(ctx, 0, -21, 11.5, 12.4, "#5f9a4a");
+        ellipse(ctx, 0, -21, 8, 8.6, "#7cba5c", false);
+        for (const [dx, dy] of [[0, -23], [-5, -18], [5, -18], [0, -15], [-5, -26], [5, -26]]) ellipse(ctx, dx, dy, 2.4, 2.4, "#4a8038", false);
+      } else if (front && layer === "under") {
+        ellipse(ctx, 0, -21, 12.6, 12.4, "#4a8038");
+      }
+      break;
+    case "surfboard":
+      if (!front && layer === "over") {
+        ctx.beginPath();
+        ctx.ellipse(0, -18, 6.4, 25, 0.1, 0, Math.PI * 2);
+        fillStroke(ctx, c);
+        line(ctx, [[0.6, -42], [-0.4, 6]], "#ffffff", 1.4);
+        ellipse(ctx, 0, -14, 3, 3, "#ffffff", false);
+      } else if (front && layer === "under") {
+        ctx.beginPath();
+        ctx.ellipse(-9, -20, 4.4, 24, -0.18, 0, Math.PI * 2);
+        fillStroke(ctx, c);
+      }
+      break;
     case "tail": {
       const wag = Math.sin(time * 5) * 3;
       if ((front && layer === "under") || (!front && layer === "over")) {
@@ -587,6 +738,77 @@ export function drawHandItem(ctx: Ctx, a: AvatarConfig, hand: Point, time: numbe
       ctx.restore();
       break;
     }
+    case "lantern": {
+      const sw = Math.sin(time * 2.4) * 1.5;
+      line(ctx, [[hx, hy - 1], [hx + sw, hy + 4]], "#6b4a33", 0.9);
+      const lx = hx + sw;
+      roundRect(ctx, lx - 4, hy + 3, 8, 2, 1, "#3a2a20");
+      ellipse(ctx, lx, hy + 9, 4.6, 5.6, c === "#f28fb8" ? "#e0525c" : c);
+      ctx.globalAlpha = 0.5 + Math.sin(time * 6) * 0.1;
+      ellipse(ctx, lx, hy + 9, 2.4, 3, "#fff6a8", false);
+      ctx.globalAlpha = 1;
+      for (const dy of [7, 9, 11]) line(ctx, [[lx - 4, hy + dy], [lx + 4, hy + dy]], "rgba(60,20,20,0.35)", 0.5);
+      roundRect(ctx, lx - 3, hy + 14, 6, 1.6, 0.8, "#3a2a20");
+      break;
+    }
+    case "sword":
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(0.35);
+      roundRect(ctx, -1, -22, 2, 19, 0.6, "#dfe6ee");
+      poly(ctx, [[-1, -22], [1, -22], [0, -26]], "#dfe6ee");
+      roundRect(ctx, -4, -4, 8, 2, 0.8, GOLD);
+      roundRect(ctx, -1.2, -2, 2.4, 6, 0.8, c === "#f28fb8" ? "#6b4430" : c);
+      ctx.restore();
+      break;
+    case "lollipop":
+      line(ctx, [[hx, hy + 3], [hx + 3, hy - 9]], "#f7f1e3", 1.2);
+      ellipse(ctx, hx + 3.4, hy - 13, 6, 6, c);
+      ctx.beginPath();
+      ctx.arc(hx + 3.4, hy - 13, 3.6, 0, Math.PI * 1.6);
+      ctx.strokeStyle = "rgba(255,255,255,0.75)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      break;
+    case "flag": {
+      const wave = Math.sin(time * 5) * 1.6;
+      line(ctx, [[hx, hy + 3], [hx + 2, -74]], "#9b6a47", 1.4);
+      ctx.beginPath();
+      ctx.moveTo(hx + 2, -74);
+      ctx.quadraticCurveTo(hx + 10, -76 + wave, hx + 17, -73);
+      ctx.lineTo(hx + 17, -63);
+      ctx.quadraticCurveTo(hx + 10, -66 + wave, hx + 2, -63);
+      ctx.closePath();
+      fillStroke(ctx, c);
+      ellipse(ctx, hx + 9.5, -68.4, 2.2, 2.2, "#ffffff", false);
+      break;
+    }
+    case "fishingrod": {
+      ctx.beginPath();
+      ctx.moveTo(hx - 1, hy + 2);
+      ctx.quadraticCurveTo(hx + 8, hy - 20, hx + 20, hy - 20);
+      ctx.strokeStyle = "#8b5a2b";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      const bob = Math.sin(time * 2) * 1;
+      line(ctx, [[hx + 20, hy - 20], [hx + 20, hy + 2 + bob]], "rgba(58,38,38,0.6)", 0.5);
+      ellipse(ctx, hx + 20, hy + 4 + bob, 1.8, 2.2, "#e0525c");
+      break;
+    }
+    case "cards":
+      for (let k = -1; k <= 1; k += 1) {
+        ctx.save();
+        ctx.translate(hx, hy + 1);
+        ctx.rotate(k * 0.38);
+        roundRect(ctx, -2.8, -10, 5.6, 8, 0.9, "#ffffff");
+        ctx.fillStyle = k === 0 ? "#e0525c" : "#2e2e38";
+        ctx.font = "bold 5px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(k === 0 ? "♥" : "♠", 0, -6);
+        ctx.restore();
+      }
+      break;
     case "drink":
       roundRect(ctx, hx - 2.6, hy - 6, 5.2, 8, 1.2, "rgba(255,255,255,0.8)");
       roundRect(ctx, hx - 2.2, hy - 3.5, 4.4, 5, 0.8, c, false);

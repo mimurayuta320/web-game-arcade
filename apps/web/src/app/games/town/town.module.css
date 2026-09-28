@@ -722,7 +722,17 @@
 
 .toolToggle {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+.toolToggle .chip {
+  white-space: nowrap;
+}
+
+.toolToggle .chip:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .furnitureGrid {
@@ -1278,3 +1288,529 @@
     padding: 4px 6px;
   }
 }
+
+/* ------------------------------------------------------------ friends (ピグとも) */
+
+.friendsPanel {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--town-panel);
+  color: var(--town-ink);
+}
+
+.friendToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.friendList {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.friendRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--town-line);
+  border-radius: 12px;
+  background: var(--town-soft);
+}
+
+.friendName {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.friendWhere {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--town-muted);
+}
+
+.friendDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #c9bfb6;
+}
+
+.friendDot[data-online="true"] {
+  background: #35b56a;
+}
+
+.friendActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.friendGhostButton {
+  border: 1px solid var(--town-line);
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: var(--town-panel);
+  color: var(--town-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.friendGhostButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.friendSearch {
+  display: flex;
+  gap: 8px;
+}
+
+.friendInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--town-line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+  color: var(--town-ink);
+  background: var(--town-panel);
+}
+
+/* ------------------------------------------------------------ fishing */
+
+.fishingPanel {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 7;
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 20px));
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 3px solid #3f8fd0;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 28px rgba(20, 60, 100, 0.3);
+  color: var(--town-ink);
+  user-select: none;
+  touch-action: none;
+  animation: fishIn 0.22s ease-out;
+}
+
+@keyframes fishIn {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.fishingHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fishingHeader strong {
+  font-size: 15px;
+}
+
+.fishingPoints {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2f6fa8;
+  background: #e4f1fb;
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.fishingLink {
+  border: 1px solid var(--town-line);
+  background: var(--town-panel);
+  color: var(--town-ink);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.fishingLink:first-of-type {
+  margin-left: auto;
+}
+
+.fishingLink:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.fishingBody {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  text-align: center;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.fishingGear {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.fishingGear label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fishingGear select {
+  border: 1px solid var(--town-line);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 13px;
+  background: #ffffff;
+  color: var(--town-ink);
+}
+
+.fishingNote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--town-muted);
+}
+
+.fishingBig {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.fishFloat {
+  font-size: 34px;
+  line-height: 1;
+  animation: floatBob 1.4s ease-in-out infinite;
+}
+
+.fishFloat[data-bite="true"] {
+  animation: floatBite 0.18s ease-in-out infinite alternate;
+}
+
+@keyframes floatBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+@keyframes floatBite {
+  from { transform: translateY(0) scale(1); }
+  to { transform: translateY(6px) scale(1.2); }
+}
+
+.reelGrade {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  min-height: 1.3em;
+}
+
+.reelGrade[data-grade="perfect"] { color: #e8367f; }
+.reelGrade[data-grade="great"] { color: #f08a3c; }
+.reelGrade[data-grade="hit"] { color: #d9a400; }
+.reelGrade[data-grade="miss"] { color: #9aa0aa; }
+
+.reelTrack {
+  position: relative;
+  width: 100%;
+  height: 34px;
+  border-radius: 999px;
+  background: #cfe3f2;
+  overflow: hidden;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.reelZone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.reelZone[data-zone="hit"] { background: #ffe07a; }
+.reelZone[data-zone="great"] { background: #ffb15c; }
+.reelZone[data-zone="perfect"] { background: #ff6fa8; }
+
+.reelNeedle {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+.reelNeedle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  bottom: -8px;
+  width: 3px;
+  transform: translateX(-50%);
+  background: #1f2a44;
+  z-index: -1;
+}
+
+.catchGauge {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: #eceff3;
+  overflow: hidden;
+}
+
+.catchGauge span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #46b3a0, #35d07f);
+  transition: width 0.08s linear;
+}
+
+.fishResultEmoji {
+  margin: 0;
+  font-size: 46px;
+  line-height: 1;
+}
+
+.recordTag {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e8367f;
+  color: #ffffff;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.fishBook {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+.fishBook li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--town-soft);
+  font-size: 13px;
+}
+
+.fishBook li[data-caught="false"] {
+  opacity: 0.6;
+}
+
+.fishBook small {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--town-muted);
+}
+
+.fishBookEmoji {
+  font-size: 20px;
+}
+
+/* ------------------------------------------------------------ point shops */
+
+.shopEmoji {
+  display: grid;
+  place-items: center;
+  width: 80px;
+  height: 80px;
+  font-size: 40px;
+}
+
+.shopDesc {
+  font-size: 11px;
+  color: var(--town-muted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.pointBadge {
+  border: 1px solid var(--town-line);
+  background: var(--town-panel);
+  color: var(--town-ink);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ---- pets & garden ---- */
+.petNameInput {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.petFoodBar { margin: 0 0 10px; font-size: 13px; }
+.petSelect {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.petList { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.petCard {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+.petCard[data-active="true"] { border-color: #ffb84d; background: rgba(255, 184, 77, 0.12); }
+.petBody { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.petName { display: flex; align-items: center; gap: 8px; font-size: 15px; flex-wrap: wrap; }
+.petRename { display: flex; gap: 6px; align-items: center; }
+.petRename .petNameInput { margin: 0; }
+.petActions { display: flex; gap: 6px; flex-wrap: wrap; }
+.linkButton {
+  border: none;
+  background: none;
+  color: #2a6fd0;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.gaugeRow { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.gaugeLabel { width: 150px; flex: none; opacity: 0.85; }
+.gaugeTrack { flex: 1; height: 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.1); overflow: hidden; }
+.gaugeFill { display: block; height: 100%; border-radius: 4px; transition: width 0.3s; }
+.gaugeFill[data-tone="hunger"] { background: linear-gradient(90deg, #ffb84d, #ffd97a); }
+.gaugeFill[data-tone="bond"] { background: linear-gradient(90deg, #ff6f9c, #ffa6c4); }
+.buyRow { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.plotCard {
+  width: min(340px, calc(100vw - 32px));
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--town-panel);
+  color: var(--town-ink);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  display: grid;
+  gap: 10px;
+}
+.plotStatus { display: flex; align-items: center; gap: 12px; margin: 0; font-size: 14px; }
+
+/* ---- circular reel (a shrinking circle: let go inside the frame) ---- */
+.reelDial { width: min(230px, 60vw); height: auto; display: block; margin: 0 auto; touch-action: none; user-select: none; }
+.reelBody { touch-action: none; user-select: none; }
+.dialArena { fill: #eaf3fa; stroke: #b9d3e6; stroke-width: 3; }
+.dialBand { fill: none; }
+.dialBand[data-zone="hit"] { stroke: rgba(255, 224, 122, 0.9); }
+.dialBand[data-zone="great"] { stroke: rgba(255, 177, 92, 0.95); }
+.dialBand[data-zone="perfect"] { stroke: rgba(255, 111, 168, 1); }
+.dialCatch { fill: rgba(53, 208, 127, 0.18); stroke: #35d07f; stroke-width: 4; }
+.dialCatch[data-mode="wait"] { stroke-dasharray: 8 6; }
+.dialCatch[data-grade="perfect"] { stroke: #e8367f; fill: rgba(232, 54, 127, 0.18); }
+.dialCatch[data-grade="great"] { stroke: #f08a3c; fill: rgba(240, 138, 60, 0.18); }
+.dialCatch[data-grade="hit"] { stroke: #d9a400; fill: rgba(217, 164, 0, 0.16); }
+.dialCatch[data-grade="miss"] { stroke: #d64545; fill: rgba(214, 69, 69, 0.15); }
+.dialFish { font-size: 18px; }
+.dialGrade { font-size: 17px; font-weight: 900; fill: #9aa0aa; }
+.dialGrade[data-grade="hold"] { fill: #35a878; }
+.dialGrade[data-grade="perfect"] { fill: #e8367f; }
+.dialGrade[data-grade="great"] { fill: #f08a3c; }
+.dialGrade[data-grade="hit"] { fill: #d9a400; }
+.dialGrade[data-grade="miss"] { fill: #d64545; }
+.dialTime { font-size: 11px; fill: #5a4a4a; }
+/* ---- missions & achievements ---- */
+.iconButton { position: relative; }
+.badgeDot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #e0303c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+}
+.questList { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.questRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.questRow[data-done="true"][data-claimed="false"] { border-color: #ffb84d; background: rgba(255, 184, 77, 0.14); }
+.questRow[data-claimed="true"] { opacity: 0.55; }
+.questText { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.questText small { opacity: 0.7; }
+.questBar { display: block; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.1); overflow: hidden; }
+.questBar span { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #46b3a0, #35d07f); }
+.questBonus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(0, 0, 0, 0.25);
+  font-weight: 700;
+}
+.questBonus[data-ready="true"] { border-color: #ffb84d; background: rgba(255, 184, 77, 0.14); }
+
+/* ---- room editor (building, layouts) ---- */
+.editorHint { margin: 4px 0 8px; font-size: 12px; opacity: 0.8; line-height: 1.5; }
+.layoutBox { display: grid; gap: 6px; padding: 10px; margin-bottom: 8px; border-radius: 12px; background: rgba(0, 0, 0, 0.04); border: 1px solid rgba(0, 0, 0, 0.08); }
+.layoutRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.layoutInfo { flex: 1; min-width: 90px; opacity: 0.75; font-size: 12px; }

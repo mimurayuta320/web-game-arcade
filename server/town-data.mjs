@@ -19,8 +19,22 @@ export const FLAT_FURNITURE = new Set(economy.flatFurniture);
 export const WALL_STYLES = new Set(economy.wallStyles);
 export const FLOOR_STYLES = new Set(economy.floorStyles);
 export const ROOM_SIZES = economy.rooms.sizes;
-export const LIMITED_PARTS = new Map(economy.limitedParts.map((p) => [`${p.key}:${p.id}`, p]));
-export const LIMITED_FURNITURE = new Map(economy.limitedFurniture.map((f) => [f.kind, f]));
+/** Point-shop entries (fishing points / casino coins), by id. */
+export const POINT_SHOP = new Map(economy.pointShop.map((e) => [e.id, e]));
+// Limited = must be owned before use. Point-shop parts/furniture are limited too (bought with other currencies).
+export const LIMITED_PARTS = new Map([
+  ...economy.limitedParts.map((p) => [`${p.key}:${p.id}`, p]),
+  ...economy.pointShop.filter((e) => e.key && e.part).map((e) => [`${e.key}:${e.part}`, { key: e.key, id: e.part, label: e.label, price: e.price, shop: e.shop }]),
+]);
+export const LIMITED_FURNITURE = new Map([
+  ...economy.limitedFurniture.map((f) => [f.kind, f]),
+  ...economy.pointShop.filter((e) => e.furniture).map((e) => [e.furniture, { kind: e.furniture, label: e.label, price: e.price, shop: e.shop }]),
+]);
+export const RODS = new Map(economy.fishing.rods.map((r) => [r.id, r]));
+export const BAITS = new Map(economy.fishing.baits.map((b) => [b.id, b]));
+export const CASINO_ITEMS = new Map(economy.casinoItems.map((i) => [i.id, i]));
+export const PET_SPECIES = new Map(economy.pets.species.map((s) => [s.id, s]));
+export const CROPS = new Map(economy.garden.crops.map((c) => [c.id, c]));
 
 /** playerId -> player */
 export const players = new Map();
@@ -45,18 +59,278 @@ export function newRoomId() {
   return id;
 }
 
+// ------------------------------------------------------------ cloud accounts
+
+/** cloud account key (lower-cased user id) -> playerId */
+const linkIndex = new Map();
+
+export function cloudKeyOf(userId) {
+  return String(userId || "").trim().toLowerCase().slice(0, 24);
+}
+
+/**
+ * Which player record a join uses.
+ * - Logged in (verified): the account's own record. The first time an account joins it takes over
+ *   this browser's record (so existing アメ/rooms come along) unless that already belongs to another account.
+ * - Guest: this browser's record, unless an account has taken it over — then a separate guest record,
+ *   so a logged-out visitor on a shared browser can't spend the account's アメ or edit its rooms.
+ */
+export function resolvePlayerId(clientKey, cloudKey) {
+  const browserId = clientKey ? playerIdFor(clientKey) : "";
+  if (cloudKey) {
+    const linked = linkIndex.get(cloudKey);
+    if (linked && players.has(linked)) return linked;
+    const browserPlayer = browserId ? players.get(browserId) : null;
+    const id = browserId && !browserPlayer?.cloudKey ? browserId : newPlayerId();
+    linkIndex.set(cloudKey, id);
+    return id;
+  }
+  if (browserId && players.get(browserId)?.cloudKey) return playerIdFor(`${clientKey}:guest`);
+  return browserId;
+}
+
+/** The account's player id if it has joined town before, else "". */
+export function linkedPlayerId(cloudKey) {
+  const id = linkIndex.get(cloudKey);
+  return id && players.has(id) ? id : "";
+}
+
+function newPlayerId() {
+  let id = "";
+  do id = crypto.randomBytes(8).toString("hex");
+  while (rooms.has(id) || players.has(id));
+  return id;
+}
+
+export function bindCloud(player, cloudKey) {
+  if (player.cloudKey === cloudKey) return;
+  player.cloudKey = cloudKey;
+  linkIndex.set(cloudKey, player.id);
+  scheduleSave();
+}
+
+/** Name + avatar kept on the server for logged-in players so every device shows the same look. */
+export function sanitizeProfile(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const avatar = {};
+  for (const [key, value] of Object.entries(raw.avatar && typeof raw.avatar === "object" ? raw.avatar : {})) {
+    if (key === "wearItems") continue;
+    const text = String(value ?? "").trim().slice(0, 24);
+    if (/^[a-zA-Z]{1,16}$/.test(key) && text && /^[a-z0-9#-]*$/i.test(text)) avatar[key] = text;
+  }
+  const wearItems = raw.avatar && typeof raw.avatar === "object" && Array.isArray(raw.avatar.wearItems) ? raw.avatar.wearItems : null;
+  if (wearItems) {
+    avatar.wearItems = wearItems.slice(0, 20).flatMap((rawItem) => {
+      if (!rawItem || typeof rawItem !== "object") return [];
+      const key = String(rawItem.key || "").trim();
+      const id = String(rawItem.id || "").trim().slice(0, 24);
+      const color = String(rawItem.color || "").trim().slice(0, 24);
+      if (!/^(top|bottom|onepiece|shoes|hat|glasses|neck|back|hand|ride)$/.test(key) || !/^[a-z0-9-]+$/i.test(id)) return [];
+      return [{ key, id, ...(/^#[0-9a-f]{6}$/i.test(color) ? { color: color.toLowerCase() } : {}) }];
+    });
+  }
+  return { name: normalizeName(raw.name), avatar };
+}
+
 export function normalizeName(raw) {
   const trimmed = String(raw || "").trim().replace(/\s+/g, " ");
   return trimmed.slice(0, 12) || "ゲスト";
 }
 
 function freshDaily() {
-  return { day: dayKey(), login: false, dress: false, onlineMs: 0, onlineEarned: 0, praiseReceived: 0, praiseGiven: 0, visits: [] };
+  return {
+    day: dayKey(), login: false, coinLogin: false, petGift: false, petBond: 0, waterAme: 0, dress: false, onlineMs: 0, onlineEarned: 0,
+    praiseReceived: 0, praiseGiven: 0, visits: [], stats: {}, claimed: {}, bonus: false,
+  };
+}
+
+/** Fishing gear, fishing points, the fish log and casino items (added after the first release). */
+function ensureExtras(player, raw = player) {
+  player.fishPoints = Math.max(0, Math.floor(Number(raw.fishPoints) || 0));
+  const fishing = raw.fishing && typeof raw.fishing === "object" ? raw.fishing : {};
+  const rods = new Set(["bamboo", ...(Array.isArray(fishing.rods) ? fishing.rods : [])].filter((r) => RODS.has(r)));
+  const baits = {};
+  for (const [id, n] of Object.entries(fishing.baits && typeof fishing.baits === "object" ? fishing.baits : {})) {
+    const count = Math.floor(Number(n) || 0);
+    if (BAITS.has(id) && count > 0) baits[id] = count;
+  }
+  const rod = rods.has(fishing.rod) ? fishing.rod : "bamboo";
+  const bait = baits[fishing.bait] ? fishing.bait : "none";
+  player.fishing = { rod, bait, rods: [...rods], baits };
+  const log = {};
+  for (const [id, entry] of Object.entries(raw.fishLog && typeof raw.fishLog === "object" ? raw.fishLog : {})) {
+    const count = Math.floor(Number(entry?.count) || 0);
+    if (count > 0) log[id] = { count, best: Math.max(0, Number(entry.best) || 0) };
+  }
+  player.fishLog = log;
+  const items = {};
+  for (const [id, n] of Object.entries(raw.items && typeof raw.items === "object" ? raw.items : {})) {
+    const count = Math.floor(Number(n) || 0);
+    if (CASINO_ITEMS.has(id) && count > 0) items[id] = count;
+  }
+  player.items = items;
+
+  // Pets: { id, species, name, bond (0-100), fedAt } plus which one walks with the owner.
+  const pets = [];
+  for (const entry of Array.isArray(raw.pets) ? raw.pets : []) {
+    if (pets.length >= economy.pets.max || !PET_SPECIES.has(entry?.species) || !/^[0-9a-f]{12}$/.test(String(entry.id))) continue;
+    pets.push({
+      id: String(entry.id),
+      species: entry.species,
+      name: normalizePetName(entry.name, entry.species),
+      bond: Math.max(0, Math.min(100, Math.floor(Number(entry.bond) || 0))),
+      fedAt: Number(entry.fedAt) || nowTs(),
+      pattedAt: 0,
+    });
+  }
+  player.pets = pets;
+  player.activePet = pets.some((p) => p.id === raw.activePet) ? raw.activePet : "";
+  // Garden: seeds to plant and harvested goods, plus pet food.
+  const countMap = (source, allowed) => {
+    const out = {};
+    for (const [id, n] of Object.entries(source && typeof source === "object" ? source : {})) {
+      const count = Math.floor(Number(n) || 0);
+      if (allowed.has(id) && count > 0) out[id] = Math.min(count, 9999);
+    }
+    return out;
+  };
+  player.seeds = countMap(raw.seeds, CROPS);
+  player.goods = countMap(raw.goods, CROPS);
+  player.petFood = Math.max(0, Math.min(9999, Math.floor(Number(raw.petFood) || 0)));
+  // Lifetime counters (for achievements) and which achievements have been claimed.
+  const stats = {};
+  for (const [id, n] of Object.entries(raw.stats && typeof raw.stats === "object" ? raw.stats : {})) {
+    const count = Math.floor(Number(n) || 0);
+    if (/^[a-zA-Z]{1,16}$/.test(id) && count > 0) stats[id] = Math.min(count, 1e9);
+  }
+  player.stats = stats;
+  const achIds = new Set(ACHIEVEMENTS.map((a) => a.id));
+  player.achClaimed = {};
+  for (const id of Object.keys(raw.achClaimed && typeof raw.achClaimed === "object" ? raw.achClaimed : {})) {
+    if (achIds.has(id)) player.achClaimed[id] = true;
+  }
+}
+
+export function normalizePetName(raw, species) {
+  const name = String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, economy.pets.nameMax);
+  return name || PET_SPECIES.get(species)?.label || "ペット";
+}
+
+/** 0 = full, 100 = starving. */
+export function petHunger(pet, now = nowTs()) {
+  return Math.max(0, Math.min(100, Math.floor(((now - pet.fedAt) / economy.pets.hungerFullMs) * 100)));
+}
+
+export function petLevel(pet) {
+  return Math.min(4, Math.floor(pet.bond / 25));
+}
+
+/** What other players see of someone's companion. */
+export function publicPet(player) {
+  const pet = player?.activePet ? player.pets.find((p) => p.id === player.activePet) : null;
+  return pet ? { species: pet.species, name: pet.name, level: petLevel(pet) } : null;
 }
 
 export function dailyOf(player) {
   if (!player.daily || player.daily.day !== dayKey()) player.daily = freshDaily();
+  if (!player.daily.stats || typeof player.daily.stats !== "object") player.daily.stats = {};
+  if (!player.daily.claimed || typeof player.daily.claimed !== "object") player.daily.claimed = {};
   return player.daily;
+}
+
+// ------------------------------------------------------------ missions & achievements
+
+const QUEST_POOL = economy.quests.pool;
+const ACHIEVEMENTS = economy.achievements;
+
+/** Count something the player did: feeds both today's missions and the lifetime achievements. */
+export function bump(player, stat, n = 1) {
+  if (!player || n <= 0) return;
+  const daily = dailyOf(player);
+  daily.stats[stat] = (daily.stats[stat] || 0) + n;
+  player.stats[stat] = Math.min(1e9, (player.stats[stat] || 0) + n);
+  scheduleSave();
+}
+
+function seededRandom(seed) {
+  let s = crypto.createHash("sha256").update(seed).digest().readUInt32LE(0) || 1;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+/** Today's missions: a fixed pick per player and day, never two of the same kind. */
+function todaysMissions(player) {
+  const random = seededRandom(`${dayKey()}:${player.id}`);
+  const pool = [...QUEST_POOL];
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const picked = [];
+  const used = new Set();
+  for (const q of pool) {
+    if (picked.length >= economy.quests.dailyCount) break;
+    if (used.has(q.stat)) continue;
+    used.add(q.stat);
+    picked.push(q);
+  }
+  return picked;
+}
+
+export function missionsOf(player) {
+  const daily = dailyOf(player);
+  const list = todaysMissions(player).map((q) => ({
+    id: q.id, label: q.label, target: q.target, reward: q.reward,
+    progress: Math.min(q.target, daily.stats[q.stat] || 0), claimed: Boolean(daily.claimed[q.id]),
+  }));
+  return {
+    list,
+    bonus: { reward: economy.quests.allBonus, ready: list.every((m) => m.claimed), claimed: Boolean(daily.bonus) },
+  };
+}
+
+/** Amount to pay out, or 0 when the mission is unknown, not finished or already claimed. */
+export function claimMission(player, id) {
+  const mission = missionsOf(player).list.find((m) => m.id === id);
+  if (!mission || mission.claimed || mission.progress < mission.target) return 0;
+  dailyOf(player).claimed[id] = true;
+  scheduleSave();
+  return mission.reward;
+}
+
+export function claimMissionBonus(player) {
+  const { bonus } = missionsOf(player);
+  if (!bonus.ready || bonus.claimed) return 0;
+  dailyOf(player).bonus = true;
+  scheduleSave();
+  return bonus.reward;
+}
+
+function achievementProgress(player, stat) {
+  switch (stat) {
+    case "species": return Object.keys(player.fishLog).length;
+    case "pets": return player.pets.length;
+    case "maxBond": return player.pets.reduce((m, p) => Math.max(m, p.bond), 0);
+    case "furniture": return player.rooms.reduce((sum, id) => sum + (rooms.get(id)?.items.length || 0), 0);
+    default: return player.stats[stat] || 0;
+  }
+}
+
+export function achievementsOf(player) {
+  return ACHIEVEMENTS.map((a) => {
+    const progress = Math.min(a.target, achievementProgress(player, a.stat));
+    return { id: a.id, label: a.label, desc: a.desc, target: a.target, reward: a.reward, progress, claimed: Boolean(player.achClaimed[a.id]) };
+  });
+}
+
+export function claimAchievement(player, id) {
+  const a = achievementsOf(player).find((x) => x.id === id);
+  if (!a || a.claimed || a.progress < a.target) return 0;
+  player.achClaimed[id] = true;
+  scheduleSave();
+  return a.reward;
 }
 
 // ------------------------------------------------------------ rooms
@@ -73,6 +347,20 @@ export function maxItems(size) {
   return economy.rooms.maxItems[String(size)] ?? 50;
 }
 
+// ------------------------------------------------------------ building: levels, blocks, stairs
+
+export const MAX_LEVEL = economy.rooms.maxLevel ?? 3;
+export const LAYOUT_SLOTS = economy.rooms.layoutSlots ?? 3;
+export const HALF_BLOCK_KINDS = new Set(economy.build.halfBlocks || []);
+export const BLOCK_KINDS = new Set([...economy.build.blocks, ...(economy.build.halfBlocks || [])]);
+export const STAIRS_KINDS = new Set(economy.build.stairs);
+const isBlock = (item) => BLOCK_KINDS.has(item.kind);
+const isStairs = (item) => STAIRS_KINDS.has(item.kind);
+export const blockHeight = (item) => HALF_BLOCK_KINDS.has(item.kind) ? 0.5 : isBlock(item) ? 1 : 0;
+/** The level an item sits on: 0 = the floor, 1 = on top of one block, ... */
+const level = (item) => item.z || 0;
+const pieceHeight = (item) => isBlock(item) ? blockHeight(item) : 1;
+
 export function footprint(item) {
   const [w, h] = FURNITURE[item.kind] || [1, 1];
   return item.rot ? { w: h, h: w } : { w, h };
@@ -83,26 +371,83 @@ function covers(item, x, y) {
   return x >= item.x && x < item.x + w && y >= item.y && y < item.y + h;
 }
 
+/** The piece you would pick at a tile: the highest solid one, or a rug if that is all there is. */
 export function itemAt(room, x, y) {
   const hits = room.items.filter((o) => covers(o, x, y));
-  return hits.find((o) => !FLAT_FURNITURE.has(o.kind)) || hits[0];
+  const solid = hits.filter((o) => !FLAT_FURNITURE.has(o.kind)).sort((a, b) => level(b) - level(a));
+  return solid[0] || hits[0];
 }
 
-export function canPlace(room, item) {
+/**
+ * Where the next thing on this tile would sit: `top` is the height of the block stack, `occupied` is true when
+ * furniture or a staircase already stands on it (nothing can be put on those).
+ */
+export function tileTop(room, x, y, ignore = null) {
+  const here = room.items.filter((o) => o !== ignore && !FLAT_FURNITURE.has(o.kind) && covers(o, x, y));
+  let top = 0;
+  while (true) {
+    const block = here.find((o) => isBlock(o) && level(o) === top);
+    if (!block) break;
+    top += blockHeight(block);
+  }
+  return { top, occupied: here.some((o) => !isBlock(o) && level(o) === top) };
+}
+
+/** The level a new piece lands on when dropped at (x, y): on top of whatever is built there. */
+export function autoLevel(room, item, ignore = null) {
+  if (FLAT_FURNITURE.has(item.kind)) return 0;
+  return tileTop(room, item.x, item.y, ignore).top;
+}
+
+/** Something is resting on this block (so it can't be taken out from under it). */
+export function hasAbove(room, item) {
+  if (!isBlock(item)) return false;
+  const { w, h } = footprint(item);
+  return room.items.some((o) => o !== item && !FLAT_FURNITURE.has(o.kind) && level(o) > level(item)
+    && [...Array(w).keys()].some((dx) => [...Array(h).keys()].some((dy) => covers(o, item.x + dx, item.y + dy))));
+}
+
+export function canPlace(room, item, ignore = null) {
   const { w, h } = footprint(item);
   if (item.x < 0 || item.y < 0 || item.x + w > room.size || item.y + h > room.size) return false;
-  const door = roomDoor(room.size);
+  const z = level(item);
   const flat = FLAT_FURNITURE.has(item.kind);
+  if (flat && z !== 0) return false;
+  const height = isBlock(item) ? blockHeight(item) : isStairs(item) ? 1 : 0;
+  if (z < 0 || z > MAX_LEVEL - height) return false;
+  const door = roomDoor(room.size);
   for (let dx = 0; dx < w; dx += 1) {
     for (let dy = 0; dy < h; dy += 1) {
       const x = item.x + dx;
       const y = item.y + dy;
       if (door.some(([ddx, ddy]) => ddx === x && ddy === y)) return false;
-      // Rugs may sit under furniture and vice versa; solid pieces can't overlap each other.
-      if (room.items.some((o) => covers(o, x, y) && FLAT_FURNITURE.has(o.kind) === flat)) return false;
+      if (flat) {
+        // Rugs may sit under furniture and vice versa; rugs can't overlap each other.
+        if (room.items.some((o) => o !== ignore && covers(o, x, y) && FLAT_FURNITURE.has(o.kind))) return false;
+        continue;
+      }
+      const itemTop = z + pieceHeight(item);
+      if (room.items.some((o) => {
+        if (o === ignore || FLAT_FURNITURE.has(o.kind) || !covers(o, x, y)) return false;
+        const otherZ = level(o);
+        return Math.max(z, otherZ) < Math.min(itemTop, otherZ + pieceHeight(o)) - 0.001;
+      })) return false;
+      const t = tileTop(room, x, y, ignore);
+      if (!isBlock(item) && (t.occupied || t.top !== z)) return false;
     }
   }
   return true;
+}
+
+/** Keep every piece that still has something to stand on, from the ground up; drop the rest. */
+export function settleItems(size, items, limit) {
+  const room = { size, items: [] };
+  const ordered = [...items].sort((a, b) => Number(!FLAT_FURNITURE.has(a.kind)) - Number(!FLAT_FURNITURE.has(b.kind)) || level(a) - level(b));
+  for (const item of ordered) {
+    if (room.items.length >= limit) break;
+    if (canPlace(room, item)) room.items.push(item);
+  }
+  return room.items;
 }
 
 export function sanitizeItem(raw) {
@@ -113,7 +458,48 @@ export function sanitizeItem(raw) {
   const color = String(raw.color || "");
   if (/^#[0-9a-f]{6}$/i.test(color)) item.color = color.toLowerCase();
   if (raw.rot) item.rot = 1;
+  const z = Math.round(Number(raw.z) * 2) / 2;
+  if (Number.isFinite(z) && z > 0) item.z = Math.min(z, MAX_LEVEL);
+  if (STAIRS_KINDS.has(kind)) {
+    const dir = ((Math.floor(Number(raw.dir)) || 0) % 4 + 4) % 4;
+    if (dir) item.dir = dir;
+  }
+  // A plot remembers what is growing in it.
+  const crop = raw.crop;
+  if (kind === "plot" && crop && typeof crop === "object" && CROPS.has(crop.id)) {
+    const plantedAt = Number(crop.plantedAt);
+    const readyAt = Number(crop.readyAt);
+    if (Number.isFinite(plantedAt) && Number.isFinite(readyAt) && readyAt >= plantedAt) {
+      item.crop = {
+        id: crop.id, plantedAt, readyAt,
+        waters: Math.max(0, Math.min(economy.garden.maxWater, Math.floor(Number(crop.waters) || 0))),
+        lastWaterAt: Number(crop.lastWaterAt) || 0,
+      };
+    }
+  }
   return item;
+}
+
+function sanitizeLayouts(raw, size) {
+  const out = [];
+  for (const entry of Array.isArray(raw) ? raw.slice(0, LAYOUT_SLOTS) : []) {
+    if (!entry || typeof entry !== "object") {
+      out.push(null);
+      continue;
+    }
+    const items = (Array.isArray(entry.items) ? entry.items : []).map(sanitizeItem).filter(Boolean).map((i) => {
+      delete i.crop;
+      return i;
+    });
+    out.push({
+      savedAt: Number(entry.savedAt) || nowTs(),
+      size: ROOM_SIZES.includes(Number(entry.size)) ? Number(entry.size) : size,
+      wall: WALL_STYLES.has(entry.wall) ? entry.wall : "cream",
+      floor: FLOOR_STYLES.has(entry.floor) ? entry.floor : "wood",
+      items: items.slice(0, maxItems(Math.max(...ROOM_SIZES))),
+    });
+  }
+  return out;
 }
 
 export function sanitizeRoom(raw) {
@@ -127,20 +513,19 @@ export function sanitizeRoom(raw) {
     floor: FLOOR_STYLES.has(raw.floor) ? raw.floor : "wood",
     size,
     items: [],
+    layouts: sanitizeLayouts(raw.layouts, size),
     updatedAt: Number(raw.updatedAt) || nowTs(),
   };
-  for (const itemRaw of Array.isArray(raw.items) ? raw.items : []) {
-    const item = sanitizeItem(itemRaw);
-    if (item && room.items.length < maxItems(size) && canPlace(room, item)) room.items.push(item);
-  }
+  const items = (Array.isArray(raw.items) ? raw.items : []).map(sanitizeItem).filter(Boolean);
+  room.items = settleItems(size, items, maxItems(size));
   return room;
 }
-
 export function publicRoom(room) {
   const owner = players.get(room.ownerId);
   return {
     id: room.id, owner: room.owner, title: room.title, wall: room.wall, floor: room.floor,
     size: room.size, items: room.items, goodPigg: owner?.goodPigg || 0,
+    layouts: (room.layouts || []).map((l) => (l ? { savedAt: l.savedAt, count: l.items.length } : null)),
   };
 }
 
@@ -159,6 +544,7 @@ export function ensurePlayer(id, name) {
       daily: freshDaily(),
       createdAt: nowTs(),
     };
+    ensureExtras(player);
     players.set(id, player);
     scheduleSave();
   }
@@ -203,8 +589,22 @@ export function walletOf(player) {
       id: r.id, title: r.title, size: r.size, items: r.items.length,
     })),
     goodPigg: player.goodPigg,
+    fishPoints: player.fishPoints,
+    fishing: player.fishing,
+    fishLog: player.fishLog,
+    items: player.items,
+    seeds: player.seeds,
+    goods: player.goods,
+    petFood: player.petFood,
+    pets: player.pets.map((p) => ({
+      id: p.id, species: p.species, name: p.name, bond: p.bond, level: petLevel(p), hunger: petHunger(p),
+    })),
+    activePet: player.activePet,
+    missions: missionsOf(player),
+    achievements: achievementsOf(player),
     today: {
       login: daily.login,
+      coinLogin: Boolean(daily.coinLogin),
       dress: daily.dress,
       onlineEarned: daily.onlineEarned,
       praiseReceived: daily.praiseReceived,
@@ -234,6 +634,15 @@ function load() {
         daily: raw.daily && typeof raw.daily === "object" ? { ...freshDaily(), ...raw.daily } : freshDaily(),
         createdAt: Number(raw.createdAt) || nowTs(),
       });
+      const loaded = players.get(raw.id);
+      ensureExtras(loaded, raw);
+      const cloudKey = cloudKeyOf(raw.cloudKey);
+      if (cloudKey && !linkIndex.has(cloudKey)) {
+        loaded.cloudKey = cloudKey;
+        linkIndex.set(cloudKey, loaded.id);
+      }
+      const profile = sanitizeProfile(raw.profile);
+      if (profile) loaded.profile = profile;
     }
     for (const raw of data.rooms || []) {
       if (/^[0-9a-f]{16}$/.test(raw?.id)) rooms.set(raw.id, sanitizeRoom(raw));
@@ -261,7 +670,7 @@ function migrateLegacy() {
     // Legacy rooms were keyed by the owner's id.
     const room = sanitizeRoom({ ...raw, ownerId: raw.id, size: 10 });
     rooms.set(room.id, room);
-    players.set(raw.id, {
+    const migrated = {
       id: raw.id,
       name: room.owner,
       ame: economy.startingAme,
@@ -270,7 +679,9 @@ function migrateLegacy() {
       goodPigg: Math.max(0, Math.floor(Number(praise[raw.id]) || 0)),
       daily: freshDaily(),
       createdAt: nowTs(),
-    });
+    };
+    ensureExtras(migrated);
+    players.set(raw.id, migrated);
   }
   console.log(`[town] migrated ${rooms.size} legacy room(s) from ${path.basename(LEGACY_ROOMS_PATH)}`);
   scheduleSave();

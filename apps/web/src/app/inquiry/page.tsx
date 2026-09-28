@@ -95,7 +95,7 @@ export default function InquiryPage() {
       window.history.back();
       return;
     }
-    window.location.href = "/";
+    window.location.href = "/arcade";
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

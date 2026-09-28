@@ -19,6 +19,8 @@ type Props = {
   height: number;
   facing?: AvatarPose["facing"];
   flip?: boolean;
+  /** Heading on screen; overrides facing/flip when given. */
+  dir?: AvatarPose["dir"];
   /** Animate a walk cycle. */
   walking?: boolean;
   /** Loop an action (feelings, dances…) for previews. */
@@ -29,7 +31,7 @@ type Props = {
 };
 
 export function AvatarCanvas({
-  avatar, width, height, facing = "front", flip = false, walking = false, action = null, focus = "body", className,
+  avatar, width, height, facing = "front", flip = false, dir, walking = false, action = null, focus = "body", className,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -63,6 +65,7 @@ export function AvatarCanvas({
       drawAvatar(ctx, avatar, {
         facing,
         flip,
+        dir,
         walkPhase: walking ? elapsed * 9 : null,
         action,
         actionTime: loopSec ? elapsed % loopSec : 0,
@@ -72,7 +75,7 @@ export function AvatarCanvas({
     };
     paint(performance.now());
     return () => cancelAnimationFrame(raf);
-  }, [avatar, width, height, facing, flip, walking, action, focus]);
+  }, [avatar, width, height, facing, flip, dir, walking, action, focus]);
 
   return <canvas ref={canvasRef} className={className} style={{ width, height }} />;
 }

@@ -83,6 +83,20 @@ export function drawHairBackLayer(ctx: Ctx, a: AvatarConfig) {
     case "afro":
       ellipse(ctx, 0, -50, 23, 19, a.hairColor);
       break;
+    case "longstraight":
+      roundRect(ctx, -18.5, -52, 37, 36, 8, c);
+      break;
+    case "hipony":
+      ellipse(ctx, -3, -68, 5, 12, c, true, 0.35);
+      tie(ctx, -0.5, -60);
+      break;
+    case "sidebraid":
+      braid(ctx, 16.5, c, -44, -28);
+      break;
+    case "wolf":
+      roundRect(ctx, -19, -50, 38, 15, 6, c);
+      poly(ctx, [[-19, -36], [-15, -26], [-11, -35], [-6, -24], [-1, -35], [5, -25], [10, -35], [15, -27], [19, -36]], c);
+      break;
   }
 }
 
@@ -161,6 +175,31 @@ export function drawHairFront(ctx: Ctx, a: AvatarConfig) {
       ctx.restore();
       poly(ctx, [[-4, -57], [-6, -64], [-3, -63], [-4, -71], [0, -66], [2, -74], [3, -66], [6, -69], [4, -57]], c);
       break;
+    case "curly":
+      dome(ctx, BANGS_ZIG, c);
+      for (let x = -14; x <= 14; x += 7) ellipse(ctx, x, -53 - (Math.abs(x) < 8 ? 3 : 0), 5, 4.4, c);
+      for (const side of [-1, 1]) ellipse(ctx, side * 17.5, -45, 4.4, 6, c);
+      break;
+    case "longstraight":
+      sideLocks(ctx, c, -20);
+      dome(ctx, [[16, -47], [-16, -47]], c);
+      line(ctx, [[-15.5, -47], [-15.5, -44]], shade(c, -0.25), 0.8);
+      break;
+    case "hipony":
+    case "sidebraid":
+      dome(ctx, BANGS_SIDE, c);
+      break;
+    case "wolf":
+      sideLocks(ctx, c, -36);
+      poly(ctx, [[-17, -48], [-21, -53], [-15, -55]], c);
+      poly(ctx, [[17, -48], [21, -54], [15, -56]], c);
+      dome(ctx, BANGS_MESSY, c);
+      break;
+    case "pompadour":
+      ellipse(ctx, 4, -66, 15, 8, c);
+      dome(ctx, BANGS_SIDE, c);
+      line(ctx, [[-4, -70], [12, -68]], shade(c, -0.3), 0.8);
+      break;
   }
 }
 
@@ -199,6 +238,16 @@ export function drawHairBackView(ctx: Ctx, a: AvatarConfig) {
     case "messy":
       poly(ctx, [[-17, -44], [-22, -50], [-15, -54], [-8, -64], [0, -60], [8, -65], [15, -54], [22, -50], [17, -44]], c);
       break;
+    case "longstraight":
+      roundRect(ctx, -18, -52, 36, 36, 8, c);
+      break;
+    case "wolf":
+      roundRect(ctx, -18.5, -50, 37, 16, 6, c);
+      poly(ctx, [[-18.5, -36], [-14, -25], [-10, -35], [-5, -24], [0, -35], [5, -25], [10, -35], [14, -26], [18.5, -36]], c);
+      break;
+    case "curly":
+      for (let x = -15; x <= 15; x += 7.5) ellipse(ctx, x, -55 - (Math.abs(x) < 8 ? 3 : 0), 5, 4.6, c);
+      break;
   }
   ellipse(ctx, 0, -45.5, 17.6, 15.6, c);
   switch (a.hair) {
@@ -226,6 +275,16 @@ export function drawHairBackView(ctx: Ctx, a: AvatarConfig) {
     case "doublebun":
       ellipse(ctx, -12, -58, 6.2, 5.8, c);
       ellipse(ctx, 12, -58, 6.2, 5.8, c);
+      break;
+    case "hipony":
+      ellipse(ctx, 0, -66, 5, 13, c, true, 0);
+      tie(ctx, 0, -58);
+      break;
+    case "sidebraid":
+      braid(ctx, -13, c, -44, -28);
+      break;
+    case "pompadour":
+      ellipse(ctx, 0, -60, 15, 8, c);
       break;
   }
 }
